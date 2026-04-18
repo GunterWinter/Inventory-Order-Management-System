@@ -9,6 +9,7 @@
             id: '',
             name: '',
             number: '',
+            referenceCode: '', 
             unitPrice: '',
             description: '',
             productGroupId: null,
@@ -16,6 +17,7 @@
             physical: false,
             errors: {
                 name: '',
+                referenceCode: '', 
                 unitPrice: '',
                 productGroupId: '',
                 unitMeasureId: ''
@@ -29,10 +31,12 @@
         const unitMeasureIdRef = Vue.ref(null);
         const nameRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
+        const referenceCodeRef = Vue.ref(null); 
         const unitPriceRef = Vue.ref(null);
 
         const validateForm = function () {
             state.errors.name = '';
+            state.errors.referenceCode = '';
             state.errors.unitPrice = '';
             state.errors.productGroupId = '';
             state.errors.unitMeasureId = '';
@@ -66,6 +70,7 @@
             state.id = '';
             state.name = '';
             state.number = '';
+            state.referenceCode = ''; 
             state.unitPrice = '';
             state.description = '';
             state.productGroupId = null;
@@ -73,6 +78,7 @@
             state.physical = false;
             state.errors = {
                 name: '',
+                referenceCode: '',
                 unitPrice: '',
                 productGroupId: '',
                 unitMeasureId: ''
@@ -88,20 +94,20 @@
                     throw error;
                 }
             },
-            createMainData: async (name, unitPrice, physical, description, productGroupId, unitMeasureId, createdById) => {
+            createMainData: async (name, referenceCode, unitPrice, physical, description, productGroupId, unitMeasureId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/Product/CreateProduct', {
-                        name, unitPrice, physical, description, productGroupId, unitMeasureId, createdById
+                        name, referenceCode, unitPrice, physical, description, productGroupId, unitMeasureId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, unitPrice, physical, description, productGroupId, unitMeasureId, updatedById) => {
+            updateMainData: async (id, name, referenceCode, unitPrice, physical, description, productGroupId, unitMeasureId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/Product/UpdateProduct', {
-                        id, name, unitPrice, physical, description, productGroupId, unitMeasureId, updatedById
+                        id, name, referenceCode, unitPrice, physical, description, productGroupId, unitMeasureId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -235,6 +241,21 @@
             }
         };
 
+        const referenceCodeText = {
+            obj: null,
+            create: () => {
+                referenceCodeText.obj = new ej.inputs.TextBox({
+                    placeholder: 'Enter Reference Code (SKU/Custom)',
+                });
+                referenceCodeText.obj.appendTo(referenceCodeRef.value);
+            },
+            refresh: () => {
+                if (referenceCodeText.obj) {
+                    referenceCodeText.obj.value = state.referenceCode;
+                }
+            }
+        };
+
         const unitPriceNumber = {
             obj: null,
             create: () => {
@@ -266,6 +287,14 @@
             () => state.number,
             (newVal, oldVal) => {
                 numberText.refresh();
+            }
+        );
+
+        Vue.watch(
+            () => state.referenceCode,
+            (newVal, oldVal) => {
+                state.errors.referenceCode = '';
+                referenceCodeText.refresh();
             }
         );
 
@@ -304,10 +333,10 @@
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -317,6 +346,7 @@
                             state.mainTitle = 'Edit Product';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
+                            state.referenceCode = response?.data?.content?.data.referenceCode ?? ''; // MAP DATA TRẢ VỀ
                             state.name = response?.data?.content?.data.name ?? '';
                             state.unitPrice = response?.data?.content?.data.unitPrice ?? '';
                             state.description = response?.data?.content?.data.description ?? '';
@@ -385,6 +415,7 @@
 
                 nameText.create();
                 numberText.create();
+                referenceCodeText.create(); // KHỞI TẠO COMPONENT MỚI
                 unitPriceNumber.create();
 
                 mainModal.create();
@@ -395,7 +426,7 @@
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
-                
+
             }
         });
 
@@ -432,12 +463,13 @@
                         {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
-                        { field: 'number', headerText: 'Number', width: 200, minWidth: 200 },
+                        { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
+                        { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 }, // THÊM CỘT VÀO GRID
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
                         { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N2' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
-                        { field: 'physical', headerText: 'Physical Product', width: 200, minWidth: 200, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
+                        { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
                         { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
@@ -451,7 +483,8 @@
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'name', 'productGroupName', 'unitPrice', 'unitMeasureName', 'physical', 'createdAtUtc']);
+                        // CẬP NHẬT autofit TỰ ĐỘNG CĂN CHỈNH CHO referenceCode
+                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'unitPrice', 'unitMeasureName', 'physical', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -492,6 +525,7 @@
                                 state.mainTitle = 'Edit Product';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
+                                state.referenceCode = selectedRecord.referenceCode ?? '';
                                 state.name = selectedRecord.name ?? '';
                                 state.unitPrice = selectedRecord.unitPrice ?? '';
                                 state.description = selectedRecord.description ?? '';
@@ -509,6 +543,7 @@
                                 state.mainTitle = 'Delete Product?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
+                                state.referenceCode = selectedRecord.referenceCode ?? ''; 
                                 state.name = selectedRecord.name ?? '';
                                 state.unitPrice = selectedRecord.unitPrice ?? '';
                                 state.description = selectedRecord.description ?? '';
@@ -545,6 +580,7 @@
             unitMeasureIdRef,
             nameRef,
             numberRef,
+            referenceCodeRef, 
             unitPriceRef,
             state,
             handler,

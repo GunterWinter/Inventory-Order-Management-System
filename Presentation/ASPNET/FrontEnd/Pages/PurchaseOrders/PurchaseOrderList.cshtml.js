@@ -160,20 +160,20 @@
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, purchaseOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/CreatePurchaseOrderItem', {
-                        unitPrice, quantity, summary, productId, purchaseOrderId, createdById
+                        unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, purchaseOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/UpdatePurchaseOrderItem', {
-                        id, unitPrice, quantity, summary, productId, purchaseOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -613,6 +613,8 @@
             }
         };
 
+        let batchObj; 
+
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
@@ -693,6 +695,31 @@
                                         floatLabelType: 'Never'
                                     });
                                     productObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'batchNumber',
+                            headerText: 'Batch Number',
+                            width: 150,
+                            validationRules: { required: true },
+                            edit: {
+                                create: () => {
+                                    let batchElem = document.createElement('input');
+                                    return batchElem;
+                                },
+                                read: () => {
+                                    return batchObj.value;
+                                },
+                                destroy: () => {
+                                    if (batchObj) batchObj.destroy();
+                                },
+                                write: (args) => {
+                                    batchObj = new ej.inputs.TextBox({
+                                        placeholder: 'Enter Batch No.',
+                                        value: args.rowData.batchNumber || ''
+                                    });
+                                    batchObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -870,7 +897,7 @@
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, purchaseOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, purchaseOrderId, userId);
                             await methods.populateSecondaryData(purchaseOrderId);
                             secondaryGrid.refresh();
 
@@ -886,7 +913,7 @@
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, purchaseOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, purchaseOrderId, userId);
                             await methods.populateSecondaryData(purchaseOrderId);
                             secondaryGrid.refresh();
 
@@ -959,7 +986,7 @@
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
-                
+
             }
         });
 

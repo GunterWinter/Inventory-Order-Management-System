@@ -6,6 +6,7 @@ public class Product : BaseEntity
 {
     public string? Name { get; set; }
     public string? Number { get; set; }
+    public string? ReferenceCode { get; set; }
     public string? Description { get; set; }
     public double? UnitPrice { get; set; }
     public bool? Physical { get; set; } = true;

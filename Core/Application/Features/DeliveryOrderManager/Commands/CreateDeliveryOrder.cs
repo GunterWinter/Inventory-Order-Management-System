@@ -93,15 +93,28 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
             {
                 if (item?.Product?.Physical ?? false)
                 {
-                    await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
-                        entity.Id,
-                        defaultWarehouse.Id,
-                        item.ProductId,
-                        item.Quantity,
-                        entity.CreatedById,
-                        cancellationToken
+                    var invenTrans = await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
+                            entity.Id,
+                            defaultWarehouse.Id,
+                            item.ProductId,
+                            item.Quantity,
+                            entity.CreatedById,
+                            item.Id,
+                            item.BatchNumber,
+                            cancellationToken
                         );
 
+                    // ĐÃ SỬA: GỌI HÀM BATCH COSTING TẠI ĐÂY
+                    if (invenTrans != null)
+                    {
+                        await _inventoryTransactionService.AllocateDeliveryAsync(
+                            invenTrans,
+                            item,
+                            entity.DeliveryDate,
+                            entity.CreatedById,
+                            cancellationToken
+                        );
+                    }
                 }
             }
         }

@@ -13,6 +13,7 @@ public class PurchaseOrderItemConfiguration : BaseEntityConfiguration<PurchaseOr
 
         builder.Property(x => x.PurchaseOrderId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.ProductId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.BatchNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Summary).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.UnitPrice).IsRequired(false);
         builder.Property(x => x.Quantity).IsRequired(false);

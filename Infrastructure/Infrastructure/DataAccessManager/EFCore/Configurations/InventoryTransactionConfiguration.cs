@@ -19,6 +19,7 @@ public class InventoryTransactionConfiguration : BaseEntityConfiguration<Invento
         builder.Property(x => x.Number).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.WarehouseId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.ProductId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.BatchNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Movement).IsRequired(false);
         builder.Property(x => x.TransType).IsRequired(false);
         builder.Property(x => x.Stock).IsRequired(false);

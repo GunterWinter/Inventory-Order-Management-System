@@ -16,6 +16,7 @@ public class UpdatePurchaseOrderItemRequest : IRequest<UpdatePurchaseOrderItemRe
     public string? Id { get; init; }
     public string? PurchaseOrderId { get; init; }
     public string? ProductId { get; init; }
+    public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
@@ -65,6 +66,7 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
 
         entity.PurchaseOrderId = request.PurchaseOrderId;
         entity.ProductId = request.ProductId;
+        entity.BatchNumber = request.BatchNumber;
         entity.Summary = request.Summary;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = request.Quantity;

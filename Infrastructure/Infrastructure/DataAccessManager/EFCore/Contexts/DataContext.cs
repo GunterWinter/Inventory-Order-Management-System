@@ -41,6 +41,8 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<PurchaseOrder> PurchaseOrder { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItem { get; set; }
     public DbSet<InventoryTransaction> InventoryTransaction { get; set; }
+    public DbSet<InventoryCostLayer> InventoryCostLayer { get; set; }
+    public DbSet<InventoryIssueAllocation> InventoryIssueAllocation { get; set; }
     public DbSet<DeliveryOrder> DeliveryOrder { get; set; }
     public DbSet<GoodsReceive> GoodsReceive { get; set; }
     public DbSet<SalesReturn> SalesReturn { get; set; }
@@ -84,6 +86,8 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new PurchaseOrderConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseOrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new InventoryTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new InventoryCostLayerConfiguration());
+        modelBuilder.ApplyConfiguration(new InventoryIssueAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new DeliveryOrderConfiguration());
         modelBuilder.ApplyConfiguration(new GoodsReceiveConfiguration());
         modelBuilder.ApplyConfiguration(new SalesReturnConfiguration());

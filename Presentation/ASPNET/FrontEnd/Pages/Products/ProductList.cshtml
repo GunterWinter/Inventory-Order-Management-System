@@ -2,7 +2,6 @@
 @{
     ViewData["Title"] = "Product List";
 }
-
 <div id="app" v-cloak>
     <div class="row">
         <div class="col-12">
@@ -36,35 +35,46 @@
                                                 <label class="text-danger">{{ state.errors.name }}</label>
                                             </div>
                                             <div class="col-md-6">
-                                                <label for="Number">Number</label>
+                                                <label for="Number">Number (Mã HT)</label>
                                                 <input ref="numberRef" v-model="state.number" readonly>
                                             </div>
                                         </div>
+                                        
                                         <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="ReferenceCode">Reference Code (Mã tùy chỉnh)</label>
+                                                <input ref="referenceCodeRef" v-model="state.referenceCode" class="form-control" placeholder="Nhập mã nội bộ/SKU...">
+                                                <label class="text-danger">{{ state.errors.referenceCode }}</label>
+                                            </div>
                                             <div class="col-md-6">
                                                 <label for="UnitPrice">Unit Price</label>
                                                 <input ref="unitPriceRef" v-model="state.unitPrice">
                                                 <label class="text-danger">{{ state.errors.unitPrice }}</label>
                                             </div>
+                                        </div>
+
+                                        <div class="row mb-2">
                                             <div class="col-md-6">
                                                 <label for="UnitMeasureId">Unit Measure</label>
                                                 <div ref="unitMeasureIdRef"></div>
                                                 <label class="text-danger">{{ state.errors.unitMeasureId }}</label>
                                             </div>
-                                        </div>
-                                        <div class="row mb-2">
                                             <div class="col-md-6">
                                                 <label for="ProductGroupId">Product Group</label>
                                                 <div ref="productGroupIdRef"></div>
                                                 <label class="text-danger">{{ state.errors.productGroupId }}</label>
                                             </div>
-                                            <div class="col-md-6">
-                                                <div class="form-check mt-4">
+                                        </div>
+
+                                        <div class="row mb-2">
+                                            <div class="col-md-12">
+                                                <div class="form-check mt-2">
                                                     <input v-model="state.physical" id="Physical" name="Physical" type="checkbox" class="form-check-input">
                                                     <label for="Physical" class="form-check-label">Is Physical Product?</label>
                                                 </div>
                                             </div>
                                         </div>
+
                                         <div class="row mb-2">
                                             <div class="col-12">
                                                 <label for="Description">Description</label>

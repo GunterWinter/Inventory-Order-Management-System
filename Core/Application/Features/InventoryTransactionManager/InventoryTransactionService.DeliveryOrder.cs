@@ -13,8 +13,10 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? createdById,
+        string? moduleItemId,
+        string? batchNumber,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         var parent = await _queryContext
             .DeliveryOrder
@@ -31,6 +33,7 @@ public partial class InventoryTransactionService
 
         child.Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT");
         child.ModuleId = parent.Id;
+        child.ModuleItemId = moduleItemId;
         child.ModuleName = nameof(DeliveryOrder);
         child.ModuleCode = "DO";
         child.ModuleNumber = parent.Number;
@@ -39,6 +42,7 @@ public partial class InventoryTransactionService
 
         child.WarehouseId = warehouseId;
         child.ProductId = productId;
+        child.BatchNumber = batchNumber;
         child.Movement = movement;
 
         CalculateInvenTrans(child);
@@ -55,8 +59,10 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? updatedById,
+        string? moduleItemId,
+        string? batchNumber,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         var child = await _inventoryTransactionRepository.GetAsync(id ?? string.Empty, cancellationToken);
 
@@ -69,6 +75,8 @@ public partial class InventoryTransactionService
 
         child.WarehouseId = warehouseId;
         child.ProductId = productId;
+        child.ModuleItemId = moduleItemId;
+        child.BatchNumber = batchNumber;
         child.Movement = movement;
 
         CalculateInvenTrans(child);
@@ -83,7 +91,7 @@ public partial class InventoryTransactionService
         string? id,
         string? updatedById,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         var child = await _inventoryTransactionRepository.GetAsync(id ?? string.Empty, cancellationToken);
 
@@ -99,11 +107,12 @@ public partial class InventoryTransactionService
 
         return child;
     }
+
     public async Task<List<InventoryTransaction>> DeliveryOrderGetInvenTransList(
         string? moduleId,
         string? moduleName,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         var childs = await _queryContext
             .InventoryTransaction

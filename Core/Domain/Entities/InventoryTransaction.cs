@@ -8,7 +8,7 @@ public class InventoryTransaction : BaseEntity
 {
     public string? ModuleId { get; set; }
     public string? ModuleName { get; set; }
-    public string? ModuleCode { get; set; }
+    public string? ModuleCode { get; set; } 
     public string? ModuleNumber { get; set; }
     public DateTime? MovementDate { get; set; }
     public InventoryTransactionStatus? Status { get; set; }
@@ -16,6 +16,8 @@ public class InventoryTransaction : BaseEntity
     public string? WarehouseId { get; set; }
     public Warehouse? Warehouse { get; set; }
     public string? ProductId { get; set; }
+    public string? BatchNumber { get; set; }
+    public string? ModuleItemId { get; set; }
     public Product? Product { get; set; }
     public double? Movement { get; set; }
     public InventoryTransType? TransType { get; set; }

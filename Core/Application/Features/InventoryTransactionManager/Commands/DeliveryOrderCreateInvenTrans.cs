@@ -14,6 +14,8 @@ public class DeliveryOrderCreateInvenTransRequest : IRequest<DeliveryOrderCreate
     public string? ModuleId { get; init; }
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
+    public string? ModuleItemId { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? CreatedById { get; init; }
 }
@@ -30,18 +32,21 @@ public class DeliveryOrderCreateInvenTransValidator : AbstractValidator<Delivery
     }
 }
 
-public class DeliveryOrderCreateInvenTransHandler : IRequestHandler<DeliveryOrderCreateInvenTransRequest, DeliveryOrderCreateInvenTransResult>
+public class DeliveryOrderCreateInvenTransHandler
+    : IRequestHandler<DeliveryOrderCreateInvenTransRequest, DeliveryOrderCreateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public DeliveryOrderCreateInvenTransHandler(
         InventoryTransactionService inventoryTransactionService
-        )
+    )
     {
         _inventoryTransactionService = inventoryTransactionService;
     }
 
-    public async Task<DeliveryOrderCreateInvenTransResult> Handle(DeliveryOrderCreateInvenTransRequest request, CancellationToken cancellationToken = default)
+    public async Task<DeliveryOrderCreateInvenTransResult> Handle(
+        DeliveryOrderCreateInvenTransRequest request,
+        CancellationToken cancellationToken = default)
     {
         var entity = await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
             request.ModuleId,
@@ -49,11 +54,10 @@ public class DeliveryOrderCreateInvenTransHandler : IRequestHandler<DeliveryOrde
             request.ProductId,
             request.Movement,
             request.CreatedById,
+            request.ModuleItemId,
+            request.BatchNumber,
             cancellationToken);
 
-        return new DeliveryOrderCreateInvenTransResult
-        {
-            Data = entity
-        };
+        return new DeliveryOrderCreateInvenTransResult { Data = entity };
     }
 }

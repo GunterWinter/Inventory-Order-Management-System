@@ -14,6 +14,7 @@ public class UpdateProductRequest : IRequest<UpdateProductResult>
 {
     public string? Id { get; init; }
     public string? Name { get; init; }
+    public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
     public bool? Physical { get; init; } = true;
@@ -64,6 +65,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
         entity.Name = request.Name;
         entity.UnitPrice = request.UnitPrice;
         entity.Physical = request.Physical;
+        entity.ReferenceCode = request.ReferenceCode;
         entity.Description = request.Description;
         entity.UnitMeasureId = request.UnitMeasureId;
         entity.ProductGroupId = request.ProductGroupId;

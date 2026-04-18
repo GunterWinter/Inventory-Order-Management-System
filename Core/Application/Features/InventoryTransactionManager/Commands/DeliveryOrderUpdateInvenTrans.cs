@@ -14,9 +14,10 @@ public class DeliveryOrderUpdateInvenTransRequest : IRequest<DeliveryOrderUpdate
     public string? Id { get; init; }
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
+    public string? ModuleItemId { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? UpdatedById { get; init; }
-
 }
 
 public class DeliveryOrderUpdateInvenTransValidator : AbstractValidator<DeliveryOrderUpdateInvenTransRequest>
@@ -31,18 +32,21 @@ public class DeliveryOrderUpdateInvenTransValidator : AbstractValidator<Delivery
     }
 }
 
-public class DeliveryOrderUpdateInvenTransHandler : IRequestHandler<DeliveryOrderUpdateInvenTransRequest, DeliveryOrderUpdateInvenTransResult>
+public class DeliveryOrderUpdateInvenTransHandler
+    : IRequestHandler<DeliveryOrderUpdateInvenTransRequest, DeliveryOrderUpdateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public DeliveryOrderUpdateInvenTransHandler(
         InventoryTransactionService inventoryTransactionService
-        )
+    )
     {
         _inventoryTransactionService = inventoryTransactionService;
     }
 
-    public async Task<DeliveryOrderUpdateInvenTransResult> Handle(DeliveryOrderUpdateInvenTransRequest request, CancellationToken cancellationToken = default)
+    public async Task<DeliveryOrderUpdateInvenTransResult> Handle(
+        DeliveryOrderUpdateInvenTransRequest request,
+        CancellationToken cancellationToken = default)
     {
         var entity = await _inventoryTransactionService.DeliveryOrderUpdateInvenTrans(
             request.Id,
@@ -50,11 +54,10 @@ public class DeliveryOrderUpdateInvenTransHandler : IRequestHandler<DeliveryOrde
             request.ProductId,
             request.Movement,
             request.UpdatedById,
+            request.ModuleItemId,
+            request.BatchNumber,
             cancellationToken);
 
-        return new DeliveryOrderUpdateInvenTransResult
-        {
-            Data = entity
-        };
+        return new DeliveryOrderUpdateInvenTransResult { Data = entity };
     }
 }

@@ -79,6 +79,7 @@ public static class DI
         services.AddScoped<NegativeAdjustmentSeeder>();
         services.AddScoped<ScrappingSeeder>();
         services.AddScoped<StockCountSeeder>();
+        services.AddScoped<BatchCostingDemoSeeder>();
         return services;
     }
     public static IHost SeedDemoData(this IHost host)
@@ -131,41 +132,44 @@ public static class DI
             var warehouseSeeder = serviceProvider.GetRequiredService<WarehouseSeeder>();
             warehouseSeeder.GenerateDataAsync().Wait();
 
-            var salesOrderSeeder = serviceProvider.GetRequiredService<SalesOrderSeeder>();
-            salesOrderSeeder.GenerateDataAsync().Wait();
+            var batchCostingDemoSeeder = serviceProvider.GetRequiredService<BatchCostingDemoSeeder>();
+            batchCostingDemoSeeder.GenerateDataAsync().Wait();
 
-            var purchaseOrderSeeder = serviceProvider.GetRequiredService<PurchaseOrderSeeder>();
-            purchaseOrderSeeder.GenerateDataAsync().Wait();
+            //var salesOrderSeeder = serviceProvider.GetRequiredService<SalesOrderSeeder>();
+            //salesOrderSeeder.GenerateDataAsync().Wait();
 
-            var deliveryOrderSeeder = serviceProvider.GetRequiredService<DeliveryOrderSeeder>();
-            deliveryOrderSeeder.GenerateDataAsync().Wait();
+            //var purchaseOrderSeeder = serviceProvider.GetRequiredService<PurchaseOrderSeeder>();
+            //purchaseOrderSeeder.GenerateDataAsync().Wait();
 
-            var salesReturnSeeder = serviceProvider.GetRequiredService<SalesReturnSeeder>();
-            salesReturnSeeder.GenerateDataAsync().Wait();
+            //var deliveryOrderSeeder = serviceProvider.GetRequiredService<DeliveryOrderSeeder>();
+            //deliveryOrderSeeder.GenerateDataAsync().Wait();
 
-            var goodsReceiveSeeder = serviceProvider.GetRequiredService<GoodsReceiveSeeder>();
-            goodsReceiveSeeder.GenerateDataAsync().Wait();
+            //var salesReturnSeeder = serviceProvider.GetRequiredService<SalesReturnSeeder>();
+            //salesReturnSeeder.GenerateDataAsync().Wait();
 
-            var purchaseReturnSeeder = serviceProvider.GetRequiredService<PurchaseReturnSeeder>();
-            purchaseReturnSeeder.GenerateDataAsync().Wait();
+            //var goodsReceiveSeeder = serviceProvider.GetRequiredService<GoodsReceiveSeeder>();
+            //goodsReceiveSeeder.GenerateDataAsync().Wait();
 
-            var transferOutSeeder = serviceProvider.GetRequiredService<TransferOutSeeder>();
-            transferOutSeeder.GenerateDataAsync().Wait();
+            //var purchaseReturnSeeder = serviceProvider.GetRequiredService<PurchaseReturnSeeder>();
+            //purchaseReturnSeeder.GenerateDataAsync().Wait();
 
-            var transferInSeeder = serviceProvider.GetRequiredService<TransferInSeeder>();
-            transferInSeeder.GenerateDataAsync().Wait();
+            //var transferOutSeeder = serviceProvider.GetRequiredService<TransferOutSeeder>();
+            //transferOutSeeder.GenerateDataAsync().Wait();
 
-            var positiveAdjustmentSeeder = serviceProvider.GetRequiredService<PositiveAdjustmentSeeder>();
-            positiveAdjustmentSeeder.GenerateDataAsync().Wait();
+            //var transferInSeeder = serviceProvider.GetRequiredService<TransferInSeeder>();
+            //transferInSeeder.GenerateDataAsync().Wait();
 
-            var negativeAdjustmentSeeder = serviceProvider.GetRequiredService<NegativeAdjustmentSeeder>();
-            negativeAdjustmentSeeder.GenerateDataAsync().Wait();
+            //var positiveAdjustmentSeeder = serviceProvider.GetRequiredService<PositiveAdjustmentSeeder>();
+            //positiveAdjustmentSeeder.GenerateDataAsync().Wait();
 
-            var scrappingSeeder = serviceProvider.GetRequiredService<ScrappingSeeder>();
-            scrappingSeeder.GenerateDataAsync().Wait();
+            //var negativeAdjustmentSeeder = serviceProvider.GetRequiredService<NegativeAdjustmentSeeder>();
+            //negativeAdjustmentSeeder.GenerateDataAsync().Wait();
 
-            var stockCountSeeder = serviceProvider.GetRequiredService<StockCountSeeder>();
-            stockCountSeeder.GenerateDataAsync().Wait();
+            //var scrappingSeeder = serviceProvider.GetRequiredService<ScrappingSeeder>();
+            //scrappingSeeder.GenerateDataAsync().Wait();
+
+            //var stockCountSeeder = serviceProvider.GetRequiredService<StockCountSeeder>();
+            //stockCountSeeder.GenerateDataAsync().Wait();
 
         }
         return host;

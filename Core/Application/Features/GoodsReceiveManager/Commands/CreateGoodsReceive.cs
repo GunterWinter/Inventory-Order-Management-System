@@ -93,15 +93,27 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
             {
                 if (item?.Product?.Physical ?? false)
                 {
-                    await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
+                    var invenTrans = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
                         entity.Id,
                         defaultWarehouse.Id,
                         item.ProductId,
                         item.Quantity,
                         entity.CreatedById,
+                        item.Id,
+                        item.BatchNumber,
                         cancellationToken
-                        );
+                    );
 
+                    if (invenTrans != null)
+                    {
+                        await _inventoryTransactionService.CreateInboundLayerAsync(
+                            invenTrans,
+                            item,
+                            entity.ReceiveDate,
+                            entity.CreatedById,
+                            cancellationToken
+                        );
+                    }
                 }
             }
         }

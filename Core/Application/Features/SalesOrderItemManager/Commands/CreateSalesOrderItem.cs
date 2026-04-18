@@ -16,6 +16,7 @@ public class CreateSalesOrderItemRequest : IRequest<CreateSalesOrderItemResult>
     public string? SalesOrderId { get; init; }
     public string? ProductId { get; init; }
     public string? Summary { get; init; }
+    public string? BatchNumber { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public string? CreatedById { get; init; }
@@ -42,7 +43,7 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
         SalesOrderService salesOrderService
-        )
+    )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
@@ -57,19 +58,19 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
         entity.SalesOrderId = request.SalesOrderId;
         entity.ProductId = request.ProductId;
         entity.Summary = request.Summary;
+        entity.BatchNumber = request.BatchNumber;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = request.Quantity;
 
         entity.Total = entity.Quantity * entity.UnitPrice;
+        entity.CogsAmount = 0d;
+        entity.ProfitAmount = 0d;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
 
-        return new CreateSalesOrderItemResult
-        {
-            Data = entity
-        };
+        return new CreateSalesOrderItemResult { Data = entity };
     }
 }

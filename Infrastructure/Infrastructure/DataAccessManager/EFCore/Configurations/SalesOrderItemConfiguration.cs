@@ -13,7 +13,10 @@ public class SalesOrderItemConfiguration : BaseEntityConfiguration<SalesOrderIte
 
         builder.Property(x => x.SalesOrderId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.ProductId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.BatchNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Summary).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.CogsAmount).IsRequired(false);
+        builder.Property(x => x.ProfitAmount).IsRequired(false);
         builder.Property(x => x.UnitPrice).IsRequired(false);
         builder.Property(x => x.Quantity).IsRequired(false);
         builder.Property(x => x.Total).IsRequired(false);

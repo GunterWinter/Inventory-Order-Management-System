@@ -13,6 +13,7 @@ public class ProductConfiguration : BaseEntityConfiguration<Product>
 
         builder.Property(x => x.Name).HasMaxLength(NameConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Number).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.ReferenceCode).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.UnitPrice).IsRequired(false);
         builder.Property(x => x.Physical).IsRequired(false);

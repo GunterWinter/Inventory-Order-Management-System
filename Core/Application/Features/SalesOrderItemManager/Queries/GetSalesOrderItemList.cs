@@ -20,6 +20,9 @@ public record GetSalesOrderItemListDto
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public double? Total { get; init; }
+    public string? BatchNumber { get; init; }
+    public double? CogsAmount { get; init; }
+    public double? ProfitAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 

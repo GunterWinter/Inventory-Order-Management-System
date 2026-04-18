@@ -14,6 +14,8 @@ public class GoodsReceiveCreateInvenTransRequest : IRequest<GoodsReceiveCreateIn
     public string? ModuleId { get; init; }
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
+    public string? ModuleItemId { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? CreatedById { get; init; }
 }
@@ -30,18 +32,21 @@ public class GoodsReceiveCreateInvenTransValidator : AbstractValidator<GoodsRece
     }
 }
 
-public class GoodsReceiveCreateInvenTransHandler : IRequestHandler<GoodsReceiveCreateInvenTransRequest, GoodsReceiveCreateInvenTransResult>
+public class GoodsReceiveCreateInvenTransHandler
+    : IRequestHandler<GoodsReceiveCreateInvenTransRequest, GoodsReceiveCreateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public GoodsReceiveCreateInvenTransHandler(
         InventoryTransactionService inventoryTransactionService
-        )
+    )
     {
         _inventoryTransactionService = inventoryTransactionService;
     }
 
-    public async Task<GoodsReceiveCreateInvenTransResult> Handle(GoodsReceiveCreateInvenTransRequest request, CancellationToken cancellationToken = default)
+    public async Task<GoodsReceiveCreateInvenTransResult> Handle(
+        GoodsReceiveCreateInvenTransRequest request,
+        CancellationToken cancellationToken = default)
     {
         var entity = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
             request.ModuleId,
@@ -49,11 +54,10 @@ public class GoodsReceiveCreateInvenTransHandler : IRequestHandler<GoodsReceiveC
             request.ProductId,
             request.Movement,
             request.CreatedById,
+            request.ModuleItemId,
+            request.BatchNumber,
             cancellationToken);
 
-        return new GoodsReceiveCreateInvenTransResult
-        {
-            Data = entity
-        };
+        return new GoodsReceiveCreateInvenTransResult { Data = entity };
     }
 }

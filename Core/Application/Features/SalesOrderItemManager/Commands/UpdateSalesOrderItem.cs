@@ -17,6 +17,7 @@ public class UpdateSalesOrderItemRequest : IRequest<UpdateSalesOrderItemResult>
     public string? SalesOrderId { get; init; }
     public string? ProductId { get; init; }
     public string? Summary { get; init; }
+    public string? BatchNumber { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public string? UpdatedById { get; init; }
@@ -44,7 +45,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
         SalesOrderService salesOrderService
-        )
+    )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
@@ -53,9 +54,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
     public async Task<UpdateSalesOrderItemResult> Handle(UpdateSalesOrderItemRequest request, CancellationToken cancellationToken)
     {
-
         var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
         if (entity == null)
         {
             throw new Exception($"Entity not found: {request.Id}");
@@ -66,6 +65,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         entity.SalesOrderId = request.SalesOrderId;
         entity.ProductId = request.ProductId;
         entity.Summary = request.Summary;
+        entity.BatchNumber = request.BatchNumber;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = request.Quantity;
 
@@ -76,10 +76,6 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
 
-        return new UpdateSalesOrderItemResult
-        {
-            Data = entity
-        };
+        return new UpdateSalesOrderItemResult { Data = entity };
     }
 }
-

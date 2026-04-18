@@ -15,6 +15,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
+    public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }

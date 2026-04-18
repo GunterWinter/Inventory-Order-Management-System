@@ -14,9 +14,10 @@ public class GoodsReceiveUpdateInvenTransRequest : IRequest<GoodsReceiveUpdateIn
     public string? Id { get; init; }
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
+    public string? ModuleItemId { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? UpdatedById { get; init; }
-
 }
 
 public class GoodsReceiveUpdateInvenTransValidator : AbstractValidator<GoodsReceiveUpdateInvenTransRequest>
@@ -31,18 +32,21 @@ public class GoodsReceiveUpdateInvenTransValidator : AbstractValidator<GoodsRece
     }
 }
 
-public class GoodsReceiveUpdateInvenTransHandler : IRequestHandler<GoodsReceiveUpdateInvenTransRequest, GoodsReceiveUpdateInvenTransResult>
+public class GoodsReceiveUpdateInvenTransHandler
+    : IRequestHandler<GoodsReceiveUpdateInvenTransRequest, GoodsReceiveUpdateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public GoodsReceiveUpdateInvenTransHandler(
         InventoryTransactionService inventoryTransactionService
-        )
+    )
     {
         _inventoryTransactionService = inventoryTransactionService;
     }
 
-    public async Task<GoodsReceiveUpdateInvenTransResult> Handle(GoodsReceiveUpdateInvenTransRequest request, CancellationToken cancellationToken = default)
+    public async Task<GoodsReceiveUpdateInvenTransResult> Handle(
+        GoodsReceiveUpdateInvenTransRequest request,
+        CancellationToken cancellationToken = default)
     {
         var entity = await _inventoryTransactionService.GoodsReceiveUpdateInvenTrans(
             request.Id,
@@ -50,11 +54,10 @@ public class GoodsReceiveUpdateInvenTransHandler : IRequestHandler<GoodsReceiveU
             request.ProductId,
             request.Movement,
             request.UpdatedById,
+            request.ModuleItemId,
+            request.BatchNumber,
             cancellationToken);
 
-        return new GoodsReceiveUpdateInvenTransResult
-        {
-            Data = entity
-        };
+        return new GoodsReceiveUpdateInvenTransResult { Data = entity };
     }
 }
