@@ -75,18 +75,24 @@
                             <tr>
                                 <th>Product Number</th>
                                 <th>Product Name</th>
+                                <th>Batch Number</th>
                                 <th>Unit Price</th>
                                 <th>Quantity</th>
                                 <th>Total</th>
+                                <th>COGS</th>
+                                <th>Profit</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="item in state.items" :key="item.productNumber">
                                 <td>{{ item?.product?.number }}</td>
                                 <td>{{ item?.product?.name }}</td>
+                                <td>{{ item?.batchNumber }}</td>
                                 <td>{{ item?.unitPrice }}</td>
                                 <td>{{ item?.quantity }}</td>
                                 <td>{{ item?.total }}</td>
+                                <td>{{ item?.cogsAmount }}</td>
+                                <td>{{ item?.profitAmount }}</td>
                             </tr>
                         </tbody>
                     </table>

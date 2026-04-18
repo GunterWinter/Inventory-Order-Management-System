@@ -431,7 +431,7 @@
                 await mainGrid.create(state.mainData);
 
                 mainModal.create();
-                mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden());
+                mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
                 await methods.populateSalesOrderListLookupData();
                 await methods.populateDeliveryOrderStatusListLookupData();
                 numberText.create();
@@ -451,7 +451,7 @@
         });
 
         Vue.onUnmounted(() => {
-            mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden());
+            mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
         });
 
         const mainGrid = {
@@ -591,7 +591,6 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: true },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -601,7 +600,7 @@
                     allowPaging: false,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
-                    sortSettings: { columns: [{ field: 'warehouseName', direction: 'Descending' }] },
+                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: false,
@@ -616,227 +615,52 @@
                             field: 'warehouseId',
                             headerText: 'Warehouse',
                             width: 250,
-                            validationRules: { required: true },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const warehouse = state.warehouseListLookupData.find(item => item.id === data[field]);
                                 return warehouse ? `${warehouse.name}` : '';
-                            },
-                            editType: 'dropdownedit',
-                            edit: {
-                                create: () => {
-                                    const warehouseElem = document.createElement('input');
-                                    return warehouseElem;
-                                },
-                                read: () => {
-                                    return warehouseObj.value;
-                                },
-                                destroy: function () {
-                                    warehouseObj.destroy();
-                                },
-                                write: function (args) {
-                                    warehouseObj = new ej.dropdowns.DropDownList({
-                                        dataSource: state.warehouseListLookupData,
-                                        fields: { value: 'id', text: 'name' },
-                                        value: args.rowData.warehouseId,
-                                        placeholder: 'Select a Warehouse',
-                                        floatLabelType: 'Never'
-                                    });
-                                    warehouseObj.appendTo(args.element);
-                                }
                             }
                         },
                         {
                             field: 'productId',
                             headerText: 'Product',
                             width: 250,
-                            validationRules: { required: true },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
                                 return product ? `${product.numberName}` : '';
-                            },
-                            editType: 'dropdownedit',
-                            edit: {
-                                create: () => {
-                                    const productElem = document.createElement('input');
-                                    return productElem;
-                                },
-                                read: () => {
-                                    return productObj.value;
-                                },
-                                destroy: function () {
-                                    productObj.destroy();
-                                },
-                                write: function (args) {
-                                    productObj = new ej.dropdowns.DropDownList({
-                                        dataSource: state.productListLookupData,
-                                        fields: { value: 'id', text: 'numberName' },
-                                        value: args.rowData.productId,
-                                        change: function (e) {
-                                            if (movementObj) {
-                                                movementObj.value = 1;
-                                            }
-                                        },
-                                        placeholder: 'Select a Product',
-                                        floatLabelType: 'Never'
-                                    });
-                                    productObj.appendTo(args.element);
-                                }
                             }
+                        },
+                        {
+                            field: 'batchNumber',
+                            headerText: 'Batch Number',
+                            width: 180
                         },
                         {
                             field: 'movement',
                             headerText: 'Movement',
                             width: 200,
-                            validationRules: {
-                                required: true,
-                                custom: [(args) => {
-                                    return args['value'] > 0;
-                                }, 'Must be a positive number and not zero']
-                            },
-                            type: 'number', format: 'N2', textAlign: 'Right',
-                            edit: {
-                                create: () => {
-                                    const movementElem = document.createElement('input');
-                                    return movementElem;
-                                },
-                                read: () => {
-                                    return movementObj.value;
-                                },
-                                destroy: function () {
-                                    movementObj.destroy();
-                                },
-                                write: function (args) {
-                                    movementObj = new ej.inputs.NumericTextBox({
-                                        value: args.rowData.movement ?? 0,
-                                    });
-                                    movementObj.appendTo(args.element);
-                                }
-                            }
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
+                        },
+                        {
+                            field: 'createdAtUtc',
+                            headerText: 'Created At UTC',
+                            width: 180,
+                            format: 'yyyy-MM-dd HH:mm'
                         },
                     ],
                     toolbar: [
-                        'ExcelExport',
-                        { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        'ExcelExport', 'Search',
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () { },
                     excelExportComplete: () => { },
-                    rowSelected: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
-                        } else {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
-                        }
-                    },
-                    rowDeselected: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
-                        } else {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
-                        }
-                    },
-                    rowSelecting: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length) {
-                            secondaryGrid.obj.clearSelection();
-                        }
-                    },
                     toolbarClick: (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
                         }
-                    },
-                    actionComplete: async (args) => {
-                        if (args.requestType === 'save' && args.action === 'add') {
-                            try {
-                                const response = await services.createSecondaryData(state.id, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId());
-                                await methods.populateSecondaryData(state.id);
-                                secondaryGrid.refresh();
-                                if (response.data.code === 200) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Save Successful',
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Save Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
-                                    });
-                                }
-                            } catch (error) {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
-                                });
-                            }
-                        }
-                        if (args.requestType === 'save' && args.action === 'edit') {
-                            try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId());
-                                await methods.populateSecondaryData(state.id);
-                                secondaryGrid.refresh();
-                                if (response.data.code === 200) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Update Successful',
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Update Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
-                                    });
-                                }
-                            } catch (error) {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
-                                });
-                            }
-                        }
-                        if (args.requestType === 'delete') {
-                            try {
-                                const response = await services.deleteSecondaryData(args.data[0].id, StorageManager.getUserId());
-                                await methods.populateSecondaryData(state.id);
-                                secondaryGrid.refresh();
-                                if (response.data.code === 200) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Delete Successful',
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Delete Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
-                                    });
-                                }
-                            } catch (error) {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
-                                });
-                            }
-                        }
-                        methods.refreshSummary();
                     }
                 });
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);

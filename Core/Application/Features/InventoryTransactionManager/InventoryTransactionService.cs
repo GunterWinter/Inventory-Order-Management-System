@@ -44,35 +44,22 @@ public partial class InventoryTransactionService
 
     public double GetStock(string? warehouseId, string? productId, string? currentId = null)
     {
-        var result = 0.0;
-        if (currentId == null)
-        {
-            result = _queryContext.InventoryTransaction
-                .ApplyIsDeletedFilter(false)
-                .Include(x => x.Product)
-                .Where(x =>
-                    x.Status == InventoryTransactionStatus.Confirmed &&
-                    x.WarehouseId == warehouseId &&
-                    x.ProductId == productId &&
-                    x.Product!.Physical == true)
-                .Sum(x => x.Stock ?? 0.0);
+        var query = _queryContext
+            .Set<InventoryTransaction>()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x =>
+                x.Status == InventoryTransactionStatus.Confirmed &&
+                x.WarehouseId == warehouseId &&
+                x.ProductId == productId &&
+                x.Product!.Physical == true);
 
-        }
-        else
+        if (currentId != null)
         {
-
-            result = _queryContext.InventoryTransaction
-                .ApplyIsDeletedFilter(false)
-                .Include(x => x.Product)
-                .Where(x =>
-                    x.Status == InventoryTransactionStatus.Confirmed &&
-                    x.WarehouseId == warehouseId &&
-                    x.ProductId == productId &&
-                    x.Product!.Physical == true &&
-                    x.Id != currentId)
-                .Sum(x => x.Stock ?? 0.0);
+            query = query.Where(x => x.Id != currentId);
         }
-        return result;
+
+        return query.Sum(x => x.Stock ?? 0.0);
     }
 
     public async Task PropagateParentUpdate(
@@ -86,13 +73,21 @@ public partial class InventoryTransactionService
         CancellationToken cancellationToken = default
         )
     {
-        var childs = await _inventoryTransactionRepository
-            .GetQuery()
+        var childIds = await _queryContext
+            .Set<InventoryTransaction>()
+            .AsNoTracking()
             .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)
+            .Select(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var item in childs)
+        foreach (var childId in childIds)
         {
+            var item = await _inventoryTransactionRepository.GetAsync(childId ?? string.Empty, cancellationToken);
+            if (item == null)
+            {
+                continue;
+            }
+
             item.MovementDate = movementDate;
             item.Status = status;
             item.IsDeleted = isDeleted ?? false;

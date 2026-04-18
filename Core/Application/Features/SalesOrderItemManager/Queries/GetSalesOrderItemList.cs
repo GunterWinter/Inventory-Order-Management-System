@@ -76,7 +76,7 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
     public async Task<GetSalesOrderItemListResult> Handle(GetSalesOrderItemListRequest request, CancellationToken cancellationToken)
     {
         var query = _context
-            .SalesOrderItem
+            .Set<SalesOrderItem>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.SalesOrder)

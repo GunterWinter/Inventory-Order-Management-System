@@ -10,9 +10,19 @@
     </ul>
 
     <!-- Right navbar links -->
-
-    <span class="mt-0" id="topbarContent">Currency: </span>
     <ul class="navbar-nav ml-auto">
+        <li class="nav-item d-flex align-items-center mr-3">
+            <span class="mt-0 small text-muted">
+                <span data-i18n="Currency:">Currency:</span>
+                <strong id="topbarCurrency">---</strong>
+            </span>
+        </li>
+        <li class="nav-item d-flex align-items-center mr-3">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Language">
+                <button type="button" class="btn btn-outline-secondary" data-language-switch="en">EN</button>
+                <button type="button" class="btn btn-outline-secondary" data-language-switch="vi">VI</button>
+            </div>
+        </li>
         <li class="nav-item dropdown">
             <a class="nav-link" data-toggle="dropdown" href="#">
                 <i class="fas fa-th-large"></i>
@@ -20,11 +30,11 @@
             <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
                 <div class="dropdown-divider"></div>
                 <a asp-area="" asp-page="/Profiles/MyProfile" class="dropdown-item">
-                    <i class="fas fa-users mr-2"></i> Profile
+                    <i class="fas fa-users mr-2"></i><span data-i18n="Profile">Profile</span>
                 </a>
                 <div class="dropdown-divider"></div>
                 <form class="form-inline" asp-area="" asp-page="/Accounts/Logout">
-                    <button type="submit" class="nav-link btn btn-link text-black dropdown-item"><i class="fas fa-lock mr-2"></i>Log Out</button>
+                    <button type="submit" class="nav-link btn btn-link text-black dropdown-item"><i class="fas fa-lock mr-2"></i><span data-i18n="Log Out">Log Out</span></button>
 
                 </form>
                 <div class="dropdown-divider"></div>

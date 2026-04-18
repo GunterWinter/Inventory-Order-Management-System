@@ -8,6 +8,7 @@
             purchaseOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
+            inventoryCostLayerData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -38,6 +39,35 @@
         const taxIdRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
+
+        const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
+        const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
+        const getHistoricalBatchOptions = (productId) => {
+            if (!productId) {
+                return [];
+            }
+
+            const options = [];
+            const registered = new Set();
+
+            state.inventoryCostLayerData
+                .filter(item => item.productId === productId && normalizeBatchNumber(item.batchNumber) !== '')
+                .sort((a, b) => toDateTicks(b.receivedDate) - toDateTicks(a.receivedDate))
+                .forEach(item => {
+                    const batchNumber = normalizeBatchNumber(item.batchNumber);
+                    if (registered.has(batchNumber)) {
+                        return;
+                    }
+
+                    registered.add(batchNumber);
+                    options.push({
+                        batchNumber,
+                        displayText: batchNumber
+                    });
+                });
+
+            return options;
+        };
 
         const validateForm = function () {
             state.errors.orderDate = '';
@@ -197,6 +227,14 @@
                 } catch (error) {
                     throw error;
                 }
+            },
+            getInventoryCostLayerData: async () => {
+                try {
+                    const response = await AxiosManager.get('/InventoryCostLayer/GetInventoryCostLayerList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
             }
         };
 
@@ -236,6 +274,13 @@
             populateProductListLookupData: async () => {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
+            },
+            populateInventoryCostLayerData: async () => {
+                const response = await services.getInventoryCostLayerData();
+                state.inventoryCostLayerData = response?.data?.content?.data.map(item => ({
+                    ...item,
+                    receivedDate: item.receivedDate ? new Date(item.receivedDate) : null
+                })) ?? [];
             },
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
@@ -613,7 +658,13 @@
             }
         };
 
-        let batchObj; 
+        let productObj;
+        let batchObj;
+        let priceObj;
+        let quantityObj;
+        let totalObj;
+        let numberObj;
+        let summaryObj;
 
         const secondaryGrid = {
             obj: null,
@@ -673,6 +724,7 @@
                                             const selectedProduct = state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
                                                 args.rowData.productId = selectedProduct.id;
+                                                args.rowData.batchNumber = '';
                                                 if (numberObj) {
                                                     numberObj.value = selectedProduct.number;
                                                 }
@@ -688,6 +740,11 @@
                                                     if (totalObj) {
                                                         totalObj.value = total;
                                                     }
+                                                }
+                                                if (batchObj) {
+                                                    batchObj.dataSource = getHistoricalBatchOptions(selectedProduct.id);
+                                                    batchObj.value = '';
+                                                    batchObj.text = '';
                                                 }
                                             }
                                         },
@@ -715,9 +772,17 @@
                                     if (batchObj) batchObj.destroy();
                                 },
                                 write: (args) => {
-                                    batchObj = new ej.inputs.TextBox({
-                                        placeholder: 'Enter Batch No.',
-                                        value: args.rowData.batchNumber || ''
+                                    batchObj = new ej.dropdowns.ComboBox({
+                                        dataSource: getHistoricalBatchOptions(args.rowData.productId),
+                                        fields: { value: 'batchNumber', text: 'displayText' },
+                                        value: args.rowData.batchNumber || '',
+                                        allowCustom: true,
+                                        allowFiltering: true,
+                                        autofill: true,
+                                        placeholder: 'Select existing or type new batch',
+                                        change: (e) => {
+                                            args.rowData.batchNumber = normalizeBatchNumber(e.value);
+                                        }
                                     });
                                     batchObj.appendTo(args.element);
                                 }
@@ -982,6 +1047,7 @@
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
+                await methods.populateInventoryCostLayerData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {
                 console.error('page init error:', e);

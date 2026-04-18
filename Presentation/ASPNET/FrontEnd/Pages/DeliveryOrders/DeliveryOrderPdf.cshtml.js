@@ -82,12 +82,13 @@
                 ].filter(Boolean).join(', ');
 
                 state.number = pdfData?.number;
-                state.deliveryDate = DateFormatManager.formatToLocale(state.deliveryDate);
+                state.deliveryDate = DateFormatManager.formatToLocale(pdfData?.deliveryDate);
                 state.referenceNumber = pdfData?.salesOrder?.number;
 
                 state.mappedItems = (state.pdfTransactionList || []).map(item => ({
                     warehouse: item.warehouse?.name || 'Unknown',
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim() || 'Unknown Product',
+                    batchNumber: item.batchNumber || '',
                     movement: item.movement || 0,
                 }));
 

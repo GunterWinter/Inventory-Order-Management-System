@@ -75,6 +75,7 @@
                             <tr>
                                 <th>Warehouse</th>
                                 <th>Product</th>
+                                <th>Batch Number</th>
                                 <th>Movement</th>
                             </tr>
                         </thead>
@@ -82,6 +83,7 @@
                             <tr v-for="item in state.mappedItems" :key="item.product + item.warehouse">
                                 <td>{{ item.warehouse }}</td>
                                 <td>{{ item.product }}</td>
+                                <td>{{ item.batchNumber }}</td>
                                 <td>{{ item.movement }}</td>
                             </tr>
                         </tbody>

@@ -8,6 +8,7 @@
             salesOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
+            inventoryCostLayerData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -38,6 +39,74 @@
         const taxIdRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
+
+        const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
+        const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
+        const formatQuantity = (value) => new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(Number(value ?? 0));
+        const getAvailableBatchOptions = (productId) => {
+            if (!productId) {
+                return [];
+            }
+
+            const grouped = new Map();
+
+            state.inventoryCostLayerData
+                .filter(item =>
+                    item.productId === productId &&
+                    normalizeBatchNumber(item.batchNumber) !== '' &&
+                    Number(item.remainingQty ?? 0) > 0
+                )
+                .sort((a, b) => toDateTicks(a.receivedDate) - toDateTicks(b.receivedDate))
+                .forEach(item => {
+                    const batchNumber = normalizeBatchNumber(item.batchNumber);
+                    const current = grouped.get(batchNumber) ?? {
+                        batchNumber,
+                        remainingQty: 0,
+                        firstReceivedDate: item.receivedDate
+                    };
+
+                    current.remainingQty += Number(item.remainingQty ?? 0);
+
+                    if (toDateTicks(item.receivedDate) < toDateTicks(current.firstReceivedDate)) {
+                        current.firstReceivedDate = item.receivedDate;
+                    }
+
+                    grouped.set(batchNumber, current);
+                });
+
+            return [...grouped.values()]
+                .sort((a, b) => toDateTicks(a.firstReceivedDate) - toDateTicks(b.firstReceivedDate))
+                .map(item => ({
+                    batchNumber: item.batchNumber,
+                    remainingQty: item.remainingQty,
+                    displayText: `${item.batchNumber} | Remaining: ${formatQuantity(item.remainingQty)}`
+                }));
+        };
+        const getSuggestedBatchOption = (productId) => getAvailableBatchOptions(productId)[0] ?? null;
+        const getRemainingQtyForBatch = (productId, batchNumber) => {
+            const options = getAvailableBatchOptions(productId);
+            const normalizedBatchNumber = normalizeBatchNumber(batchNumber);
+
+            if (normalizedBatchNumber !== '') {
+                return options.find(item => item.batchNumber === normalizedBatchNumber)?.remainingQty ?? 0;
+            }
+
+            return options[0]?.remainingQty ?? 0;
+        };
+        const enrichSalesOrderItem = (item) => ({
+            ...item,
+            batchNumber: normalizeBatchNumber(item.batchNumber),
+            availableBatchQty: getRemainingQtyForBatch(item.productId, item.batchNumber)
+        });
+        const syncSecondaryAvailability = () => {
+            state.secondaryData = state.secondaryData.map(enrichSalesOrderItem);
+            if (secondaryGrid.obj) {
+                secondaryGrid.refresh();
+            }
+        };
 
         const validateForm = function () {
             state.errors.orderDate = '';
@@ -160,20 +229,20 @@
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, salesOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, batchNumber, salesOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
-                        unitPrice, quantity, summary, productId, salesOrderId, createdById
+                        unitPrice, quantity, summary, productId, batchNumber, salesOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, salesOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, batchNumber, salesOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
-                        id, unitPrice, quantity, summary, productId, salesOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, batchNumber, salesOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -193,6 +262,14 @@
             getProductListLookupData: async () => {
                 try {
                     const response = await AxiosManager.get('/Product/GetProductList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getInventoryCostLayerData: async () => {
+                try {
+                    const response = await AxiosManager.get('/InventoryCostLayer/GetInventoryCostLayerList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -227,7 +304,7 @@
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
                         createdAtUtc: new Date(item.createdAtUtc)
-                    }));
+                    })).map(enrichSalesOrderItem);
                     methods.refreshPaymentSummary(salesOrderId);
                 } catch (error) {
                     state.secondaryData = [];
@@ -236,6 +313,17 @@
             populateProductListLookupData: async () => {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
+            },
+            populateInventoryCostLayerData: async () => {
+                const response = await services.getInventoryCostLayerData();
+                state.inventoryCostLayerData = response?.data?.content?.data.map(item => ({
+                    ...item,
+                    receivedDate: item.receivedDate ? new Date(item.receivedDate) : null
+                })) ?? [];
+                syncSecondaryAvailability();
+            },
+            refreshInventoryAvailability: async () => {
+                await methods.populateInventoryCostLayerData();
             },
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
@@ -277,6 +365,7 @@
                             state.orderStatus = String(response?.data?.content?.data.orderStatus ?? '');
                             state.showComplexDiv = true;
 
+                            await methods.refreshInventoryAvailability();
                             await methods.refreshPaymentSummary(state.id);
 
                             Swal.fire({
@@ -558,6 +647,7 @@
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                await methods.refreshInventoryAvailability();
                                 state.mainTitle = 'Edit Sales Order';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
@@ -580,6 +670,7 @@
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                await methods.refreshInventoryAvailability();
                                 state.mainTitle = 'Delete Sales Order?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
@@ -612,6 +703,14 @@
                 mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
+
+        let productObj;
+        let batchObj;
+        let priceObj;
+        let quantityObj;
+        let totalObj;
+        let numberObj;
+        let summaryObj;
 
         const secondaryGrid = {
             obj: null,
@@ -670,7 +769,10 @@
                                         change: (e) => {
                                             const selectedProduct = state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
+                                                const suggestedBatch = getSuggestedBatchOption(selectedProduct.id);
                                                 args.rowData.productId = selectedProduct.id;
+                                                args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
+                                                args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
                                                 if (numberObj) {
                                                     numberObj.value = selectedProduct.number;
                                                 }
@@ -687,6 +789,10 @@
                                                         totalObj.value = total;
                                                     }
                                                 }
+                                                if (batchObj) {
+                                                    batchObj.dataSource = getAvailableBatchOptions(selectedProduct.id);
+                                                    batchObj.value = args.rowData.batchNumber;
+                                                }
                                             }
                                         },
                                         placeholder: 'Select a Product',
@@ -695,6 +801,58 @@
                                     productObj.appendTo(args.element);
                                 }
                             }
+                        },
+                        {
+                            field: 'batchNumber',
+                            headerText: 'Batch Number',
+                            width: 180,
+                            edit: {
+                                create: () => {
+                                    let batchElem = document.createElement('input');
+                                    return batchElem;
+                                },
+                                read: () => {
+                                    return batchObj.value;
+                                },
+                                destroy: () => {
+                                    if (batchObj) {
+                                        batchObj.destroy();
+                                    }
+                                },
+                                write: (args) => {
+                                    const batchOptions = getAvailableBatchOptions(args.rowData.productId);
+                                    const suggestedBatch = getSuggestedBatchOption(args.rowData.productId);
+                                    const initialBatchNumber = normalizeBatchNumber(args.rowData.batchNumber) || suggestedBatch?.batchNumber || '';
+                                    const syncBatchSelection = (batchNumber) => {
+                                        args.rowData.batchNumber = normalizeBatchNumber(batchNumber);
+                                        args.rowData.availableBatchQty = getRemainingQtyForBatch(args.rowData.productId, args.rowData.batchNumber);
+                                    };
+
+                                    batchObj = new ej.dropdowns.ComboBox({
+                                        dataSource: batchOptions,
+                                        fields: { value: 'batchNumber', text: 'displayText' },
+                                        value: initialBatchNumber,
+                                        allowCustom: false,
+                                        allowFiltering: true,
+                                        showClearButton: true,
+                                        placeholder: batchOptions.length ? 'Suggested FIFO batch' : 'No batch with stock',
+                                        change: (e) => {
+                                            syncBatchSelection(e.value);
+                                        }
+                                    });
+                                    syncBatchSelection(initialBatchNumber);
+                                    batchObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'availableBatchQty',
+                            headerText: 'Remaining Qty',
+                            allowEditing: false,
+                            width: 170,
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
                         },
                         {
                             field: 'unitPrice',
@@ -831,6 +989,24 @@
                                 }
                             }
                         },
+                        {
+                            field: 'cogsAmount',
+                            headerText: 'COGS',
+                            allowEditing: false,
+                            width: 160,
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
+                        },
+                        {
+                            field: 'profitAmount',
+                            headerText: 'Profit',
+                            allowEditing: false,
+                            width: 160,
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
+                        },
                     ],
                     toolbar: [
                         'ExcelExport',
@@ -870,7 +1046,7 @@
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, salesOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, salesOrderId, userId);
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
 
@@ -886,7 +1062,7 @@
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, salesOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, salesOrderId, userId);
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
 
@@ -955,6 +1131,7 @@
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
+                await methods.populateInventoryCostLayerData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {
                 console.error('page init error:', e);

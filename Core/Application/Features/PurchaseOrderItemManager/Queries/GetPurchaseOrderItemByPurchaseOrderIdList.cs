@@ -69,7 +69,7 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListHandler : IRequestHandler<
     public async Task<GetPurchaseOrderItemByPurchaseOrderIdListResult> Handle(GetPurchaseOrderItemByPurchaseOrderIdListRequest request, CancellationToken cancellationToken)
     {
         var query = _context
-            .PurchaseOrderItem
+            .Set<PurchaseOrderItem>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Include(x => x.PurchaseOrder)

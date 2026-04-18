@@ -1,5 +1,6 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.InventoryTransactionManager;
@@ -16,7 +17,23 @@ public partial class InventoryTransactionService
         var qty = (decimal)(purchaseOrderItem.Quantity ?? 0d);
         var unitCost = (decimal)(purchaseOrderItem.UnitPrice ?? 0d);
 
-        if (qty <= 0m) return;
+        if (qty <= 0m)
+        {
+            return;
+        }
+
+        var hasExistingLayer = await _queryContext
+            .Set<InventoryCostLayer>()
+            .AsNoTracking()
+            .AnyAsync(
+                x => !x.IsDeleted && x.InventoryTransactionId == inventoryTransaction.Id,
+                cancellationToken
+            );
+
+        if (hasExistingLayer)
+        {
+            return;
+        }
 
         var layer = new InventoryCostLayer
         {
@@ -30,10 +47,9 @@ public partial class InventoryTransactionService
             UnitCost = unitCost,
             OriginalQty = qty,
             RemainingQty = qty,
-            LayerStatus = 1 // 1: Mở (Open)
+            LayerStatus = 1
         };
 
-        // ĐÚNG CHUẨN: Dùng CommandRepository để Create
         await _inventoryCostLayerRepository.CreateAsync(layer, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
     }
@@ -45,15 +61,42 @@ public partial class InventoryTransactionService
         string? createdById,
         CancellationToken cancellationToken = default)
     {
+        var salesOrderItemId = salesOrderItem.Id;
         var requestQty = (decimal)(salesOrderItem.Quantity ?? 0d);
         var salesUnitPrice = (decimal)(salesOrderItem.UnitPrice ?? 0d);
 
-        if (requestQty <= 0m) return;
+        if (requestQty <= 0m)
+        {
+            return;
+        }
 
-        // ĐÚNG CHUẨN: Dùng _queryContext ĐỂ ĐỌC DỮ LIỆU
-        var query = _queryContext.Set<InventoryCostLayer>()
+        var existingAllocations = await _queryContext
+            .Set<InventoryIssueAllocation>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.InventoryTransactionId == inventoryTransaction.Id)
+            .ToListAsync(cancellationToken);
+
+        if (existingAllocations.Any())
+        {
+            await UpdateSalesOrderItemAmountsAsync(
+                salesOrderItemId,
+                existingAllocations.Sum(x => (double)(x.CostAmount ?? 0m)),
+                existingAllocations.Sum(x => (double)(x.ProfitAmount ?? 0m)),
+                createdById,
+                cancellationToken
+            );
+            return;
+        }
+
+        var query = _queryContext
+            .Set<InventoryCostLayer>()
+            .AsNoTracking()
+            .Include(x => x.InventoryTransaction)
             .Where(x =>
                 !x.IsDeleted &&
+                x.InventoryTransaction != null &&
+                !x.InventoryTransaction.IsDeleted &&
+                x.InventoryTransaction.Status == InventoryTransactionStatus.Confirmed &&
                 x.WarehouseId == inventoryTransaction.WarehouseId &&
                 x.ProductId == salesOrderItem.ProductId &&
                 (x.RemainingQty ?? 0m) > 0m);
@@ -62,12 +105,11 @@ public partial class InventoryTransactionService
         {
             query = query.Where(x => x.BatchNumber == salesOrderItem.BatchNumber);
         }
-        else
-        {
-            query = query.OrderBy(x => x.ReceivedDate).ThenBy(x => x.Id);
-        }
 
-        var layers = await query.ToListAsync(cancellationToken);
+        var layers = await query
+            .OrderBy(x => x.ReceivedDate)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
 
         decimal remainingToIssue = requestQty;
         double totalCogs = 0d;
@@ -75,10 +117,16 @@ public partial class InventoryTransactionService
 
         foreach (var layer in layers)
         {
-            if (remainingToIssue <= 0m) break;
+            if (remainingToIssue <= 0m)
+            {
+                break;
+            }
 
             var layerRemaining = layer.RemainingQty ?? 0m;
-            if (layerRemaining <= 0m) continue;
+            if (layerRemaining <= 0m)
+            {
+                continue;
+            }
 
             var issueQty = Math.Min(remainingToIssue, layerRemaining);
             var unitCost = layer.UnitCost ?? 0m;
@@ -105,15 +153,19 @@ public partial class InventoryTransactionService
                 AllocationDate = allocationDate
             };
 
-            // Dùng CommandRepository để Create
             await _inventoryIssueAllocationRepository.CreateAsync(allocation, cancellationToken);
 
-            layer.RemainingQty = layerRemaining - issueQty;
-            layer.LayerStatus = (layer.RemainingQty ?? 0m) > 0m ? 1 : 2;
-            layer.UpdatedById = createdById;
+            var trackedLayer = await _inventoryCostLayerRepository.GetAsync(layer.Id, cancellationToken);
+            if (trackedLayer == null)
+            {
+                throw new Exception($"Cost layer not found for update: {layer.Id}");
+            }
 
-            // BẮT BUỘC gọi Update trên CommandRepository
-            _inventoryCostLayerRepository.Update(layer);
+            trackedLayer.RemainingQty = layerRemaining - issueQty;
+            trackedLayer.LayerStatus = (trackedLayer.RemainingQty ?? 0m) > 0m ? 1 : 2;
+            trackedLayer.UpdatedById = createdById;
+
+            _inventoryCostLayerRepository.Update(trackedLayer);
 
             totalCogs += (double)costAmount;
             totalProfit += (double)profitAmount;
@@ -125,13 +177,33 @@ public partial class InventoryTransactionService
             throw new Exception($"Not enough stock in cost layers for Product: {salesOrderItem.ProductId}, Batch: {salesOrderItem.BatchNumber ?? "ANY"}");
         }
 
-        salesOrderItem.CogsAmount = totalCogs;
-        salesOrderItem.ProfitAmount = totalProfit;
-        salesOrderItem.UpdatedById = createdById;
+        await UpdateSalesOrderItemAmountsAsync(
+            salesOrderItemId,
+            totalCogs,
+            totalProfit,
+            createdById,
+            cancellationToken
+        );
+    }
 
-        // BẮT BUỘC gọi Update để lưu Cogs/Profit
-        _salesOrderItemRepository.Update(salesOrderItem);
+    private async Task UpdateSalesOrderItemAmountsAsync(
+        string? salesOrderItemId,
+        double totalCogs,
+        double totalProfit,
+        string? updatedById,
+        CancellationToken cancellationToken)
+    {
+        var trackedSalesOrderItem = await _salesOrderItemRepository.GetAsync(salesOrderItemId ?? string.Empty, cancellationToken);
+        if (trackedSalesOrderItem == null)
+        {
+            throw new Exception($"Sales order item not found for update: {salesOrderItemId}");
+        }
 
+        trackedSalesOrderItem.CogsAmount = totalCogs;
+        trackedSalesOrderItem.ProfitAmount = totalProfit;
+        trackedSalesOrderItem.UpdatedById = updatedById;
+
+        _salesOrderItemRepository.Update(trackedSalesOrderItem);
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 }

@@ -15,10 +15,13 @@ public record GetSalesOrderItemBySalesOrderIdListDto
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
+    public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public double? Total { get; init; }
+    public double? CogsAmount { get; init; }
+    public double? ProfitAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -68,7 +71,7 @@ public class GetSalesOrderItemBySalesOrderIdListHandler : IRequestHandler<GetSal
     public async Task<GetSalesOrderItemBySalesOrderIdListResult> Handle(GetSalesOrderItemBySalesOrderIdListRequest request, CancellationToken cancellationToken)
     {
         var query = _context
-            .SalesOrderItem
+            .Set<SalesOrderItem>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Include(x => x.SalesOrder)

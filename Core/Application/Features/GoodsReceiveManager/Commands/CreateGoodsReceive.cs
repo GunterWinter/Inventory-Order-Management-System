@@ -1,4 +1,5 @@
-﻿using Application.Common.Extensions;
+using Application.Common.CQS.Queries;
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -36,28 +37,25 @@ public class CreateGoodsReceiveValidator : AbstractValidator<CreateGoodsReceiveR
 
 public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveRequest, CreateGoodsReceiveResult>
 {
-    private readonly ICommandRepository<GoodsReceive> _deliveryOrderRepository;
-    private readonly ICommandRepository<PurchaseOrderItem> _purchaseOrderItemRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
+    private readonly ICommandRepository<GoodsReceive> _goodsReceiveRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public CreateGoodsReceiveHandler(
-        ICommandRepository<GoodsReceive> deliveryOrderRepository,
-        ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
+        ICommandRepository<GoodsReceive> goodsReceiveRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
-        _deliveryOrderRepository = deliveryOrderRepository;
-        _purchaseOrderItemRepository = purchaseOrderItemRepository;
-        _warehouseRepository = warehouseRepository;
+        _goodsReceiveRepository = goodsReceiveRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<CreateGoodsReceiveResult> Handle(CreateGoodsReceiveRequest request, CancellationToken cancellationToken = default)
@@ -71,50 +69,58 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
         entity.Description = request.Description;
         entity.PurchaseOrderId = request.PurchaseOrderId;
 
-        await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
+        await _goodsReceiveRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var defaultWarehouse = await _warehouseRepository
-            .GetQuery()
+        var defaultWarehouseId = await _queryContext
+            .Set<Warehouse>()
+            .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SystemWarehouse == false)
+            .Select(x => x.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (defaultWarehouse != null)
+        if (string.IsNullOrWhiteSpace(defaultWarehouseId))
         {
-            var items = await _purchaseOrderItemRepository
-                .GetQuery()
-                .ApplyIsDeletedFilter(false)
-                .Where(x => x.PurchaseOrderId == entity.PurchaseOrderId)
-                .Include(x => x.Product)
-                .ToListAsync(cancellationToken);
-
-            foreach (var item in items)
+            return new CreateGoodsReceiveResult
             {
-                if (item?.Product?.Physical ?? false)
-                {
-                    var invenTrans = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
-                        entity.Id,
-                        defaultWarehouse.Id,
-                        item.ProductId,
-                        item.Quantity,
-                        entity.CreatedById,
-                        item.Id,
-                        item.BatchNumber,
-                        cancellationToken
-                    );
+                Data = entity
+            };
+        }
 
-                    if (invenTrans != null)
-                    {
-                        await _inventoryTransactionService.CreateInboundLayerAsync(
-                            invenTrans,
-                            item,
-                            entity.ReceiveDate,
-                            entity.CreatedById,
-                            cancellationToken
-                        );
-                    }
-                }
+        var items = await _queryContext
+            .Set<PurchaseOrderItem>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x =>
+                x.PurchaseOrderId == entity.PurchaseOrderId &&
+                x.Product != null &&
+                x.Product.Physical == true)
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            var inventoryTransaction = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
+                entity.Id,
+                defaultWarehouseId,
+                item.ProductId,
+                item.Quantity,
+                entity.CreatedById,
+                item.Id,
+                item.BatchNumber,
+                cancellationToken
+            );
+
+            if (entity.Status == GoodsReceiveStatus.Confirmed)
+            {
+                await _inventoryTransactionService.CreateInboundLayerAsync(
+                    inventoryTransaction,
+                    item,
+                    entity.ReceiveDate,
+                    entity.CreatedById,
+                    cancellationToken
+                );
             }
         }
 

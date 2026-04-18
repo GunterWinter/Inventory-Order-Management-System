@@ -88,6 +88,7 @@
                 state.mappedItems = (state.pdfTransactionList || []).map(item => ({
                     warehouse: item.warehouse?.name || '',
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim(),
+                    batchNumber: item.batchNumber || '',
                     movement: item.movement || 0,
                 }));
 

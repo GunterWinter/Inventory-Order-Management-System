@@ -1,5 +1,6 @@
-﻿using Domain.Common;
-using Domain.Entities;
+using Domain.Common;
+
+namespace Domain.Entities;
 
 public class InventoryIssueAllocation : BaseEntity
 {

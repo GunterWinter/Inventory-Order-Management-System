@@ -86,13 +86,20 @@
 
                         const companyName = data[0]?.name ?? 'Default Company';
                         const companyWeb = data[0]?.website ?? '#';
-                        const year = new Date().getFullYear();
                         const currency = data[0]?.currency ?? '---';
+                        const footerCompanyLink = document.getElementById('footerCompanyLink');
+                        const topbarCurrency = document.getElementById('topbarCurrency');
 
-                        document.getElementById('footerContent').innerHTML =
-                            `© ${year} <a href="${companyWeb}">${companyName}</a>, All Right Reserved.`;
-                        document.getElementById('topbarContent').innerHTML =
-                            `Currency: ${currency}`;
+                        if (footerCompanyLink) {
+                            footerCompanyLink.href = companyWeb;
+                            footerCompanyLink.textContent = companyName;
+                        }
+
+                        if (topbarCurrency) {
+                            topbarCurrency.textContent = currency;
+                        }
+
+                        window.UiLocalization?.refresh?.();
                     }
                 } catch (error) {
                     console.error('Error:', error);

@@ -33,10 +33,17 @@
     <script src="~/lib/indotalent/storage-manager.js" defer></script>
     <script src="~/lib/indotalent/security-manager.js" defer></script>
     <script src="~/lib/indotalent/axios-manager.js" defer></script>
+    <script src="~/lib/indotalent/ui-localization.js" defer></script>
 
 
 </head>
 <body class="hold-transition login-page">
+    <div class="position-fixed" style="top: 1rem; right: 1rem; z-index: 1031;">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Language">
+            <button type="button" class="btn btn-outline-secondary bg-white" data-language-switch="en">EN</button>
+            <button type="button" class="btn btn-outline-secondary bg-white" data-language-switch="vi">VI</button>
+        </div>
+    </div>
     <div class="login-box">
         <div class="login-logo">
             <a asp-area="" asp-page="/Index"><b>INDOTALENT</b> WHMS.</a>

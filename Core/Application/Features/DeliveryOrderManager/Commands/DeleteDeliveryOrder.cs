@@ -53,6 +53,11 @@ public class DeleteDeliveryOrderHandler : IRequestHandler<DeleteDeliveryOrderReq
             throw new Exception($"Entity not found: {request.Id}");
         }
 
+        if (entity.Status != DeliveryOrderStatus.Draft)
+        {
+            throw new Exception("Only draft delivery order can be deleted.");
+        }
+
         entity.UpdatedById = request.DeletedById;
 
         _repository.Delete(entity);

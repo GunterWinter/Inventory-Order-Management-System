@@ -1,4 +1,5 @@
-﻿using Application.Common.Extensions;
+using Application.Common.CQS.Queries;
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -37,27 +38,24 @@ public class CreateDeliveryOrderValidator : AbstractValidator<CreateDeliveryOrde
 public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderRequest, CreateDeliveryOrderResult>
 {
     private readonly ICommandRepository<DeliveryOrder> _deliveryOrderRepository;
-    private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public CreateDeliveryOrderHandler(
         ICommandRepository<DeliveryOrder> deliveryOrderRepository,
-        ICommandRepository<SalesOrderItem> salesOrderItemRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
         _deliveryOrderRepository = deliveryOrderRepository;
-        _salesOrderItemRepository = salesOrderItemRepository;
-        _warehouseRepository = warehouseRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<CreateDeliveryOrderResult> Handle(CreateDeliveryOrderRequest request, CancellationToken cancellationToken = default)
@@ -74,48 +72,55 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
         await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var defaultWarehouse = await _warehouseRepository
-            .GetQuery()
+        var defaultWarehouseId = await _queryContext
+            .Set<Warehouse>()
+            .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SystemWarehouse == false)
+            .Select(x => x.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (defaultWarehouse != null)
+        if (string.IsNullOrWhiteSpace(defaultWarehouseId))
         {
-            var items = await _salesOrderItemRepository
-                .GetQuery()
-                .ApplyIsDeletedFilter(false)
-                .Where(x => x.SalesOrderId == entity.SalesOrderId)
-                .Include(x => x.Product)
-                .ToListAsync(cancellationToken);
-
-            foreach (var item in items)
+            return new CreateDeliveryOrderResult
             {
-                if (item?.Product?.Physical ?? false)
-                {
-                    var invenTrans = await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
-                            entity.Id,
-                            defaultWarehouse.Id,
-                            item.ProductId,
-                            item.Quantity,
-                            entity.CreatedById,
-                            item.Id,
-                            item.BatchNumber,
-                            cancellationToken
-                        );
+                Data = entity
+            };
+        }
 
-                    // ĐÃ SỬA: GỌI HÀM BATCH COSTING TẠI ĐÂY
-                    if (invenTrans != null)
-                    {
-                        await _inventoryTransactionService.AllocateDeliveryAsync(
-                            invenTrans,
-                            item,
-                            entity.DeliveryDate,
-                            entity.CreatedById,
-                            cancellationToken
-                        );
-                    }
-                }
+        var items = await _queryContext
+            .Set<SalesOrderItem>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x =>
+                x.SalesOrderId == entity.SalesOrderId &&
+                x.Product != null &&
+                x.Product.Physical == true)
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            var inventoryTransaction = await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
+                entity.Id,
+                defaultWarehouseId,
+                item.ProductId,
+                item.Quantity,
+                entity.CreatedById,
+                item.Id,
+                item.BatchNumber,
+                cancellationToken
+            );
+
+            if (entity.Status == DeliveryOrderStatus.Confirmed)
+            {
+                await _inventoryTransactionService.AllocateDeliveryAsync(
+                    inventoryTransaction,
+                    item,
+                    entity.DeliveryDate,
+                    entity.CreatedById,
+                    cancellationToken
+                );
             }
         }
 

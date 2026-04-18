@@ -9,7 +9,8 @@
     USER_ROLES: 'userRoles',
     MENU_NAVIGATION: 'menuNavigation',
     AVATAR: 'avatar',
-    COMPANY: 'company'
+    COMPANY: 'company',
+    LOCALE: 'locale'
 };
 
 const StorageManager = {
@@ -90,6 +91,10 @@ const StorageManager = {
     saveCompany: (company) => StorageManager.save(STORAGE_KEYS.COMPANY, company),
     getCompany: () => StorageManager.get(STORAGE_KEYS.COMPANY),
     removeCompany: () => StorageManager.remove(STORAGE_KEYS.COMPANY),
+
+    saveLocale: (locale) => StorageManager.save(STORAGE_KEYS.LOCALE, locale),
+    getLocale: () => StorageManager.get(STORAGE_KEYS.LOCALE),
+    removeLocale: () => StorageManager.remove(STORAGE_KEYS.LOCALE),
 
     saveLoginResult: (data) => {
         StorageManager.saveAccessToken(data?.content?.data?.accessToken);

@@ -1,11 +1,14 @@
-﻿@page
+@page
 @{
-    ViewData["Title"] = "Movement Report List";
+    ViewData["Title"] = "Batch Profit Report";
 }
 
 <div id="app" v-cloak>
     <div class="row">
         <div class="col-12">
+            <div class="alert alert-info">
+                This page only shows batches that have already been sold. Each row represents the actual profit by product and batch based on issued allocations.
+            </div>
             <div class="grid-container">
                 <div ref="mainGridRef"></div>
             </div>

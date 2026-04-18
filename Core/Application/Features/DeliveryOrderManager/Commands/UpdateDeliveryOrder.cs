@@ -1,9 +1,12 @@
-﻿using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
+using Application.Common.Extensions;
+using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.DeliveryOrderManager.Commands;
 
@@ -38,21 +41,23 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
     private readonly ICommandRepository<DeliveryOrder> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public UpdateDeliveryOrderHandler(
         ICommandRepository<DeliveryOrder> repository,
         IUnitOfWork unitOfWork,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdateDeliveryOrderResult> Handle(UpdateDeliveryOrderRequest request, CancellationToken cancellationToken)
     {
-
         var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
 
         if (entity == null)
@@ -60,8 +65,12 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
             throw new Exception($"Entity not found: {request.Id}");
         }
 
-        entity.UpdatedById = request.UpdatedById;
+        if (entity.Status != DeliveryOrderStatus.Draft)
+        {
+            throw new Exception("Only draft delivery order can be updated.");
+        }
 
+        entity.UpdatedById = request.UpdatedById;
         entity.DeliveryDate = request.DeliveryDate;
         entity.Status = (DeliveryOrderStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
@@ -69,6 +78,13 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
+
+        await SynchronizeInventoryTransactionsAsync(entity, cancellationToken);
+
+        if (entity.Status == DeliveryOrderStatus.Confirmed)
+        {
+            await EnsureIssueAllocationsAsync(entity, cancellationToken);
+        }
 
         await _inventoryTransactionService.PropagateParentUpdate(
             entity.Id,
@@ -86,5 +102,128 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
             Data = entity
         };
     }
-}
 
+    private async Task SynchronizeInventoryTransactionsAsync(DeliveryOrder entity, CancellationToken cancellationToken)
+    {
+        var items = await _queryContext
+            .Set<SalesOrderItem>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x =>
+                x.SalesOrderId == entity.SalesOrderId &&
+                x.Product != null &&
+                x.Product.Physical == true)
+            .ToListAsync(cancellationToken);
+
+        var inventoryTransactions = await _queryContext
+            .Set<InventoryTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleId == entity.Id && x.ModuleName == nameof(DeliveryOrder))
+            .ToListAsync(cancellationToken);
+
+        var validModuleItemIds = items
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .Select(x => x.Id!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var obsoleteTransaction in inventoryTransactions.Where(x => !validModuleItemIds.Contains(x.ModuleItemId ?? string.Empty)))
+        {
+            await _inventoryTransactionService.DeliveryOrderDeleteInvenTrans(
+                obsoleteTransaction.Id,
+                entity.UpdatedById ?? entity.CreatedById,
+                cancellationToken
+            );
+        }
+
+        var defaultWarehouseId = await GetDefaultWarehouseIdAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
+            var warehouseId = existingTransaction?.WarehouseId ?? defaultWarehouseId;
+
+            if (string.IsNullOrWhiteSpace(warehouseId))
+            {
+                throw new Exception("Default warehouse not found.");
+            }
+
+            if (existingTransaction == null)
+            {
+                await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
+                    entity.Id,
+                    warehouseId,
+                    item.ProductId,
+                    item.Quantity,
+                    entity.UpdatedById ?? entity.CreatedById,
+                    item.Id,
+                    item.BatchNumber,
+                    cancellationToken
+                );
+            }
+            else
+            {
+                await _inventoryTransactionService.DeliveryOrderUpdateInvenTrans(
+                    existingTransaction.Id,
+                    warehouseId,
+                    item.ProductId,
+                    item.Quantity,
+                    entity.UpdatedById ?? entity.CreatedById,
+                    item.Id,
+                    item.BatchNumber,
+                    cancellationToken
+                );
+            }
+        }
+    }
+
+    private async Task EnsureIssueAllocationsAsync(DeliveryOrder entity, CancellationToken cancellationToken)
+    {
+        var items = await _queryContext
+            .Set<SalesOrderItem>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x =>
+                x.SalesOrderId == entity.SalesOrderId &&
+                x.Product != null &&
+                x.Product.Physical == true)
+            .ToListAsync(cancellationToken);
+
+        var inventoryTransactions = await _queryContext
+            .Set<InventoryTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleId == entity.Id && x.ModuleName == nameof(DeliveryOrder))
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            var inventoryTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
+            if (inventoryTransaction == null)
+            {
+                continue;
+            }
+
+            await _inventoryTransactionService.AllocateDeliveryAsync(
+                inventoryTransaction,
+                item,
+                entity.DeliveryDate,
+                entity.UpdatedById ?? entity.CreatedById,
+                cancellationToken
+            );
+        }
+    }
+
+    private async Task<string?> GetDefaultWarehouseIdAsync(CancellationToken cancellationToken)
+    {
+        return await _queryContext
+            .Set<Warehouse>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.SystemWarehouse == false)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+}

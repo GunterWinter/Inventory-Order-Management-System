@@ -19,7 +19,7 @@ public partial class InventoryTransactionService
     )
     {
         var parent = await _queryContext
-            .GoodsReceive
+            .Set<GoodsReceive>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == moduleId, cancellationToken);
 
@@ -115,7 +115,7 @@ public partial class InventoryTransactionService
     )
     {
         var childs = await _queryContext
-            .InventoryTransaction
+            .Set<InventoryTransaction>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)

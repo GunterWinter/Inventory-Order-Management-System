@@ -52,6 +52,11 @@ public class DeleteGoodsReceiveHandler : IRequestHandler<DeleteGoodsReceiveReque
             throw new Exception($"Entity not found: {request.Id}");
         }
 
+        if (entity.Status != GoodsReceiveStatus.Draft)
+        {
+            throw new Exception("Only draft goods receive can be deleted.");
+        }
+
         entity.UpdatedById = request.DeletedById;
 
         _repository.Delete(entity);
