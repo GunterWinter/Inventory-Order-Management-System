@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -23,7 +23,7 @@
                 const response = await services.getMainData();
                 const formattedData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
                 state.mainData = formattedData;
             },
@@ -59,7 +59,7 @@
                         { field: 'prefix', headerText: 'Prefix', width: 100, minWidth: 100 },
                         { field: 'suffix', headerText: 'Suffix', width: 100, minWidth: 100 },
                         { field: 'lastUsedCount', headerText: 'Last Used Count', width: 100, minWidth: 100 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -112,3 +112,4 @@
 };
 
 Vue.createApp(App).mount('#app');
+

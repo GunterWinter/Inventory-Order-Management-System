@@ -72,7 +72,7 @@ public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyRequest, Update
 
         entity.Name = request.Name;
         entity.Description = request.Description;
-        entity.Currency = request.Currency;
+        entity.Currency = "VND";
         entity.Street = request.Street;
         entity.City = request.City;
         entity.State = request.State;

@@ -119,9 +119,6 @@
 
 <script>
     function formatNumberToN2(number) {
-        return Number(number).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+        return NumberFormatManager.formatToLocale(Number(number), 2, 2);
     }
 </script>

@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -255,8 +255,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    orderDate: new Date(item.orderDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateSecondaryData: async (purchaseOrderId) => {
@@ -264,7 +264,7 @@
                     const response = await services.getSecondaryData(purchaseOrderId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshPaymentSummary(purchaseOrderId);
                 } catch (error) {
@@ -279,7 +279,7 @@
                 const response = await services.getInventoryCostLayerData();
                 state.inventoryCostLayerData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    receivedDate: item.receivedDate ? new Date(item.receivedDate) : null
+                    receivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null
                 })) ?? [];
             },
             refreshPaymentSummary: async (id) => {
@@ -314,7 +314,7 @@
                             state.mainTitle = 'Edit Purchase Order';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
-                            state.orderDate = response?.data?.content?.data.orderDate ? new Date(response.data.content.data.orderDate) : null;
+                            state.orderDate = response?.data?.content?.data.orderDate ? DateFormatManager.parseBusinessDate(response.data.content.data.orderDate) : null;
                             state.description = response?.data?.content?.data.description ?? '';
                             state.vendorId = response?.data?.content?.data.vendorId ?? '';
                             state.taxId = response?.data?.content?.data.taxId ?? '';
@@ -458,7 +458,8 @@
             create: () => {
                 orderDatePicker.obj = new ej.calendars.DatePicker({
                     format: 'yyyy-MM-dd',
-                    value: state.orderDate ? new Date(state.orderDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.orderDate ? DateFormatManager.parseBusinessDate(state.orderDate) : null,
                     change: (e) => {
                         state.orderDate = e.value;
                     }
@@ -467,7 +468,7 @@
             },
             refresh: () => {
                 if (orderDatePicker.obj) {
-                    orderDatePicker.obj.value = state.orderDate ? new Date(state.orderDate) : null;
+                    orderDatePicker.obj.value = state.orderDate ? DateFormatManager.parseBusinessDate(state.orderDate) : null;
                 }
             }
         };
@@ -548,7 +549,7 @@
                         { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
                         { field: 'taxName', headerText: 'Tax', width: 150, minWidth: 150 },
                         { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N2' },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -606,7 +607,7 @@
                                 state.mainTitle = 'Edit Purchase Order';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.orderDate = selectedRecord.orderDate ? new Date(selectedRecord.orderDate) : null;
+                                state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.vendorId = selectedRecord.vendorId ?? '';
                                 state.taxId = selectedRecord.taxId ?? '';
@@ -628,7 +629,7 @@
                                 state.mainTitle = 'Delete Purchase Order?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.orderDate = selectedRecord.orderDate ? new Date(selectedRecord.orderDate) : null;
+                                state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.vendorId = selectedRecord.vendorId ?? '';
                                 state.taxId = selectedRecord.taxId ?? '';

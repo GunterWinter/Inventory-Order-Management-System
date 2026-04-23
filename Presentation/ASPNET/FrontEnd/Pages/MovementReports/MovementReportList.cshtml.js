@@ -13,7 +13,7 @@ const App = {
                 const unitCost = Number(item.unitCost ?? 0);
                 const salesUnitPrice = Number(item.salesUnitPrice ?? 0);
                 const batchNumber = (item.batchNumber ?? '').toString().trim();
-                const allocationDate = item.allocationDate ? new Date(item.allocationDate) : null;
+                const allocationDate = item.allocationDate ? DateFormatManager.parseBusinessDate(item.allocationDate) : null;
                 const key = [
                     item.productId ?? '',
                     batchNumber,

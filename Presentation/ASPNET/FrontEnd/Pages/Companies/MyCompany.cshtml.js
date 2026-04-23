@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -7,7 +7,7 @@
             id: '',
             name: '',
             description: '',
-            currency: '',
+            currency: 'VND',
             street: '',
             city: '',
             state: '',
@@ -112,7 +112,7 @@
                         { field: 'street', headerText: 'Street', width: 150, minWidth: 150 },
                         { field: 'phoneNumber', headerText: 'Phone#', width: 150, minWidth: 150 },
                         { field: 'emailAddress', headerText: 'Email', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -157,7 +157,7 @@
                                 state.id = selectedRecord.id ?? '';
                                 state.name = selectedRecord.name ?? '';
                                 state.description = selectedRecord.description ?? '';
-                                state.currency = selectedRecord.currency ?? '';
+                                state.currency = 'VND';
                                 state.street = selectedRecord.street ?? '';
                                 state.city = selectedRecord.city ?? '';
                                 state.state = selectedRecord.state ?? '';
@@ -185,7 +185,8 @@
                 const response = await services.getMainData();
                 const formattedData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                    currency: item.currency ?? 'VND'
                 }));
                 state.mainData = formattedData;
             },
@@ -220,7 +221,8 @@
             obj: null,
             create: () => {
                 currencyText.obj = new ej.inputs.TextBox({
-                    placeholder: 'Enter Currency',
+                    placeholder: 'VND',
+                    readonly: true
                 });
                 currencyText.obj.appendTo(currencyRef.value);
             },
@@ -461,7 +463,7 @@
                     let isValid = true;
                     Object.keys(state.errors).forEach(field => {
                         state.errors[field] = '';
-                        if (!state[field] && ['name', 'currency', 'street', 'city', 'state', 'zipCode', 'phoneNumber', 'emailAddress'].includes(field)) {
+                        if (!state[field] && ['name', 'street', 'city', 'state', 'zipCode', 'phoneNumber', 'emailAddress'].includes(field)) {
                             state.errors[field] = `${field.charAt(0).toUpperCase() + field.slice(1)} is required.`;
                             isValid = false;
                         }
@@ -473,7 +475,7 @@
                         state.id,
                         state.name,
                         state.description,
-                        state.currency,
+                        'VND',
                         state.street,
                         state.city,
                         state.state,
@@ -548,7 +550,7 @@
                 mainModalRef.value.addEventListener('hidden.bs.modal', () => {
                     Object.keys(state).forEach(key => {
                         if (typeof state[key] === 'string') {
-                            state[key] = '';
+                            state[key] = key === 'currency' ? 'VND' : '';
                         }
                     });
                     state.errors = {
@@ -594,3 +596,4 @@
 };
 
 Vue.createApp(App).mount('#app');
+

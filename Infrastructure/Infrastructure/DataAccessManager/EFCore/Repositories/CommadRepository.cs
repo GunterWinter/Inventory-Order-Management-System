@@ -18,26 +18,26 @@ public class CommandRepository<T> : ICommandRepository<T> where T : BaseEntity
 
     public async Task CreateAsync(T entity, CancellationToken cancellationToken = default)
     {
-        entity.CreatedAtUtc = DateTime.UtcNow;
+        entity.CreatedAtUtc = AppDateTime.VietnamNow();
         await _context.AddAsync(entity, cancellationToken);
     }
 
     public void Create(T entity)
     {
-        entity.CreatedAtUtc = DateTime.UtcNow;
+        entity.CreatedAtUtc = AppDateTime.VietnamNow();
         _context.Add(entity);
     }
 
     public void Update(T entity)
     {
-        entity.UpdatedAtUtc = DateTime.UtcNow;
+        entity.UpdatedAtUtc = AppDateTime.VietnamNow();
         _context.Update(entity);
     }
 
     public void Delete(T entity)
     {
         entity.IsDeleted = true;
-        entity.UpdatedAtUtc = DateTime.UtcNow;
+        entity.UpdatedAtUtc = AppDateTime.VietnamNow();
         _context.Update(entity);
     }
 

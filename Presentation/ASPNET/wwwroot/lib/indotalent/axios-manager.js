@@ -10,6 +10,45 @@
     let isRefreshing = false;
     let retryQueue = [];
 
+    const formatDateOnly = (value) => {
+        if (window.DateFormatManager?.formatForApiDate) {
+            return window.DateFormatManager.formatForApiDate(value);
+        }
+
+        return [
+            value.getFullYear(),
+            `${value.getMonth() + 1}`.padStart(2, '0'),
+            `${value.getDate()}`.padStart(2, '0')
+        ].join('-');
+    };
+
+    const normalizeRequestData = (value) => {
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : formatDateOnly(value);
+        }
+
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+
+        if (
+            (typeof FormData !== 'undefined' && value instanceof FormData) ||
+            (typeof Blob !== 'undefined' && value instanceof Blob) ||
+            (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) ||
+            (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams)
+        ) {
+            return value;
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(normalizeRequestData);
+        }
+
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, normalizeRequestData(item)])
+        );
+    };
+
     axiosInstance.interceptors.request.use(
         (config) => {
             const token = StorageManager.getAccessToken(); 
@@ -68,7 +107,7 @@
             const response = await axiosInstance({
                 method,
                 url,
-                data,
+                data: normalizeRequestData(data),
                 headers: {
                     ...customHeaders,
                 },

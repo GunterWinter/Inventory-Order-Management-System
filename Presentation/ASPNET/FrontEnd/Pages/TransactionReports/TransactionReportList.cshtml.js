@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: []
@@ -22,8 +22,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc),
-                    movementDate: new Date(item.movementDate)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                    movementDate: DateFormatManager.parseBusinessDate(item.movementDate)
                 }));
             },
             onMainModalHidden: () => {
@@ -87,7 +87,7 @@
                         { field: 'moduleNumber', headerText: 'Module Number', width: 100 },
                         { field: 'warehouseFromName', headerText: 'Warehouse From', width: 100 },
                         { field: 'warehouseToName', headerText: 'Warehouse To', width: 100 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
                         {
@@ -147,3 +147,4 @@
 };
 
 Vue.createApp(App).mount('#app');
+

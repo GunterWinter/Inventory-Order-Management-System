@@ -82,11 +82,16 @@
                     const data = response?.data?.content?.data;
                     
                     if (data && data.length > 0) {
-                        StorageManager.saveCompany(data[0]);
+                        const companyData = {
+                            ...data[0],
+                            currency: 'VND'
+                        };
 
-                        const companyName = data[0]?.name ?? 'Default Company';
-                        const companyWeb = data[0]?.website ?? '#';
-                        const currency = data[0]?.currency ?? '---';
+                        StorageManager.saveCompany(companyData);
+
+                        const companyName = companyData?.name ?? 'Default Company';
+                        const companyWeb = companyData?.website ?? '#';
+                        const currency = 'VND';
                         const footerCompanyLink = document.getElementById('footerCompanyLink');
                         const topbarCurrency = document.getElementById('topbarCurrency');
 

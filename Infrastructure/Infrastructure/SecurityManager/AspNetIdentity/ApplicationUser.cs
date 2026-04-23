@@ -28,7 +28,7 @@ public class ApplicationUser : IdentityUser
         EmailConfirmed = true;
         IsBlocked = false;
         IsDeleted = false;
-        CreatedAt = DateTime.UtcNow;
+        CreatedAt = Domain.Common.AppDateTime.VietnamNow();
         Email = email.Trim();
         UserName = Email;
         FirstName = firstName.Trim();

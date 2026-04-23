@@ -22,8 +22,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    allocationDate: item.allocationDate ? new Date(item.allocationDate) : null,
-                    createdAtUtc: item.createdAtUtc ? new Date(item.createdAtUtc) : null
+                    allocationDate: item.allocationDate ? DateFormatManager.parseBusinessDate(item.allocationDate) : null,
+                    createdAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
                 }));
             }
         };
@@ -78,7 +78,7 @@
                         { field: 'salesAmount', headerText: 'Sales Amount', width: 130, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'profitAmount', headerText: 'Profit', width: 130, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'allocationDate', headerText: 'Allocation Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 170, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -106,3 +106,5 @@
 };
 
 Vue.createApp(App).mount('#app');
+
+

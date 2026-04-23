@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -76,7 +76,8 @@
                 scrappingDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.scrappingDate ? new Date(state.scrappingDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.scrappingDate ? DateFormatManager.parseBusinessDate(state.scrappingDate) : null,
                     change: (e) => {
                         state.scrappingDate = e.value;
                     }
@@ -85,7 +86,7 @@
             },
             refresh: () => {
                 if (scrappingDatePicker.obj) {
-                    scrappingDatePicker.obj.value = state.scrappingDate ? new Date(state.scrappingDate) : null;
+                    scrappingDatePicker.obj.value = state.scrappingDate ? DateFormatManager.parseBusinessDate(state.scrappingDate) : null;
                 }
             }
         };
@@ -286,8 +287,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    scrappingDate: new Date(item.scrappingDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    scrappingDate: DateFormatManager.parseBusinessDate(item.scrappingDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateWarehouseListLookupData: async () => {
@@ -303,7 +304,7 @@
                     const response = await services.getSecondaryData(scrappingId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -476,7 +477,7 @@
                         { field: 'scrappingDate', headerText: 'Scrapping Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -532,7 +533,7 @@
                                 state.mainTitle = 'Edit Scrapping';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.scrappingDate = selectedRecord.scrappingDate ? new Date(selectedRecord.scrappingDate) : null;
+                                state.scrappingDate = selectedRecord.scrappingDate ? DateFormatManager.parseBusinessDate(selectedRecord.scrappingDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -550,7 +551,7 @@
                                 state.mainTitle = 'Delete Scrapping?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.scrappingDate = selectedRecord.scrappingDate ? new Date(selectedRecord.scrappingDate) : null;
+                                state.scrappingDate = selectedRecord.scrappingDate ? DateFormatManager.parseBusinessDate(selectedRecord.scrappingDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.status = String(selectedRecord.status ?? '');

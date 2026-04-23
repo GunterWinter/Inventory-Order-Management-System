@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -176,14 +176,14 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateSecondaryData: async (vendorId) => {
                 const response = await services.getSecondaryData(vendorId);
                 state.secondaryData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
         };
@@ -781,7 +781,7 @@
                         { field: 'street', headerText: 'Street', width: 200, minWidth: 200 },
                         { field: 'phoneNumber', headerText: 'Phone', width: 200, minWidth: 200 },
                         { field: 'emailAddress', headerText: 'Email', width: 200, minWidth: 200 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -940,7 +940,7 @@
                         { field: 'phoneNumber', headerText: 'Phone', width: 200, minWidth: 200, validationRules: { required: true } },
                         { field: 'emailAddress', headerText: 'Email', width: 200, minWidth: 200, validationRules: { required: true } },
                         { field: 'description', headerText: 'Description', width: 400, minWidth: 400 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Add', 'Edit', 'Delete', 'Update', 'Cancel', 'Search'
@@ -1088,3 +1088,5 @@
 };
 
 Vue.createApp(App).mount('#app');
+
+

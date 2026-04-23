@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -80,7 +80,8 @@
                 returnDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.returnDate ? new Date(state.returnDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.returnDate ? DateFormatManager.parseBusinessDate(state.returnDate) : null,
                     change: (e) => {
                         state.returnDate = e.value;
                     }
@@ -89,7 +90,7 @@
             },
             refresh: () => {
                 if (returnDatePicker.obj) {
-                    returnDatePicker.obj.value = state.returnDate ? new Date(state.returnDate) : null;
+                    returnDatePicker.obj.value = state.returnDate ? DateFormatManager.parseBusinessDate(state.returnDate) : null;
                 }
             }
         };
@@ -300,8 +301,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    returnDate: new Date(item.returnDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    returnDate: DateFormatManager.parseBusinessDate(item.returnDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateDeliveryOrderListLookupData: async () => {
@@ -330,7 +331,7 @@
                     const response = await services.getSecondaryData(salesReturnId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -481,7 +482,7 @@
                         { field: 'returnDate', headerText: 'Return Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'deliveryOrderNumber', headerText: 'Delivery Order', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -537,7 +538,7 @@
                                 state.mainTitle = 'Edit Sales Return';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.returnDate = selectedRecord.returnDate ? new Date(selectedRecord.returnDate) : null;
+                                state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.deliveryOrderId = selectedRecord.deliveryOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -555,7 +556,7 @@
                                 state.mainTitle = 'Delete Sales Return?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.returnDate = selectedRecord.returnDate ? new Date(selectedRecord.returnDate) : null;
+                                state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.deliveryOrderId = selectedRecord.deliveryOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');

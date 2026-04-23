@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -89,7 +89,8 @@
                 transferReleaseDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.transferReleaseDate ? new Date(state.transferReleaseDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.transferReleaseDate ? DateFormatManager.parseBusinessDate(state.transferReleaseDate) : null,
                     change: (e) => {
                         state.transferReleaseDate = e.value;
                     }
@@ -98,7 +99,7 @@
             },
             refresh: () => {
                 if (transferReleaseDatePicker.obj) {
-                    transferReleaseDatePicker.obj.value = state.transferReleaseDate ? new Date(state.transferReleaseDate) : null;
+                    transferReleaseDatePicker.obj.value = state.transferReleaseDate ? DateFormatManager.parseBusinessDate(state.transferReleaseDate) : null;
                 }
             }
         };
@@ -350,8 +351,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    transferReleaseDate: new Date(item.transferReleaseDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    transferReleaseDate: DateFormatManager.parseBusinessDate(item.transferReleaseDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateWarehouseFromListLookupData: async () => {
@@ -380,7 +381,7 @@
                     const response = await services.getSecondaryData(transferOutId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -534,7 +535,7 @@
                         { field: 'warehouseFromName', headerText: 'Warehouse From', width: 150, minWidth: 150 },
                         { field: 'warehouseToName', headerText: 'Warehouse To', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -590,7 +591,7 @@
                                 state.mainTitle = 'Edit Transfer Out';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.transferReleaseDate = selectedRecord.transferReleaseDate ? new Date(selectedRecord.transferReleaseDate) : null;
+                                state.transferReleaseDate = selectedRecord.transferReleaseDate ? DateFormatManager.parseBusinessDate(selectedRecord.transferReleaseDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseFromId = selectedRecord.warehouseFromId ?? '';
                                 state.warehouseToId = selectedRecord.warehouseToId ?? '';
@@ -609,7 +610,7 @@
                                 state.mainTitle = 'Delete Transfer Out?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.transferReleaseDate = selectedRecord.transferReleaseDate ? new Date(selectedRecord.transferReleaseDate) : null;
+                                state.transferReleaseDate = selectedRecord.transferReleaseDate ? DateFormatManager.parseBusinessDate(selectedRecord.transferReleaseDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseFromId = selectedRecord.warehouseFromId ?? '';
                                 state.warehouseToId = selectedRecord.warehouseToId ?? '';

@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -76,7 +76,8 @@
                 countDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.countDate ? new Date(state.countDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.countDate ? DateFormatManager.parseBusinessDate(state.countDate) : null,
                     change: (e) => {
                         state.countDate = e.value;
                     }
@@ -85,7 +86,7 @@
             },
             refresh: () => {
                 if (countDatePicker.obj) {
-                    countDatePicker.obj.value = state.countDate ? new Date(state.countDate) : null;
+                    countDatePicker.obj.value = state.countDate ? DateFormatManager.parseBusinessDate(state.countDate) : null;
                 }
             }
         };
@@ -286,8 +287,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    countDate: new Date(item.countDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    countDate: DateFormatManager.parseBusinessDate(item.countDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateWarehouseListLookupData: async () => {
@@ -303,7 +304,7 @@
                     const response = await services.getSecondaryData(stockCountId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -476,7 +477,7 @@
                         { field: 'countDate', headerText: 'Count Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -532,7 +533,7 @@
                                 state.mainTitle = 'Edit Stock Count';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.countDate = selectedRecord.countDate ? new Date(selectedRecord.countDate) : null;
+                                state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -550,7 +551,7 @@
                                 state.mainTitle = 'Delete Stock Count?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.countDate = selectedRecord.countDate ? new Date(selectedRecord.countDate) : null;
+                                state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.status = String(selectedRecord.status ?? '');

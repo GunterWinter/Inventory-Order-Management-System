@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -276,7 +276,7 @@
                     const response = await services.getMainData();
                     state.mainData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAt: new Date(item.createdAt)
+                        createdAt: DateFormatManager.parseServerDate(item.createdAt)
                     }));
                 } catch (error) {
                     console.error("Error populating main data:", error);

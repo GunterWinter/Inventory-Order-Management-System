@@ -83,14 +83,34 @@
         'Order Date': 'Ngày chứng từ',
         'Receive Date': 'Ngày nhập',
         'Delivery Date': 'Ngày xuất',
+        'Return Date': 'Ngày trả hàng',
+        'Release Date': 'Ngày xuất chuyển',
+        'Adjustment Date': 'Ngày điều chỉnh',
+        'Scrapping Date': 'Ngày hủy hàng',
+        'Count Date': 'Ngày kiểm kê',
         'Movement Date': 'Ngày giao dịch',
         'Received Date': 'Ngày nhập',
         'Number': 'Số chứng từ',
+        'Number (Mã HT)': 'Số chứng từ (mã hệ thống)',
         'Description': 'Diễn giải',
         'Order Status': 'Trạng thái chứng từ',
         'Status': 'Trạng thái',
+        'Draft': 'Nháp',
+        'Confirm': 'Xác nhận',
+        'Confirmed': 'Đã xác nhận',
+        'Cancelled': 'Đã hủy',
+        'Canceled': 'Đã hủy',
+        'Archived': 'Đã lưu trữ',
+        'In': 'Nhập',
+        'Out': 'Xuất',
         'Product Number': 'Mã hàng',
         'Product Name': 'Tên hàng',
+        'Physical Product': 'Hàng hóa vật lý',
+        'Is Physical Product?': 'Là hàng hóa vật lý?',
+        'Reference Code': 'Mã tham khảo',
+        'Reference Code (Mã tùy chỉnh)': 'Mã tham khảo (mã tùy chỉnh)',
+        'Ref Code': 'Mã tham khảo',
+        'Enter Reference Code (SKU/Custom)': 'Nhập mã tham khảo (SKU/tùy chỉnh)',
         'Batch Number': 'Số lô',
         'Quantity': 'Số lượng',
         'Summary': 'Ghi chú',
@@ -100,8 +120,17 @@
         'Total': 'Thành tiền',
         'Total Cost': 'Tổng giá vốn',
         'Total Sales': 'Tổng doanh thu',
+        'Percentage': 'Tỷ lệ',
+        'Prefix': 'Tiền tố',
+        'Suffix': 'Hậu tố',
         'Warehouse': 'Kho hàng',
+        'System Warehouse': 'Kho hệ thống',
+        'Is System Warehouse?': 'Là kho hệ thống?',
+        'System Stock': 'Tồn kho hệ thống',
         'Movement': 'Số lượng giao dịch',
+        'Trans Type': 'Loại giao dịch',
+        'Adjustment': 'Điều chỉnh',
+        'Counted': 'Đã kiểm kê',
         'Close': 'Đóng',
         'Save': 'Lưu',
         'Delete': 'Xóa',
@@ -131,6 +160,13 @@
         'Please check your credentials.': 'Vui lòng kiểm tra lại thông tin đăng nhập.',
         'Please check your data.': 'Vui lòng kiểm tra lại dữ liệu.',
         'Form will be closed...': 'Biểu mẫu sẽ được đóng...',
+        'Passwords do not match.': 'Mật khẩu không khớp.',
+        'Password and Confirm Password must match.': 'Mật khẩu và mật khẩu xác nhận phải khớp nhau.',
+        'Email Confirmation Successful': 'Xác nhận email thành công',
+        'Email Confirmation Failed': 'Xác nhận email thất bại',
+        'Email confirmation is in progress.': 'Đang xác nhận email.',
+        'Forgot Password Confirm': 'Xác nhận quên mật khẩu',
+        'Click the button below to confirm and log out completely.': 'Bấm nút bên dưới để xác nhận và đăng xuất hoàn toàn.',
         'Remember Me': 'Ghi nhớ đăng nhập',
         '- OR -': 'HOẶC',
         'Sign in using Facebook': 'Đăng nhập bằng Facebook',
@@ -139,7 +175,70 @@
         'Password': 'Mật khẩu',
         'Email': 'Email',
         'Company': 'Công ty',
+        'Name': 'Tên',
+        'Group': 'Nhóm',
+        'Category': 'Phân loại',
+        'Street': 'Địa chỉ',
+        'City': 'Thành phố',
+        'State': 'Tỉnh/Thành',
+        'Zip Code': 'Mã bưu chính',
+        'Country': 'Quốc gia',
+        'Currency': 'Tiền tệ',
+        'Company Name': 'Tên công ty',
+        'Phone': 'Điện thoại',
+        'Phone#': 'Điện thoại',
+        'Phone Number': 'Số điện thoại',
+        'PhoneNumber': 'Số điện thoại',
+        'Fax Number': 'Số fax',
+        'Email Address': 'Địa chỉ email',
+        'EmailAddress': 'Địa chỉ email',
+        'Website': 'Website',
+        'Job Title': 'Chức danh',
+        'JobTitle': 'Chức danh',
+        'First Name': 'Tên',
+        'Last Name': 'Họ',
+        'FirstName': 'Tên',
+        'LastName': 'Họ',
+        'Lastname': 'Họ',
+        'Confirm Password': 'Xác nhận mật khẩu',
+        'Old Password': 'Mật khẩu hiện tại',
+        'New Password': 'Mật khẩu mới',
+        'Confirm New Password': 'Xác nhận mật khẩu mới',
+        'Enter old password': 'Nhập mật khẩu hiện tại',
+        'Enter new password': 'Nhập mật khẩu mới',
+        'Confirm new password': 'Xác nhận mật khẩu mới',
+        'Email Confirmed': 'Email đã xác nhận',
+        'Is Blocked': 'Bị khóa',
+        'Is Deleted': 'Đã xóa',
+        'Access Granted': 'Được cấp quyền',
+        'Created At': 'Thời điểm tạo',
         'Created At UTC': 'Thời điểm tạo',
+        'Last Updated': 'Cập nhật lần cuối',
+        'Last Used Count': 'Số lần đã dùng',
+        'PO Date': 'Ngày đơn mua',
+        'SO Date': 'Ngày đơn bán',
+        'Date': 'Ngày',
+        '#Number': 'Số chứng từ',
+        'Id': 'ID',
+        'Module': 'Phân hệ',
+        'Module Name': 'Tên phân hệ',
+        'Module Code': 'Mã phân hệ',
+        'Module Number': 'Số chứng từ phân hệ',
+        'Entity Name': 'Tên đối tượng',
+        'PurchaseOrder': 'Đơn mua hàng',
+        'SalesOrder': 'Đơn bán hàng',
+        'Warehouse From': 'Kho xuất',
+        'Warehouse To': 'Kho nhập',
+        'Layer Status': 'Trạng thái lớp',
+        'Issued Batch': 'Lô xuất',
+        'Qty Issued': 'Số lượng đã xuất',
+        'Sales Amount': 'Doanh thu',
+        'Allocation Date': 'Ngày phân bổ',
+        'Sales by Customer Group': 'Bán hàng theo nhóm khách hàng',
+        'Sales by Customer Category': 'Bán hàng theo phân loại khách hàng',
+        'Purchase by Vendor Group': 'Mua hàng theo nhóm nhà cung cấp',
+        'Purchase by Vendor Category': 'Mua hàng theo phân loại nhà cung cấp',
+        'Stock by Warehouse': 'Tồn kho theo kho hàng',
         'Remaining Qty': 'Tồn còn lại',
         'Sold Qty': 'Số lượng đã bán',
         'Sales Price': 'Giá bán',
@@ -192,6 +291,9 @@
     const termTranslations = {
         'dashboard': 'bảng điều khiển',
         'default dashboard': 'bảng điều khiển tổng quan',
+        'sales': 'bán hàng',
+        'purchase': 'mua hàng',
+        'inventory': 'kho',
         'customer': 'khách hàng',
         'customer group': 'nhóm khách hàng',
         'customer category': 'phân loại khách hàng',
@@ -241,11 +343,27 @@
         'order date': 'ngày chứng từ',
         'receive date': 'ngày nhập',
         'delivery date': 'ngày xuất',
+        'return date': 'ngày trả hàng',
+        'release date': 'ngày xuất chuyển',
+        'adjustment date': 'ngày điều chỉnh',
+        'scrapping date': 'ngày hủy hàng',
+        'count date': 'ngày kiểm kê',
         'movement date': 'ngày giao dịch',
         'status': 'trạng thái',
         'order status': 'trạng thái chứng từ',
+        'draft': 'nháp',
+        'confirm': 'xác nhận',
+        'confirmed': 'đã xác nhận',
+        'cancelled': 'đã hủy',
+        'canceled': 'đã hủy',
+        'archived': 'đã lưu trữ',
+        'in': 'nhập',
+        'out': 'xuất',
         'product number': 'mã hàng',
         'product name': 'tên hàng',
+        'physical product': 'hàng hóa vật lý',
+        'reference code': 'mã tham khảo',
+        'ref code': 'mã tham khảo',
         'batch number': 'số lô',
         'quantity': 'số lượng',
         'summary': 'ghi chú',
@@ -254,13 +372,22 @@
         'total': 'thành tiền',
         'total cost': 'tổng giá vốn',
         'total sales': 'tổng doanh thu',
+        'percentage': 'tỷ lệ',
+        'prefix': 'tiền tố',
+        'suffix': 'hậu tố',
         'subtotal': 'tạm tính',
         'total amount': 'tổng thanh toán',
         'payment summary': 'tổng hợp thanh toán',
         'number': 'số chứng từ',
         'description': 'diễn giải',
         'warehouse': 'kho hàng',
+        'system warehouse': 'kho hệ thống',
+        'system stock': 'tồn kho hệ thống',
         'movement': 'số lượng giao dịch',
+        'trans type': 'loại giao dịch',
+        'transaction type': 'loại giao dịch',
+        'adjustment': 'điều chỉnh',
+        'counted': 'đã kiểm kê',
         'sales price': 'giá bán',
         'sold qty': 'số lượng đã bán',
         'profit': 'lợi nhuận',
@@ -270,7 +397,72 @@
         'password': 'mật khẩu',
         'email': 'email',
         'company': 'công ty',
-        'created at utc': 'thời điểm tạo'
+        'name': 'tên',
+        'group': 'nhóm',
+        'category': 'phân loại',
+        'street': 'địa chỉ',
+        'city': 'thành phố',
+        'state': 'tỉnh/thành',
+        'zip code': 'mã bưu chính',
+        'country': 'quốc gia',
+        'currency': 'tiền tệ',
+        'company name': 'tên công ty',
+        'phone': 'điện thoại',
+        'phone#': 'điện thoại',
+        'phone number': 'số điện thoại',
+        'phonenumber': 'số điện thoại',
+        'phone no': 'số điện thoại',
+        'fax number': 'số fax',
+        'email address': 'địa chỉ email',
+        'emailaddress': 'địa chỉ email',
+        'website': 'website',
+        'job title': 'chức danh',
+        'jobtitle': 'chức danh',
+        'first name': 'tên',
+        'last name': 'họ',
+        'firstname': 'tên',
+        'lastname': 'họ',
+        'confirm password': 'xác nhận mật khẩu',
+        'old password': 'mật khẩu hiện tại',
+        'new password': 'mật khẩu mới',
+        'confirm new password': 'xác nhận mật khẩu mới',
+        'email confirmed': 'email đã xác nhận',
+        'is blocked': 'bị khóa',
+        'is deleted': 'đã xóa',
+        'access granted': 'được cấp quyền',
+        'created at': 'thời điểm tạo',
+        'created at utc': 'thời điểm tạo',
+        'last updated': 'cập nhật lần cuối',
+        'last used count': 'số lần đã dùng',
+        'po date': 'ngày đơn mua',
+        'so date': 'ngày đơn bán',
+        'date': 'ngày',
+        '#number': 'số chứng từ',
+        'id': 'ID',
+        'module': 'phân hệ',
+        'module name': 'tên phân hệ',
+        'module code': 'mã phân hệ',
+        'module number': 'số chứng từ phân hệ',
+        'entity name': 'tên đối tượng',
+        'purchaseorder': 'đơn mua hàng',
+        'salesorder': 'đơn bán hàng',
+        'warehouse from': 'kho xuất',
+        'warehouse to': 'kho nhập',
+        'layer status': 'trạng thái lớp',
+        'issued batch': 'lô xuất',
+        'qty issued': 'số lượng đã xuất',
+        'sales amount': 'doanh thu',
+        'allocation date': 'ngày phân bổ',
+        'stock': 'tồn kho',
+        'password reset': 'đặt lại mật khẩu',
+        'reset password': 'đặt lại mật khẩu',
+        'email confirmation': 'xác nhận email',
+        'logout': 'đăng xuất',
+        'register': 'đăng ký',
+        'change password': 'đổi mật khẩu',
+        'change role': 'đổi vai trò',
+        'edit company': 'chỉnh sửa thông tin doanh nghiệp',
+        'manage contact': 'quản lý liên hệ'
     };
 
     function normalizeText(value) {
@@ -338,14 +530,40 @@
             return exactTranslations[value];
         }
 
-        const requiredMatch = value.match(/^(.+?) is required\.$/i);
+        const requiredMatch = value.match(/^(.+?) is required\.?$/i);
         if (requiredMatch) {
             return `${toSentenceCase(translateBusinessTerm(requiredMatch[1], locale))} là bắt buộc.`;
         }
 
-        const selectMatch = value.match(/^Select (?:a|an) (.+)$/i);
+        const minLengthMatch = value.match(/^(.+?) must be at least (\d+) characters\.?$/i);
+        if (minLengthMatch) {
+            return `${toSentenceCase(translateBusinessTerm(minLengthMatch[1], locale))} phải có ít nhất ${minLengthMatch[2]} ký tự.`;
+        }
+
+        const mustMatch = value.match(/^(.+?) and (.+?) must match\.?$/i);
+        if (mustMatch) {
+            return `${toSentenceCase(translateBusinessTerm(mustMatch[1], locale))} và ${translateBusinessTerm(mustMatch[2], locale)} phải khớp nhau.`;
+        }
+
+        const isMatch = value.match(/^Is (.+?)\?$/i);
+        if (isMatch) {
+            return `Là ${translateBusinessTerm(isMatch[1], locale)}?`;
+        }
+
+        const selectMatch = value.match(/^Select(?: (?:a|an))? (.+)$/i);
         if (selectMatch) {
             return `Chọn ${translateBusinessTerm(selectMatch[1], locale)}`;
+        }
+
+        const enterMatch = value.match(/^Enter (.+)$/i);
+        if (enterMatch) {
+            return `Nhập ${translateBusinessTerm(enterMatch[1], locale)}`;
+        }
+
+        const statusMatch = value.match(/^(.+?) (Successful|Failed)$/i);
+        if (statusMatch) {
+            const resultText = statusMatch[2].toLowerCase() === 'successful' ? 'thành công' : 'thất bại';
+            return `${toSentenceCase(translateBusinessTerm(statusMatch[1], locale))} ${resultText}`;
         }
 
         const listMatch = value.match(/^(.+?) List$/i);
@@ -356,6 +574,16 @@
         const pdfMatch = value.match(/^(.+?) PDF$/i);
         if (pdfMatch) {
             return `PDF ${translateBusinessTerm(pdfMatch[1], locale)}`;
+        }
+
+        const byMatch = value.match(/^(.+?) by (.+)$/i);
+        if (byMatch) {
+            const metricText = translateBusinessTerm(byMatch[1], locale);
+            const groupText = translateBusinessTerm(byMatch[2], locale);
+
+            if (metricText !== byMatch[1] || groupText !== byMatch[2]) {
+                return `${toSentenceCase(metricText)} theo ${groupText}`;
+            }
         }
 
         const batchRemainingMatch = value.match(/^(.*\|\s*)Remaining:\s*(.+)$/i);
@@ -676,11 +904,7 @@
         }
 
         window.ej.base.setCulture(currentLocale === 'vi' ? 'vi' : 'en-US');
-
-        const currencyCode = window.StorageManager?.getCompany?.()?.currency;
-        if (currencyCode) {
-            window.ej.base.setCurrencyCode(currencyCode);
-        }
+        window.ej.base.setCurrencyCode('VND');
     }
 
     function setLocale(locale, persist = true) {

@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -63,7 +63,7 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             }
         };
@@ -187,7 +187,7 @@
                         },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'description', headerText: 'Description', width: 400, minWidth: 400 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -304,3 +304,4 @@
 };
 
 Vue.createApp(App).mount('#app');
+

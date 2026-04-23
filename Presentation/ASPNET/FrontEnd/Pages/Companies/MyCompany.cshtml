@@ -7,7 +7,7 @@
     <div class="row">
         <div class="col-12">
             <div class="grid-container">
-                <div ref="mainGridRef"></div>
+                <div id="MainGrid" ref="mainGridRef"></div>
             </div>
         </div>
     </div>
@@ -38,7 +38,7 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="Currency">Currency</label>
-                                                <input ref="currencyRef" v-model="state.currency" type="text" class="form-control" placeholder="">
+                                                <input ref="currencyRef" v-model="state.currency" type="text" class="form-control" placeholder="" readonly>
                                                 <label class="text-danger">{{ state.errors.currency }}</label>
                                             </div>
                                         </div>

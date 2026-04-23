@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -79,7 +79,8 @@
                 receiveDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.receiveDate ? new Date(state.receiveDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.receiveDate ? DateFormatManager.parseBusinessDate(state.receiveDate) : null,
                     change: (e) => {
                         state.receiveDate = e.value;
                     }
@@ -88,7 +89,7 @@
             },
             refresh: () => {
                 if (receiveDatePicker.obj) {
-                    receiveDatePicker.obj.value = state.receiveDate ? new Date(state.receiveDate) : null;
+                    receiveDatePicker.obj.value = state.receiveDate ? DateFormatManager.parseBusinessDate(state.receiveDate) : null;
                 }
             }
         };
@@ -299,8 +300,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    receiveDate: new Date(item.receiveDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    receiveDate: DateFormatManager.parseBusinessDate(item.receiveDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populatePurchaseOrderListLookupData: async () => {
@@ -329,7 +330,7 @@
                     const response = await services.getSecondaryData(goodsReceiveId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -480,7 +481,7 @@
                         { field: 'receiveDate', headerText: 'Receive Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'purchaseOrderNumber', headerText: 'Purchase Order', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -536,7 +537,7 @@
                                 state.mainTitle = 'Edit Goods Receive';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.receiveDate = selectedRecord.receiveDate ? new Date(selectedRecord.receiveDate) : null;
+                                state.receiveDate = selectedRecord.receiveDate ? DateFormatManager.parseBusinessDate(selectedRecord.receiveDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -554,7 +555,7 @@
                                 state.mainTitle = 'Delete Goods Receive?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.receiveDate = selectedRecord.receiveDate ? new Date(selectedRecord.receiveDate) : null;
+                                state.receiveDate = selectedRecord.receiveDate ? DateFormatManager.parseBusinessDate(selectedRecord.receiveDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -642,7 +643,7 @@
                         },
                         {
                             field: 'createdAtUtc',
-                            headerText: 'Created At UTC',
+                            headerText: 'Created At',
                             width: 180,
                             format: 'yyyy-MM-dd HH:mm'
                         },

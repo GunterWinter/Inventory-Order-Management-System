@@ -3,6 +3,7 @@ using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Application.Features.WarehouseManager;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -92,7 +93,7 @@ public partial class InventoryTransactionService
             item.Status = status;
             item.IsDeleted = isDeleted ?? false;
             item.UpdatedById = updatedId;
-            item.UpdatedAtUtc = DateTime.UtcNow;
+            item.UpdatedAtUtc = AppDateTime.VietnamNow();
             if (warehouseId != null)
             {
                 item.WarehouseId = warehouseId;

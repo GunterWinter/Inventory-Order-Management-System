@@ -22,8 +22,8 @@ const App = {
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    receivedDate: item.receivedDate ? new Date(item.receivedDate) : null,
-                    createdAtUtc: item.createdAtUtc ? new Date(item.createdAtUtc) : null
+                    receivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null,
+                    createdAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
                 }));
             }
         };
@@ -75,7 +75,7 @@ const App = {
                         { field: 'originalQty', headerText: 'Original Qty', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'remainingQty', headerText: 'Remaining Qty', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'layerStatusName', headerText: 'Layer Status', width: 130 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 170, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -103,3 +103,5 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+

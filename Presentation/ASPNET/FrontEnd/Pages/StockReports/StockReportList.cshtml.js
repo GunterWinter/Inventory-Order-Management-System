@@ -28,19 +28,19 @@ const App = {
                         unitCost,
                         originalQty: 0,
                         remainingQty: 0,
-                        firstReceivedDate: item.receivedDate ? new Date(item.receivedDate) : null,
-                        lastUpdatedAtUtc: item.createdAtUtc ? new Date(item.createdAtUtc) : null
+                        firstReceivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null,
+                        lastUpdatedAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
                     };
 
                     current.originalQty += Number(item.originalQty ?? 0);
                     current.remainingQty += Number(item.remainingQty ?? 0);
 
-                    const receivedDate = item.receivedDate ? new Date(item.receivedDate) : null;
+                    const receivedDate = item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null;
                     if (receivedDate && (!current.firstReceivedDate || receivedDate < current.firstReceivedDate)) {
                         current.firstReceivedDate = receivedDate;
                     }
 
-                    const createdAtUtc = item.createdAtUtc ? new Date(item.createdAtUtc) : null;
+                    const createdAtUtc = item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null;
                     if (createdAtUtc && (!current.lastUpdatedAtUtc || createdAtUtc > current.lastUpdatedAtUtc)) {
                         current.lastUpdatedAtUtc = createdAtUtc;
                     }
@@ -130,7 +130,7 @@ const App = {
                         { field: 'originalQty', headerText: 'Original Qty', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'remainingQty', headerText: 'Remaining Qty', width: 150, type: 'number', format: 'N2', textAlign: 'Right' },
                         { field: 'firstReceivedDate', headerText: 'Received Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'lastUpdatedAtUtc', headerText: 'Created At UTC', width: 170, format: 'yyyy-MM-dd HH:mm' }
+            { field: 'lastUpdatedAtUtc', headerText: 'Last Updated', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
                         {
@@ -170,3 +170,5 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+

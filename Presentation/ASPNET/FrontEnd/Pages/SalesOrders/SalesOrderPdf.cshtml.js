@@ -52,7 +52,7 @@
                 state.customer = pdfData.customer || {};
                 state.orderNumber = pdfData.number || '';
                 state.orderDate = DateFormatManager.formatToLocale(pdfData.orderDate) || '';
-                state.orderCurrency = StorageManager.getCompany()?.currency || '';
+    state.orderCurrency = StorageManager.getCompany()?.currency || 'VND';
                 state.subTotal = NumberFormatManager.formatToLocale(pdfData.beforeTaxAmount) || '';
                 state.tax = NumberFormatManager.formatToLocale(pdfData.taxAmount) || '';
                 state.totalAmount = NumberFormatManager.formatToLocale(pdfData.afterTaxAmount) || '';

@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -78,7 +78,8 @@
                 transferReceiveDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.transferReceiveDate ? new Date(state.transferReceiveDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.transferReceiveDate ? DateFormatManager.parseBusinessDate(state.transferReceiveDate) : null,
                     change: (e) => {
                         state.transferReceiveDate = e.value;
                     }
@@ -87,7 +88,7 @@
             },
             refresh: () => {
                 if (transferReceiveDatePicker.obj) {
-                    transferReceiveDatePicker.obj.value = state.transferReceiveDate ? new Date(state.transferReceiveDate) : null;
+                    transferReceiveDatePicker.obj.value = state.transferReceiveDate ? DateFormatManager.parseBusinessDate(state.transferReceiveDate) : null;
                 }
             }
         };
@@ -290,8 +291,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    transferReceiveDate: new Date(item.transferReceiveDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    transferReceiveDate: DateFormatManager.parseBusinessDate(item.transferReceiveDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateTransferOutListLookupData: async () => {
@@ -316,7 +317,7 @@
                     const response = await services.getSecondaryData(transferInId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -466,7 +467,7 @@
                         { field: 'transferReceiveDate', headerText: 'Receive Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'transferOutNumber', headerText: 'Transfer Out', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -522,7 +523,7 @@
                                 state.mainTitle = 'Edit Transfer In';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.transferReceiveDate = selectedRecord.transferReceiveDate ? new Date(selectedRecord.transferReceiveDate) : null;
+                                state.transferReceiveDate = selectedRecord.transferReceiveDate ? DateFormatManager.parseBusinessDate(selectedRecord.transferReceiveDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.transferOutId = selectedRecord.transferOutId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
@@ -540,7 +541,7 @@
                                 state.mainTitle = 'Delete Transfer In?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.transferReceiveDate = selectedRecord.transferReceiveDate ? new Date(selectedRecord.transferReceiveDate) : null;
+                                state.transferReceiveDate = selectedRecord.transferReceiveDate ? DateFormatManager.parseBusinessDate(selectedRecord.transferReceiveDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.transferOutId = selectedRecord.transferOutId ?? '';
                                 state.status = String(selectedRecord.status ?? '');

@@ -1,4 +1,5 @@
 ﻿using Application.Common.Repositories;
+using Domain.Common;
 using Domain.Entities;
 
 namespace Infrastructure.SeedManager.Systems;
@@ -19,10 +20,10 @@ public class CompanySeeder
     {
         var entity = new Company
         {
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = AppDateTime.VietnamNow(),
             IsDeleted = false,
             Name = "Acme Corp",
-            Currency = "USD",
+            Currency = "VND",
             Street = "123 Main St",
             City = "Metropolis",
             State = "New York",

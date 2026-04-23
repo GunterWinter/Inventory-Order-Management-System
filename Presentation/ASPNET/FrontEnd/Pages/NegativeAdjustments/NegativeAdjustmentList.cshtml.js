@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -68,7 +68,8 @@
                 adjustmentDatePicker.obj = new ej.calendars.DatePicker({
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
-                    value: state.adjustmentDate ? new Date(state.adjustmentDate) : null,
+                    locale: DateFormatManager.syncfusionDateLocale,
+                    value: state.adjustmentDate ? DateFormatManager.parseBusinessDate(state.adjustmentDate) : null,
                     change: (e) => {
                         state.adjustmentDate = e.value;
                     }
@@ -77,7 +78,7 @@
             },
             refresh: () => {
                 if (adjustmentDatePicker.obj) {
-                    adjustmentDatePicker.obj.value = state.adjustmentDate ? new Date(state.adjustmentDate) : null;
+                    adjustmentDatePicker.obj.value = state.adjustmentDate ? DateFormatManager.parseBusinessDate(state.adjustmentDate) : null;
                 }
             }
         };
@@ -239,8 +240,8 @@
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    adjustmentDate: new Date(item.adjustmentDate),
-                    createdAtUtc: new Date(item.createdAtUtc)
+                    adjustmentDate: DateFormatManager.parseBusinessDate(item.adjustmentDate),
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populateNegativeAdjustmentStatusListLookupData: async () => {
@@ -265,7 +266,7 @@
                     const response = await services.getSecondaryData(negativeAdjustmentId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: new Date(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -412,7 +413,7 @@
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
                         { field: 'adjustmentDate', headerText: 'Adjustment Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At UTC', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -468,7 +469,7 @@
                                 state.mainTitle = 'Edit Negative Adjustment';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.adjustmentDate = selectedRecord.adjustmentDate ? new Date(selectedRecord.adjustmentDate) : null;
+                                state.adjustmentDate = selectedRecord.adjustmentDate ? DateFormatManager.parseBusinessDate(selectedRecord.adjustmentDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
@@ -485,7 +486,7 @@
                                 state.mainTitle = 'Delete Negative Adjustment?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.adjustmentDate = selectedRecord.adjustmentDate ? new Date(selectedRecord.adjustmentDate) : null;
+                                state.adjustmentDate = selectedRecord.adjustmentDate ? DateFormatManager.parseBusinessDate(selectedRecord.adjustmentDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
