@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides; // 👈 1. THÊM KHAI BÁO THƯ VIỆN NÀY
 using ASPNET.BackEnd;
 using ASPNET.BackEnd.Common.Middlewares;
 using ASPNET.FrontEnd;
@@ -14,7 +15,16 @@ if (!Directory.Exists(logPath))
 builder.Services.AddBackEndServices(builder.Configuration);
 builder.Services.AddFrontEndServices();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.RegisterBackEndBuilder(app.Environment, app, builder.Configuration);
 
@@ -27,10 +37,11 @@ if (!app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseCors();
 app.UseMiddleware<GlobalApiExceptionHandlerMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapStaticAssets();
 
+app.MapStaticAssets();
 app.MapFrontEndRoutes();
 app.MapBackEndRoutes();
 

@@ -4,6 +4,8 @@
     const GROUP_SEPARATOR = '.';
     const DECIMAL_SEPARATOR = ',';
     const MAX_FRACTION_DIGITS = 2;
+    const MONEY_FORMAT = 'N0';
+    const MONEY_FIELD_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|sales)/i;
 
     function toFiniteNumber(value) {
         if (typeof value === 'number' && Number.isFinite(value)) {
@@ -48,6 +50,54 @@
             minimumFractionDigits,
             maximumFractionDigits
         }).format(safeValue);
+    }
+
+    function getColumnText(column) {
+        return [
+            column?.field,
+            column?.headerText,
+            column?.foreignKeyField,
+            column?.foreignKeyValue
+        ].filter(Boolean).join(' ');
+    }
+
+    function isMoneyText(value) {
+        return MONEY_FIELD_PATTERN.test(`${value ?? ''}`);
+    }
+
+    function isMoneyNumericTextBox(numericTextBox) {
+        return isMoneyText([
+            numericTextBox?.placeholder,
+            numericTextBox?.element?.id,
+            numericTextBox?.element?.name,
+            numericTextBox?.element?.className,
+            numericTextBox?.htmlAttributes?.name,
+            numericTextBox?.htmlAttributes?.id
+        ].filter(Boolean).join(' '));
+    }
+
+    function normalizeMoneyNumericTextBox(numericTextBox) {
+        const format = `${numericTextBox?.format ?? ''}`.toLowerCase();
+        if (format === 'n2' && isMoneyNumericTextBox(numericTextBox)) {
+            numericTextBox.format = 'n0';
+            numericTextBox.decimals = 0;
+            numericTextBox.validateDecimalOnType = false;
+        }
+    }
+
+    function normalizeMoneyGridColumn(column) {
+        if (!column) {
+            return;
+        }
+
+        if (Array.isArray(column.columns)) {
+            column.columns.forEach(normalizeMoneyGridColumn);
+        }
+
+        const format = `${column.format ?? ''}`.toLowerCase();
+        if (format === 'n2' && isMoneyText(getColumnText(column))) {
+            column.format = MONEY_FORMAT;
+        }
     }
 
     function splitEditableNumber(value) {
@@ -175,8 +225,7 @@
         element.dataset.liveFormatted = 'true';
 
         if (numericTextBox.value != null && numericTextBox.value !== '') {
-            const fractionDigits = numericTextBox.decimals ?? null;
-            element.value = formatNumber(numericTextBox.value, fractionDigits, fractionDigits);
+            element.value = formatNumber(numericTextBox.value);
         }
     }
 
@@ -188,6 +237,7 @@
 
         const originalAppendTo = numericTextBox.prototype.appendTo;
         numericTextBox.prototype.appendTo = function (selector) {
+            normalizeMoneyNumericTextBox(this);
             const result = originalAppendTo.call(this, selector);
             attachLiveFormatting(this);
             return result;
@@ -196,12 +246,35 @@
         numericTextBox.prototype.__vietnamCurrencyPatched = true;
     }
 
+    function patchGrid() {
+        const grid = window.ej?.grids?.Grid;
+        if (!grid || grid.prototype.__vietnamMoneyFormatPatched) {
+            return;
+        }
+
+        const originalAppendTo = grid.prototype.appendTo;
+        grid.prototype.appendTo = function (selector) {
+            if (Array.isArray(this.columns)) {
+                this.columns.forEach(normalizeMoneyGridColumn);
+            }
+
+            return originalAppendTo.call(this, selector);
+        };
+
+        grid.prototype.__vietnamMoneyFormatPatched = true;
+    }
+
     patchNumericTextBox();
-    document.addEventListener('DOMContentLoaded', patchNumericTextBox, { once: true });
+    patchGrid();
+    document.addEventListener('DOMContentLoaded', () => {
+        patchNumericTextBox();
+        patchGrid();
+    }, { once: true });
 
     window.NumberFormatManager = {
         locale: VI_LOCALE,
         currency: DEFAULT_CURRENCY,
+        moneyFormat: MONEY_FORMAT,
         formatToLocale: formatNumber,
         formatCurrencyToLocale: formatCurrency,
         formatEditableValue,

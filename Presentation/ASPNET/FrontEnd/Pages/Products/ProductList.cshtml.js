@@ -33,6 +33,13 @@ const App = {
         const numberRef = Vue.ref(null);
         const referenceCodeRef = Vue.ref(null); 
         const unitPriceRef = Vue.ref(null);
+        const getUnitPriceValue = () => {
+            if (typeof state.unitPrice === 'number') {
+                return state.unitPrice;
+            }
+
+            return NumberFormatManager.parseLocaleNumber(state.unitPrice);
+        };
 
         const validateForm = function () {
             state.errors.name = '';
@@ -47,11 +54,12 @@ const App = {
                 state.errors.name = 'Name is required.';
                 isValid = false;
             }
-            if (!state.unitPrice) {
+            const unitPriceValue = getUnitPriceValue();
+            if (unitPriceValue == null) {
                 state.errors.unitPrice = 'Unit price is required.';
                 isValid = false;
-            } else if (!/^\d+(\.\d{1,2})?$/.test(state.unitPrice)) {
-                state.errors.unitPrice = 'Unit price must be a numeric value with up to two decimal places.';
+            } else if (unitPriceValue < 0) {
+                state.errors.unitPrice = 'Unit price must be zero or greater.';
                 isValid = false;
             }
             if (!state.productGroupId) {
@@ -260,17 +268,21 @@ const App = {
             obj: null,
             create: () => {
                 unitPriceNumber.obj = new ej.inputs.NumericTextBox({
-                    format: 'n2',
+                    format: 'n0',
                     placeholder: 'Enter Unit Price',
                     min: 0,
-                    step: 0.01,
-                    validateDecimalOnType: true
+                    step: 1000,
+                    decimals: 0,
+                    validateDecimalOnType: false,
+                    change: (e) => {
+                        state.unitPrice = e.value ?? '';
+                    }
                 });
                 unitPriceNumber.obj.appendTo(unitPriceRef.value);
             },
             refresh: () => {
                 if (unitPriceNumber.obj) {
-                    unitPriceNumber.obj.value = state.unitPrice;
+                    unitPriceNumber.obj.value = getUnitPriceValue();
                 }
             }
         };
@@ -333,10 +345,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.referenceCode, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.referenceCode, state.unitPrice, state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), state.physical, state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();

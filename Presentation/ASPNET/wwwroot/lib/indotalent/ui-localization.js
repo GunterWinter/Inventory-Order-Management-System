@@ -3,6 +3,10 @@
     const DEFAULT_LOCALE = 'en';
     const textNodeOriginals = new WeakMap();
     const attributeOriginals = new WeakMap();
+    const localizedDropDownInstances = new Set();
+    const localizedSyncfusionTextInstances = new Set();
+    const LOCALIZED_DROPDOWN_TEXT_FIELD = '__localizedText';
+    const STATUS_OPTION_TEXTS = new Set(['Draft', 'Cancelled', 'Canceled', 'Confirmed', 'Archived', 'In', 'Out']);
     let currentLocale = resolveLocale(getSavedLocale()) ?? detectBrowserLocale();
     let originalTitle = document.title;
     let isApplying = false;
@@ -11,9 +15,15 @@
     const exactTranslations = {
         'Dashboards': 'Bảng điều khiển',
         'Default Dashboard': 'Bảng điều khiển tổng quan',
+        'WHMS - .NET 9 - Warehouse & Inventory Management System': 'WHMS - .NET 9 - Hệ thống quản lý kho và tồn kho',
         'Sales': 'Bán hàng',
+        'Sales Rtrn.': 'Trả hàng bán',
         'Purchase': 'Mua hàng',
+        'Purchase Rtrn.': 'Trả hàng mua',
+        'Purchases': 'Mua hàng',
         'Inventory': 'Kho',
+        'Stocks': 'Tồn kho',
+        'Transactions': 'Giao dịch',
         'Utilities': 'Tiện ích',
         'Membership': 'Người dùng và phân quyền',
         'Profiles': 'Hồ sơ',
@@ -57,6 +67,7 @@
         'Inventory Issue Allocations': 'Phân bổ xuất kho theo lô',
         'Todo': 'Công việc',
         'Todo Item': 'Chi tiết công việc',
+        'User': 'Người dùng',
         'Users': 'Người dùng',
         'Roles': 'Vai trò',
         'My Profile': 'Hồ sơ của tôi',
@@ -72,15 +83,38 @@
         'Email Confirm': 'Xác nhận email',
         'Home page': 'Trang chủ',
         'Profile': 'Hồ sơ',
+        'Language': 'Ngôn ngữ',
         'Currency:': 'Tiền tệ:',
         'Loading...': 'Đang tải...',
+        'Please wait...': 'Vui lòng chờ...',
         'All Right Reserved.': 'Bảo lưu mọi quyền.',
         'Developed By:': 'Phát triển bởi:',
         'Main Info': 'Thông tin chính',
+        'Tax Info': 'Thông tin thuế',
+        'Address': 'Địa chỉ',
+        'Communication': 'Liên hệ',
+        'Social Media': 'Mạng xã hội',
+        'Customer Information': 'Thông tin khách hàng',
+        'Vendor Information': 'Thông tin nhà cung cấp',
+        'Warehouse Information': 'Thông tin kho hàng',
+        'Order Information': 'Thông tin đơn hàng',
+        'Delivery Information': 'Thông tin xuất kho',
+        'Receive Information': 'Thông tin nhập kho',
+        'Return Information': 'Thông tin trả hàng',
+        'Adjustment Information': 'Thông tin điều chỉnh',
+        'Transfer Information': 'Thông tin chuyển kho',
+        'Scrapping Information': 'Thông tin hủy hàng',
+        'Stock Count Information': 'Thông tin kiểm kê',
+        'User Info': 'Thông tin người dùng',
+        'User Password': 'Mật khẩu người dùng',
+        'User Roles': 'Vai trò người dùng',
         'Payment Summary': 'Tổng hợp thanh toán',
         'Subtotal': 'Tạm tính',
         'Total Amount': 'Tổng thanh toán',
+        'Total Movement': 'Tổng số lượng giao dịch',
+        'Total Counted': 'Tổng số lượng kiểm kê',
         'Order Date': 'Ngày chứng từ',
+        'Order Number': 'Số đơn hàng',
         'Receive Date': 'Ngày nhập',
         'Delivery Date': 'Ngày xuất',
         'Return Date': 'Ngày trả hàng',
@@ -92,6 +126,7 @@
         'Received Date': 'Ngày nhập',
         'Number': 'Số chứng từ',
         'Number (Mã HT)': 'Số chứng từ (mã hệ thống)',
+        'Reference': 'Tham chiếu',
         'Description': 'Diễn giải',
         'Order Status': 'Trạng thái chứng từ',
         'Status': 'Trạng thái',
@@ -112,6 +147,7 @@
         'Ref Code': 'Mã tham khảo',
         'Enter Reference Code (SKU/Custom)': 'Nhập mã tham khảo (SKU/tùy chỉnh)',
         'Batch Number': 'Số lô',
+        'Qty.': 'SL.',
         'Quantity': 'Số lượng',
         'Summary': 'Ghi chú',
         'Unit Price': 'Đơn giá',
@@ -150,29 +186,41 @@
         'Login Successful': 'Đăng nhập thành công',
         'Login Failed': 'Đăng nhập thất bại',
         'An Error Occurred': 'Đã xảy ra lỗi',
+        'An unexpected error occurred.': 'Đã xảy ra lỗi không mong muốn.',
         'Unauthorized': 'Không có quyền truy cập',
         'Token not valid': 'Phiên đăng nhập không hợp lệ',
         'Error validating token': 'Lỗi xác thực phiên đăng nhập',
         'You are being redirected...': 'Hệ thống đang chuyển hướng...',
+        'Page will be refreshed...': 'Trang sẽ được làm mới...',
         'Try Again': 'Thử lại',
         'OK': 'Đồng ý',
         'Please try again.': 'Vui lòng thử lại.',
         'Please check your credentials.': 'Vui lòng kiểm tra lại thông tin đăng nhập.',
         'Please check your data.': 'Vui lòng kiểm tra lại dữ liệu.',
+        'Please check your email. You are being redirected...': 'Vui lòng kiểm tra email. Hệ thống đang chuyển hướng...',
         'Form will be closed...': 'Biểu mẫu sẽ được đóng...',
         'Passwords do not match.': 'Mật khẩu không khớp.',
         'Password and Confirm Password must match.': 'Mật khẩu và mật khẩu xác nhận phải khớp nhau.',
+        'Password has been updated.': 'Mật khẩu đã được cập nhật.',
+        'Password reset is in progress.': 'Đang đặt lại mật khẩu.',
         'Email Confirmation Successful': 'Xác nhận email thành công',
         'Email Confirmation Failed': 'Xác nhận email thất bại',
         'Email confirmation is in progress.': 'Đang xác nhận email.',
+        'Email or code is missing in the URL query string.': 'Thiếu email hoặc mã xác nhận trong URL.',
         'Forgot Password Confirm': 'Xác nhận quên mật khẩu',
         'Click the button below to confirm and log out completely.': 'Bấm nút bên dưới để xác nhận và đăng xuất hoàn toàn.',
+        'Are you sure you want to log out?': 'Bạn có chắc muốn đăng xuất không?',
         'Remember Me': 'Ghi nhớ đăng nhập',
         '- OR -': 'HOẶC',
         'Sign in using Facebook': 'Đăng nhập bằng Facebook',
         'Sign in using Google+': 'Đăng nhập bằng Google',
+        'Sign up using Facebook': 'Đăng ký bằng Facebook',
+        'Sign up using Google+': 'Đăng ký bằng Google',
         'Register a new membership': 'Đăng ký tài khoản mới',
+        'I already have a membership': 'Tôi đã có tài khoản',
+        'I forgot my password': 'Tôi quên mật khẩu',
         'Password': 'Mật khẩu',
+        'Re-type Password': 'Nhập lại mật khẩu',
         'Email': 'Email',
         'Company': 'Công ty',
         'Name': 'Tên',
@@ -192,7 +240,7 @@
         'Fax Number': 'Số fax',
         'Email Address': 'Địa chỉ email',
         'EmailAddress': 'Địa chỉ email',
-        'Website': 'Website',
+        'Website': 'Trang web',
         'Job Title': 'Chức danh',
         'JobTitle': 'Chức danh',
         'First Name': 'Tên',
@@ -234,6 +282,10 @@
         'Qty Issued': 'Số lượng đã xuất',
         'Sales Amount': 'Doanh thu',
         'Allocation Date': 'Ngày phân bổ',
+        'Inventory Stock': 'Tồn kho',
+        'Inventory Transaction': 'Giao dịch kho',
+        'Latest Sales': 'Đơn bán hàng mới nhất',
+        'Latest Purchase': 'Đơn mua hàng mới nhất',
         'Sales by Customer Group': 'Bán hàng theo nhóm khách hàng',
         'Sales by Customer Category': 'Bán hàng theo phân loại khách hàng',
         'Purchase by Vendor Group': 'Mua hàng theo nhóm nhà cung cấp',
@@ -251,6 +303,11 @@
         'No batch with stock': 'Không có lô còn tồn',
         'Blank = FIFO': 'Để trống = FIFO',
         'Enter Batch No.': 'Nhập số lô',
+        'Return Item': 'Chi tiết trả hàng',
+        'Change Avatar': 'Đổi ảnh đại diện',
+        'Uploader Area': 'Khu vực tải lên',
+        'User Image': 'Ảnh người dùng',
+        'Your image has been uploaded successfully!': 'Ảnh của bạn đã được tải lên thành công!',
         'Default Company': 'Công ty mặc định',
         'Open': 'Đang mở',
         'Closed': 'Đã hết',
@@ -260,6 +317,9 @@
         'This report shows only batches that still have stock on hand. Use it to check which product is available in which batch and how much quantity remains in the warehouse.': 'Báo cáo này chỉ hiển thị các lô vẫn còn tồn kho. Dùng báo cáo để kiểm tra hàng hóa nào đang còn ở lô nào và còn bao nhiêu trong kho.',
         'Select an existing batch if you want to receive more stock into the same batch, or type a new batch to create a new supplier lot.': 'Chọn lô đã có nếu muốn nhập tiếp vào cùng lô, hoặc gõ lô mới để tạo lô nhập mới từ nhà cung cấp.',
         'When a product is selected, the system suggests the earliest available batch by FIFO. You can still choose a different batch, and each option shows its remaining stock.': 'Khi chọn hàng hóa, hệ thống sẽ gợi ý lô còn tồn sớm nhất theo FIFO. Bạn vẫn có thể chọn lô khác, và mỗi lựa chọn đều hiển thị tồn còn lại.',
+        'Inventory transactions are auto-generated from': 'Giao dịch kho được tự động tạo từ',
+        'items. Maintain batch numbers on the purchase order before confirming receipt.': 'chi tiết. Hãy quản lý đúng số lô trên đơn mua trước khi xác nhận nhập kho.',
+        'items. Leave batch blank on the sales order for FIFO, or fill it to force a specific batch.': 'chi tiết. Để trống số lô trên đơn bán hàng để xuất theo FIFO, hoặc nhập số lô nếu muốn chỉ định lô cụ thể.',
         'Inventory transactions are auto-generated from Purchase Order items. Maintain batch numbers on the purchase order before confirming receipt.': 'Giao dịch kho được tự động tạo từ chi tiết đơn mua hàng. Hãy quản lý đúng số lô trên đơn mua trước khi xác nhận nhập kho.',
         'Inventory transactions are auto-generated from Sales Order items. Leave batch blank on the sales order for FIFO, or fill it to force a specific batch.': 'Giao dịch kho được tự động tạo từ chi tiết đơn bán hàng. Để trống số lô để xuất theo FIFO, hoặc nhập số lô nếu muốn chỉ định lô cụ thể.',
         'Leave Batch Number empty to issue automatically by FIFO. Fill it only when you want to force a specific batch.': 'Để trống số lô để hệ thống tự xuất theo FIFO. Chỉ nhập số lô khi muốn chỉ định lô cụ thể.',
@@ -292,8 +352,13 @@
         'dashboard': 'bảng điều khiển',
         'default dashboard': 'bảng điều khiển tổng quan',
         'sales': 'bán hàng',
+        'sales rtrn.': 'trả hàng bán',
         'purchase': 'mua hàng',
+        'purchase rtrn.': 'trả hàng mua',
+        'purchases': 'mua hàng',
         'inventory': 'kho',
+        'stocks': 'tồn kho',
+        'transactions': 'giao dịch',
         'customer': 'khách hàng',
         'customer group': 'nhóm khách hàng',
         'customer category': 'phân loại khách hàng',
@@ -326,6 +391,10 @@
         'stock count': 'phiếu kiểm kê',
         'transaction report': 'báo cáo giao dịch kho',
         'stock report': 'báo cáo tồn kho',
+        'inventory stock': 'tồn kho',
+        'inventory transaction': 'giao dịch kho',
+        'latest sales': 'đơn bán hàng mới nhất',
+        'latest purchase': 'đơn mua hàng mới nhất',
         'movement report': 'báo cáo lãi theo lô',
         'movement reports': 'báo cáo lãi theo lô',
         'batch profit report': 'báo cáo lãi theo lô',
@@ -341,6 +410,7 @@
         'tax': 'thuế',
         'number sequence': 'mã số chứng từ',
         'order date': 'ngày chứng từ',
+        'order number': 'số đơn hàng',
         'receive date': 'ngày nhập',
         'delivery date': 'ngày xuất',
         'return date': 'ngày trả hàng',
@@ -365,6 +435,7 @@
         'reference code': 'mã tham khảo',
         'ref code': 'mã tham khảo',
         'batch number': 'số lô',
+        'qty.': 'SL.',
         'quantity': 'số lượng',
         'summary': 'ghi chú',
         'unit price': 'đơn giá',
@@ -377,10 +448,16 @@
         'suffix': 'hậu tố',
         'subtotal': 'tạm tính',
         'total amount': 'tổng thanh toán',
+        'total movement': 'tổng số lượng giao dịch',
+        'total counted': 'tổng số lượng kiểm kê',
         'payment summary': 'tổng hợp thanh toán',
         'number': 'số chứng từ',
+        'reference': 'tham chiếu',
         'description': 'diễn giải',
         'warehouse': 'kho hàng',
+        'address': 'địa chỉ',
+        'communication': 'liên hệ',
+        'social media': 'mạng xã hội',
         'system warehouse': 'kho hệ thống',
         'system stock': 'tồn kho hệ thống',
         'movement': 'số lượng giao dịch',
@@ -388,6 +465,15 @@
         'transaction type': 'loại giao dịch',
         'adjustment': 'điều chỉnh',
         'counted': 'đã kiểm kê',
+        'information': 'thông tin',
+        'delivery': 'xuất kho',
+        'order': 'đơn hàng',
+        'receive': 'nhập kho',
+        'return': 'trả hàng',
+        'transfer': 'chuyển kho',
+        'from': 'từ',
+        'to': 'đến',
+        'return item': 'chi tiết trả hàng',
         'sales price': 'giá bán',
         'sold qty': 'số lượng đã bán',
         'profit': 'lợi nhuận',
@@ -395,6 +481,7 @@
         'cogs': 'giá vốn',
         'last sold': 'lần bán gần nhất',
         'password': 'mật khẩu',
+        're-type password': 'nhập lại mật khẩu',
         'email': 'email',
         'company': 'công ty',
         'name': 'tên',
@@ -415,7 +502,7 @@
         'fax number': 'số fax',
         'email address': 'địa chỉ email',
         'emailaddress': 'địa chỉ email',
-        'website': 'website',
+        'website': 'trang web',
         'job title': 'chức danh',
         'jobtitle': 'chức danh',
         'first name': 'tên',
@@ -460,9 +547,17 @@
         'logout': 'đăng xuất',
         'register': 'đăng ký',
         'change password': 'đổi mật khẩu',
+        'change avatar': 'đổi ảnh đại diện',
         'change role': 'đổi vai trò',
         'edit company': 'chỉnh sửa thông tin doanh nghiệp',
-        'manage contact': 'quản lý liên hệ'
+        'manage contact': 'quản lý liên hệ',
+        'language': 'ngôn ngữ',
+        'user info': 'thông tin người dùng',
+        'user password': 'mật khẩu người dùng',
+        'user roles': 'vai trò người dùng',
+        'tax info': 'thông tin thuế',
+        'uploader area': 'khu vực tải lên',
+        'user image': 'ảnh người dùng'
     };
 
     function normalizeText(value) {
@@ -530,6 +625,19 @@
             return exactTranslations[value];
         }
 
+        const contactLineMatch = value.match(/^Email:\s*(.+?)\s*\|\s*Phone:\s*(.+)$/i);
+        if (contactLineMatch) {
+            return `Email: ${contactLineMatch[1]} | Điện thoại: ${contactLineMatch[2]}`;
+        }
+
+        const colonLabelMatch = value.match(/^(.+?):$/);
+        if (colonLabelMatch) {
+            const labelText = translateNormalized(colonLabelMatch[1], locale);
+            if (labelText !== colonLabelMatch[1]) {
+                return `${labelText}:`;
+            }
+        }
+
         const requiredMatch = value.match(/^(.+?) is required\.?$/i);
         if (requiredMatch) {
             return `${toSentenceCase(translateBusinessTerm(requiredMatch[1], locale))} là bắt buộc.`;
@@ -569,6 +677,14 @@
         const listMatch = value.match(/^(.+?) List$/i);
         if (listMatch) {
             return `Danh sách ${translateBusinessTerm(listMatch[1], locale)}`;
+        }
+
+        const infoMatch = value.match(/^(.+?) (?:Info|Information)$/i);
+        if (infoMatch) {
+            const subjectText = translateBusinessTerm(infoMatch[1], locale);
+            if (subjectText !== infoMatch[1]) {
+                return `Thông tin ${subjectText}`;
+            }
         }
 
         const pdfMatch = value.match(/^(.+?) PDF$/i);
@@ -628,6 +744,265 @@
         }
 
         return rawValue.replace(normalized, translated);
+    }
+
+    function getDropDownTextField(instance) {
+        return instance?.fields?.text || 'text';
+    }
+
+    function getDropDownValueField(instance) {
+        return instance?.fields?.value || 'value';
+    }
+
+    function resolveOriginalDropDownSource(instance) {
+        if (!instance || !Array.isArray(instance.dataSource)) {
+            return null;
+        }
+
+        if (instance.dataSource !== instance.__localizedDataSource) {
+            instance.__originalDataSource = instance.dataSource;
+            instance.__originalFields = { ...(instance.fields ?? {}) };
+        }
+
+        return instance.__originalDataSource ?? instance.dataSource;
+    }
+
+    function isStatusOptionSource(dataSource, textField) {
+        if (!Array.isArray(dataSource) || !dataSource.length || dataSource.length > STATUS_OPTION_TEXTS.size) {
+            return false;
+        }
+
+        return dataSource.every(item => STATUS_OPTION_TEXTS.has(normalizeText(item?.[textField])));
+    }
+
+    function localizeDropDownDataSource(instance) {
+        const originalDataSource = resolveOriginalDropDownSource(instance);
+        if (!originalDataSource) {
+            return false;
+        }
+
+        const originalFields = instance.__originalFields ?? { ...(instance.fields ?? {}) };
+        const textField = originalFields.text || getDropDownTextField(instance);
+        if (!isStatusOptionSource(originalDataSource, textField)) {
+            return false;
+        }
+
+        if (currentLocale === 'en') {
+            instance.dataSource = originalDataSource;
+            instance.fields = originalFields;
+            instance.__localizedDataSource = null;
+            return true;
+        }
+
+        const localizedDataSource = originalDataSource.map(item => ({
+            ...item,
+            [LOCALIZED_DROPDOWN_TEXT_FIELD]: translateText(item?.[textField])
+        }));
+
+        instance.__localizedDataSource = localizedDataSource;
+        instance.dataSource = localizedDataSource;
+        instance.fields = {
+            ...originalFields,
+            text: LOCALIZED_DROPDOWN_TEXT_FIELD
+        };
+        return true;
+    }
+
+    function syncDropDownSelectedText(instance) {
+        if (!instance || currentLocale === 'en' || !Array.isArray(instance.dataSource)) {
+            return;
+        }
+
+        const valueField = getDropDownValueField(instance);
+        const selectedItem = instance.dataSource.find(item => `${item?.[valueField]}` === `${instance.value}`);
+        const translatedText = selectedItem?.[LOCALIZED_DROPDOWN_TEXT_FIELD];
+        if (!translatedText) {
+            return;
+        }
+
+        if (instance.inputElement && instance.inputElement.value !== translatedText) {
+            instance.inputElement.value = translatedText;
+            instance.inputElement.setAttribute('value', translatedText);
+        }
+
+        if (instance.text !== translatedText) {
+            instance.text = translatedText;
+        }
+    }
+
+    function refreshDropDownInstance(instance) {
+        if (!localizeDropDownDataSource(instance)) {
+            return;
+        }
+
+        if (typeof instance.dataBind === 'function' && !instance.__isLocalizingDataBind) {
+            instance.__isLocalizingDataBind = true;
+            instance.dataBind();
+            instance.__isLocalizingDataBind = false;
+        }
+
+        syncDropDownSelectedText(instance);
+    }
+
+    function refreshSyncfusionLocalizedControls() {
+        localizedDropDownInstances.forEach(refreshDropDownInstance);
+        localizedSyncfusionTextInstances.forEach(refreshSyncfusionTextInstance);
+    }
+
+    function patchDropDownComponent(component) {
+        if (!component || component.prototype.__localizedStatusTextPatched) {
+            return;
+        }
+
+        const originalAppendTo = component.prototype.appendTo;
+        component.prototype.appendTo = function (selector) {
+            localizeDropDownDataSource(this);
+            const result = originalAppendTo.call(this, selector);
+            localizedDropDownInstances.add(this);
+            syncDropDownSelectedText(this);
+            return result;
+        };
+
+        const originalDataBind = component.prototype.dataBind;
+        if (typeof originalDataBind === 'function') {
+            component.prototype.dataBind = function () {
+                if (!this.__isLocalizingDataBind) {
+                    localizeDropDownDataSource(this);
+                }
+
+                const result = originalDataBind.call(this);
+                syncDropDownSelectedText(this);
+                return result;
+            };
+        }
+
+        component.prototype.__localizedStatusTextPatched = true;
+    }
+
+    function patchSyncfusionDropDowns() {
+        patchDropDownComponent(window.ej?.dropdowns?.DropDownList);
+        patchDropDownComponent(window.ej?.dropdowns?.ComboBox);
+    }
+
+    function localizeStringProperty(owner, propertyName, originalPropertyName) {
+        if (!owner || typeof owner[propertyName] !== 'string') {
+            return false;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(owner, originalPropertyName)) {
+            owner[originalPropertyName] = owner[propertyName];
+        }
+
+        const originalValue = owner[originalPropertyName] ?? '';
+        const localizedValue = currentLocale === 'vi' ? translateText(originalValue) : originalValue;
+        if (owner[propertyName] === localizedValue) {
+            return false;
+        }
+
+        owner[propertyName] = localizedValue;
+        return true;
+    }
+
+    function localizeGridColumnHeaders(columns) {
+        if (!Array.isArray(columns)) {
+            return false;
+        }
+
+        let changed = false;
+        columns.forEach(column => {
+            changed = localizeStringProperty(column, 'headerText', '__originalHeaderText') || changed;
+            changed = localizeGridColumnHeaders(column.columns) || changed;
+        });
+
+        return changed;
+    }
+
+    function localizeGridText(instance) {
+        return localizeGridColumnHeaders(instance?.columns);
+    }
+
+    function localizeChartText(instance) {
+        if (!instance) {
+            return false;
+        }
+
+        let changed = false;
+        changed = localizeStringProperty(instance, 'title', '__originalTitle') || changed;
+        changed = localizeStringProperty(instance.primaryXAxis, 'title', '__originalTitle') || changed;
+        changed = localizeStringProperty(instance.primaryYAxis, 'title', '__originalTitle') || changed;
+
+        if (Array.isArray(instance.axes)) {
+            instance.axes.forEach(axis => {
+                changed = localizeStringProperty(axis, 'title', '__originalTitle') || changed;
+            });
+        }
+
+        if (Array.isArray(instance.series)) {
+            instance.series.forEach(series => {
+                changed = localizeStringProperty(series, 'name', '__originalName') || changed;
+            });
+        }
+
+        return changed;
+    }
+
+    function refreshSyncfusionTextInstance(instance) {
+        const localizer = instance?.__syncfusionTextLocalizer;
+        if (typeof localizer !== 'function') {
+            return;
+        }
+
+        localizer(instance);
+        if (instance.__isLocalizingTextRefresh) {
+            return;
+        }
+
+        instance.__isLocalizingTextRefresh = true;
+        try {
+            if (typeof instance.refreshColumns === 'function') {
+                instance.refreshColumns();
+            } else if (typeof instance.refresh === 'function') {
+                instance.refresh();
+            } else if (typeof instance.dataBind === 'function') {
+                instance.dataBind();
+            }
+        } finally {
+            instance.__isLocalizingTextRefresh = false;
+        }
+    }
+
+    function patchSyncfusionTextComponent(component, localizer) {
+        if (!component || component.prototype.__localizedTextPatched) {
+            return;
+        }
+
+        const originalAppendTo = component.prototype.appendTo;
+        component.prototype.appendTo = function (selector) {
+            this.__syncfusionTextLocalizer = localizer;
+            localizer(this);
+            const result = originalAppendTo.call(this, selector);
+            localizedSyncfusionTextInstances.add(this);
+            return result;
+        };
+
+        const originalDataBind = component.prototype.dataBind;
+        if (typeof originalDataBind === 'function') {
+            component.prototype.dataBind = function () {
+                if (!this.__isLocalizingTextRefresh) {
+                    this.__syncfusionTextLocalizer = localizer;
+                    localizer(this);
+                }
+
+                return originalDataBind.call(this);
+            };
+        }
+
+        component.prototype.__localizedTextPatched = true;
+    }
+
+    function patchSyncfusionTextComponents() {
+        patchSyncfusionTextComponent(window.ej?.grids?.Grid, localizeGridText);
+        patchSyncfusionTextComponent(window.ej?.charts?.Chart, localizeChartText);
     }
 
     function captureTextNodeOriginal(node, force = false) {
@@ -916,6 +1291,7 @@
         }
 
         applyCulture();
+        refreshSyncfusionLocalizedControls();
         scheduleTranslate();
         window.dispatchEvent(new CustomEvent('ui:languagechanged', {
             detail: { locale: resolvedLocale }
@@ -979,8 +1355,11 @@
 
     function init() {
         initSyncfusionLocalization();
+        patchSyncfusionDropDowns();
+        patchSyncfusionTextComponents();
         bindLanguageSwitcher();
         applyCulture();
+        refreshSyncfusionLocalizedControls();
         scheduleTranslate();
         initMutationObserver();
     }
@@ -995,6 +1374,7 @@
         getLocale: () => currentLocale,
         setLocale,
         translateText,
+        refreshSyncfusionControls: refreshSyncfusionLocalizedControls,
         refresh: scheduleTranslate
     };
 })(window, document);

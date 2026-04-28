@@ -9,6 +9,7 @@
 
     let isRefreshing = false;
     let retryQueue = [];
+    const NUMERIC_REQUEST_KEY_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|quantity|qty|movement|percentage|rate)$/i;
 
     const formatDateOnly = (value) => {
         if (window.DateFormatManager?.formatForApiDate) {
@@ -22,9 +23,18 @@
         ].join('-');
     };
 
-    const normalizeRequestData = (value) => {
+    const normalizeRequestData = (value, key = '') => {
         if (value instanceof Date) {
             return Number.isNaN(value.getTime()) ? null : formatDateOnly(value);
+        }
+
+        if (typeof value === 'string' && NUMERIC_REQUEST_KEY_PATTERN.test(key)) {
+            const parsedValue = window.NumberFormatManager?.parseLocaleNumber?.(value);
+            if (parsedValue != null) {
+                return parsedValue;
+            }
+
+            return value.trim() === '' ? null : value;
         }
 
         if (!value || typeof value !== 'object') {
@@ -41,11 +51,11 @@
         }
 
         if (Array.isArray(value)) {
-            return value.map(normalizeRequestData);
+            return value.map((item) => normalizeRequestData(item, key));
         }
 
         return Object.fromEntries(
-            Object.entries(value).map(([key, item]) => [key, normalizeRequestData(item)])
+            Object.entries(value).map(([itemKey, item]) => [itemKey, normalizeRequestData(item, itemKey)])
         );
     };
 

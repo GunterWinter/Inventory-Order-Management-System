@@ -872,6 +872,10 @@ const App = {
                                 },
                                 write: (args) => {
                                     priceObj = new ej.inputs.NumericTextBox({
+                                        format: 'n0',
+                                        decimals: 0,
+                                        step: 1000,
+                                        validateDecimalOnType: false,
                                         value: args.rowData.unitPrice ?? 0,
                                         change: (e) => {
                                             if (quantityObj && totalObj) {
@@ -937,6 +941,8 @@ const App = {
                                 },
                                 write: (args) => {
                                     totalObj = new ej.inputs.NumericTextBox({
+                                        format: 'n0',
+                                        decimals: 0,
                                         value: args.rowData.total ?? 0,
                                         readonly: true
                                     });
