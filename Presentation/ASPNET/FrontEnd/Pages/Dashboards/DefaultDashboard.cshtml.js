@@ -90,14 +90,14 @@
                 const cardsDashboard = state.cardsData?.cardsDashboard;
 
                 if (cardsDashboard) {
-                    cardSalesQtyRef.value.textContent = cardsDashboard.salesTotal || 0;
-                    cardSalesReturnQtyRef.value.textContent = cardsDashboard.salesReturnTotal || 0;
-                    cardPurchaseQtyRef.value.textContent = cardsDashboard.purchaseTotal || 0;
-                    cardPurchaseReturnQtyRef.value.textContent = cardsDashboard.purchaseReturnTotal || 0;
-                    cardDeliveryOrderQtyRef.value.textContent = cardsDashboard.deliveryOrderTotal || 0;
-                    cardGoodsReceiveQtyRef.value.textContent = cardsDashboard.goodsReceiveTotal || 0;
-                    cardTransferOutQtyRef.value.textContent = cardsDashboard.transferOutTotal || 0;
-                    cardTransferInQtyRef.value.textContent = cardsDashboard.transferInTotal || 0;
+                    cardSalesQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.salesTotal || 0);
+                    cardSalesReturnQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.salesReturnTotal || 0);
+                    cardPurchaseQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.purchaseTotal || 0);
+                    cardPurchaseReturnQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.purchaseReturnTotal || 0);
+                    cardDeliveryOrderQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.deliveryOrderTotal || 0);
+                    cardGoodsReceiveQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.goodsReceiveTotal || 0);
+                    cardTransferOutQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.transferOutTotal || 0);
+                    cardTransferInQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.transferInTotal || 0);
                 } else {
                     console.error('CardsDashboard data is not available.');
                 }
@@ -125,6 +125,7 @@
                         },
                         { field: 'salesOrder.orderDate', headerText: 'Order Date', width: 70, type: 'dateTime', format: 'yyyy-MM-dd', textAlign: 'Left' },
                         { field: 'salesOrder.number', headerText: '#Number', width: 90 },
+                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
                         { field: 'product.name', headerText: 'Product', width: 150 },
                         { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N2', textAlign: 'Right' },
                     ],
@@ -153,6 +154,7 @@
                         },
                         { field: 'movementDate', headerText: 'Date', width: 150, format: 'yyyy-MM-dd', textAlign: 'Left', type: 'dateTime' },
                         { field: 'warehouse.name', headerText: 'Warehouse', width: 150 },
+                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 120 },
                         { field: 'product.name', headerText: 'Product', width: 150 },
                         { field: 'number', headerText: 'Number', width: 150 },
                         { field: 'stock', headerText: 'Movement', width: 100, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
@@ -187,6 +189,7 @@
                         },
                         { field: 'purchaseOrder.orderDate', headerText: 'Order Date', width: 70, type: 'dateTime', format: 'yyyy-MM-dd', textAlign: 'Left' },
                         { field: 'purchaseOrder.number', headerText: '#Number', width: 90 },
+                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
                         { field: 'product.name', headerText: 'Product', width: 150 },
                         { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N2', textAlign: 'Right' },
                     ],

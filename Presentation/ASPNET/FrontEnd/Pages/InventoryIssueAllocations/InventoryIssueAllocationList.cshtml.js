@@ -69,6 +69,7 @@
                         { field: 'salesOrderNumber', headerText: 'Sales Order', width: 170 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 180 },
                         { field: 'productNumber', headerText: 'Product Number', width: 180 },
+                        { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },
                         { field: 'batchNumber', headerText: 'Issued Batch', width: 160 },
                         { field: 'qtyIssued', headerText: 'Qty Issued', width: 130, type: 'number', format: 'N2', textAlign: 'Right' },

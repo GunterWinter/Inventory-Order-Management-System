@@ -75,6 +75,7 @@ const App = {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 100 },
+                        { field: 'productReferenceCode', headerText: 'Ref Code', width: 120 },
                         { field: 'productName', headerText: 'Product', width: 100 },
                         { field: 'movementDate', headerText: 'Movement Date', width: 100, format: 'yyyy-MM-dd' },
                         { field: 'number', headerText: 'Number', width: 100 },
@@ -107,7 +108,7 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.autoFitColumns(['warehouseName', 'productName', 'movementDate', 'number', 'movement', 'transTypeName', 'statusName', 'moduleName', 'moduleCode', 'moduleNumber', 'warehouseFromName', 'warehouseToName', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['warehouseName', 'productReferenceCode', 'productName', 'movementDate', 'number', 'movement', 'transTypeName', 'statusName', 'moduleName', 'moduleCode', 'moduleNumber', 'warehouseFromName', 'warehouseToName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {

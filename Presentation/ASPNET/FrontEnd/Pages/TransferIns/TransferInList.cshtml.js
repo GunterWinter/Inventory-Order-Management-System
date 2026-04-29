@@ -596,6 +596,17 @@ const App = {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
                         {
+                            field: 'productReferenceCode',
+                            headerText: 'Ref Code',
+                            width: 140,
+                            allowEditing: false,
+                            disableHtmlEncode: false,
+                            valueAccessor: (field, data, column) => {
+                                const product = state.productListLookupData.find(item => item.id === data.productId);
+                                return product ? `${product.referenceCode ?? ''}` : '';
+                            }
+                        },
+                        {
                             field: 'productId',
                             headerText: 'Product',
                             width: 250,

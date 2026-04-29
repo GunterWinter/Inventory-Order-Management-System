@@ -59,6 +59,7 @@ const App = {
                         { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
                         { field: 'salesOrderNumber', headerText: 'SalesOrder', width: 200, minWidth: 200 },
                         { field: 'productNumber', headerText: 'Product Number', width: 200, minWidth: 200 },
+                        { field: 'productReferenceCode', headerText: 'Ref Code', width: 160, minWidth: 160 },
                         { field: 'productName', headerText: 'Product Name', width: 200, minWidth: 200 },
                         { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N2' },
                         { field: 'quantity', headerText: 'Quantity', width: 150, minWidth: 150 },
@@ -83,7 +84,7 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.autoFitColumns(['customerName', 'salesOrderNumber', 'productNumber', 'productName', 'unitPrice', 'quantity', 'total', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['customerName', 'salesOrderNumber', 'productNumber', 'productReferenceCode', 'productName', 'unitPrice', 'quantity', 'total', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => { },

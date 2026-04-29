@@ -725,6 +725,7 @@ const App = {
                                             const selectedProduct = state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
                                                 args.rowData.productId = selectedProduct.id;
+                                                args.rowData.productReferenceCode = selectedProduct.referenceCode;
                                                 args.rowData.batchNumber = '';
                                                 if (numberObj) {
                                                     numberObj.value = selectedProduct.number;
@@ -906,6 +907,16 @@ const App = {
                                     numberObj.readonly = true;
                                     numberObj.appendTo(args.element);
                                 }
+                            }
+                        },
+                        {
+                            field: 'productReferenceCode',
+                            headerText: 'Ref Code',
+                            allowEditing: false,
+                            width: 160,
+                            valueAccessor: (field, data, column) => {
+                                const product = state.productListLookupData.find(item => item.id === data.productId);
+                                return data.productReferenceCode ?? product?.referenceCode ?? '';
                             }
                         },
                         {

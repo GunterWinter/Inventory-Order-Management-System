@@ -40,7 +40,7 @@ public class TokenService : ITokenService
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim("FirstName", user.FirstName ?? ""),
             new Claim("LastName", user.LastName ?? ""),
-            new Claim("CompanyName", user.LastName ?? ""),
+            new Claim("CompanyName", user.CompanyName ?? ""),
         };
 
         if (userClaims != null)

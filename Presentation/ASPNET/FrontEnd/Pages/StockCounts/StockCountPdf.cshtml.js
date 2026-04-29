@@ -68,9 +68,9 @@
 
                 state.mappedItems = (state.pdfTransactionList || []).map(item => ({
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim(),
-                    systemStock: item.qtySCSys || 0,
-                    counted: item.qtySCCount || 0,
-                    adjustment: item.stock || 0,
+                    systemStock: NumberFormatManager.formatToLocale(item.qtySCSys || 0),
+                    counted: NumberFormatManager.formatToLocale(item.qtySCCount || 0),
+                    adjustment: NumberFormatManager.formatToLocale(item.stock || 0),
                 }));
 
                 let movementTotal = (state.pdfTransactionList || []).reduce((sum, item) => sum + (item.qtySCCount || 0), 0);

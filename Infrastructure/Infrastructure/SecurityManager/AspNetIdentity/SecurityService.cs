@@ -101,7 +101,7 @@ public class SecurityService : ISecurityService
         var token = new Token();
         token.UserId = user.Id;
         token.RefreshToken = refreshToken;
-        token.ExpiryDate = DateTime.UtcNow.AddDays(TokenConsts.ExpiryInDays);
+        token.ExpiryDate = DateTimeOffset.UtcNow.AddDays(TokenConsts.ExpiryInDays);
         token.IsDeleted = false;
         token.CreatedAtUtc = DateTime.UtcNow;
         token.CreatedById = user.Id;
@@ -298,17 +298,37 @@ public class SecurityService : ISecurityService
         CancellationToken cancellationToken
         )
     {
-        var registeredToken = await _context.Token.SingleOrDefaultAsync(x => x.RefreshToken == refreshToken, cancellationToken);
+        var registeredToken = await _context.Token.SingleOrDefaultAsync(
+            x => x.RefreshToken == refreshToken && !x.IsDeleted,
+            cancellationToken);
         if (registeredToken == null)
         {
             throw new Exception("Refresh token invalid, please re-login");
         }
-        var user = await _userManager.FindByIdAsync(registeredToken?.UserId ?? "");
+
+        if (registeredToken.ExpiryDate <= DateTimeOffset.UtcNow)
+        {
+            _context.Token.Remove(registeredToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            throw new Exception("Refresh token expired, please re-login");
+        }
+
+        var user = await _userManager.FindByIdAsync(registeredToken.UserId ?? "");
         if (user == null)
         {
+            _context.Token.Remove(registeredToken);
+            await _context.SaveChangesAsync(cancellationToken);
             throw new Exception("Refresh token invalid, please re-login");
         }
-        _context.Token.Remove(registeredToken!);
+
+        if (user.IsBlocked == true || user.IsDeleted == true)
+        {
+            _context.Token.Remove(registeredToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            throw new Exception("Refresh token invalid, please re-login");
+        }
+
+        _context.Token.Remove(registeredToken);
 
         var newAccessToken = _tokenService.GenerateToken(user, null);
         var newRefreshToken = _tokenService.GenerateRefreshToken();
@@ -317,7 +337,7 @@ public class SecurityService : ISecurityService
         var token = new Token();
         token.UserId = user.Id;
         token.RefreshToken = newRefreshToken;
-        token.ExpiryDate = DateTime.UtcNow.AddDays(TokenConsts.ExpiryInDays);
+        token.ExpiryDate = DateTimeOffset.UtcNow.AddDays(TokenConsts.ExpiryInDays);
         token.IsDeleted = false;
         token.CreatedAtUtc = DateTime.UtcNow;
         token.CreatedById = user.Id;

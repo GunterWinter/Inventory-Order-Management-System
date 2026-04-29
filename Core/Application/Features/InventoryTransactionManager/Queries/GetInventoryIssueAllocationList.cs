@@ -15,6 +15,7 @@ public record GetInventoryIssueAllocationListDto
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
+    public string? ProductReferenceCode { get; init; }
     public string? BatchNumber { get; init; }
     public string? SalesOrderItemId { get; init; }
     public string? SalesOrderNumber { get; init; }
@@ -39,6 +40,8 @@ public class GetInventoryIssueAllocationListProfile : Profile
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.Name : string.Empty))
             .ForMember(dest => dest.ProductNumber,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.Number : string.Empty))
+            .ForMember(dest => dest.ProductReferenceCode,
+                opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty))
             .ForMember(dest => dest.SalesOrderNumber,
                 opt => opt.MapFrom(src =>
                     src.SalesOrderItem != null && src.SalesOrderItem.SalesOrder != null

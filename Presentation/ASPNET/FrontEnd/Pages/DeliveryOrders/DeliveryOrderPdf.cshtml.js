@@ -89,7 +89,7 @@
                     warehouse: item.warehouse?.name || 'Unknown',
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim() || 'Unknown Product',
                     batchNumber: item.batchNumber || '',
-                    movement: item.movement || 0,
+                    movement: NumberFormatManager.formatToLocale(item.movement || 0),
                 }));
 
                 let movementTotal = (state.pdfTransactionList || []).reduce((sum, item) => sum + (item.movement || 0), 0);

@@ -48,7 +48,12 @@
             populatePDFData: async (id) => {
                 const response = await services.getPDFData(id);
                 const pdfData = response?.data?.content?.data || {};
-                state.items = pdfData.salesOrderItemList || [];
+                state.items = (pdfData.salesOrderItemList || []).map(item => ({
+                    ...item,
+                    unitPrice: NumberFormatManager.formatToLocale(item?.unitPrice || 0),
+                    quantity: NumberFormatManager.formatToLocale(item?.quantity || 0),
+                    total: NumberFormatManager.formatToLocale(item?.total || 0),
+                }));
                 state.customer = pdfData.customer || {};
                 state.orderNumber = pdfData.number || '';
                 state.orderDate = DateFormatManager.formatToLocale(pdfData.orderDate) || '';

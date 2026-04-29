@@ -15,6 +15,7 @@ public record GetInventoryCostLayerListDto
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
+    public string? ProductReferenceCode { get; init; }
     public string? BatchNumber { get; init; }
     public DateTime? ReceivedDate { get; init; }
     public decimal? UnitCost { get; init; }
@@ -36,6 +37,8 @@ public class GetInventoryCostLayerListProfile : Profile
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.Name : string.Empty))
             .ForMember(dest => dest.ProductNumber,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.Number : string.Empty))
+            .ForMember(dest => dest.ProductReferenceCode,
+                opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty))
             .ForMember(dest => dest.LayerStatusName,
                 opt => opt.MapFrom(src => src.LayerStatus == 1 ? "Open" : src.LayerStatus == 2 ? "Closed" : "Unknown"));
     }

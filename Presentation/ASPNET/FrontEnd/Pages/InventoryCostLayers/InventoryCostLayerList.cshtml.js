@@ -68,6 +68,7 @@ const App = {
                         { field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 180 },
                         { field: 'productNumber', headerText: 'Product Number', width: 180 },
+                        { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },
                         { field: 'batchNumber', headerText: 'Batch Number', width: 160 },
                         { field: 'receivedDate', headerText: 'Received Date', width: 150, format: 'yyyy-MM-dd' },

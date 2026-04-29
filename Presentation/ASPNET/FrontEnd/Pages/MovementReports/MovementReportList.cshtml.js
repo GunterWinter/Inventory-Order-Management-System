@@ -24,6 +24,7 @@ const App = {
                 const current = rows.get(key) ?? {
                     productId: item.productId ?? '',
                     productNumber: item.productNumber ?? '',
+                    productReferenceCode: item.productReferenceCode ?? '',
                     productName: item.productName ?? '',
                     batchNumber,
                     soldQty: 0,
@@ -108,6 +109,7 @@ const App = {
                     gridLines: 'Horizontal',
                     columns: [
                         { field: 'productNumber', headerText: 'Product Number', width: 160 },
+                        { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product', width: 220 },
                         { field: 'batchNumber', headerText: 'Batch Number', width: 180 },
                         { field: 'soldQty', headerText: 'Sold Qty', width: 130, type: 'number', format: 'N2', textAlign: 'Right' },

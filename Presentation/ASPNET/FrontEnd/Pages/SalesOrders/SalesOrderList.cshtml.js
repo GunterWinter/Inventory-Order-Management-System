@@ -42,10 +42,7 @@ const App = {
 
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
-        const formatQuantity = (value) => new Intl.NumberFormat('en-US', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(Number(value ?? 0));
+        const formatQuantity = (value) => NumberFormatManager.formatToLocale(value ?? 0);
         const getAvailableBatchOptions = (productId) => {
             if (!productId) {
                 return [];
@@ -105,6 +102,23 @@ const App = {
             state.secondaryData = state.secondaryData.map(enrichSalesOrderItem);
             if (secondaryGrid.obj) {
                 secondaryGrid.refresh();
+            }
+        };
+        const refreshAvailableBatchQtyCell = (editorElement, value) => {
+            if (availableBatchQtyObj) {
+                availableBatchQtyObj.value = Number(value ?? 0);
+                availableBatchQtyObj.dataBind();
+            }
+
+            const rowElement = editorElement?.closest?.('tr');
+            const visibleColumns = secondaryGrid.obj?.getVisibleColumns?.() ?? [];
+            const columnIndex = visibleColumns.findIndex(column => column.field === 'availableBatchQty');
+
+            if (rowElement && columnIndex >= 0) {
+                const cell = rowElement.cells[columnIndex];
+                if (cell && !cell.querySelector('input')) {
+                    cell.textContent = formatQuantity(value);
+                }
             }
         };
 
@@ -707,6 +721,7 @@ const App = {
 
         let productObj;
         let batchObj;
+        let availableBatchQtyObj;
         let priceObj;
         let quantityObj;
         let totalObj;
@@ -763,38 +778,64 @@ const App = {
                                     productObj.destroy();
                                 },
                                 write: (args) => {
+                                    const resolveSelectedProduct = (valueOrItem) => {
+                                        if (!valueOrItem) {
+                                            return null;
+                                        }
+
+                                        if (valueOrItem.id) {
+                                            return valueOrItem;
+                                        }
+
+                                        return state.productListLookupData.find(item => item.id === valueOrItem);
+                                    };
+                                    const applyProductSelection = (selectedProduct) => {
+                                        if (selectedProduct) {
+                                            const suggestedBatch = getSuggestedBatchOption(selectedProduct.id);
+                                            const batchOptions = getAvailableBatchOptions(selectedProduct.id);
+                                            args.rowData.productId = selectedProduct.id;
+                                            args.rowData.productReferenceCode = selectedProduct.referenceCode;
+                                            args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
+                                            args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
+                                            if (productObj) {
+                                                productObj.value = selectedProduct.id;
+                                                productObj.dataBind();
+                                            }
+                                            refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
+                                            if (numberObj) {
+                                                numberObj.value = selectedProduct.number;
+                                            }
+                                            if (priceObj) {
+                                                priceObj.value = selectedProduct.unitPrice;
+                                            }
+                                            if (summaryObj) {
+                                                summaryObj.value = selectedProduct.description;
+                                            }
+                                            if (quantityObj) {
+                                                quantityObj.value = 1;
+                                                const total = selectedProduct.unitPrice * quantityObj.value;
+                                                if (totalObj) {
+                                                    totalObj.value = total;
+                                                }
+                                            }
+                                            if (batchObj) {
+                                                batchObj.dataSource = batchOptions;
+                                                batchObj.value = args.rowData.batchNumber;
+                                                batchObj.text = batchOptions.find(item => item.batchNumber === args.rowData.batchNumber)?.displayText ?? '';
+                                                batchObj.dataBind();
+                                            }
+                                        }
+                                    };
+
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.productListLookupData,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
+                                        select: (e) => {
+                                            applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
+                                        },
                                         change: (e) => {
-                                            const selectedProduct = state.productListLookupData.find(item => item.id === e.value);
-                                            if (selectedProduct) {
-                                                const suggestedBatch = getSuggestedBatchOption(selectedProduct.id);
-                                                args.rowData.productId = selectedProduct.id;
-                                                args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
-                                                args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
-                                                if (numberObj) {
-                                                    numberObj.value = selectedProduct.number;
-                                                }
-                                                if (priceObj) {
-                                                    priceObj.value = selectedProduct.unitPrice;
-                                                }
-                                                if (summaryObj) {
-                                                    summaryObj.value = selectedProduct.description;
-                                                }
-                                                if (quantityObj) {
-                                                    quantityObj.value = 1;
-                                                    const total = selectedProduct.unitPrice * quantityObj.value;
-                                                    if (totalObj) {
-                                                        totalObj.value = total;
-                                                    }
-                                                }
-                                                if (batchObj) {
-                                                    batchObj.dataSource = getAvailableBatchOptions(selectedProduct.id);
-                                                    batchObj.value = args.rowData.batchNumber;
-                                                }
-                                            }
+                                            applyProductSelection(resolveSelectedProduct(e.value));
                                         },
                                         placeholder: 'Select a Product',
                                         floatLabelType: 'Never'
@@ -827,6 +868,7 @@ const App = {
                                     const syncBatchSelection = (batchNumber) => {
                                         args.rowData.batchNumber = normalizeBatchNumber(batchNumber);
                                         args.rowData.availableBatchQty = getRemainingQtyForBatch(args.rowData.productId, args.rowData.batchNumber);
+                                        refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
                                     };
 
                                     batchObj = new ej.dropdowns.ComboBox({
@@ -837,6 +879,9 @@ const App = {
                                         allowFiltering: true,
                                         showClearButton: true,
                                         placeholder: batchOptions.length ? 'Suggested FIFO batch' : 'No batch with stock',
+                                        select: (e) => {
+                                            syncBatchSelection(e.itemData?.batchNumber ?? e.itemData?.value);
+                                        },
                                         change: (e) => {
                                             syncBatchSelection(e.value);
                                         }
@@ -849,11 +894,35 @@ const App = {
                         {
                             field: 'availableBatchQty',
                             headerText: 'Remaining Qty',
-                            allowEditing: false,
+                            allowEditing: true,
                             width: 170,
                             type: 'number',
                             format: 'N2',
-                            textAlign: 'Right'
+                            textAlign: 'Right',
+                            edit: {
+                                create: () => {
+                                    let availableBatchQtyElem = document.createElement('input');
+                                    return availableBatchQtyElem;
+                                },
+                                read: () => {
+                                    return availableBatchQtyObj?.value ?? 0;
+                                },
+                                destroy: () => {
+                                    if (availableBatchQtyObj) {
+                                        availableBatchQtyObj.destroy();
+                                        availableBatchQtyObj = null;
+                                    }
+                                },
+                                write: (args) => {
+                                    availableBatchQtyObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.availableBatchQty ?? 0,
+                                        format: 'n2',
+                                        decimals: 2,
+                                        readonly: true
+                                    });
+                                    availableBatchQtyObj.appendTo(args.element);
+                                }
+                            }
                         },
                         {
                             field: 'unitPrice',
@@ -972,6 +1041,16 @@ const App = {
                                     numberObj.readonly = true;
                                     numberObj.appendTo(args.element);
                                 }
+                            }
+                        },
+                        {
+                            field: 'productReferenceCode',
+                            headerText: 'Ref Code',
+                            allowEditing: false,
+                            width: 160,
+                            valueAccessor: (field, data, column) => {
+                                const product = state.productListLookupData.find(item => item.id === data.productId);
+                                return data.productReferenceCode ?? product?.referenceCode ?? '';
                             }
                         },
                         {

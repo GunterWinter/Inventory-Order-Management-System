@@ -49,7 +49,12 @@
                 const response = await services.getPDFData(id);
                 const pdfData = response?.data?.content?.data || {};
 
-                state.items = pdfData.purchaseOrderItemList || [];
+                state.items = (pdfData.purchaseOrderItemList || []).map(item => ({
+                    ...item,
+                    unitPrice: NumberFormatManager.formatToLocale(item?.unitPrice || 0),
+                    quantity: NumberFormatManager.formatToLocale(item?.quantity || 0),
+                    total: NumberFormatManager.formatToLocale(item?.total || 0),
+                }));
                 state.vendor = pdfData.vendor || {};
                 state.orderNumber = pdfData.number || '';
                 state.orderDate = DateFormatManager.formatToLocale(pdfData.orderDate) || '';

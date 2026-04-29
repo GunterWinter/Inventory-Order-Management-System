@@ -20,6 +20,7 @@ public record GetInventoryTransactionListDto
     public string? Number { get; init; }
     public string? WarehouseName { get; init; }
     public string? ProductName { get; init; }
+    public string? ProductReferenceCode { get; init; }
     public double? Movement { get; init; }
     public string? TransTypeName { get; init; }
     public double? Stock { get; init; }
@@ -57,6 +58,10 @@ public class GetInventoryTransactionListProfile : Profile
             .ForMember(
                 dest => dest.ProductName,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.Number + ' ' + src.Product.Name : string.Empty)
+            )
+            .ForMember(
+                dest => dest.ProductReferenceCode,
+                opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty)
             );
     }
 }

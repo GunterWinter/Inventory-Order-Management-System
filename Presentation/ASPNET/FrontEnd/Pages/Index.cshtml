@@ -1,13 +1,41 @@
-﻿@page
+@page
 @{
-    Layout = "~/FrontEnd/Pages/Shared/_Layout.cshtml";
-    ViewData["Title"] = "Home page";
+    Layout = null;
+    ViewData["Title"] = "Redirecting";
 }
 
-<div class="lock-overlay">
-    <h1 class="lock-welcome">INDOTALENT WHMS</h1>
-    <a asp-area="" asp-page="/Accounts/Login" class="lock-login">
-        <i class="fas fa-lock lock-icon"></i>
-    </a>
-</div>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@ViewData["Title"]</title>
+    <script>
+        (() => {
+            const loginUrl = '/Accounts/Login';
+            const defaultUrl = '/Profiles/MyProfile';
 
+            const readStorage = (key) => {
+                try {
+                    const value = localStorage.getItem(key);
+                    return value ? JSON.parse(value) : null;
+                } catch {
+                    return null;
+                }
+            };
+
+            const isAuthenticated =
+                readStorage('isAuthenticated') === true &&
+                Boolean(readStorage('accessToken')) &&
+                Boolean(readStorage('userId'));
+
+            window.location.replace(isAuthenticated ? defaultUrl : loginUrl);
+        })();
+    </script>
+</head>
+<body>
+    <noscript>
+        <meta http-equiv="refresh" content="0; url=/Accounts/Login">
+    </noscript>
+</body>
+</html>

@@ -68,6 +68,7 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                 ProductId = group.Key.ProductId,
                 Warehouse = group.Max(x => x.Warehouse!.Name),
                 Product = group.Max(x => x.Product!.Name),
+                ProductReferenceCode = group.Max(x => x.Product!.ReferenceCode),
                 Stock = group.Sum(x => x.Stock),
                 Id = group.Max(x => x.Id),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
@@ -102,8 +103,12 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                             .Where(x => x.Warehouse == wh)
                             .Select(x => new BarDataItem
                             {
-                                X = x.Product ?? string.Empty,
-                                TooltipMappingName = x.Product ?? string.Empty,
+                                X = string.IsNullOrWhiteSpace(x.ProductReferenceCode)
+                                    ? x.Product ?? string.Empty
+                                    : $"{x.ProductReferenceCode} - {x.Product}",
+                                TooltipMappingName = string.IsNullOrWhiteSpace(x.ProductReferenceCode)
+                                    ? x.Product ?? string.Empty
+                                    : $"{x.ProductReferenceCode} - {x.Product}",
                                 Y = (int)(x.Stock ?? 0.0)
                             }).ToList()
                     })
