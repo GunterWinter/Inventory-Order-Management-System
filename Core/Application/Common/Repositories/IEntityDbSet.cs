@@ -32,8 +32,6 @@ public interface IEntityDbSet
     public DbSet<PurchaseOrder> PurchaseOrder { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItem { get; set; }
     public DbSet<InventoryTransaction> InventoryTransaction { get; set; }
-    public DbSet<InventoryCostLayer> InventoryCostLayer { get; set; }
-    public DbSet<InventoryIssueAllocation> InventoryIssueAllocation { get; set; }
     public DbSet<DeliveryOrder> DeliveryOrder { get; set; }
     public DbSet<GoodsReceive> GoodsReceive { get; set; }
     public DbSet<SalesReturn> SalesReturn { get; set; }

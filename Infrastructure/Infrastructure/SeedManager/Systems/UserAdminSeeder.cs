@@ -21,33 +21,58 @@ public class UserAdminSeeder
 
     public async Task GenerateDataAsync()
     {
-        var adminEmail = _identitySettings.DefaultAdmin.Email;
         var adminPassword = _identitySettings.DefaultAdmin.Password;
-
-        if (await _userManager.FindByEmailAsync(adminEmail) == null)
+        var adminUsers = new[]
         {
-            var applicationUser = new ApplicationUser(
-                adminEmail,
-                "Root",
-                "Admin"
-                );
+            new { Email = _identitySettings.DefaultAdmin.Email, FirstName = "Root", LastName = "Admin" },
+            new { Email = "nqthai09456@gmail.com", FirstName = "Thai", LastName = "Nguyen" },
+            new { Email = "test@gmail.com", FirstName = "Test", LastName = "Admin" }
+        };
 
-            applicationUser.EmailConfirmed = true;
+        foreach (var adminUser in adminUsers)
+        {
+            await EnsureAdminUserAsync(
+                adminUser.Email,
+                adminUser.FirstName,
+                adminUser.LastName,
+                adminPassword
+            );
+        }
+    }
 
-            //create user Root Admin
-            await _userManager.CreateAsync(applicationUser, adminPassword);
+    private async Task EnsureAdminUserAsync(
+        string email,
+        string firstName,
+        string lastName,
+        string password)
+    {
+        var applicationUser = await _userManager.FindByEmailAsync(email);
 
-            //add Admin role to Root Admin
-            var roles = RoleHelper.GetAdminRoles();
-            foreach (var role in roles)
+        if (applicationUser == null)
+        {
+            applicationUser = new ApplicationUser(email, firstName, lastName)
             {
-                if (!await _userManager.IsInRoleAsync(applicationUser, role))
-                {
-                    await _userManager.AddToRoleAsync(applicationUser, role);
-                }
+                EmailConfirmed = true
+            };
+            await _userManager.CreateAsync(applicationUser, password);
+        }
+        else
+        {
+            applicationUser.FirstName = firstName;
+            applicationUser.LastName = lastName;
+            applicationUser.EmailConfirmed = true;
+            applicationUser.IsBlocked = false;
+            applicationUser.IsDeleted = false;
+            await _userManager.UpdateAsync(applicationUser);
+        }
 
+        var roles = RoleHelper.GetAdminRoles();
+        foreach (var role in roles)
+        {
+            if (!await _userManager.IsInRoleAsync(applicationUser, role))
+            {
+                await _userManager.AddToRoleAsync(applicationUser, role);
             }
-
         }
     }
 }

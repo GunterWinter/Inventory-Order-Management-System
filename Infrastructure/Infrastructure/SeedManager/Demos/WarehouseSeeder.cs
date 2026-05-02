@@ -19,18 +19,17 @@ namespace Infrastructure.SeedManager.Demos
 
         public async Task GenerateDataAsync()
         {
-            var warehouses = new List<Warehouse>
+            if (_repository.GetQuery().Any(x => !x.IsDeleted && x.Name == "Kho thiết bị nhà thông minh"))
             {
-                new Warehouse { Name = "New York" },
-                new Warehouse { Name = "San Francisco" },
-                new Warehouse { Name = "Chicago" },
-                new Warehouse { Name = "Los Angeles" }
-            };
-
-            foreach (var warehouse in warehouses)
-            {
-                await _repository.CreateAsync(warehouse);
+                return;
             }
+
+            await _repository.CreateAsync(new Warehouse
+            {
+                Name = "Kho thiết bị nhà thông minh",
+                Description = "Kho vật lý demo cho thiết bị nhà thông minh và nội thất.",
+                SystemWarehouse = false
+            });
 
             await _unitOfWork.SaveAsync();
         }

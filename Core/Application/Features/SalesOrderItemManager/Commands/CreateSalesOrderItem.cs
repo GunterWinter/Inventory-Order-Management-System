@@ -1,4 +1,5 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
+using Application.Features.InventoryTransactionManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using FluentValidation;
@@ -38,16 +39,19 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
     private readonly ICommandRepository<SalesOrderItem> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SalesOrderService _salesOrderService;
+    private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreateSalesOrderItemHandler(
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
-        SalesOrderService salesOrderService
+        SalesOrderService salesOrderService,
+        InventoryTransactionService inventoryTransactionService
     )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _salesOrderService = salesOrderService;
+        _inventoryTransactionService = inventoryTransactionService;
     }
 
     public async Task<CreateSalesOrderItemResult> Handle(CreateSalesOrderItemRequest request, CancellationToken cancellationToken = default)
@@ -68,6 +72,12 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
+
+        await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
+            entity,
+            entity.CreatedById,
+            cancellationToken
+        );
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
 

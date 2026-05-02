@@ -21,16 +21,19 @@ public class CustomerCategorySeeder
     {
         var customerCategories = new List<CustomerCategory>
         {
-            new CustomerCategory { Name = "Enterprise" },
-            new CustomerCategory { Name = "Medium" },
-            new CustomerCategory { Name = "Small" },
-            new CustomerCategory { Name = "Startup" },
-            new CustomerCategory { Name = "Micro" }
+            new CustomerCategory { Name = "Căn hộ" },
+            new CustomerCategory { Name = "Nhà phố" },
+            new CustomerCategory { Name = "Biệt thự" },
+            new CustomerCategory { Name = "Văn phòng" },
+            new CustomerCategory { Name = "Showroom nội thất" }
         };
 
         foreach (var category in customerCategories)
         {
-            await _categoryRepository.CreateAsync(category);
+            if (!_categoryRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == category.Name))
+            {
+                await _categoryRepository.CreateAsync(category);
+            }
         }
 
         await _unitOfWork.SaveAsync();

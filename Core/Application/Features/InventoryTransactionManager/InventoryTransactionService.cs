@@ -18,8 +18,6 @@ public partial class InventoryTransactionService
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    private readonly ICommandRepository<InventoryCostLayer> _inventoryCostLayerRepository;
-    private readonly ICommandRepository<InventoryIssueAllocation> _inventoryIssueAllocationRepository;
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
 
     public InventoryTransactionService(
@@ -28,8 +26,6 @@ public partial class InventoryTransactionService
         IQueryContext queryContext,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         IUnitOfWork unitOfWork,
-        ICommandRepository<InventoryCostLayer> inventoryCostLayerRepository,
-        ICommandRepository<InventoryIssueAllocation> inventoryIssueAllocationRepository,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository
         )
     {
@@ -38,8 +34,6 @@ public partial class InventoryTransactionService
         _queryContext = queryContext;
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _unitOfWork = unitOfWork;
-        _inventoryCostLayerRepository = inventoryCostLayerRepository;
-        _inventoryIssueAllocationRepository = inventoryIssueAllocationRepository;
         _salesOrderItemRepository = salesOrderItemRepository;
     }
 

@@ -1,4 +1,4 @@
-using Application.Common.Repositories;
+using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -7,203 +7,97 @@ namespace Application.Features.InventoryTransactionManager;
 
 public partial class InventoryTransactionService
 {
-    public async Task CreateInboundLayerAsync(
-        InventoryTransaction inventoryTransaction,
-        PurchaseOrderItem purchaseOrderItem,
-        DateTime? receivedDate,
-        string? createdById,
+    public async Task UpdateSalesOrderItemBatchCostAsync(
+        SalesOrderItem salesOrderItem,
+        string? updatedById,
         CancellationToken cancellationToken = default)
     {
-        var qty = (decimal)(purchaseOrderItem.Quantity ?? 0d);
-        var unitCost = (decimal)(purchaseOrderItem.UnitPrice ?? 0d);
+        var quantity = salesOrderItem.Quantity ?? 0d;
+        var salesUnitPrice = salesOrderItem.UnitPrice ?? 0d;
 
-        if (qty <= 0m)
+        if (quantity <= 0d)
         {
+            salesOrderItem.CogsAmount = 0d;
+            salesOrderItem.ProfitAmount = 0d;
             return;
         }
 
-        var hasExistingLayer = await _queryContext
-            .Set<InventoryCostLayer>()
-            .AsNoTracking()
-            .AnyAsync(
-                x => !x.IsDeleted && x.InventoryTransactionId == inventoryTransaction.Id,
-                cancellationToken
-            );
+        var unitCost = await GetBatchUnitCostAsync(
+            salesOrderItem.ProductId,
+            salesOrderItem.BatchNumber,
+            cancellationToken
+        );
 
-        if (hasExistingLayer)
-        {
-            return;
-        }
+        var totalCogs = unitCost * quantity;
+        var totalSales = salesUnitPrice * quantity;
 
-        var layer = new InventoryCostLayer
-        {
-            CreatedById = createdById,
-            InventoryTransactionId = inventoryTransaction.Id,
-            ModuleItemId = purchaseOrderItem.Id,
-            WarehouseId = inventoryTransaction.WarehouseId,
-            ProductId = purchaseOrderItem.ProductId,
-            BatchNumber = purchaseOrderItem.BatchNumber,
-            ReceivedDate = receivedDate,
-            UnitCost = unitCost,
-            OriginalQty = qty,
-            RemainingQty = qty,
-            LayerStatus = 1
-        };
+        salesOrderItem.CogsAmount = totalCogs;
+        salesOrderItem.ProfitAmount = totalSales - totalCogs;
+        salesOrderItem.UpdatedById = updatedById;
 
-        await _inventoryCostLayerRepository.CreateAsync(layer, cancellationToken);
+        _salesOrderItemRepository.Update(salesOrderItem);
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 
-    public async Task AllocateDeliveryAsync(
-        InventoryTransaction inventoryTransaction,
-        SalesOrderItem salesOrderItem,
-        DateTime? allocationDate,
-        string? createdById,
-        CancellationToken cancellationToken = default)
+    private async Task<double> GetBatchUnitCostAsync(
+        string? productId,
+        string? batchNumber,
+        CancellationToken cancellationToken)
     {
-        var salesOrderItemId = salesOrderItem.Id;
-        var requestQty = (decimal)(salesOrderItem.Quantity ?? 0d);
-        var salesUnitPrice = (decimal)(salesOrderItem.UnitPrice ?? 0d);
-
-        if (requestQty <= 0m)
+        if (string.IsNullOrWhiteSpace(productId))
         {
-            return;
+            return 0d;
         }
 
-        var existingAllocations = await _queryContext
-            .Set<InventoryIssueAllocation>()
+        var receivedPurchaseOrderIds = await _queryContext
+            .Set<GoodsReceive>()
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.InventoryTransactionId == inventoryTransaction.Id)
+            .ApplyIsDeletedFilter(false)
+            .Where(x =>
+                x.Status == GoodsReceiveStatus.Confirmed &&
+                x.PurchaseOrderId != null)
+            .Select(x => x.PurchaseOrderId!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        if (existingAllocations.Any())
+        if (!receivedPurchaseOrderIds.Any())
         {
-            await UpdateSalesOrderItemAmountsAsync(
-                salesOrderItemId,
-                existingAllocations.Sum(x => (double)(x.CostAmount ?? 0m)),
-                existingAllocations.Sum(x => (double)(x.ProfitAmount ?? 0m)),
-                createdById,
-                cancellationToken
-            );
-            return;
+            return 0d;
         }
 
         var query = _queryContext
-            .Set<InventoryCostLayer>()
+            .Set<PurchaseOrderItem>()
             .AsNoTracking()
-            .Include(x => x.InventoryTransaction)
+            .ApplyIsDeletedFilter(false)
             .Where(x =>
-                !x.IsDeleted &&
-                x.InventoryTransaction != null &&
-                !x.InventoryTransaction.IsDeleted &&
-                x.InventoryTransaction.Status == InventoryTransactionStatus.Confirmed &&
-                x.WarehouseId == inventoryTransaction.WarehouseId &&
-                x.ProductId == salesOrderItem.ProductId &&
-                (x.RemainingQty ?? 0m) > 0m);
+                receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
+                x.ProductId == productId);
 
-        if (!string.IsNullOrWhiteSpace(salesOrderItem.BatchNumber))
+        if (!string.IsNullOrWhiteSpace(batchNumber))
         {
-            query = query.Where(x => x.BatchNumber == salesOrderItem.BatchNumber);
+            query = query.Where(x => x.BatchNumber == batchNumber);
         }
 
-        var layers = await query
-            .OrderBy(x => x.ReceivedDate)
-            .ThenBy(x => x.Id)
-            .ToListAsync(cancellationToken);
+        var purchaseItems = await query.ToListAsync(cancellationToken);
 
-        decimal remainingToIssue = requestQty;
-        double totalCogs = 0d;
-        double totalProfit = 0d;
-
-        foreach (var layer in layers)
+        if (!purchaseItems.Any() && !string.IsNullOrWhiteSpace(batchNumber))
         {
-            if (remainingToIssue <= 0m)
-            {
-                break;
-            }
-
-            var layerRemaining = layer.RemainingQty ?? 0m;
-            if (layerRemaining <= 0m)
-            {
-                continue;
-            }
-
-            var issueQty = Math.Min(remainingToIssue, layerRemaining);
-            var unitCost = layer.UnitCost ?? 0m;
-            var costAmount = issueQty * unitCost;
-            var salesAmount = issueQty * salesUnitPrice;
-            var profitAmount = salesAmount - costAmount;
-
-            var allocation = new InventoryIssueAllocation
-            {
-                CreatedById = createdById,
-                InventoryTransactionId = inventoryTransaction.Id,
-                ModuleItemId = salesOrderItem.Id,
-                SalesOrderItemId = salesOrderItem.Id,
-                CostLayerId = layer.Id,
-                WarehouseId = inventoryTransaction.WarehouseId,
-                ProductId = salesOrderItem.ProductId,
-                BatchNumber = layer.BatchNumber,
-                QtyIssued = issueQty,
-                UnitCost = unitCost,
-                SalesUnitPrice = salesUnitPrice,
-                CostAmount = costAmount,
-                SalesAmount = salesAmount,
-                ProfitAmount = profitAmount,
-                AllocationDate = allocationDate
-            };
-
-            await _inventoryIssueAllocationRepository.CreateAsync(allocation, cancellationToken);
-
-            var trackedLayer = await _inventoryCostLayerRepository.GetAsync(layer.Id, cancellationToken);
-            if (trackedLayer == null)
-            {
-                throw new Exception($"Cost layer not found for update: {layer.Id}");
-            }
-
-            trackedLayer.RemainingQty = layerRemaining - issueQty;
-            trackedLayer.LayerStatus = (trackedLayer.RemainingQty ?? 0m) > 0m ? 1 : 2;
-            trackedLayer.UpdatedById = createdById;
-
-            _inventoryCostLayerRepository.Update(trackedLayer);
-
-            totalCogs += (double)costAmount;
-            totalProfit += (double)profitAmount;
-            remainingToIssue -= issueQty;
+            purchaseItems = await _queryContext
+                .Set<PurchaseOrderItem>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x =>
+                    receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
+                    x.ProductId == productId)
+                .ToListAsync(cancellationToken);
         }
 
-        if (remainingToIssue > 0m)
+        var totalQty = purchaseItems.Sum(x => x.Quantity ?? 0d);
+        if (totalQty <= 0d)
         {
-            throw new Exception($"Not enough stock in cost layers for Product: {salesOrderItem.ProductId}, Batch: {salesOrderItem.BatchNumber ?? "ANY"}");
+            return 0d;
         }
 
-        await UpdateSalesOrderItemAmountsAsync(
-            salesOrderItemId,
-            totalCogs,
-            totalProfit,
-            createdById,
-            cancellationToken
-        );
-    }
-
-    private async Task UpdateSalesOrderItemAmountsAsync(
-        string? salesOrderItemId,
-        double totalCogs,
-        double totalProfit,
-        string? updatedById,
-        CancellationToken cancellationToken)
-    {
-        var trackedSalesOrderItem = await _salesOrderItemRepository.GetAsync(salesOrderItemId ?? string.Empty, cancellationToken);
-        if (trackedSalesOrderItem == null)
-        {
-            throw new Exception($"Sales order item not found for update: {salesOrderItemId}");
-        }
-
-        trackedSalesOrderItem.CogsAmount = totalCogs;
-        trackedSalesOrderItem.ProfitAmount = totalProfit;
-        trackedSalesOrderItem.UpdatedById = updatedById;
-
-        _salesOrderItemRepository.Update(trackedSalesOrderItem);
-        await _unitOfWork.SaveAsync(cancellationToken);
+        return purchaseItems.Sum(x => (x.UnitPrice ?? 0d) * (x.Quantity ?? 0d)) / totalQty;
     }
 }

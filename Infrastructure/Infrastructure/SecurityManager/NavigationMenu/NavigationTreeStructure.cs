@@ -196,16 +196,6 @@ public static class NavigationTreeStructure
                     "URL": "/MovementReports/MovementReportList",
                     "Name": "Batch Profit Report",
                     "IsModule": false
-                },
-                {
-                    "URL": "/InventoryCostLayers/InventoryCostLayerList",
-                    "Name": "Inventory Cost Layers",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/InventoryIssueAllocations/InventoryIssueAllocationList",
-                    "Name": "Inventory Issue Allocations",
-                    "IsModule": false
                 }
             ]
         },

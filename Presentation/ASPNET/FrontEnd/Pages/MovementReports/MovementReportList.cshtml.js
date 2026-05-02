@@ -10,10 +10,13 @@ const App = {
             const rows = new Map();
 
             items.forEach(item => {
-                const unitCost = Number(item.unitCost ?? 0);
-                const salesUnitPrice = Number(item.salesUnitPrice ?? 0);
+                const soldQty = Number(item.quantity ?? 0);
+                const totalCost = Number(item.cogsAmount ?? 0);
+                const totalSales = Number(item.total ?? 0);
+                const unitCost = soldQty > 0 ? totalCost / soldQty : 0;
+                const salesUnitPrice = Number(item.unitPrice ?? 0);
                 const batchNumber = (item.batchNumber ?? '').toString().trim();
-                const allocationDate = item.allocationDate ? DateFormatManager.parseBusinessDate(item.allocationDate) : null;
+                const soldDate = item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null;
                 const key = [
                     item.productId ?? '',
                     batchNumber,
@@ -28,21 +31,21 @@ const App = {
                     productName: item.productName ?? '',
                     batchNumber,
                     soldQty: 0,
-                    unitCost,
-                    salesUnitPrice,
-                    totalCost: 0,
-                    totalSales: 0,
-                    totalProfit: 0,
-                    lastSoldDate: allocationDate
+                        unitCost,
+                        salesUnitPrice,
+                        totalCost: 0,
+                        totalSales: 0,
+                        totalProfit: 0,
+                    lastSoldDate: soldDate
                 };
 
-                current.soldQty += Number(item.qtyIssued ?? 0);
-                current.totalCost += Number(item.costAmount ?? 0);
-                current.totalSales += Number(item.salesAmount ?? 0);
+                current.soldQty += soldQty;
+                current.totalCost += totalCost;
+                current.totalSales += totalSales;
                 current.totalProfit += Number(item.profitAmount ?? 0);
 
-                if (allocationDate && (!current.lastSoldDate || allocationDate > current.lastSoldDate)) {
-                    current.lastSoldDate = allocationDate;
+                if (soldDate && (!current.lastSoldDate || soldDate > current.lastSoldDate)) {
+                    current.lastSoldDate = soldDate;
                 }
 
                 rows.set(key, current);
@@ -58,7 +61,7 @@ const App = {
         const services = {
             getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryIssueAllocation/GetInventoryIssueAllocationList', {});
+                    const response = await AxiosManager.get('/SalesOrderItem/GetSalesOrderItemList', {});
                     return response;
                 } catch (error) {
                     throw error;

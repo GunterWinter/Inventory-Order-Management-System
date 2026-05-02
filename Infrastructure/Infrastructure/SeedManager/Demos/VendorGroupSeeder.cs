@@ -21,16 +21,19 @@ public class VendorGroupSeeder
     {
         var vendorGroups = new List<VendorGroup>
         {
-            new VendorGroup { Name = "Manufacture" },
-            new VendorGroup { Name = "Supplier" },
-            new VendorGroup { Name = "Service Provider" },
-            new VendorGroup { Name = "Distributor" },
-            new VendorGroup { Name = "Freelancer" }
+            new VendorGroup { Name = "Nhà sản xuất" },
+            new VendorGroup { Name = "Phân phối" },
+            new VendorGroup { Name = "Nhập khẩu chính hãng" },
+            new VendorGroup { Name = "Đơn vị thi công" },
+            new VendorGroup { Name = "Nhà cung cấp nội thất" }
         };
 
         foreach (var group in vendorGroups)
         {
-            await _groupRepository.CreateAsync(group);
+            if (!_groupRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == group.Name))
+            {
+                await _groupRepository.CreateAsync(group);
+            }
         }
 
         await _unitOfWork.SaveAsync();

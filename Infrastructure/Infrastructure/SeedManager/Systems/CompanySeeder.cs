@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Common;
 using Domain.Entities;
 
@@ -8,35 +8,48 @@ public class CompanySeeder
 {
     private readonly ICommandRepository<Company> _repository;
     private readonly IUnitOfWork _unitOfWork;
+
     public CompanySeeder(
         ICommandRepository<Company> repository,
         IUnitOfWork unitOfWork
-        )
+    )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
     }
+
     public async Task GenerateDataAsync()
     {
-        var entity = new Company
+        var entity = _repository.GetQuery().FirstOrDefault(x => !x.IsDeleted);
+
+        var isNewCompany = entity == null;
+        entity ??= new Company
         {
             CreatedAtUtc = AppDateTime.VietnamNow(),
-            IsDeleted = false,
-            Name = "Acme Corp",
-            Currency = "VND",
-            Street = "123 Main St",
-            City = "Metropolis",
-            State = "New York",
-            ZipCode = "10001",
-            Country = "USA",
-            PhoneNumber = "+1-212-555-1234",
-            FaxNumber = "+1-212-555-5678",
-            EmailAddress = "info@acmecorp.com",
-            Website = "https://www.acmecorp.com"
+            IsDeleted = false
         };
 
-        await _repository.CreateAsync(entity);
+        entity.Name = "Architech Việt Nam";
+        entity.Currency = "VND";
+        entity.Street = "15/29 Nguyễn Thiện Thuật, Tân Tiến";
+        entity.City = "Nha Trang";
+        entity.State = "Khánh Hòa";
+        entity.ZipCode = "650000";
+        entity.Country = "Việt Nam";
+        entity.PhoneNumber = "0979 788 978";
+        entity.FaxNumber = "";
+        entity.EmailAddress = "info@architechvietnam.com";
+        entity.Website = "https://architechvietnam.com/";
+
+        if (isNewCompany)
+        {
+            await _repository.CreateAsync(entity);
+        }
+        else
+        {
+            _repository.Update(entity);
+        }
+
         await _unitOfWork.SaveAsync();
     }
-
 }

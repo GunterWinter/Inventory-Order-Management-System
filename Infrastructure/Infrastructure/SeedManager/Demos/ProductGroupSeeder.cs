@@ -21,17 +21,20 @@ public class ProductGroupSeeder
     {
         var productGroups = new List<ProductGroup>
         {
-            new ProductGroup { Name = "Hardware" },
-            new ProductGroup { Name = "Networking" },
-            new ProductGroup { Name = "Storage" },
-            new ProductGroup { Name = "Device" },
-            new ProductGroup { Name = "Software" },
-            new ProductGroup { Name = "Service" }
+            new ProductGroup { Name = "Thiết bị nhà thông minh" },
+            new ProductGroup { Name = "Công tắc thông minh" },
+            new ProductGroup { Name = "Cảm biến thông minh" },
+            new ProductGroup { Name = "Camera an ninh" },
+            new ProductGroup { Name = "Nội thất" },
+            new ProductGroup { Name = "Phụ kiện lắp đặt" }
         };
 
         foreach (var productGroup in productGroups)
         {
-            await _productGroupRepository.CreateAsync(productGroup);
+            if (!_productGroupRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == productGroup.Name))
+            {
+                await _productGroupRepository.CreateAsync(productGroup);
+            }
         }
 
         await _unitOfWork.SaveAsync();

@@ -21,16 +21,19 @@ public class UnitMeasureSeeder
     {
         var unitMeasures = new List<UnitMeasure>
         {
-            new UnitMeasure { Name = "m" },
-            new UnitMeasure { Name = "kg" },
-            new UnitMeasure { Name = "hour" },
-            new UnitMeasure { Name = "unit" },
-            new UnitMeasure { Name = "pcs" }
+            new UnitMeasure { Name = "Cái" },
+            new UnitMeasure { Name = "Bộ" },
+            new UnitMeasure { Name = "Mét" },
+            new UnitMeasure { Name = "Cuộn" },
+            new UnitMeasure { Name = "Thùng" }
         };
 
         foreach (var unitMeasure in unitMeasures)
         {
-            await _unitMeasureRepository.CreateAsync(unitMeasure);
+            if (!_unitMeasureRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == unitMeasure.Name))
+            {
+                await _unitMeasureRepository.CreateAsync(unitMeasure);
+            }
         }
 
         await _unitOfWork.SaveAsync();

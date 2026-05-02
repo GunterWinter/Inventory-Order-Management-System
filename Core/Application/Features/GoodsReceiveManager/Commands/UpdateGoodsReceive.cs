@@ -81,11 +81,6 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
 
         await SynchronizeInventoryTransactionsAsync(entity, cancellationToken);
 
-        if (entity.Status == GoodsReceiveStatus.Confirmed)
-        {
-            await EnsureInboundLayersAsync(entity, cancellationToken);
-        }
-
         await _inventoryTransactionService.PropagateParentUpdate(
             entity.Id,
             nameof(GoodsReceive),
@@ -175,44 +170,6 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
                     cancellationToken
                 );
             }
-        }
-    }
-
-    private async Task EnsureInboundLayersAsync(GoodsReceive entity, CancellationToken cancellationToken)
-    {
-        var items = await _queryContext
-            .Set<PurchaseOrderItem>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.Product)
-            .Where(x =>
-                x.PurchaseOrderId == entity.PurchaseOrderId &&
-                x.Product != null &&
-                x.Product.Physical == true)
-            .ToListAsync(cancellationToken);
-
-        var inventoryTransactions = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.Id && x.ModuleName == nameof(GoodsReceive))
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in items)
-        {
-            var inventoryTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-            if (inventoryTransaction == null)
-            {
-                continue;
-            }
-
-            await _inventoryTransactionService.CreateInboundLayerAsync(
-                inventoryTransaction,
-                item,
-                entity.ReceiveDate,
-                entity.UpdatedById ?? entity.CreatedById,
-                cancellationToken
-            );
         }
     }
 

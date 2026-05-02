@@ -305,9 +305,37 @@
 </style>
 <style>
     #navbarnav {
-        width: 250px;
+        width: 100%;
         height: 70vh;
         overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .main-sidebar {
+        overflow-x: hidden;
+    }
+
+    .sidebar-collapse .main-sidebar:not(:hover) #navbarnav,
+    .sidebar-collapse .main-sidebar:not(:hover) #mainMenuContainer,
+    .sidebar-collapse .main-sidebar:not(:hover) #mainMenu {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .sidebar-collapse .main-sidebar:not(:hover) .user-panel .info,
+    .sidebar-collapse .main-sidebar:not(:hover) .brand-text,
+    .sidebar-collapse .main-sidebar:not(:hover) .e-treeview .e-list-text {
+        display: none;
+    }
+
+    .sidebar-collapse .main-sidebar:not(:hover) .e-treeview .e-list-item div.e-icons::before,
+    .sidebar-collapse .main-sidebar:not(:hover) .e-treeview .e-list-item .e-icons {
+        margin: 0;
+    }
+
+    .e-treeview .e-list-item .e-fullrow,
+    .e-treeview .e-list-item .e-text-content {
+        cursor: pointer;
     }
 
     a {

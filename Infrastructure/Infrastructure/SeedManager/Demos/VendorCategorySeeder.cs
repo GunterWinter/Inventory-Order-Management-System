@@ -21,17 +21,19 @@ public class VendorCategorySeeder
     {
         var vendorCategories = new List<VendorCategory>
         {
-            new VendorCategory { Name = "Large" },
-            new VendorCategory { Name = "Medium" },
-            new VendorCategory { Name = "Small" },
-            new VendorCategory { Name = "Specialty" },
-            new VendorCategory { Name = "Local" },
-            new VendorCategory { Name = "Global" }
+            new VendorCategory { Name = "Toàn Quốc" },
+            new VendorCategory { Name = "Quốc Tế" },
+            new VendorCategory { Name = "Thiết bị nhà thông minh" },
+            new VendorCategory { Name = "Nội thất" },
+            new VendorCategory { Name = "Phụ kiện lắp đặt" }
         };
 
         foreach (var category in vendorCategories)
         {
-            await _categoryRepository.CreateAsync(category);
+            if (!_categoryRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == category.Name))
+            {
+                await _categoryRepository.CreateAsync(category);
+            }
         }
 
         await _unitOfWork.SaveAsync();

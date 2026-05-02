@@ -8,7 +8,7 @@ const App = {
             salesOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
-            inventoryCostLayerData: [],
+            inventoryStockData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -50,32 +50,28 @@ const App = {
 
             const grouped = new Map();
 
-            state.inventoryCostLayerData
+            state.inventoryStockData
                 .filter(item =>
                     item.productId === productId &&
                     normalizeBatchNumber(item.batchNumber) !== '' &&
-                    Number(item.remainingQty ?? 0) > 0
+                    Number(item.stock ?? 0) > 0
                 )
-                .sort((a, b) => toDateTicks(a.receivedDate) - toDateTicks(b.receivedDate))
+                .sort((a, b) => normalizeBatchNumber(a.batchNumber).localeCompare(normalizeBatchNumber(b.batchNumber)))
                 .forEach(item => {
                     const batchNumber = normalizeBatchNumber(item.batchNumber);
                     const current = grouped.get(batchNumber) ?? {
                         batchNumber,
                         remainingQty: 0,
-                        firstReceivedDate: item.receivedDate
+                        firstReceivedDate: null
                     };
 
-                    current.remainingQty += Number(item.remainingQty ?? 0);
-
-                    if (toDateTicks(item.receivedDate) < toDateTicks(current.firstReceivedDate)) {
-                        current.firstReceivedDate = item.receivedDate;
-                    }
+                    current.remainingQty += Number(item.stock ?? 0);
 
                     grouped.set(batchNumber, current);
                 });
 
             return [...grouped.values()]
-                .sort((a, b) => toDateTicks(a.firstReceivedDate) - toDateTicks(b.firstReceivedDate))
+                .sort((a, b) => a.batchNumber.localeCompare(b.batchNumber))
                 .map(item => ({
                     batchNumber: item.batchNumber,
                     remainingQty: item.remainingQty,
@@ -281,9 +277,9 @@ const App = {
                     throw error;
                 }
             },
-            getInventoryCostLayerData: async () => {
+            getInventoryStockData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryCostLayer/GetInventoryCostLayerList', {});
+                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -328,16 +324,13 @@ const App = {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
             },
-            populateInventoryCostLayerData: async () => {
-                const response = await services.getInventoryCostLayerData();
-                state.inventoryCostLayerData = response?.data?.content?.data.map(item => ({
-                    ...item,
-                    receivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null
-                })) ?? [];
+            populateInventoryStockData: async () => {
+                const response = await services.getInventoryStockData();
+                state.inventoryStockData = response?.data?.content?.data ?? [];
                 syncSecondaryAvailability();
             },
             refreshInventoryAvailability: async () => {
-                await methods.populateInventoryCostLayerData();
+                await methods.populateInventoryStockData();
             },
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
@@ -1217,7 +1210,7 @@ const App = {
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
-                await methods.populateInventoryCostLayerData();
+                await methods.populateInventoryStockData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {
                 console.error('page init error:', e);

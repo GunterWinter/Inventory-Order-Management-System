@@ -101,7 +101,7 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
 
         foreach (var item in items)
         {
-            var inventoryTransaction = await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
+            await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
                 entity.Id,
                 defaultWarehouseId,
                 item.ProductId,
@@ -114,10 +114,8 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
 
             if (entity.Status == DeliveryOrderStatus.Confirmed)
             {
-                await _inventoryTransactionService.AllocateDeliveryAsync(
-                    inventoryTransaction,
+                await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
                     item,
-                    entity.DeliveryDate,
                     entity.CreatedById,
                     cancellationToken
                 );

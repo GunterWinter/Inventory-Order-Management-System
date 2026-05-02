@@ -6,70 +6,10 @@ const App = {
 
         const mainGridRef = Vue.ref(null);
 
-        const aggregateBatchStockRows = (items) => {
-            const rows = new Map();
-
-            items
-                .filter(item => Number(item.remainingQty ?? 0) > 0)
-                .forEach(item => {
-                    const warehouseId = item.warehouseId ?? '';
-                    const productId = item.productId ?? '';
-                    const batchNumber = (item.batchNumber ?? '').toString().trim();
-                    const unitCost = Number(item.unitCost ?? 0);
-                    const key = [warehouseId, productId, batchNumber, unitCost.toFixed(4)].join('|');
-
-                    const current = rows.get(key) ?? {
-                        warehouseId,
-                        warehouseName: item.warehouseName ?? '',
-                        productId,
-                        productNumber: item.productNumber ?? '',
-                        productReferenceCode: item.productReferenceCode ?? '',
-                        productName: item.productName ?? '',
-                        batchNumber,
-                        unitCost,
-                        originalQty: 0,
-                        remainingQty: 0,
-                        firstReceivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null,
-                        lastUpdatedAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
-                    };
-
-                    current.originalQty += Number(item.originalQty ?? 0);
-                    current.remainingQty += Number(item.remainingQty ?? 0);
-
-                    const receivedDate = item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null;
-                    if (receivedDate && (!current.firstReceivedDate || receivedDate < current.firstReceivedDate)) {
-                        current.firstReceivedDate = receivedDate;
-                    }
-
-                    const createdAtUtc = item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null;
-                    if (createdAtUtc && (!current.lastUpdatedAtUtc || createdAtUtc > current.lastUpdatedAtUtc)) {
-                        current.lastUpdatedAtUtc = createdAtUtc;
-                    }
-
-                    rows.set(key, current);
-                });
-
-            return [...rows.values()].sort((a, b) => {
-                const warehouseCompare = (a.warehouseName ?? '').localeCompare(b.warehouseName ?? '');
-                if (warehouseCompare !== 0) {
-                    return warehouseCompare;
-                }
-
-                const productCompare = (a.productName ?? '').localeCompare(b.productName ?? '');
-                if (productCompare !== 0) {
-                    return productCompare;
-                }
-
-                const dateA = a.firstReceivedDate ? a.firstReceivedDate.getTime() : 0;
-                const dateB = b.firstReceivedDate ? b.firstReceivedDate.getTime() : 0;
-                return dateA - dateB;
-            });
-        };
-
         const services = {
             getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryCostLayer/GetInventoryCostLayerList', {});
+                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -80,8 +20,12 @@ const App = {
         const methods = {
             populateMainData: async () => {
                 const response = await services.getMainData();
-                const layers = response?.data?.content?.data ?? [];
-                state.mainData = aggregateBatchStockRows(layers);
+                state.mainData = (response?.data?.content?.data ?? [])
+                    .filter(item => Number(item.stock ?? 0) !== 0)
+                    .map(item => ({
+                        ...item,
+                        createdAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
+                    }));
             }
         };
 
@@ -115,7 +59,7 @@ const App = {
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
-                    sortSettings: { columns: [{ field: 'firstReceivedDate', direction: 'Ascending' }] },
+                    sortSettings: { columns: [{ field: 'productName', direction: 'Ascending' }, { field: 'batchNumber', direction: 'Ascending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ['10', '20', '50', '100', '200', 'All'] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true,
@@ -128,19 +72,17 @@ const App = {
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },
                         { field: 'batchNumber', headerText: 'Batch Number', width: 170 },
-                        { field: 'unitCost', headerText: 'Unit Cost', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
-                        { field: 'originalQty', headerText: 'Original Qty', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
-                        { field: 'remainingQty', headerText: 'Remaining Qty', width: 150, type: 'number', format: 'N2', textAlign: 'Right' },
-                        { field: 'firstReceivedDate', headerText: 'Received Date', width: 150, format: 'yyyy-MM-dd' },
-            { field: 'lastUpdatedAtUtc', headerText: 'Last Updated', width: 170, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'stock', headerText: 'Stock', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
+                        { field: 'statusName', headerText: 'Status', width: 120 },
+                        { field: 'createdAtUtc', headerText: 'Last Updated', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
                         {
                             columns: [
                                 {
                                     type: 'Sum',
-                                    field: 'remainingQty',
-                                    groupCaptionTemplate: 'Remaining Qty: ${Sum}',
+                                    field: 'stock',
+                                    groupCaptionTemplate: 'Stock: ${Sum}',
                                     format: 'N2'
                                 }
                             ]
@@ -148,7 +90,7 @@ const App = {
                     ],
                     toolbar: ['ExcelExport', 'Search'],
                     dataBound: function () {
-                        mainGrid.obj.autoFitColumns(['unitCost', 'originalQty', 'remainingQty', 'firstReceivedDate', 'lastUpdatedAtUtc']);
+                        mainGrid.obj.autoFitColumns(['stock', 'statusName', 'createdAtUtc']);
                     },
                     toolbarClick: (args) => {
                         if (args.item.id === 'MainGrid_excelexport') {

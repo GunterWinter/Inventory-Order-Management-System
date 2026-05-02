@@ -31,7 +31,10 @@ namespace Infrastructure.SeedManager.Systems
 
             foreach (var warehouse in warehouses)
             {
-                await _repository.CreateAsync(warehouse);
+                if (!_repository.GetQuery().Any(x => !x.IsDeleted && x.Name == warehouse.Name))
+                {
+                    await _repository.CreateAsync(warehouse);
+                }
             }
 
             await _unitOfWork.SaveAsync();

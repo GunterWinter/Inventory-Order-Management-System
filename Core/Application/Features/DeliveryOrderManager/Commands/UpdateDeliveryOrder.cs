@@ -81,11 +81,6 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
 
         await SynchronizeInventoryTransactionsAsync(entity, cancellationToken);
 
-        if (entity.Status == DeliveryOrderStatus.Confirmed)
-        {
-            await EnsureIssueAllocationsAsync(entity, cancellationToken);
-        }
-
         await _inventoryTransactionService.PropagateParentUpdate(
             entity.Id,
             nameof(DeliveryOrder),
@@ -175,44 +170,15 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
                     cancellationToken
                 );
             }
-        }
-    }
 
-    private async Task EnsureIssueAllocationsAsync(DeliveryOrder entity, CancellationToken cancellationToken)
-    {
-        var items = await _queryContext
-            .Set<SalesOrderItem>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.Product)
-            .Where(x =>
-                x.SalesOrderId == entity.SalesOrderId &&
-                x.Product != null &&
-                x.Product.Physical == true)
-            .ToListAsync(cancellationToken);
-
-        var inventoryTransactions = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.Id && x.ModuleName == nameof(DeliveryOrder))
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in items)
-        {
-            var inventoryTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-            if (inventoryTransaction == null)
+            if (entity.Status == DeliveryOrderStatus.Confirmed)
             {
-                continue;
+                await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
+                    item,
+                    entity.UpdatedById ?? entity.CreatedById,
+                    cancellationToken
+                );
             }
-
-            await _inventoryTransactionService.AllocateDeliveryAsync(
-                inventoryTransaction,
-                item,
-                entity.DeliveryDate,
-                entity.UpdatedById ?? entity.CreatedById,
-                cancellationToken
-            );
         }
     }
 

@@ -16,6 +16,7 @@ public record GetInventoryStockListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Stock { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
@@ -63,11 +64,12 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.Warehouse!.SystemWarehouse == false &&
                 x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed
             )
-            .GroupBy(x => new { x.WarehouseId, x.ProductId })
+            .GroupBy(x => new { x.WarehouseId, x.ProductId, x.BatchNumber })
             .Select(group => new GetInventoryStockListDto
             {
                 WarehouseId = group.Key.WarehouseId,
                 ProductId = group.Key.ProductId,
+                BatchNumber = group.Key.BatchNumber,
                 WarehouseName = group.Max(x => x.Warehouse!.Name),
                 ProductName = group.Max(x => x.Product!.Name),
                 ProductNumber = group.Max(x => x.Product!.Number),

@@ -8,7 +8,7 @@ const App = {
             purchaseOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
-            inventoryCostLayerData: [],
+            purchaseOrderItemHistoryData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -50,9 +50,9 @@ const App = {
             const options = [];
             const registered = new Set();
 
-            state.inventoryCostLayerData
+            state.purchaseOrderItemHistoryData
                 .filter(item => item.productId === productId && normalizeBatchNumber(item.batchNumber) !== '')
-                .sort((a, b) => toDateTicks(b.receivedDate) - toDateTicks(a.receivedDate))
+                .sort((a, b) => toDateTicks(b.createdAtUtc) - toDateTicks(a.createdAtUtc))
                 .forEach(item => {
                     const batchNumber = normalizeBatchNumber(item.batchNumber);
                     if (registered.has(batchNumber)) {
@@ -228,9 +228,9 @@ const App = {
                     throw error;
                 }
             },
-            getInventoryCostLayerData: async () => {
+            getPurchaseOrderItemHistoryData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryCostLayer/GetInventoryCostLayerList', {});
+                    const response = await AxiosManager.get('/PurchaseOrderItem/GetPurchaseOrderItemList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -275,11 +275,11 @@ const App = {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
             },
-            populateInventoryCostLayerData: async () => {
-                const response = await services.getInventoryCostLayerData();
-                state.inventoryCostLayerData = response?.data?.content?.data.map(item => ({
+            populatePurchaseOrderItemHistoryData: async () => {
+                const response = await services.getPurchaseOrderItemHistoryData();
+                state.purchaseOrderItemHistoryData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    receivedDate: item.receivedDate ? DateFormatManager.parseBusinessDate(item.receivedDate) : null
+                    createdAtUtc: item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null
                 })) ?? [];
             },
             refreshPaymentSummary: async (id) => {
@@ -1065,7 +1065,7 @@ const App = {
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
-                await methods.populateInventoryCostLayerData();
+                await methods.populatePurchaseOrderItemHistoryData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {
                 console.error('page init error:', e);

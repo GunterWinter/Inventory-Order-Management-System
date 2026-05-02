@@ -21,15 +21,17 @@ public class TaxSeeder
     {
         var taxes = new List<Tax>
         {
-            new Tax { Name = "NOTAX", Percentage = 0.0 },
-            new Tax { Name = "T10", Percentage = 10.0 },
-            new Tax { Name = "T15", Percentage = 15.0 },
-            new Tax { Name = "T20", Percentage = 20.0 }
+            new Tax { Name = "Không thuế", Percentage = 0.0 },
+            new Tax { Name = "VAT 8%", Percentage = 8.0 },
+            new Tax { Name = "VAT 10%", Percentage = 10.0 }
         };
 
         foreach (var tax in taxes)
         {
-            await _repository.CreateAsync(tax);
+            if (!_repository.GetQuery().Any(x => !x.IsDeleted && x.Name == tax.Name))
+            {
+                await _repository.CreateAsync(tax);
+            }
         }
 
         await _unitOfWork.SaveAsync();

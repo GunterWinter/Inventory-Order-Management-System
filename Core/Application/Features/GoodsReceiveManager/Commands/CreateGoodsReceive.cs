@@ -112,16 +112,6 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
                 cancellationToken
             );
 
-            if (entity.Status == GoodsReceiveStatus.Confirmed)
-            {
-                await _inventoryTransactionService.CreateInboundLayerAsync(
-                    inventoryTransaction,
-                    item,
-                    entity.ReceiveDate,
-                    entity.CreatedById,
-                    cancellationToken
-                );
-            }
         }
 
         return new CreateGoodsReceiveResult
