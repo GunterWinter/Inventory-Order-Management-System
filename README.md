@@ -1,168 +1,170 @@
-![indotalent-whms](https://cdn.shopify.com/s/files/1/0097/8422/9945/files/product_hunt_inventory_wms_2.png?v=1738303996)
-<a href="https://www.producthunt.com/posts/indotalent-wms?embed=true&utm_source=badge-featured&utm_medium=badge&utm_souce=badge-indotalent&#0045;wms" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=836427&theme=light&t=1738304283591" alt="INDOTALENT&#0032;WMS - Free&#0032;and&#0032;open&#0045;source&#0032;powerful&#0032;inventory&#0032;management&#0032;system | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-# 🔥 Introduction  
-Welcome to our **Warehouse Inventory Management System (WHMS)**, an innovative and scalable solution meticulously crafted to streamline and optimize your inventory operations.  
+# Architech WHMS
 
-Now powered by **ASP.NET Core 9.0**, the latest cutting-edge technology from Microsoft, WHMS is faster than ever and showcases the future of modern web development. With its fully decoupled **headless API** architecture, WHMS enables seamless integration between the back end and front end, offering unparalleled flexibility and performance.  
+**Architech WHMS** là hệ thống quản lý kho, tồn kho và đơn hàng được xây dựng trên ASP.NET Core 9.0. README này định hướng dự án như một giải pháp vận hành dành cho Architech: tập trung vào quản trị dữ liệu hàng hóa, chuẩn hóa luồng mua bán, kiểm soát tồn kho và cung cấp nền tảng kỹ thuật dễ mở rộng.
 
-The back end is built using **Clean Architecture**, **CQRS**, **MediatR**, and the **Repository Pattern**, ensuring maintainability and scalability for enterprise-grade applications. On the front end, **ASP.NET Core Razor Pages** and **Vue.js** come together to create a dynamic and user-friendly interface.  
+## Định Vị Giải Pháp
 
-## Key Features  
-WHMS provides a comprehensive suite of capabilities:  
-- **Sales, Purchase, Delivery, and Goods Receive**  
-- **Transfer, Adjustment, Return, and Scrapping**  
-- **Stock Count and Detailed Reporting Functionalities**  
+Architech WHMS hỗ trợ doanh nghiệp quản lý tập trung các quy trình liên quan đến hàng hóa và đơn hàng:
 
-🎯 **Challenge Yourself!**  
-Experience the blazing speed and efficiency of **.NET 9**, the latest breakthrough in performance from Microsoft. Explore our **live online demo** today and see firsthand how WHMS can revolutionize your inventory management operations.  
+- Theo dõi tồn kho, nhập kho, xuất kho, chuyển kho và kiểm kê.
+- Quản lý khách hàng, nhà cung cấp, sản phẩm, kho, đơn vị tính và nhóm dữ liệu liên quan.
+- Chuẩn hóa quy trình mua hàng, bán hàng, giao hàng, nhận hàng và trả hàng.
+- Cung cấp báo cáo giao dịch, tồn kho và biến động hàng hóa để hỗ trợ ra quyết định.
+- Quản trị người dùng, phân quyền, cấu hình công ty, thuế và số chứng từ.
 
+Mục tiêu của hệ thống là giúp Architech có một nền tảng back-office rõ ràng, dễ triển khai nội bộ, dễ tùy biến theo quy trình thực tế và có thể mở rộng thành giải pháp cho khách hàng doanh nghiệp.
 
+## Năng Lực Nghiệp Vụ
 
-# Monolithic Clean Architecture  
+- **Quản lý khách hàng**
+  - Nhóm khách hàng, danh mục khách hàng, hồ sơ khách hàng và liên hệ.
+- **Quản lý nhà cung cấp**
+  - Nhóm nhà cung cấp, danh mục nhà cung cấp, hồ sơ nhà cung cấp và liên hệ.
+- **Quản lý sản phẩm và kho**
+  - Sản phẩm, nhóm sản phẩm, đơn vị tính, kho hàng và dữ liệu tham chiếu.
+- **Mua hàng**
+  - Đơn mua hàng, nhận hàng, trả hàng mua và báo cáo mua hàng.
+- **Bán hàng**
+  - Đơn bán hàng, giao hàng, trả hàng bán và báo cáo bán hàng.
+- **Vận hành kho**
+  - Chuyển kho, điều chỉnh tăng/giảm, hủy hàng, kiểm kê và lịch sử giao dịch tồn kho.
+- **Báo cáo**
+  - Báo cáo giao dịch, báo cáo tồn kho, báo cáo biến động và dữ liệu dashboard.
+- **Quản trị hệ thống**
+  - Cấu hình công ty, thuế, số chứng từ, người dùng, vai trò, nhật ký lỗi và nhật ký phân tích.
 
-WHMS is built using a **Monolithic Clean Architecture** approach, ensuring a structured and simplified development process. By keeping all components within a single codebase, dependency management is streamlined, eliminating the risk of a **dependency nightmare**. This approach consolidates all dependencies in one place, ensuring compatibility and coherence across the entire system.  
+## Kiến Trúc Và Công Nghệ
 
-Additionally, it simplifies **deployment**, as all code resides in a single repository with a well-optimized pipeline, reducing complexity. The **cohesive project structure** provides a clear and consistent source code pattern, making it easier for developers to understand and maintain the system. With the combination of Clean Architecture, CQRS, and MediatR, WHMS delivers a **scalable, maintainable, and enterprise-ready solution**.
+Hệ thống được tổ chức theo hướng **Monolithic Clean Architecture**: một mã nguồn triển khai thống nhất, nhưng vẫn tách lớp rõ ràng giữa domain, application, infrastructure và presentation.
 
-
-
-# Technical Features
-- **ASP.NET Core 9.0 Headless API** (Back End)
+- **Backend**
+  - ASP.NET Core 9.0
   - Clean Architecture
-  - CQRS with MediatR
+  - CQRS với MediatR
   - Repository Pattern
-  - Entity Framework Core (EF Core) for data access
-  - AutoMapper for object mapping
-  - FluentValidation for input validation
-  - Serilog for logging
-  - Support for file uploads and downloads (images/documents)
-  - Secure authentication and authorization with ASP.NET Identity + JWT
-- **ASP.NET Core Razor Pages with a Simple & Modern UI** (Front End)  
-  - **Effortless** dynamic interactivity using Vue.js **without any build system**  
-  - **Ready-to-use** industry-leading Syncfusion UI components (free community edition)  
-  - **Lightweight and straightforward** API communication with Axios  
-  - **Easy-to-customize** responsive UI powered by the AdminLTE template  
+  - Entity Framework Core với SQL Server
+  - ASP.NET Identity và JWT
+  - AutoMapper
+  - FluentValidation
+  - Serilog
+  - API cho upload/download hình ảnh và tài liệu
+- **Frontend**
+  - ASP.NET Core Razor Pages
+  - Vue.js dùng trực tiếp, không cần build system riêng
+  - Syncfusion UI Components
+  - AdminLTE template
+  - Axios cho giao tiếp API
 
+## Cấu Trúc Dự Án
 
+```text
+Core/
+  Application/        # Use case, CQRS handler, DTO, validation, interface
+  Domain/             # Entity và logic domain
 
+Infrastructure/
+  Infrastructure/     # EF Core, Identity, repository, service triển khai
 
-# Functional Features
-- **Customer Management**
-  - Customer Group, Category, Details, and Contacts
-- **Sales Management**
-  - Sales Order, Sales Return, Sales Reports
-- **Vendor Management**
-  - Vendor Group, Category, Details, and Contacts
-- **Purchase Management**
-  - Purchase Order, Purchase Return, Purchase Reports
-- **Warehouse Operations**
-  - Unit Measure, Product Group, Products
-  - Delivery Order, Goods Receive
-  - Transfers, Adjustments, Scrapping, Stock Counts
-- **Reporting**
-  - Transaction Report, Stock Report, Movement Report
-- **System Settings**
-  - Company Settings, Tax Configuration, User Management
-  - Number Sequence for systematic tracking
-- **Analytics and Logs**
-  - Error Logs, Analytic Logs
-- **Authentication & Membership**
-  - Secure user authentication and role-based access control
+Presentation/
+  ASPNET/             # Razor Pages, API controllers, wwwroot, appsettings
+```
 
+## Cấu Hình Chính
 
+File cấu hình chính nằm tại:
 
-# Run The Project: Visual Studio  
+```text
+Presentation/ASPNET/appsettings.json
+```
 
-Getting started is **easy**! Thanks to **Monolithic Clean Architecture**, everything is structured and streamlined. Plus, even though this project uses a **modern JavaScript framework like Vue.js**, it **does not require a build system**—just use Visual Studio to run and build effortlessly.  
+Các cấu hình thường cần kiểm tra trước khi chạy:
 
-1. Open the project using Visual Studio.  
-2. Update the connection string in `appsettings.json` to match your SQL Server database.  
-3. Clean and build the solution:  
-   - Right-click the solution > Clean  
-   - Right-click the solution > Build  
-4. Run the project:  
-   - Click the green "play" button in the Visual Studio toolbar.  
+- `ConnectionStrings:DefaultConnection`: chuỗi kết nối SQL Server.
+- `AspNetIdentity:DefaultAdmin`: tài khoản quản trị mặc định.
+- `Jwt`: khóa, issuer, audience và thời hạn token.
+- `FileImageManager` và `FileDocumentManager`: thư mục lưu file upload.
+- `SmtpSettings`: cấu hình gửi email.
+- `IsDemoVersion`: trạng thái demo của hệ thống.
 
-> **Note**: The database will be created automatically if it does not exist.  
+Tài khoản quản trị mặc định trong cấu hình hiện tại:
 
+```text
+Email: admin@root.com
+Password: 123456
+```
 
+## Chạy Dự Án Bằng Visual Studio
 
+1. Mở solution trong thư mục gốc của repo bằng Visual Studio.
+2. Kiểm tra chuỗi kết nối trong `Presentation/ASPNET/appsettings.json`.
+3. Clean và build solution.
+4. Chạy project `Presentation/ASPNET`.
+5. Truy cập ứng dụng theo URL Kestrel hoặc IIS Express mà Visual Studio cung cấp.
 
+Database sẽ được tạo tự động nếu cấu hình SQL Server hợp lệ và database chưa tồn tại.
 
-# Run The Project: IIS Web Server  
+## Chạy Dự Án Bằng .NET CLI
 
-Deployment is **easy**! Thanks to **Monolithic Clean Architecture**, both the front end and back end are in a single deployable unit, making the process straightforward.  
+Yêu cầu môi trường:
 
-For deployment to IIS:  
+- .NET 9 SDK
+- SQL Server hoặc SQL Server Express
+- Visual Studio/SQL Server tooling nếu cần quản trị database thủ công
 
-1. **Publish the project**:  
-   - Right-click the project > Publish.  
-   - Choose a folder to output the files.  
+Lệnh chạy:
 
-2. **Deploy to IIS**:  
-   - Copy the published files to your IIS directory.  
-   - Configure IIS to point to the folder and ensure database connectivity.  
+```powershell
+dotnet restore .\Presentation\ASPNET\ASPNET.csproj
+dotnet build .\Presentation\ASPNET\ASPNET.csproj
+dotnet run --project .\Presentation\ASPNET\ASPNET.csproj
+```
 
-> For detailed instructions, refer to [Microsoft's official IIS deployment documentation](https://learn.microsoft.com/en-us/aspnet/core/tutorials/publish-to-iis).  
+Theo cấu hình hiện tại, ứng dụng dùng Kestrel tại:
 
+```text
+http://localhost:5000
+```
 
+## Kiểm Thử API Đăng Nhập
 
+Endpoint đăng nhập API:
 
-# Live Demo Link
-- **URL**: [https://whms-lte-fs.csharpasp.net/](https://whms-lte-fs.csharpasp.net/)
-- ✅ **Username**: admin@root.com  
-- ✅ **Password**: 123456  
+```http
+POST /api/Security/Login
+Content-Type: application/json
+```
 
+Body mẫu:
 
+```json
+{
+  "email": "admin@root.com",
+  "password": "123456"
+}
+```
 
+Sau khi đăng nhập thành công, dùng access token trong header:
 
-# Acknowledgments
+```http
+Authorization: Bearer <accessToken>
+```
 
-This project uses the following open-source and community resources:
+## Triển Khai IIS
 
-- [Syncfusion Community Edition](https://www.syncfusion.com/products/communitylicense) - For advanced UI components.  
-- [AdminLTE](https://github.com/ColorlibHQ/AdminLTE) - Licensed under the MIT License.  
+1. Publish project `Presentation/ASPNET`.
+2. Copy thư mục publish lên IIS.
+3. Cấu hình application pool phù hợp với ASP.NET Core.
+4. Cập nhật connection string theo môi trường production.
+5. Đảm bảo thư mục upload có quyền ghi.
+6. Kiểm tra cấu hình JWT, SMTP và biến demo trước khi public.
 
-We thank these projects for their contributions to the developer community.
+Tài liệu tham khảo: [Microsoft ASP.NET Core IIS deployment](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/).
 
+## Ghi Nhận
 
+Dự án sử dụng các thư viện và tài nguyên cộng đồng:
 
-# License
-
-This work is licensed under a [Creative Commons Attribution 4.0 International License (CC BY 4.0)](http://creativecommons.org/licenses/by/4.0/).  
-To view a copy of this license, visit [http://creativecommons.org/licenses/by/4.0/](http://creativecommons.org/licenses/by/4.0/).
-
-Users are required to retain the footer link in all instances of this software as part of the attribution requirement under CC BY 4.0.
-
-
-
-# Starred  
-If you find this project useful, please consider supporting us by giving a star on GitHub! ⭐  
-Your support keeps us motivated and helps us continue developing and improving this project to deliver even greater value to the community.  
-
-
-# 🌱 Help Us Grow!  
-Please help us grow by sharing it with your friends, family, and colleagues!  
-Every share helps us reach more people, grow the community, and continue improving this open-source project. ❤️  
- 
-
-
-# One Last Kiss ❤️  
-
-Thanks for stopping by and reading this far! This project is supported by **INDOTALENT**
-
-🌐 Feel free to visit: [https://store.indotalent.com](https://store.indotalent.com)  
-
-[![store-indotalent](https://cdn.shopify.com/s/files/1/0097/8422/9945/files/store-indotalent-hero.png?v=1737235553)](https://store.indotalent.com)
-### ✅ **How does Mini CRM help SMBs manage operations, drive growth, and streamline payroll?**
-[![powerfull-mini-crm](https://cdn.shopify.com/s/files/1/0097/8422/9945/files/powerfull-mini-crm-for-smb.png?v=1737992595)](https://store.indotalent.com)
-[![katenjo-crm-saas](https://store.indotalent.com/cdn/shop/files/hero1_f05d44f6-1298-4d0c-a46d-05395a7731d1_1024x1024@2x.png?v=1737932377)](https://store.indotalent.com/collections/featured-product/products/katenjo-crm-full-stack-edition-saas-multi-tenant)
-[![customer relationship management software](https://store.indotalent.com/cdn/shop/files/hero-crm-platinum-customer-relationship-management3_b5af66b6-3af1-41a0-a90e-e39c6d05ac67_1024x1024@2x.jpg?v=1739085851)](https://store.indotalent.com/)
-[![customer relationship management software Blazor](https://store.indotalent.com/cdn/shop/files/hero01_1024x1024@2x.png?v=1758478421)](https://store.indotalent.com/)
-
-
-
-
-
-
-"# Inventory-Order-Management-System" 
+- [Syncfusion Community Edition](https://www.syncfusion.com/products/communitylicense)
+- [AdminLTE](https://github.com/ColorlibHQ/AdminLTE)
+- [ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/)
+- [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/)
