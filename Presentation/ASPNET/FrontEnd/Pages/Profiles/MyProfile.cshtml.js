@@ -34,6 +34,19 @@
         const confirmNewPasswordRef = Vue.ref(null);
         const imageUploadRef = Vue.ref(null);
 
+        const allowedImageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+        const allowedImageExtensionsText = allowedImageExtensions.map(extension => `.${extension}`).join(', ');
+        const isAllowedImageFile = (file) => {
+            const fileName = file?.name ?? '';
+            const dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex < 0 || dotIndex === fileName.length - 1) {
+                return false;
+            }
+
+            const extension = fileName.substring(dotIndex + 1).toLowerCase();
+            return allowedImageExtensions.includes(extension);
+        };
+
         const services = {
             getMainData: async () => {
                 try {
@@ -327,25 +340,33 @@
                 }
             },
             handleFileUpload: async (file) => {
+                if (!isAllowedImageFile(file)) {
+                    Swal.fire({
+                        icon: "error",
+                        title: "Upload Failed",
+                        text: `Only image files are allowed (${allowedImageExtensionsText}).`
+                    });
+                    return;
+                }
+
                 try {
                     const response = await services.uploadImage(file);
                     if (response.status === 200) {
                         const imageName = response?.data?.content?.imageName;
                         await services.updateAvatarData(state.userId, imageName);
                         StorageManager.saveAvatar(imageName);
+                        await window.refreshAvatarImage?.(imageName);
 
                         Swal.fire({
                             icon: "success",
                             title: "Upload Successful",
-                            text: "Your image has been uploaded successfully!",
-                            text: 'Page will be refreshed...',
+                            text: "Your avatar has been updated successfully!",
                             timer: 1000,
                             showConfirmButton: false
                         });
 
                         setTimeout(() => {
                             changeAvatarModal.obj.hide();
-                            location.reload();
                         }, 1000);
                     } else {
                         Swal.fire({
@@ -358,7 +379,7 @@
                     Swal.fire({
                         icon: "error",
                         title: "Upload Failed",
-                        text: "An unexpected error occurred."
+                        text: error.response?.data?.message ?? error.response?.data ?? "An unexpected error occurred."
                     });
                 }
             },
@@ -400,12 +421,23 @@
                     url: "api/FileImage/UploadImage",
                     paramName: "file",
                     maxFilesize: 5,
-                    acceptedFiles: "image/*",
+                    acceptedFiles: allowedImageExtensions.map(extension => `.${extension}`).join(','),
                     addRemoveLinks: true,
                     dictDefaultMessage: "Drag and drop an image here to upload",
+                    dictInvalidFileType: `Only image files are allowed (${allowedImageExtensionsText}).`,
                     autoProcessQueue: false,
                     init: function () {
                         this.on("addedfile", async function (file) {
+                            if (!isAllowedImageFile(file)) {
+                                this.removeFile(file);
+                                Swal.fire({
+                                    icon: "error",
+                                    title: "Upload Failed",
+                                    text: `Only image files are allowed (${allowedImageExtensionsText}).`
+                                });
+                                return;
+                            }
+
                             await handler.handleFileUpload(file);
                         });
                     }

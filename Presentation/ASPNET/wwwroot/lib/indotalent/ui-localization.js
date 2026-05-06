@@ -65,6 +65,8 @@
         'Batch Profit Report': 'Báo Cáo Lãi Theo Lô',
         'Inventory Cost Layers': 'Lớp Giá Vốn Nhập Kho',
         'Inventory Issue Allocations': 'Phân Bổ Xuất Kho Theo Lô',
+        'This product already exists in this sales order.': 'Hàng hóa này đã có trong đơn bán hàng.',
+        'This product already exists in this purchase order.': 'Hàng hóa này đã có trong đơn mua hàng.',
         'Todo': 'Công Việc',
         'Todo Item': 'Chi Tiết Công Việc',
         'User': 'Người Dùng',
@@ -160,6 +162,12 @@
         'Prefix': 'Tiền Tố',
         'Suffix': 'Hậu Tố',
         'Warehouse': 'Kho Hàng',
+        'Warranty Months': 'Thời Gian Bảo Hành (Tháng)',
+        'Supplier Warranty (Months)': 'BH Nhà Cung Cấp (Tháng)',
+        'Supplier Warranty Remaining': 'BH NCC Còn Lại',
+        'Select a Warehouse': 'Chọn Kho Hàng',
+        'Enter Warranty Months': 'Nhập Thời Gian Bảo Hành',
+        'Warranty months must be zero or greater.': 'Thời gian bảo hành phải lớn hơn hoặc bằng 0.',
         'System Warehouse': 'Kho Hệ Thống',
         'Is System Warehouse?': 'Là Kho Hệ Thống?',
         'System Stock': 'Tồn Kho Hệ Thống',
@@ -460,6 +468,8 @@
         'social media': 'mạng xã hội',
         'system warehouse': 'kho hệ thống',
         'system stock': 'tồn kho hệ thống',
+        'supplier warranty (months)': 'BH nhà cung cấp (tháng)',
+        'supplier warranty remaining': 'BH NCC còn lại',
         'movement': 'số lượng giao dịch',
         'trans type': 'loại giao dịch',
         'transaction type': 'loại giao dịch',
@@ -721,6 +731,16 @@
         const stockMatch = value.match(/^Not enough stock in cost layers for Product:\s*(.+?),\s*Batch:\s*(.+)$/i);
         if (stockMatch) {
             return `Không đủ tồn trong các lớp giá vốn cho hàng hóa ${stockMatch[1]} và lô ${stockMatch[2]}.`;
+        }
+
+        const selectedBatchStockMatch = value.match(/^Not enough stock for the selected warehouse and batch\. Available:\s*(.+)\.$/i);
+        if (selectedBatchStockMatch) {
+            return `Không đủ tồn cho kho và lô đã chọn. Tồn khả dụng: ${selectedBatchStockMatch[1]}.`;
+        }
+
+        const remainingStockMatch = value.match(/^Quantity must not exceed remaining stock \((.+)\)\.$/i);
+        if (remainingStockMatch) {
+            return `Số lượng không được vượt quá tồn còn lại (${remainingStockMatch[1]}).`;
         }
 
         const translatedTerm = translateBusinessTerm(value, locale);

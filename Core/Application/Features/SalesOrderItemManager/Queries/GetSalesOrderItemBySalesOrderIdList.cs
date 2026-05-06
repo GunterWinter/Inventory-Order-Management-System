@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -16,7 +16,10 @@ public record GetSalesOrderItemBySalesOrderIdListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public string? WarehouseId { get; init; }
+    public string? WarehouseName { get; init; }
     public string? BatchNumber { get; init; }
+    public int? WarrantyMonths { get; init; }
     public string? Summary { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
@@ -46,6 +49,10 @@ public class GetSalesOrderItemBySalesOrderIdListProfile : Profile
             .ForMember(
                 dest => dest.ProductReferenceCode,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty)
+            )
+            .ForMember(
+                dest => dest.WarehouseName,
+                opt => opt.MapFrom(src => src.Warehouse != null ? src.Warehouse.Name : string.Empty)
             );
 
     }
@@ -81,6 +88,7 @@ public class GetSalesOrderItemBySalesOrderIdListHandler : IRequestHandler<GetSal
             .ApplyIsDeletedFilter(false)
             .Include(x => x.SalesOrder)
             .Include(x => x.Product)
+            .Include(x => x.Warehouse)
             .Where(x => x.SalesOrderId == request.SalesOrderId)
             .AsQueryable();
 

@@ -15,6 +15,7 @@ public class PurchaseOrderSeeder
     private readonly ICommandRepository<Vendor> _vendorRepository;
     private readonly ICommandRepository<Tax> _taxRepository;
     private readonly ICommandRepository<Product> _productRepository;
+    private readonly ICommandRepository<Warehouse> _warehouseRepository;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -25,6 +26,7 @@ public class PurchaseOrderSeeder
         ICommandRepository<Vendor> vendorRepository,
         ICommandRepository<Tax> taxRepository,
         ICommandRepository<Product> productRepository,
+        ICommandRepository<Warehouse> warehouseRepository,
         NumberSequenceService numberSequenceService,
         IUnitOfWork unitOfWork
     )
@@ -35,6 +37,7 @@ public class PurchaseOrderSeeder
         _vendorRepository = vendorRepository;
         _taxRepository = taxRepository;
         _productRepository = productRepository;
+        _warehouseRepository = warehouseRepository;
         _numberSequenceService = numberSequenceService;
         _unitOfWork = unitOfWork;
     }
@@ -45,6 +48,7 @@ public class PurchaseOrderSeeder
         var vendors = await _vendorRepository.GetQuery().Select(x => x.Id).ToListAsync();
         var taxes = await _taxRepository.GetQuery().Select(x => x.Id).ToListAsync();
         var products = await _productRepository.GetQuery().ToListAsync();
+        var warehouses = await _warehouseRepository.GetQuery().Where(x => x.SystemWarehouse == false).Select(x => x.Id).ToListAsync();
 
         var dateFinish = DateTime.Now;
         var dateStart = new DateTime(dateFinish.AddMonths(-12).Year, dateFinish.AddMonths(-12).Month, 1);
@@ -70,10 +74,12 @@ public class PurchaseOrderSeeder
                 {
                     var product = products[random.Next(products.Count)];
                     var quantity = random.Next(20, 50);
+                    var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
                     var purchaseOrderItem = new PurchaseOrderItem
                     {
                         PurchaseOrderId = purchaseOrder.Id,
                         ProductId = product.Id,
+                        WarehouseId = warehouseId,
                         Summary = product.Number,
                         UnitPrice = product.UnitPrice,
                         Quantity = quantity,

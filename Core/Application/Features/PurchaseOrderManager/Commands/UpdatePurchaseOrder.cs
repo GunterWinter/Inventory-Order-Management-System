@@ -73,6 +73,11 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _purchaseOrderService.Recalculate(entity.Id);
+        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
+            entity.Id,
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new UpdatePurchaseOrderResult
         {

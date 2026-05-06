@@ -24,6 +24,7 @@ public partial class InventoryTransactionService
 
         var unitCost = await GetBatchUnitCostAsync(
             salesOrderItem.ProductId,
+            salesOrderItem.WarehouseId,
             salesOrderItem.BatchNumber,
             cancellationToken
         );
@@ -41,6 +42,7 @@ public partial class InventoryTransactionService
 
     private async Task<double> GetBatchUnitCostAsync(
         string? productId,
+        string? warehouseId,
         string? batchNumber,
         CancellationToken cancellationToken)
     {
@@ -73,6 +75,11 @@ public partial class InventoryTransactionService
                 receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
                 x.ProductId == productId);
 
+        if (!string.IsNullOrWhiteSpace(warehouseId))
+        {
+            query = query.Where(x => x.WarehouseId == warehouseId);
+        }
+
         if (!string.IsNullOrWhiteSpace(batchNumber))
         {
             query = query.Where(x => x.BatchNumber == batchNumber);
@@ -88,7 +95,8 @@ public partial class InventoryTransactionService
                 .ApplyIsDeletedFilter(false)
                 .Where(x =>
                     receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
-                    x.ProductId == productId)
+                    x.ProductId == productId &&
+                    x.BatchNumber == batchNumber)
                 .ToListAsync(cancellationToken);
         }
 

@@ -28,14 +28,17 @@ public class DeletePurchaseOrderHandler : IRequestHandler<DeletePurchaseOrderReq
 {
     private readonly ICommandRepository<PurchaseOrder> _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly PurchaseOrderService _purchaseOrderService;
 
     public DeletePurchaseOrderHandler(
         ICommandRepository<PurchaseOrder> repository,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        PurchaseOrderService purchaseOrderService
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _purchaseOrderService = purchaseOrderService;
     }
 
     public async Task<DeletePurchaseOrderResult> Handle(DeletePurchaseOrderRequest request, CancellationToken cancellationToken)
@@ -52,6 +55,11 @@ public class DeletePurchaseOrderHandler : IRequestHandler<DeletePurchaseOrderReq
 
         _repository.Delete(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _purchaseOrderService.DeleteSynchronizedGoodsReceivesAsync(
+            entity.Id,
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new DeletePurchaseOrderResult
         {

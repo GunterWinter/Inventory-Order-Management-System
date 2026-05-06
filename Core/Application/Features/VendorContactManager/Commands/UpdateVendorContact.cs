@@ -30,7 +30,6 @@ public class UpdateVendorContactValidator : AbstractValidator<UpdateVendorContac
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.JobTitle).NotEmpty();
         RuleFor(x => x.PhoneNumber).NotEmpty();
-        RuleFor(x => x.EmailAddress).NotEmpty();
     }
 }
 
@@ -63,7 +62,7 @@ public class UpdateVendorContactHandler : IRequestHandler<UpdateVendorContactReq
         entity.Name = request.Name;
         entity.JobTitle = request.JobTitle;
         entity.PhoneNumber = request.PhoneNumber;
-        entity.EmailAddress = request.EmailAddress;
+        entity.EmailAddress = string.IsNullOrWhiteSpace(request.EmailAddress) ? null : request.EmailAddress.Trim();
         entity.Description = request.Description;
         entity.VendorId = request.VendorId;
 

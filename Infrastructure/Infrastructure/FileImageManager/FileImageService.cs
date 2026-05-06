@@ -39,6 +39,12 @@ public class FileImageService : IFileImageService
             throw new Exception($"Invalid file extension: {nameof(docExtension)}");
         }
 
+        var safeImageExtension = FileImageHelper.GetSafeImageExtension(docExtension);
+        if (safeImageExtension == null)
+        {
+            throw new Exception($"Only image files are allowed. Allowed extensions: {FileImageHelper.AllowedExtensionsText}");
+        }
+
         if (fileData == null || fileData.Length == 0)
         {
             throw new Exception($"File data cannot be null or empty: {nameof(fileData)}");
@@ -49,7 +55,7 @@ public class FileImageService : IFileImageService
             throw new Exception($"File size exceeds the maximum allowed size of {_maxFileSizeInBytes / (1024 * 1024)} MB");
         }
 
-        var fileName = $"{Guid.NewGuid():N}.{docExtension}";
+        var fileName = $"{Guid.NewGuid():N}.{safeImageExtension}";
 
         if (!Directory.Exists(_folderPath))
         {
@@ -63,7 +69,7 @@ public class FileImageService : IFileImageService
         var img = new FileImage();
         img.Name = fileName;
         img.OriginalName = originalFileName;
-        img.Extension = docExtension;
+        img.Extension = safeImageExtension;
         img.GeneratedName = fileName;
         img.FileSize = size;
         img.Description = description;
@@ -77,7 +83,15 @@ public class FileImageService : IFileImageService
 
     public async Task<byte[]> GetFileAsync(string fileName, CancellationToken cancellationToken = default)
     {
-        var filePath = Path.Combine(_folderPath, fileName);
+        var safeFileName = Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safeFileName) ||
+            !string.Equals(safeFileName, fileName, StringComparison.Ordinal) ||
+            !FileImageHelper.IsSupportedImageExtension(safeFileName))
+        {
+            safeFileName = "noimage.png";
+        }
+
+        var filePath = Path.Combine(_folderPath, safeFileName);
 
         if (!File.Exists(filePath))
         {

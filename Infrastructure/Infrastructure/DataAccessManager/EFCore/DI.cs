@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Commands;
+using Application.Common.CQS.Commands;
 using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
 using Infrastructure.DataAccessManager.EFCore.Contexts;
@@ -80,8 +80,34 @@ public static class DI
         // Create database using DataContext
         var dataContext = serviceProvider.GetRequiredService<DataContext>();
         dataContext.Database.EnsureCreated(); // Ensure database is created (development only)
+        EnsureCompatibilityColumns(dataContext);
 
         return host;
+    }
+
+    private static void EnsureCompatibilityColumns(DataContext dataContext)
+    {
+        if (dataContext.Database.ProviderName?.Contains("SqlServer") != true)
+        {
+            return;
+        }
+
+        var commands = new[]
+        {
+            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'DefaultWarehouseId') IS NULL ALTER TABLE [dbo].[Product] ADD [DefaultWarehouseId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'DefaultWarrantyMonths') IS NULL ALTER TABLE [dbo].[Product] ADD [DefaultWarrantyMonths] int NULL;",
+            "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseOrderItem', N'WarehouseId') IS NULL ALTER TABLE [dbo].[PurchaseOrderItem] ADD [WarehouseId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseOrderItem', N'BatchNumber') IS NULL ALTER TABLE [dbo].[PurchaseOrderItem] ADD [BatchNumber] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseOrderItem', N'SupplierWarrantyMonths') IS NULL ALTER TABLE [dbo].[PurchaseOrderItem] ADD [SupplierWarrantyMonths] int NULL;",
+            "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarrantyMonths') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarrantyMonths] int NULL;",
+            "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarehouseId') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarehouseId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'BatchNumber') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [BatchNumber] nvarchar(50) NULL;"
+        };
+
+        foreach (var command in commands)
+        {
+            dataContext.Database.ExecuteSqlRaw(command);
+        }
     }
 }
 

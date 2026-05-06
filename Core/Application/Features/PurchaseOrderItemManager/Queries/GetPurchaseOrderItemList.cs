@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -17,8 +17,11 @@ public record GetPurchaseOrderItemListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public string? WarehouseId { get; init; }
+    public string? WarehouseName { get; init; }
     public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
+    public int? SupplierWarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public double? Total { get; init; }
@@ -49,6 +52,10 @@ public class GetPurchaseOrderItemListProfile : Profile
             .ForMember(
                 dest => dest.ProductReferenceCode,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty)
+            )
+            .ForMember(
+                dest => dest.WarehouseName,
+                opt => opt.MapFrom(src => src.Warehouse != null ? src.Warehouse.Name : string.Empty)
             );
 
     }
@@ -85,6 +92,7 @@ public class GetPurchaseOrderItemListHandler : IRequestHandler<GetPurchaseOrderI
             .Include(x => x.PurchaseOrder)
                 .ThenInclude(x => x!.Vendor)
             .Include(x => x.Product)
+            .Include(x => x.Warehouse)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);

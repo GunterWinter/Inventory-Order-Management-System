@@ -72,22 +72,6 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
         await _goodsReceiveRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var defaultWarehouseId = await _queryContext
-            .Set<Warehouse>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SystemWarehouse == false)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(defaultWarehouseId))
-        {
-            return new CreateGoodsReceiveResult
-            {
-                Data = entity
-            };
-        }
-
         var items = await _queryContext
             .Set<PurchaseOrderItem>()
             .AsNoTracking()
@@ -96,14 +80,15 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
             .Where(x =>
                 x.PurchaseOrderId == entity.PurchaseOrderId &&
                 x.Product != null &&
-                x.Product.Physical == true)
+                x.Product.Physical == true &&
+                !string.IsNullOrWhiteSpace(x.WarehouseId))
             .ToListAsync(cancellationToken);
 
         foreach (var item in items)
         {
             var inventoryTransaction = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
                 entity.Id,
-                defaultWarehouseId,
+                item.WarehouseId,
                 item.ProductId,
                 item.Quantity,
                 entity.CreatedById,

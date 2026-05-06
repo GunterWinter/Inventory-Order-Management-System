@@ -133,18 +133,8 @@ public static class NavigationTreeStructure
                     "IsModule": false
                 },
                 {
-                    "URL": "/DeliveryOrders/DeliveryOrderList",
-                    "Name": "Delivery Order",
-                    "IsModule": false
-                },
-                {
                     "URL": "/SalesReturns/SalesReturnList",
                     "Name": "Sales Return",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/GoodsReceives/GoodsReceiveList",
-                    "Name": "Goods Receive",
                     "IsModule": false
                 },
                 {

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -73,6 +73,11 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(entity.Id);
+        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+            entity.Id,
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new UpdateSalesOrderResult
         {

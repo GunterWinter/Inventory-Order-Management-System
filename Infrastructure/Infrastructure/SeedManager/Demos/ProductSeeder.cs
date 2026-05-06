@@ -10,6 +10,7 @@ namespace Infrastructure.SeedManager.Demos
         private readonly ICommandRepository<Product> _productRepository;
         private readonly ICommandRepository<ProductGroup> _productGroupRepository;
         private readonly ICommandRepository<UnitMeasure> _unitMeasureRepository;
+        private readonly ICommandRepository<Warehouse> _warehouseRepository;
         private readonly NumberSequenceService _numberSequenceService;
         private readonly IUnitOfWork _unitOfWork;
 
@@ -17,6 +18,7 @@ namespace Infrastructure.SeedManager.Demos
             ICommandRepository<Product> productRepository,
             ICommandRepository<ProductGroup> productGroupRepository,
             ICommandRepository<UnitMeasure> unitMeasureRepository,
+            ICommandRepository<Warehouse> warehouseRepository,
             NumberSequenceService numberSequenceService,
             IUnitOfWork unitOfWork
         )
@@ -24,6 +26,7 @@ namespace Infrastructure.SeedManager.Demos
             _productRepository = productRepository;
             _productGroupRepository = productGroupRepository;
             _unitMeasureRepository = unitMeasureRepository;
+            _warehouseRepository = warehouseRepository;
             _numberSequenceService = numberSequenceService;
             _unitOfWork = unitOfWork;
         }
@@ -43,6 +46,8 @@ namespace Infrastructure.SeedManager.Demos
                 Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.",
                 UnitPrice = 1_352_000d,
                 Physical = true,
+                DefaultWarehouseId = await _warehouseRepository.GetQuery().Where(x => !x.IsDeleted && x.SystemWarehouse == false).Select(x => x.Id).FirstOrDefaultAsync(),
+                DefaultWarrantyMonths = 3,
                 UnitMeasureId = await _unitMeasureRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Cái").Select(x => x.Id).FirstAsync(),
                 ProductGroupId = await _productGroupRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Thiết bị nhà thông minh").Select(x => x.Id).FirstAsync()
             };

@@ -58,6 +58,11 @@ public class DeletePurchaseOrderItemHandler : IRequestHandler<DeletePurchaseOrde
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _purchaseOrderService.Recalculate(entity.PurchaseOrderId ?? "");
+        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
+            entity.PurchaseOrderId ?? "",
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new DeletePurchaseOrderItemResult
         {

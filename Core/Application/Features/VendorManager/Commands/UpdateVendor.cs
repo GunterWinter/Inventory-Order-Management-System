@@ -47,7 +47,6 @@ public class UpdateVendorValidator : AbstractValidator<UpdateVendorRequest>
         RuleFor(x => x.State).NotEmpty();
         RuleFor(x => x.ZipCode).NotEmpty();
         RuleFor(x => x.PhoneNumber).NotEmpty();
-        RuleFor(x => x.EmailAddress).NotEmpty();
         RuleFor(x => x.VendorGroupId).NotEmpty();
         RuleFor(x => x.VendorCategoryId).NotEmpty();
     }
@@ -88,7 +87,7 @@ public class UpdateVendorHandler : IRequestHandler<UpdateVendorRequest, UpdateVe
         entity.Country = request.Country;
         entity.PhoneNumber = request.PhoneNumber;
         entity.FaxNumber = request.FaxNumber;
-        entity.EmailAddress = request.EmailAddress;
+        entity.EmailAddress = string.IsNullOrWhiteSpace(request.EmailAddress) ? null : request.EmailAddress.Trim();
         entity.Website = request.Website;
         entity.WhatsApp = request.WhatsApp;
         entity.LinkedIn = request.LinkedIn;

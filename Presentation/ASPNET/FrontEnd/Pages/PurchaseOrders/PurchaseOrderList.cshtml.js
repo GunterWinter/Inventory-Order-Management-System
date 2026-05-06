@@ -8,6 +8,7 @@ const App = {
             purchaseOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
+            warehouseListLookupData: [],
             purchaseOrderItemHistoryData: [],
             mainTitle: null,
             id: '',
@@ -42,6 +43,19 @@ const App = {
 
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
+        const getSelectedProductIds = (currentRowId = null) => new Set(
+            state.secondaryData
+                .filter(item => item.id !== currentRowId && item.productId)
+                .map(item => item.productId)
+        );
+        const getSelectableProductOptions = (currentRow = {}) => {
+            const selectedProductIds = getSelectedProductIds(currentRow.id ?? null);
+            const currentProductId = currentRow.productId ?? null;
+
+            return state.productListLookupData.filter(product =>
+                product.id === currentProductId || !selectedProductIds.has(product.id)
+            );
+        };
         const getHistoricalBatchOptions = (productId) => {
             if (!productId) {
                 return [];
@@ -67,6 +81,13 @@ const App = {
                 });
 
             return options;
+        };
+        const getCurrentPoBatch = () => {
+            for (const item of state.secondaryData) {
+                const batch = normalizeBatchNumber(item.batchNumber);
+                if (batch !== '') return batch;
+            }
+            return '';
         };
 
         const validateForm = function () {
@@ -190,20 +211,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, purchaseOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/CreatePurchaseOrderItem', {
-                        unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, createdById
+                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, purchaseOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, purchaseOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/UpdatePurchaseOrderItem', {
-                        id, unitPrice, quantity, summary, productId, batchNumber, purchaseOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, purchaseOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -223,6 +244,14 @@ const App = {
             getProductListLookupData: async () => {
                 try {
                     const response = await AxiosManager.get('/Product/GetProductList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getWarehouseListLookupData: async () => {
+                try {
+                    const response = await AxiosManager.get('/Warehouse/GetWarehouseList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -274,6 +303,10 @@ const App = {
             populateProductListLookupData: async () => {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
+            },
+            populateWarehouseListLookupData: async () => {
+                const response = await services.getWarehouseListLookupData();
+                state.warehouseListLookupData = response?.data?.content?.data?.filter(item => item.systemWarehouse === false) ?? [];
             },
             populatePurchaseOrderItemHistoryData: async () => {
                 const response = await services.getPurchaseOrderItemHistoryData();
@@ -660,12 +693,14 @@ const App = {
         };
 
         let productObj;
+        let warehouseObj;
         let batchObj;
         let priceObj;
         let quantityObj;
         let totalObj;
         let numberObj;
         let summaryObj;
+        let supplierWarrantyObj;
 
         const secondaryGrid = {
             obj: null,
@@ -717,16 +752,25 @@ const App = {
                                     productObj.destroy();
                                 },
                                 write: (args) => {
+                                    const productOptions = getSelectableProductOptions(args.rowData);
                                     productObj = new ej.dropdowns.DropDownList({
-                                        dataSource: state.productListLookupData,
+                                        dataSource: productOptions,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         change: (e) => {
-                                            const selectedProduct = state.productListLookupData.find(item => item.id === e.value);
+                                            const selectedProduct = productOptions.find(item => item.id === e.value)
+                                                ?? state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
                                                 args.rowData.productId = selectedProduct.id;
                                                 args.rowData.productReferenceCode = selectedProduct.referenceCode;
-                                                args.rowData.batchNumber = '';
+                                                args.rowData.warehouseId = selectedProduct.defaultWarehouseId ?? null;
+                                                args.rowData.warehouseName = selectedProduct.defaultWarehouseName ?? '';
+                                                const poBatch = getCurrentPoBatch();
+                                                args.rowData.batchNumber = poBatch;
+                                                if (warehouseObj) {
+                                                    warehouseObj.value = args.rowData.warehouseId;
+                                                    warehouseObj.dataBind();
+                                                }
                                                 if (numberObj) {
                                                     numberObj.value = selectedProduct.number;
                                                 }
@@ -745,8 +789,11 @@ const App = {
                                                 }
                                                 if (batchObj) {
                                                     batchObj.dataSource = getHistoricalBatchOptions(selectedProduct.id);
-                                                    batchObj.value = '';
-                                                    batchObj.text = '';
+                                                    batchObj.value = poBatch;
+                                                    batchObj.text = poBatch;
+                                                }
+                                                if (supplierWarrantyObj) {
+                                                    supplierWarrantyObj.value = 6;
                                                 }
                                             }
                                         },
@@ -754,6 +801,48 @@ const App = {
                                         floatLabelType: 'Never'
                                     });
                                     productObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'warehouseId',
+                            headerText: 'Warehouse',
+                            width: 180,
+                            validationRules: { required: true },
+                            valueAccessor: (field, data, column) => {
+                                const warehouse = state.warehouseListLookupData.find(item => item.id === data[field]);
+                                return warehouse ? warehouse.name : (data.warehouseName ?? '');
+                            },
+                            editType: 'dropdownedit',
+                            edit: {
+                                create: () => {
+                                    let warehouseElem = document.createElement('input');
+                                    return warehouseElem;
+                                },
+                                read: () => {
+                                    return warehouseObj.value || null;
+                                },
+                                destroy: () => {
+                                    if (warehouseObj) {
+                                        warehouseObj.destroy();
+                                    }
+                                },
+                                write: (args) => {
+                                    warehouseObj = new ej.dropdowns.DropDownList({
+                                        dataSource: state.warehouseListLookupData,
+                                        fields: { value: 'id', text: 'name' },
+                                        value: args.rowData.warehouseId ?? null,
+                                        allowFiltering: true,
+                                        showClearButton: true,
+                                        placeholder: 'Select a Warehouse',
+                                        change: (e) => {
+                                            const selectedWarehouse = state.warehouseListLookupData.find(item => item.id === e.value);
+                                            args.rowData.warehouseId = e.value || null;
+                                            args.rowData.warehouseName = selectedWarehouse?.name ?? '';
+                                        },
+                                        floatLabelType: 'Never'
+                                    });
+                                    warehouseObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -774,10 +863,12 @@ const App = {
                                     if (batchObj) batchObj.destroy();
                                 },
                                 write: (args) => {
+                                    const existingBatch = args.rowData.batchNumber || '';
+                                    const initialBatch = existingBatch !== '' ? existingBatch : getCurrentPoBatch();
                                     batchObj = new ej.dropdowns.ComboBox({
                                         dataSource: getHistoricalBatchOptions(args.rowData.productId),
                                         fields: { value: 'batchNumber', text: 'displayText' },
-                                        value: args.rowData.batchNumber || '',
+                                        value: initialBatch,
                                         allowCustom: true,
                                         allowFiltering: true,
                                         autofill: true,
@@ -787,6 +878,40 @@ const App = {
                                         }
                                     });
                                     batchObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'supplierWarrantyMonths',
+                            headerText: 'Supplier Warranty (Months)',
+                            width: 200,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            edit: {
+                                create: () => {
+                                    let supplierWarrantyElem = document.createElement('input');
+                                    return supplierWarrantyElem;
+                                },
+                                read: () => {
+                                    return supplierWarrantyObj?.value ?? 6;
+                                },
+                                destroy: () => {
+                                    if (supplierWarrantyObj) {
+                                        supplierWarrantyObj.destroy();
+                                        supplierWarrantyObj = null;
+                                    }
+                                },
+                                write: (args) => {
+                                    supplierWarrantyObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.supplierWarrantyMonths ?? 6,
+                                        format: 'n0',
+                                        decimals: 0,
+                                        min: 0,
+                                        step: 1,
+                                        placeholder: 'Warranty months'
+                                    });
+                                    supplierWarrantyObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -848,6 +973,7 @@ const App = {
                                 write: (args) => {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
+                                        min: 0,
                                         change: (e) => {
                                             if (priceObj && totalObj) {
                                                 const total = e.value * priceObj.value;
@@ -980,7 +1106,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, purchaseOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.supplierWarrantyMonths, purchaseOrderId, userId);
                             await methods.populateSecondaryData(purchaseOrderId);
                             secondaryGrid.refresh();
 
@@ -996,7 +1122,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, purchaseOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.supplierWarrantyMonths, purchaseOrderId, userId);
                             await methods.populateSecondaryData(purchaseOrderId);
                             secondaryGrid.refresh();
 
@@ -1065,6 +1191,7 @@ const App = {
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
+                await methods.populateWarehouseListLookupData();
                 await methods.populatePurchaseOrderItemHistoryData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {

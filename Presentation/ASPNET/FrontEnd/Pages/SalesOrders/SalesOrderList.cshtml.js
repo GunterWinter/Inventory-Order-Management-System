@@ -8,6 +8,7 @@ const App = {
             salesOrderStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
+            warehouseListLookupData: [],
             inventoryStockData: [],
             mainTitle: null,
             id: '',
@@ -43,44 +44,99 @@ const App = {
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
         const formatQuantity = (value) => NumberFormatManager.formatToLocale(value ?? 0);
-        const getAvailableBatchOptions = (productId) => {
+        const getBatchSelectionKey = (warehouseId, batchNumber) => `${warehouseId ?? ''}::${normalizeBatchNumber(batchNumber)}`;
+        const findWarehouseNameById = (warehouseId) => state.warehouseListLookupData.find(item => item.id === warehouseId)?.name ?? '';
+        const getSelectedProductIds = (currentRowId = null) => new Set(
+            state.secondaryData
+                .filter(item => item.id !== currentRowId && item.productId)
+                .map(item => item.productId)
+        );
+        const getAvailableWarehouseOptions = (productId) => {
             if (!productId) {
                 return [];
             }
 
             const grouped = new Map();
+            state.inventoryStockData
+                .filter(item =>
+                    item.productId === productId &&
+                    item.warehouseId &&
+                    normalizeBatchNumber(item.batchNumber) !== '' &&
+                    Number(item.stock ?? 0) > 0
+                )
+                .forEach(item => {
+                    const warehouseId = item.warehouseId;
+                    const current = grouped.get(warehouseId) ?? {
+                        id: warehouseId,
+                        name: item.warehouseName ?? findWarehouseNameById(warehouseId),
+                        availableStock: 0
+                    };
+
+                    current.availableStock += Number(item.stock ?? 0);
+                    grouped.set(warehouseId, current);
+                });
+
+            return [...grouped.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+        };
+        const getSelectableProductOptions = (currentRow = {}) => {
+            const selectedProductIds = getSelectedProductIds(currentRow.id ?? null);
+            const currentProductId = currentRow.productId ?? null;
+
+            return state.productListLookupData.filter(product =>
+                product.id === currentProductId ||
+                (!selectedProductIds.has(product.id) && getAvailableWarehouseOptions(product.id).length > 0)
+            );
+        };
+        const getAvailableBatchOptions = (productId, warehouseId) => {
+            if (!productId) {
+                return [];
+            }
+
+            const filterWarehouseId = warehouseId ?? null;
+            const grouped = new Map();
 
             state.inventoryStockData
                 .filter(item =>
                     item.productId === productId &&
+                    (!filterWarehouseId || item.warehouseId === filterWarehouseId) &&
+                    item.warehouseId &&
                     normalizeBatchNumber(item.batchNumber) !== '' &&
                     Number(item.stock ?? 0) > 0
                 )
-                .sort((a, b) => normalizeBatchNumber(a.batchNumber).localeCompare(normalizeBatchNumber(b.batchNumber)))
                 .forEach(item => {
                     const batchNumber = normalizeBatchNumber(item.batchNumber);
-                    const current = grouped.get(batchNumber) ?? {
+                    const selectionKey = getBatchSelectionKey(item.warehouseId, batchNumber);
+                    const current = grouped.get(selectionKey) ?? {
+                        selectionKey,
                         batchNumber,
                         remainingQty: 0,
+                        warehouseId: item.warehouseId,
+                        warehouseName: item.warehouseName ?? findWarehouseNameById(item.warehouseId),
                         firstReceivedDate: null
                     };
 
                     current.remainingQty += Number(item.stock ?? 0);
 
-                    grouped.set(batchNumber, current);
+                    grouped.set(selectionKey, current);
                 });
 
             return [...grouped.values()]
-                .sort((a, b) => a.batchNumber.localeCompare(b.batchNumber))
+                .sort((a, b) => {
+                    const warehouseCompare = (a.warehouseName ?? '').localeCompare(b.warehouseName ?? '');
+                    return warehouseCompare !== 0 ? warehouseCompare : a.batchNumber.localeCompare(b.batchNumber);
+                })
                 .map(item => ({
+                    selectionKey: item.selectionKey,
                     batchNumber: item.batchNumber,
+                    warehouseId: item.warehouseId,
+                    warehouseName: item.warehouseName,
                     remainingQty: item.remainingQty,
-                    displayText: `${item.batchNumber} | Remaining: ${formatQuantity(item.remainingQty)}`
+                    displayText: `${item.batchNumber} (${item.warehouseName || 'Warehouse'} - ${formatQuantity(item.remainingQty)})`
                 }));
         };
-        const getSuggestedBatchOption = (productId) => getAvailableBatchOptions(productId)[0] ?? null;
-        const getRemainingQtyForBatch = (productId, batchNumber) => {
-            const options = getAvailableBatchOptions(productId);
+        const getSuggestedBatchOption = (productId, warehouseId) => getAvailableBatchOptions(productId, warehouseId)[0] ?? null;
+        const getRemainingQtyForBatch = (productId, batchNumber, warehouseId) => {
+            const options = getAvailableBatchOptions(productId, warehouseId);
             const normalizedBatchNumber = normalizeBatchNumber(batchNumber);
 
             if (normalizedBatchNumber !== '') {
@@ -92,7 +148,7 @@ const App = {
         const enrichSalesOrderItem = (item) => ({
             ...item,
             batchNumber: normalizeBatchNumber(item.batchNumber),
-            availableBatchQty: getRemainingQtyForBatch(item.productId, item.batchNumber)
+            availableBatchQty: getRemainingQtyForBatch(item.productId, item.batchNumber, item.warehouseId)
         });
         const syncSecondaryAvailability = () => {
             state.secondaryData = state.secondaryData.map(enrichSalesOrderItem);
@@ -239,20 +295,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, batchNumber, salesOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
-                        unitPrice, quantity, summary, productId, batchNumber, salesOrderId, createdById
+                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, batchNumber, salesOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
-                        id, unitPrice, quantity, summary, productId, batchNumber, salesOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -272,6 +328,14 @@ const App = {
             getProductListLookupData: async () => {
                 try {
                     const response = await AxiosManager.get('/Product/GetProductList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getWarehouseListLookupData: async () => {
+                try {
+                    const response = await AxiosManager.get('/Warehouse/GetWarehouseList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -323,6 +387,10 @@ const App = {
             populateProductListLookupData: async () => {
                 const response = await services.getProductListLookupData();
                 state.productListLookupData = response?.data?.content?.data;
+            },
+            populateWarehouseListLookupData: async () => {
+                const response = await services.getWarehouseListLookupData();
+                state.warehouseListLookupData = response?.data?.content?.data?.filter(item => item.systemWarehouse === false) ?? [];
             },
             populateInventoryStockData: async () => {
                 const response = await services.getInventoryStockData();
@@ -713,6 +781,7 @@ const App = {
         };
 
         let productObj;
+        let warehouseObj;
         let batchObj;
         let availableBatchQtyObj;
         let priceObj;
@@ -720,6 +789,7 @@ const App = {
         let totalObj;
         let numberObj;
         let summaryObj;
+        let warrantyObj;
 
         const secondaryGrid = {
             obj: null,
@@ -771,6 +841,7 @@ const App = {
                                     productObj.destroy();
                                 },
                                 write: (args) => {
+                                    const productOptions = getSelectableProductOptions(args.rowData);
                                     const resolveSelectedProduct = (valueOrItem) => {
                                         if (!valueOrItem) {
                                             return null;
@@ -780,19 +851,39 @@ const App = {
                                             return valueOrItem;
                                         }
 
-                                        return state.productListLookupData.find(item => item.id === valueOrItem);
+                                        return productOptions.find(item => item.id === valueOrItem)
+                                            ?? state.productListLookupData.find(item => item.id === valueOrItem);
                                     };
                                     const applyProductSelection = (selectedProduct) => {
                                         if (selectedProduct) {
-                                            const suggestedBatch = getSuggestedBatchOption(selectedProduct.id);
-                                            const batchOptions = getAvailableBatchOptions(selectedProduct.id);
+                                            const warehouseOptions = getAvailableWarehouseOptions(selectedProduct.id);
+                                            const defaultWarehouseId = selectedProduct.defaultWarehouseId ?? null;
+                                            const defaultWarehouseHasStock = defaultWarehouseId && warehouseOptions.some(item => item.id === defaultWarehouseId);
+                                            let selectedWarehouseId = defaultWarehouseHasStock ? defaultWarehouseId : null;
+                                            let batchOptions = getAvailableBatchOptions(selectedProduct.id, selectedWarehouseId);
+                                            let suggestedBatch = getSuggestedBatchOption(selectedProduct.id, selectedWarehouseId);
+
+                                            if (!selectedWarehouseId && suggestedBatch?.warehouseId) {
+                                                selectedWarehouseId = suggestedBatch.warehouseId;
+                                                batchOptions = getAvailableBatchOptions(selectedProduct.id, selectedWarehouseId);
+                                                suggestedBatch = getSuggestedBatchOption(selectedProduct.id, selectedWarehouseId);
+                                            }
+
                                             args.rowData.productId = selectedProduct.id;
                                             args.rowData.productReferenceCode = selectedProduct.referenceCode;
+                                            args.rowData.warehouseId = selectedWarehouseId;
+                                            args.rowData.warehouseName = warehouseOptions.find(item => item.id === selectedWarehouseId)?.name ?? suggestedBatch?.warehouseName ?? '';
                                             args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
                                             args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
+                                            args.rowData.warrantyMonths = selectedProduct.defaultWarrantyMonths ?? null;
                                             if (productObj) {
                                                 productObj.value = selectedProduct.id;
                                                 productObj.dataBind();
+                                            }
+                                            if (warehouseObj) {
+                                                warehouseObj.dataSource = warehouseOptions;
+                                                warehouseObj.value = selectedWarehouseId;
+                                                warehouseObj.dataBind();
                                             }
                                             refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
                                             if (numberObj) {
@@ -804,6 +895,9 @@ const App = {
                                             if (summaryObj) {
                                                 summaryObj.value = selectedProduct.description;
                                             }
+                                            if (warrantyObj) {
+                                                warrantyObj.value = args.rowData.warrantyMonths;
+                                            }
                                             if (quantityObj) {
                                                 quantityObj.value = 1;
                                                 const total = selectedProduct.unitPrice * quantityObj.value;
@@ -813,15 +907,15 @@ const App = {
                                             }
                                             if (batchObj) {
                                                 batchObj.dataSource = batchOptions;
-                                                batchObj.value = args.rowData.batchNumber;
-                                                batchObj.text = batchOptions.find(item => item.batchNumber === args.rowData.batchNumber)?.displayText ?? '';
+                                                batchObj.value = suggestedBatch?.selectionKey ?? null;
+                                                batchObj.text = args.rowData.batchNumber;
                                                 batchObj.dataBind();
                                             }
                                         }
                                     };
 
                                     productObj = new ej.dropdowns.DropDownList({
-                                        dataSource: state.productListLookupData,
+                                        dataSource: productOptions,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         select: (e) => {
@@ -838,16 +932,72 @@ const App = {
                             }
                         },
                         {
+                            field: 'warehouseId',
+                            headerText: 'Warehouse',
+                            width: 180,
+                            validationRules: { required: true },
+                            valueAccessor: (field, data, column) => {
+                                const warehouse = state.warehouseListLookupData.find(item => item.id === data[field]);
+                                return warehouse ? warehouse.name : (data.warehouseName ?? '');
+                            },
+                            editType: 'dropdownedit',
+                            edit: {
+                                create: () => {
+                                    let warehouseElem = document.createElement('input');
+                                    return warehouseElem;
+                                },
+                                read: () => {
+                                    return warehouseObj?._pendingValue ?? warehouseObj?.value ?? null;
+                                },
+                                destroy: () => {
+                                    if (warehouseObj) {
+                                        warehouseObj.destroy();
+                                        warehouseObj = null;
+                                    }
+                                },
+                                write: (args) => {
+                                    warehouseObj = new ej.dropdowns.DropDownList({
+                                        dataSource: getAvailableWarehouseOptions(args.rowData.productId),
+                                        fields: { value: 'id', text: 'name' },
+                                        value: args.rowData.warehouseId ?? null,
+                                        allowFiltering: true,
+                                        showClearButton: false,
+                                        placeholder: 'Select a Warehouse',
+                                        change: (e) => {
+                                            const selectedWarehouse = state.warehouseListLookupData.find(item => item.id === e.value);
+                                            args.rowData.warehouseId = e.value || null;
+                                            args.rowData.warehouseName = selectedWarehouse?.name ?? '';
+                                            // Re-filter batch options by new warehouse
+                                            const batchOptions = getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
+                                            const suggestedBatch = batchOptions[0] ?? null;
+                                            args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
+                                            args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
+                                            refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
+                                            if (batchObj) {
+                                                batchObj.dataSource = batchOptions;
+                                                batchObj.value = suggestedBatch?.selectionKey ?? null;
+                                                batchObj.text = args.rowData.batchNumber;
+                                                batchObj.dataBind();
+                                            }
+                                        },
+                                        floatLabelType: 'Never'
+                                    });
+                                    warehouseObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
                             field: 'batchNumber',
                             headerText: 'Batch Number',
                             width: 180,
+                            validationRules: { required: true },
                             edit: {
                                 create: () => {
                                     let batchElem = document.createElement('input');
                                     return batchElem;
                                 },
                                 read: () => {
-                                    return batchObj.value;
+                                    return batchObj?.itemData?.batchNumber ?? normalizeBatchNumber(batchObj?.text ?? batchObj?.value);
                                 },
                                 destroy: () => {
                                     if (batchObj) {
@@ -855,31 +1005,50 @@ const App = {
                                     }
                                 },
                                 write: (args) => {
-                                    const batchOptions = getAvailableBatchOptions(args.rowData.productId);
-                                    const suggestedBatch = getSuggestedBatchOption(args.rowData.productId);
-                                    const initialBatchNumber = normalizeBatchNumber(args.rowData.batchNumber) || suggestedBatch?.batchNumber || '';
-                                    const syncBatchSelection = (batchNumber) => {
-                                        args.rowData.batchNumber = normalizeBatchNumber(batchNumber);
-                                        args.rowData.availableBatchQty = getRemainingQtyForBatch(args.rowData.productId, args.rowData.batchNumber);
+                                    const batchOptions = getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
+                                    const suggestedBatch = getSuggestedBatchOption(args.rowData.productId, args.rowData.warehouseId);
+                                    const initialBatchOption = batchOptions.find(item =>
+                                        item.batchNumber === normalizeBatchNumber(args.rowData.batchNumber) &&
+                                        (!args.rowData.warehouseId || item.warehouseId === args.rowData.warehouseId)
+                                    ) ?? suggestedBatch;
+                                    const getCurrentBatchOptions = () => Array.isArray(batchObj?.dataSource)
+                                        ? batchObj.dataSource
+                                        : getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
+                                    const syncBatchSelection = (selectionValue, selectedItem = null) => {
+                                        const currentBatchOptions = getCurrentBatchOptions();
+                                        const selectedBatch = selectedItem ??
+                                            currentBatchOptions.find(item => item.selectionKey === selectionValue) ??
+                                            currentBatchOptions.find(item => item.batchNumber === normalizeBatchNumber(selectionValue));
+
+                                        args.rowData.batchNumber = selectedBatch?.batchNumber ?? '';
+                                        args.rowData.warehouseId = selectedBatch?.warehouseId ?? args.rowData.warehouseId ?? null;
+                                        args.rowData.warehouseName = selectedBatch?.warehouseName ?? args.rowData.warehouseName ?? '';
+                                        args.rowData.availableBatchQty = selectedBatch?.remainingQty ?? 0;
                                         refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
+
+                                        if (warehouseObj && selectedBatch?.warehouseId) {
+                                            warehouseObj.dataSource = getAvailableWarehouseOptions(args.rowData.productId);
+                                            warehouseObj.value = selectedBatch.warehouseId;
+                                            warehouseObj.dataBind();
+                                        }
                                     };
 
-                                    batchObj = new ej.dropdowns.ComboBox({
+                                    batchObj = new ej.dropdowns.DropDownList({
                                         dataSource: batchOptions,
-                                        fields: { value: 'batchNumber', text: 'displayText' },
-                                        value: initialBatchNumber,
-                                        allowCustom: false,
+                                        fields: { value: 'selectionKey', text: 'batchNumber' },
+                                        value: initialBatchOption?.selectionKey ?? null,
                                         allowFiltering: true,
-                                        showClearButton: true,
+                                        showClearButton: false,
+                                        itemTemplate: '<span>${batchNumber}</span>',
                                         placeholder: batchOptions.length ? 'Suggested FIFO batch' : 'No batch with stock',
                                         select: (e) => {
-                                            syncBatchSelection(e.itemData?.batchNumber ?? e.itemData?.value);
+                                            syncBatchSelection(e.itemData?.selectionKey ?? e.itemData?.value, e.itemData);
                                         },
                                         change: (e) => {
-                                            syncBatchSelection(e.value);
+                                            syncBatchSelection(e.value, e.itemData);
                                         }
                                     });
-                                    syncBatchSelection(initialBatchNumber);
+                                    syncBatchSelection(initialBatchOption?.selectionKey ?? null, initialBatchOption);
                                     batchObj.appendTo(args.element);
                                 }
                             }
@@ -914,6 +1083,41 @@ const App = {
                                         readonly: true
                                     });
                                     availableBatchQtyObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'warrantyMonths',
+                            headerText: 'Warranty Months',
+                            width: 180,
+                            type: 'number',
+                            format: 'N0',
+                            validationRules: { required: true },
+                            textAlign: 'Right',
+                            edit: {
+                                create: () => {
+                                    let warrantyElem = document.createElement('input');
+                                    return warrantyElem;
+                                },
+                                read: () => {
+                                    return warrantyObj?.value ?? null;
+                                },
+                                destroy: () => {
+                                    if (warrantyObj) {
+                                        warrantyObj.destroy();
+                                        warrantyObj = null;
+                                    }
+                                },
+                                write: (args) => {
+                                    warrantyObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.warrantyMonths ?? null,
+                                        format: 'n0',
+                                        min: 0,
+                                        decimals: 0,
+                                        validateDecimalOnType: false,
+                                        placeholder: 'Enter Warranty Months'
+                                    });
+                                    warrantyObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -1119,13 +1323,41 @@ const App = {
                             secondaryGrid.obj.excelExport();
                         }
                     },
+                    actionBegin: (args) => {
+                        if (args.requestType !== 'save') {
+                            return;
+                        }
+
+                        const data = args.data ?? {};
+                        const quantity = Number(data.quantity ?? 0);
+                        const availableBatchQty = Number(data.availableBatchQty ?? 0);
+                        const currentRow = state.secondaryData.find(item => item.id === data.id);
+                        const currentQuantity = args.action === 'edit'
+                            && currentRow?.productId === data.productId
+                            && currentRow?.warehouseId === data.warehouseId
+                            && normalizeBatchNumber(currentRow?.batchNumber) === normalizeBatchNumber(data.batchNumber)
+                            ? Number(currentRow.quantity ?? 0)
+                            : 0;
+                        const maxQuantity = availableBatchQty + currentQuantity;
+
+                        if (quantity > maxQuantity) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Save Failed',
+                                text: `Quantity must not exceed remaining stock (${formatQuantity(maxQuantity)}).`,
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    },
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
-                            const salesOrderId = state.id; 
+                            const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, salesOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, salesOrderId, userId);
+                            await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
 
@@ -1137,11 +1369,12 @@ const App = {
                             });
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
-                            const salesOrderId = state.id; 
+                            const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.batchNumber, salesOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, salesOrderId, userId);
+                            await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
 
@@ -1153,11 +1386,12 @@ const App = {
                             });
                         }
                         if (args.requestType === 'delete') {
-                            const salesOrderId = state.id; 
+                            const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data[0];
 
                             await services.deleteSecondaryData(data?.id, userId);
+                            await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
 
@@ -1210,12 +1444,13 @@ const App = {
                 orderDatePicker.create();
                 numberText.create();
                 await methods.populateProductListLookupData();
+                await methods.populateWarehouseListLookupData();
                 await methods.populateInventoryStockData();
                 await secondaryGrid.create(state.secondaryData);
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
-                
+
             }
         });
 

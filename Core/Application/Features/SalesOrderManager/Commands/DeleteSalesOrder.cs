@@ -1,4 +1,5 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
+using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
@@ -28,14 +29,17 @@ public class DeleteSalesOrderHandler : IRequestHandler<DeleteSalesOrderRequest, 
 {
     private readonly ICommandRepository<SalesOrder> _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly SalesOrderService _salesOrderService;
 
     public DeleteSalesOrderHandler(
         ICommandRepository<SalesOrder> repository,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        SalesOrderService salesOrderService
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _salesOrderService = salesOrderService;
     }
 
     public async Task<DeleteSalesOrderResult> Handle(DeleteSalesOrderRequest request, CancellationToken cancellationToken)
@@ -52,6 +56,12 @@ public class DeleteSalesOrderHandler : IRequestHandler<DeleteSalesOrderRequest, 
 
         _repository.Delete(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
+
+        await _salesOrderService.DeleteSynchronizedDeliveryOrdersAsync(
+            entity.Id ?? "",
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new DeleteSalesOrderResult
         {

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -69,6 +69,11 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderRequest, 
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(entity.Id);
+        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+            entity.Id,
+            entity.CreatedById,
+            cancellationToken
+        );
 
         return new CreateSalesOrderResult
         {

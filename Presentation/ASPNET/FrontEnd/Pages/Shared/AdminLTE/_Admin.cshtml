@@ -48,29 +48,31 @@
     @await RenderSectionAsync("scripts", required: false)
 
     <script>
-        document.addEventListener('DOMContentLoaded', async function () {
-            async function getAvatar() {
-                try {
-                    const avatar = StorageManager.getAvatar();
-                    const response = await AxiosManager.get('/FileImage/GetImage?imageName=' + avatar, {
-                        responseType: 'blob'
-                    });
-                    
-                    if (response.status === 200) {
-                        const reader = new FileReader();
-                        reader.onloadend = function () {
-                            const base64Image = reader.result;
-                            document.getElementById('AvatarImageSide').src = base64Image;
-                        };
-                        reader.readAsDataURL(response.data);
-                    } else {
-                        console.error('Error:', response.statusText);
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
+        window.refreshAvatarImage = async function (avatarName) {
+            try {
+                const avatar = avatarName ?? StorageManager.getAvatar() ?? '';
+                const response = await AxiosManager.get('/FileImage/GetImage?imageName=' + encodeURIComponent(avatar) + '&_=' + Date.now(), {
+                    responseType: 'blob'
+                });
+
+                if (response.status === 200) {
+                    const reader = new FileReader();
+                    reader.onloadend = function () {
+                        document.querySelectorAll('#AvatarImageSide').forEach(function (avatarImage) {
+                            avatarImage.src = reader.result;
+                        });
+                    };
+                    reader.readAsDataURL(response.data);
+                } else {
+                    console.error('Error:', response.statusText);
                 }
+            } catch (error) {
+                console.error('Error:', error);
             }
-            getAvatar();
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+            window.refreshAvatarImage();
         });
     </script>
 

@@ -101,9 +101,16 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
 
         foreach (var item in items)
         {
+            var warehouseId = item.Product?.DefaultWarehouseId ?? defaultWarehouseId;
+
+            if (string.IsNullOrWhiteSpace(warehouseId))
+            {
+                continue;
+            }
+
             await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
                 entity.Id,
-                defaultWarehouseId,
+                warehouseId,
                 item.ProductId,
                 item.Quantity,
                 entity.CreatedById,

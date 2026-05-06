@@ -171,6 +171,7 @@ public class BatchCostingDemoSeeder
         {
             PurchaseOrderId = purchaseOrder.Id,
             ProductId = product.Id,
+            WarehouseId = warehouseId,
             Summary = $"{product.Name} - {DemoBatchNumber}",
             BatchNumber = DemoBatchNumber,
             UnitPrice = unitCost,
@@ -612,6 +613,12 @@ public class BatchCostingDemoSeeder
             .Select(x => x.Id)
             .FirstAsync();
 
+        var defaultWarehouseId = await _queryContext
+            .Set<Warehouse>()
+            .Where(x => !x.IsDeleted && x.SystemWarehouse == false)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
         var isNewProduct = product == null;
         product ??= new Product
         {
@@ -623,6 +630,8 @@ public class BatchCostingDemoSeeder
         product.Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.";
         product.UnitPrice = 1_352_000d;
         product.Physical = true;
+        product.DefaultWarehouseId = defaultWarehouseId;
+        product.DefaultWarrantyMonths = 3;
         product.UnitMeasureId = unitMeasureId;
         product.ProductGroupId = productGroupId;
 

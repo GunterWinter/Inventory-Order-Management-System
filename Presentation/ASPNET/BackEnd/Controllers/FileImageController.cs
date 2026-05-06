@@ -25,11 +25,16 @@ public class FileImageController : BaseApiController
             return BadRequest("Invalid file.");
         }
 
+        var extension = FileImageHelper.GetSafeImageExtension(file.FileName);
+        if (extension == null)
+        {
+            return BadRequest($"Only image files are allowed. Allowed extensions: {FileImageHelper.AllowedExtensionsText}.");
+        }
+
         using (var memoryStream = new MemoryStream())
         {
             await file.CopyToAsync(memoryStream, cancellationToken);
             var fileData = memoryStream.ToArray();
-            var extension = Path.GetExtension(file.FileName).TrimStart('.');
 
             var command = new CreateImageRequest
             {
@@ -62,7 +67,7 @@ public class FileImageController : BaseApiController
         [FromQuery] string imageName,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(imageName) || Path.GetExtension(imageName) == string.Empty)
+        if (string.IsNullOrWhiteSpace(imageName) || !FileImageHelper.IsSupportedImageExtension(imageName))
         {
             imageName = "noimage.png";
         }

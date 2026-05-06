@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using FluentValidation;
@@ -58,6 +58,11 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
+        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+            entity.SalesOrderId ?? "",
+            entity.UpdatedById,
+            cancellationToken
+        );
 
         return new DeleteSalesOrderItemResult
         {

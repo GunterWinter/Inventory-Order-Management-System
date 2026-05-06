@@ -53,6 +53,8 @@ public class GetSalesOrderSingleHandler : IRequestHandler<GetSalesOrderSingleReq
             .Include(x => x.Tax)
             .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
                 .ThenInclude(x => x.Product)
+            .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
+                .ThenInclude(x => x.Warehouse)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

@@ -21,6 +21,7 @@ public record GetInventoryTransactionListDto
     public string? WarehouseName { get; init; }
     public string? ProductName { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? TransTypeName { get; init; }
     public double? Stock { get; init; }
@@ -100,8 +101,7 @@ public class GetInventoryTransactionListHandler : IRequestHandler<GetInventoryTr
             .Include(x => x.WarehouseTo)
             .Where(x =>
                 x.Product!.Physical == true &&
-                x.Warehouse!.SystemWarehouse == false &&
-                x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed
+                x.Warehouse!.SystemWarehouse == false
             )
             .OrderByDescending(x => x.CreatedAtUtc)
             .AsQueryable();

@@ -108,7 +108,8 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
             .Where(x =>
                 x.PurchaseOrderId == entity.PurchaseOrderId &&
                 x.Product != null &&
-                x.Product.Physical == true)
+                x.Product.Physical == true &&
+                !string.IsNullOrWhiteSpace(x.WarehouseId))
             .ToListAsync(cancellationToken);
 
         var inventoryTransactions = await _queryContext
@@ -132,23 +133,15 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
             );
         }
 
-        var defaultWarehouseId = await GetDefaultWarehouseIdAsync(cancellationToken);
-
         foreach (var item in items)
         {
             var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-            var warehouseId = existingTransaction?.WarehouseId ?? defaultWarehouseId;
-
-            if (string.IsNullOrWhiteSpace(warehouseId))
-            {
-                throw new Exception("Default warehouse not found.");
-            }
 
             if (existingTransaction == null)
             {
                 await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
                     entity.Id,
-                    warehouseId,
+                    item.WarehouseId,
                     item.ProductId,
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
@@ -161,7 +154,7 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
             {
                 await _inventoryTransactionService.GoodsReceiveUpdateInvenTrans(
                     existingTransaction.Id,
-                    warehouseId,
+                    item.WarehouseId,
                     item.ProductId,
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
@@ -173,14 +166,4 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
         }
     }
 
-    private async Task<string?> GetDefaultWarehouseIdAsync(CancellationToken cancellationToken)
-    {
-        return await _queryContext
-            .Set<Warehouse>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SystemWarehouse == false)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-    }
 }

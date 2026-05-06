@@ -16,6 +16,9 @@ public record GetProductListDto
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
     public bool? Physical { get; init; }
+    public string? DefaultWarehouseId { get; init; }
+    public string? DefaultWarehouseName { get; init; }
+    public int? DefaultWarrantyMonths { get; init; }
     public string? UnitMeasureId { get; init; }
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
@@ -35,6 +38,10 @@ public class GetProductListProfile : Profile
             .ForMember(
                 dest => dest.ProductGroupName,
                 opt => opt.MapFrom(src => src.ProductGroup != null ? src.ProductGroup.Name : string.Empty)
+            )
+            .ForMember(
+                dest => dest.DefaultWarehouseName,
+                opt => opt.MapFrom(src => src.DefaultWarehouse != null ? src.DefaultWarehouse.Name : string.Empty)
             );
 
     }
@@ -70,6 +77,7 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.UnitMeasure)
             .Include(x => x.ProductGroup)
+            .Include(x => x.DefaultWarehouse)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);

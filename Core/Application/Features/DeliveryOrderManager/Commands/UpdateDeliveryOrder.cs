@@ -137,11 +137,11 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
         foreach (var item in items)
         {
             var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-            var warehouseId = existingTransaction?.WarehouseId ?? defaultWarehouseId;
+            var warehouseId = item.Product?.DefaultWarehouseId ?? existingTransaction?.WarehouseId ?? defaultWarehouseId;
 
             if (string.IsNullOrWhiteSpace(warehouseId))
             {
-                throw new Exception("Default warehouse not found.");
+                continue;
             }
 
             if (existingTransaction == null)
