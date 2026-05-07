@@ -80,6 +80,8 @@ public static class DI
         // Create database using DataContext
         var dataContext = serviceProvider.GetRequiredService<DataContext>();
         dataContext.Database.EnsureCreated(); // Ensure database is created (development only)
+        // Keep only legacy column compatibility here. New tables should come from the EF model
+        // when the database is recreated from scratch.
         EnsureCompatibilityColumns(dataContext);
 
         return host;

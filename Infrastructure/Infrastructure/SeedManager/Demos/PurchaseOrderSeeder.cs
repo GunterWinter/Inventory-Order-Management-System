@@ -46,7 +46,7 @@ public class PurchaseOrderSeeder
     {
         var random = new Random();
         var vendors = await _vendorRepository.GetQuery().Select(x => x.Id).ToListAsync();
-        var taxes = await _taxRepository.GetQuery().Select(x => x.Id).ToListAsync();
+        var taxes = await _taxRepository.GetQuery().ToListAsync();
         var products = await _productRepository.GetQuery().ToListAsync();
         var warehouses = await _warehouseRepository.GetQuery().Where(x => x.SystemWarehouse == false).Select(x => x.Id).ToListAsync();
 
@@ -65,7 +65,6 @@ public class PurchaseOrderSeeder
                     OrderDate = transDate,
                     OrderStatus = (PurchaseOrderStatus)random.Next(0, Enum.GetNames(typeof(PurchaseOrderStatus)).Length),
                     VendorId = GetRandomValue(vendors, random),
-                    TaxId = GetRandomValue(taxes, random),
                 };
                 await _purchaseOrderRepository.CreateAsync(purchaseOrder);
 
@@ -73,17 +72,26 @@ public class PurchaseOrderSeeder
                 for (int i = 0; i < numberOfProducts; i++)
                 {
                     var product = products[random.Next(products.Count)];
+                    var tax = GetRandomValue(taxes, random);
                     var quantity = random.Next(20, 50);
+                    var total = (product.UnitPrice ?? 0d) * quantity;
+                    var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
                     var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
+                    var batchNumber = $"LOT-{transDate:yyyyMMdd}-{i + 1:00}";
                     var purchaseOrderItem = new PurchaseOrderItem
                     {
                         PurchaseOrderId = purchaseOrder.Id,
                         ProductId = product.Id,
                         WarehouseId = warehouseId,
-                        Summary = product.Number,
+                        BatchNumber = batchNumber,
+                        SupplierWarrantyMonths = product.DefaultWarrantyMonths ?? 6,
+                        Summary = $"{product.Number} - {batchNumber}",
+                        TaxId = tax.Id,
                         UnitPrice = product.UnitPrice,
                         Quantity = quantity,
-                        Total = product.UnitPrice * quantity
+                        Total = total,
+                        TaxAmount = taxAmount,
+                        AfterTaxAmount = total + taxAmount
                     };
                     await _purchaseOrderItemRepository.CreateAsync(purchaseOrderItem);
                 }

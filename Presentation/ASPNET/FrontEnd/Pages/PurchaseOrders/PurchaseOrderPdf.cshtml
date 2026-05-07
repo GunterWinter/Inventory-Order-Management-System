@@ -78,7 +78,10 @@
                                 <th>Batch Number</th>
                                 <th>Unit Price</th>
                                 <th>Quantity</th>
-                                <th>Total</th>
+                                <th>Subtotal</th>
+                                <th>Tax</th>
+                                <th>Tax Amount</th>
+                                <th>Total Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -90,6 +93,9 @@
                                 <td>{{ item?.unitPrice }}</td>
                                 <td>{{ item?.quantity }}</td>
                                 <td>{{ item?.total }}</td>
+                                <td>{{ item?.taxName }}</td>
+                                <td>{{ item?.taxAmount }}</td>
+                                <td>{{ item?.afterTaxAmount }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -214,11 +220,11 @@
         width: 100%;
         border-collapse: collapse;
         margin-bottom: 20px;
-        font-size: 14px;
+        font-size: 12px;
     }
 
         .product-table th, .product-table td {
-            padding: 8px;
+            padding: 5px;
             text-align: left;
         }
 

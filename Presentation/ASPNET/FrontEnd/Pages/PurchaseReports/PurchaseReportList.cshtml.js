@@ -63,7 +63,10 @@ const App = {
                         { field: 'productName', headerText: 'Product Name', width: 200, minWidth: 200 },
                         { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N2' },
                         { field: 'quantity', headerText: 'Quantity', width: 150, minWidth: 150 },
-                        { field: 'total', headerText: 'Total', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'total', headerText: 'Subtotal', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'taxName', headerText: 'Tax', width: 150, minWidth: 150 },
+                        { field: 'taxAmount', headerText: 'Tax Amount', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N2' },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
@@ -72,7 +75,19 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'total',
-                                    groupCaptionTemplate: 'Total: ${Sum}',
+                                    groupCaptionTemplate: 'Subtotal: ${Sum}',
+                                    format: 'N2'
+                                },
+                                {
+                                    type: 'Sum',
+                                    field: 'taxAmount',
+                                    groupCaptionTemplate: 'Tax: ${Sum}',
+                                    format: 'N2'
+                                },
+                                {
+                                    type: 'Sum',
+                                    field: 'afterTaxAmount',
+                                    groupCaptionTemplate: 'Total Amount: ${Sum}',
                                     format: 'N2'
                                 }
                             ]
@@ -84,7 +99,7 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.autoFitColumns(['vendorName', 'purchaseOrderNumber', 'productNumber', 'productReferenceCode', 'productName', 'unitPrice', 'quantity', 'total', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['vendorName', 'purchaseOrderNumber', 'productNumber', 'productReferenceCode', 'productName', 'unitPrice', 'quantity', 'total', 'taxName', 'taxAmount', 'afterTaxAmount', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => { },

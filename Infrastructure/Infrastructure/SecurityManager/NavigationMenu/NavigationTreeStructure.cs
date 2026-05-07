@@ -1,4 +1,4 @@
-﻿using Application.Common.Services.SecurityManager;
+using Application.Common.Services.SecurityManager;
 using System.Text.Json;
 
 namespace Infrastructure.SecurityManager.NavigationMenu;
@@ -185,6 +185,33 @@ public static class NavigationTreeStructure
                 {
                     "URL": "/MovementReports/MovementReportList",
                     "Name": "Batch Profit Report",
+                    "IsModule": false
+                }
+            ]
+        },
+        {
+            "URL": "#",
+            "Name": "Finance",
+            "IsModule": true,
+            "Children": [
+                {
+                    "URL": "/CashAccounts/CashAccountList",
+                    "Name": "Cash Account",
+                    "IsModule": false
+                },
+                {
+                    "URL": "/CashCategories/CashCategoryList",
+                    "Name": "Cash Category",
+                    "IsModule": false
+                },
+                {
+                    "URL": "/CashTransactions/CashTransactionList",
+                    "Name": "Cash Transaction",
+                    "IsModule": false
+                },
+                {
+                    "URL": "/CashBookReports/CashBookReportList",
+                    "Name": "Cash Book Report",
                     "IsModule": false
                 }
             ]

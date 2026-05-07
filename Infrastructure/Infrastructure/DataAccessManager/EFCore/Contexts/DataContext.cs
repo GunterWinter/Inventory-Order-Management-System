@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Configurations;
 using Infrastructure.SecurityManager.AspNetIdentity;
@@ -51,6 +51,9 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<NegativeAdjustment> NegativeAdjustment { get; set; }
     public DbSet<PositiveAdjustment> PositiveAdjustment { get; set; }
     public DbSet<Scrapping> Scrapping { get; set; }
+    public DbSet<CashAccount> CashAccount { get; set; }
+    public DbSet<CashCategory> CashCategory { get; set; }
+    public DbSet<CashTransaction> CashTransaction { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -94,6 +97,9 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new NegativeAdjustmentConfiguration());
         modelBuilder.ApplyConfiguration(new PositiveAdjustmentConfiguration());
         modelBuilder.ApplyConfiguration(new ScrappingConfiguration());
+        modelBuilder.ApplyConfiguration(new CashAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new CashCategoryConfiguration());
+        modelBuilder.ApplyConfiguration(new CashTransactionConfiguration());
 
     }
 

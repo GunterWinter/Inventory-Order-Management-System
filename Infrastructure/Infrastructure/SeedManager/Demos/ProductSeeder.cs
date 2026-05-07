@@ -33,26 +33,35 @@ namespace Infrastructure.SeedManager.Demos
 
         public async Task GenerateDataAsync()
         {
-            if (await _productRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.ReferenceCode == "SM-SWITCH-001"))
-            {
-                return;
-            }
+            var product = await _productRepository
+                .GetQuery()
+                .FirstOrDefaultAsync(x => !x.IsDeleted && x.ReferenceCode == "SM-SWITCH-001");
 
-            var product = new Product
+            var isNewProduct = product == null;
+            product ??= new Product
             {
-                Number = _numberSequenceService.GenerateNumber(nameof(Product), "", "ART"),
-                Name = "Công tắc thông minh WiFi 1 nút",
-                ReferenceCode = "SM-SWITCH-001",
-                Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.",
-                UnitPrice = 1_352_000d,
-                Physical = true,
-                DefaultWarehouseId = await _warehouseRepository.GetQuery().Where(x => !x.IsDeleted && x.SystemWarehouse == false).Select(x => x.Id).FirstOrDefaultAsync(),
-                DefaultWarrantyMonths = 3,
-                UnitMeasureId = await _unitMeasureRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Cái").Select(x => x.Id).FirstAsync(),
-                ProductGroupId = await _productGroupRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Thiết bị nhà thông minh").Select(x => x.Id).FirstAsync()
+                Number = _numberSequenceService.GenerateNumber(nameof(Product), "", "ART")
             };
 
-            await _productRepository.CreateAsync(product);
+            product.Name = "Công tắc thông minh WiFi 1 nút";
+            product.ReferenceCode = "SM-SWITCH-001";
+            product.Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.";
+            product.UnitPrice = 1_352_000d;
+            product.Physical = true;
+            product.DefaultWarehouseId = await _warehouseRepository.GetQuery().Where(x => !x.IsDeleted && x.SystemWarehouse == false).Select(x => x.Id).FirstOrDefaultAsync();
+            product.DefaultWarrantyMonths = 3;
+            product.UnitMeasureId = await _unitMeasureRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Cái").Select(x => x.Id).FirstAsync();
+            product.ProductGroupId = await _productGroupRepository.GetQuery().Where(x => !x.IsDeleted && x.Name == "Thiết bị nhà thông minh").Select(x => x.Id).FirstAsync();
+
+            if (isNewProduct)
+            {
+                await _productRepository.CreateAsync(product);
+            }
+            else
+            {
+                _productRepository.Update(product);
+            }
+
             await _unitOfWork.SaveAsync();
         }
     }

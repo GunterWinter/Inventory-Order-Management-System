@@ -1,8 +1,11 @@
 using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.SalesOrderItemManager.Commands;
 
@@ -30,16 +33,19 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
     private readonly ICommandRepository<SalesOrderItem> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SalesOrderService _salesOrderService;
+    private readonly IQueryContext _queryContext;
 
     public DeleteSalesOrderItemHandler(
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
-        SalesOrderService salesOrderService
+        SalesOrderService salesOrderService,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _salesOrderService = salesOrderService;
+        _queryContext = queryContext;
     }
 
     public async Task<DeleteSalesOrderItemResult> Handle(DeleteSalesOrderItemRequest request, CancellationToken cancellationToken)
@@ -50,6 +56,20 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
         if (entity == null)
         {
             throw new Exception($"Entity not found: {request.Id}");
+        }
+
+        var isConfirmedSalesOrder = await _queryContext
+            .Set<SalesOrder>()
+            .AsNoTracking()
+            .AnyAsync(x =>
+                !x.IsDeleted &&
+                x.Id == entity.SalesOrderId &&
+                x.OrderStatus == SalesOrderStatus.Confirmed,
+                cancellationToken);
+
+        if (isConfirmedSalesOrder)
+        {
+            throw new Exception("Cannot delete items from a confirmed sales order. You can adjust quantity, batch number, warranty months, or add a new item.");
         }
 
         entity.UpdatedById = request.DeletedById;
@@ -70,4 +90,3 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
         };
     }
 }
-

@@ -18,7 +18,6 @@ public class CreateSalesOrderRequest : IRequest<CreateSalesOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
-    public string? TaxId { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -29,7 +28,6 @@ public class CreateSalesOrderValidator : AbstractValidator<CreateSalesOrderReque
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
-        RuleFor(x => x.TaxId).NotEmpty();
     }
 }
 
@@ -63,7 +61,6 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderRequest, 
         entity.OrderStatus = (SalesOrderStatus)int.Parse(request.OrderStatus!);
         entity.Description = request.Description;
         entity.CustomerId = request.CustomerId;
-        entity.TaxId = request.TaxId;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);

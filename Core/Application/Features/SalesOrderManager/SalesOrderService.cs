@@ -44,7 +44,6 @@ public class SalesOrderService
             .GetQuery()
             .ApplyIsDeletedFilter()
             .Where(x => x.Id == salesOrderId)
-            .Include(x => x.Tax)
             .SingleOrDefault();
 
         if (salesOrder == null)
@@ -57,11 +56,8 @@ public class SalesOrderService
             .ToList();
 
         salesOrder.BeforeTaxAmount = salesOrderItems.Sum(x => x.Total ?? 0);
-
-        var taxPercentage = salesOrder.Tax?.Percentage ?? 0;
-        salesOrder.TaxAmount = (salesOrder.BeforeTaxAmount ?? 0) * taxPercentage / 100;
-
-        salesOrder.AfterTaxAmount = (salesOrder.BeforeTaxAmount ?? 0) + (salesOrder.TaxAmount ?? 0);
+        salesOrder.TaxAmount = salesOrderItems.Sum(x => x.TaxAmount ?? 0);
+        salesOrder.AfterTaxAmount = salesOrderItems.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0) + (x.TaxAmount ?? 0)));
 
         _salesOrderRepository.Update(salesOrder);
         _unitOfWork.Save();

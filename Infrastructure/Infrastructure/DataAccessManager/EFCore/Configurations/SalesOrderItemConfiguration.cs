@@ -19,9 +19,12 @@ public class SalesOrderItemConfiguration : BaseEntityConfiguration<SalesOrderIte
         builder.Property(x => x.Summary).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CogsAmount).IsRequired(false);
         builder.Property(x => x.ProfitAmount).IsRequired(false);
+        builder.Property(x => x.TaxId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.UnitPrice).IsRequired(false);
         builder.Property(x => x.Quantity).IsRequired(false);
         builder.Property(x => x.Total).IsRequired(false);
+        builder.Property(x => x.TaxAmount).IsRequired(false);
+        builder.Property(x => x.AfterTaxAmount).IsRequired(false);
 
     }
 }

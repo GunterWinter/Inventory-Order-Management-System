@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -18,8 +18,6 @@ public record GetPurchaseOrderListDto
     public string? Description { get; init; }
     public string? VendorId { get; init; }
     public string? VendorName { get; init; }
-    public string? TaxId { get; init; }
-    public string? TaxName { get; init; }
     public double? BeforeTaxAmount { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
@@ -34,10 +32,6 @@ public class GetPurchaseOrderListProfile : Profile
             .ForMember(
                 dest => dest.VendorName,
                 opt => opt.MapFrom(src => src.Vendor != null ? src.Vendor.Name : string.Empty)
-            )
-            .ForMember(
-                dest => dest.TaxName,
-                opt => opt.MapFrom(src => src.Tax != null ? src.Tax.Name : string.Empty)
             )
             .ForMember(
                 dest => dest.OrderStatusName,
@@ -76,7 +70,6 @@ public class GetPurchaseOrderListHandler : IRequestHandler<GetPurchaseOrderListR
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.Vendor)
-            .Include(x => x.Tax)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);

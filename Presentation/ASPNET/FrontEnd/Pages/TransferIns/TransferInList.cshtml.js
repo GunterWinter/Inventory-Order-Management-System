@@ -345,6 +345,10 @@ const App = {
                         return;
                     }
 
+                    if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.status))) {
+                        return;
+                    }
+
                     const response = state.id === ''
                         ? await services.createMainData(state.transferReceiveDate, state.description, state.status, state.transferOutId, StorageManager.getUserId())
                         : state.deleteMode

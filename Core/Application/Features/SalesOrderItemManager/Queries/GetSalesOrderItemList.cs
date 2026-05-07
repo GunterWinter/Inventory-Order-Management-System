@@ -20,10 +20,14 @@ public record GetSalesOrderItemListDto
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
     public string? Summary { get; init; }
+    public string? TaxId { get; init; }
+    public string? TaxName { get; init; }
     public int? WarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
     public double? Total { get; init; }
+    public double? TaxAmount { get; init; }
+    public double? AfterTaxAmount { get; init; }
     public string? BatchNumber { get; init; }
     public double? CogsAmount { get; init; }
     public double? ProfitAmount { get; init; }
@@ -58,6 +62,10 @@ public class GetSalesOrderItemListProfile : Profile
             .ForMember(
                 dest => dest.WarehouseName,
                 opt => opt.MapFrom(src => src.Warehouse != null ? src.Warehouse.Name : string.Empty)
+            )
+            .ForMember(
+                dest => dest.TaxName,
+                opt => opt.MapFrom(src => src.Tax != null ? src.Tax.Name : string.Empty)
             );
 
     }
@@ -95,6 +103,7 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
                 .ThenInclude(x => x!.Customer)
             .Include(x => x.Product)
             .Include(x => x.Warehouse)
+            .Include(x => x.Tax)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);

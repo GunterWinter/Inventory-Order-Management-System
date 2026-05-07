@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using AutoMapper;
 using Domain.Entities;
 using FluentValidation;
@@ -50,11 +50,12 @@ public class GetSalesOrderSingleHandler : IRequestHandler<GetSalesOrderSingleReq
             .SalesOrder
             .AsNoTracking()
             .Include(x => x.Customer)
-            .Include(x => x.Tax)
             .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
                 .ThenInclude(x => x.Product)
             .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
                 .ThenInclude(x => x.Warehouse)
+            .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
+                .ThenInclude(x => x.Tax)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

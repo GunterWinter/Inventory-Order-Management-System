@@ -1,7 +1,36 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Purchase Order List";
 }
+
+<style>
+    .payment-status-action {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.1;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .payment-status-action-paid {
+        color: #198754;
+    }
+
+    .payment-status-action-unpaid {
+        color: #dc3545;
+    }
+
+    .payment-status-action-none {
+        display: none;
+    }
+
+    .payment-status-action:hover {
+        text-decoration: underline;
+    }
+</style>
 
 <div id="app" v-cloak>
     <div class="row">
@@ -45,11 +74,6 @@
                                                 <label for="VendorId">Vendor</label>
                                                 <div ref="vendorIdRef"></div>
                                                 <label class="text-danger">{{ state.errors.vendorId }}</label>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label for="TaxId">Tax</label>
-                                                <div ref="taxIdRef"></div>
-                                                <label class="text-danger">{{ state.errors.taxId }}</label>
                                             </div>
                                         </div>
                                         <div class="row mb-2">

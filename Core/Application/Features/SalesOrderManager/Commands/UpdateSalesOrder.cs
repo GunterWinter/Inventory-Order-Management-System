@@ -18,7 +18,6 @@ public class UpdateSalesOrderRequest : IRequest<UpdateSalesOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
-    public string? TaxId { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -30,7 +29,6 @@ public class UpdateSalesOrderValidator : AbstractValidator<UpdateSalesOrderReque
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
-        RuleFor(x => x.TaxId).NotEmpty();
     }
 }
 
@@ -67,7 +65,6 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
         entity.OrderStatus = (SalesOrderStatus)int.Parse(request.OrderStatus!);
         entity.Description = request.Description;
         entity.CustomerId = request.CustomerId;
-        entity.TaxId = request.TaxId;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);

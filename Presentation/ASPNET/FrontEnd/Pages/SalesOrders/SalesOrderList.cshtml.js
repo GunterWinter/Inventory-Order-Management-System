@@ -10,18 +10,19 @@ const App = {
             productListLookupData: [],
             warehouseListLookupData: [],
             inventoryStockData: [],
+            paymentStatusLookupData: [],
+            cashAccountListData: [],
+            cashCategoryListData: [],
             mainTitle: null,
             id: '',
             number: '',
             orderDate: '',
             description: '',
             customerId: null,
-            taxId: null,
             orderStatus: null,
             errors: {
                 orderDate: '',
                 customerId: '',
-                taxId: '',
                 orderStatus: '',
                 description: ''
             },
@@ -37,7 +38,6 @@ const App = {
         const orderDateRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
         const customerIdRef = Vue.ref(null);
-        const taxIdRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
 
@@ -177,7 +177,6 @@ const App = {
         const validateForm = function () {
             state.errors.orderDate = '';
             state.errors.customerId = '';
-            state.errors.taxId = '';
             state.errors.orderStatus = '';
 
             let isValid = true;
@@ -188,10 +187,6 @@ const App = {
             }
             if (!state.customerId) {
                 state.errors.customerId = 'Customer is required.';
-                isValid = false;
-            }
-            if (!state.taxId) {
-                state.errors.taxId = 'Tax is required.';
                 isValid = false;
             }
             if (!state.orderStatus) {
@@ -208,12 +203,10 @@ const App = {
             state.orderDate = '';
             state.description = '';
             state.customerId = null;
-            state.taxId = null;
             state.orderStatus = null;
             state.errors = {
                 orderDate: '',
                 customerId: '',
-                taxId: '',
                 orderStatus: '',
                 description: ''
             };
@@ -233,20 +226,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (orderDate, description, orderStatus, taxId, customerId, createdById) => {
+            createMainData: async (orderDate, description, orderStatus, customerId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/CreateSalesOrder', {
-                        orderDate, description, orderStatus, taxId, customerId, createdById
+                        orderDate, description, orderStatus, customerId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, orderDate, description, orderStatus, taxId, customerId, updatedById) => {
+            updateMainData: async (id, orderDate, description, orderStatus, customerId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/UpdateSalesOrder', {
-                        id, orderDate, description, orderStatus, taxId, customerId, updatedById
+                        id, orderDate, description, orderStatus, customerId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -295,20 +288,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
-                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, createdById
+                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
-                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, salesOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -348,6 +341,46 @@ const App = {
                 } catch (error) {
                     throw error;
                 }
+            },
+            getPaymentStatusLookup: async () => {
+                try {
+                    const response = await AxiosManager.get('/CashTransaction/GetPaymentStatusLookup?sourceModule=SalesOrder', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getCashAccountList: async () => {
+                try {
+                    const response = await AxiosManager.get('/CashAccount/GetCashAccountList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getCashCategoryList: async () => {
+                try {
+                    const response = await AxiosManager.get('/CashCategory/GetCashCategoryList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            createCashTransaction: async (data) => {
+                try {
+                    const response = await AxiosManager.post('/CashTransaction/CreateCashTransaction', data);
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            updateCashTransaction: async (data) => {
+                try {
+                    const response = await AxiosManager.post('/CashTransaction/UpdateCashTransaction', data);
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
             }
         };
 
@@ -366,11 +399,26 @@ const App = {
             },
             populateMainData: async () => {
                 const response = await services.getMainData();
-                state.mainData = response?.data?.content?.data.map(item => ({
-                    ...item,
-                    orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
-                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
-                }));
+                const paymentResponse = await services.getPaymentStatusLookup();
+                state.paymentStatusLookupData = paymentResponse?.data?.content?.data ?? [];
+                const paymentMap = new Map(state.paymentStatusLookupData.map(p => [p.sourceModuleId, p]));
+                state.mainData = response?.data?.content?.data.map(item => {
+                    const payment = paymentMap.get(item.id);
+                    return {
+                        ...item,
+                        orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                        paymentStatusText: payment ? (payment.status === 2 ? 'Đã Thanh Toán' : 'Chưa Thanh Toán') : (item.orderStatus === 2 ? 'Chưa Thanh Toán' : ''),
+                        paymentStatusClass: payment ? (payment.status === 2 ? 'paid' : 'unpaid') : (item.orderStatus === 2 ? 'unpaid' : 'none'),
+                        cashTransactionId: payment?.cashTransactionId ?? null,
+                        cashTransactionDate: payment?.transactionDate ?? null,
+                        cashTransactionStatus: payment?.status ?? null,
+                        cashTransactionCashAccountId: payment?.cashAccountId ?? null,
+                        cashTransactionCashCategoryId: payment?.cashCategoryId ?? null,
+                        cashTransactionAmount: payment?.amount ?? null,
+                        cashTransactionDescription: payment?.description ?? null
+                    };
+                });
             },
             populateSecondaryData: async (salesOrderId) => {
                 try {
@@ -397,6 +445,59 @@ const App = {
                 state.inventoryStockData = response?.data?.content?.data ?? [];
                 syncSecondaryAvailability();
             },
+            populateCashAccountList: async () => {
+                const response = await services.getCashAccountList();
+                state.cashAccountListData = response?.data?.content?.data ?? [];
+            },
+            populateCashCategoryList: async () => {
+                const response = await services.getCashCategoryList();
+                state.cashCategoryListData = response?.data?.content?.data ?? [];
+            },
+            resolveCashCategoryId: (categoryName) => {
+                return state.cashCategoryListData.find(item => item.name === categoryName)?.id ?? null;
+            },
+            resolvePaymentAmount: (value) => {
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                    return value;
+                }
+
+                return NumberFormatManager.parseLocaleNumber(value) ?? 0;
+            },
+            ensureDraftCashTransactionForConfirmedOrder: async (orderId, orderNumber, totalAmount) => {
+                if (String(state.orderStatus) !== '2' || !orderId) {
+                    return;
+                }
+
+                const existingPayment = state.paymentStatusLookupData.find(p => p.sourceModuleId === orderId);
+                if (existingPayment?.status === 2) {
+                    return;
+                }
+
+                const payload = {
+                    transactionDate: existingPayment?.transactionDate ?? new Date().toISOString(),
+                    transactionType: 0,
+                    status: 0,
+                    amount: methods.resolvePaymentAmount(totalAmount),
+                    description: existingPayment?.description ?? `Thu tiền đơn ${orderNumber}`,
+                    cashAccountId: existingPayment?.cashAccountId ?? null,
+                    cashCategoryId: existingPayment?.cashCategoryId ?? methods.resolveCashCategoryId('Bán hàng'),
+                    sourceModule: 'SalesOrder',
+                    sourceModuleId: orderId,
+                    sourceModuleNumber: orderNumber
+                };
+
+                if (existingPayment?.cashTransactionId) {
+                    payload.id = existingPayment.cashTransactionId;
+                    payload.updatedById = StorageManager.getUserId();
+                    await services.updateCashTransaction(payload);
+                } else {
+                    payload.createdById = StorageManager.getUserId();
+                    await services.createCashTransaction(payload);
+                }
+
+                await methods.populateMainData();
+                mainGrid.refresh();
+            },
             refreshInventoryAvailability: async () => {
                 await methods.populateInventoryStockData();
             },
@@ -417,12 +518,17 @@ const App = {
                     return;
                 }
 
+                if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.orderStatus))) {
+                    state.isSubmitting = false;
+                    return;
+                }
+
                 try {
                     const response = state.id === ''
-                        ? await services.createMainData(state.orderDate, state.description, state.orderStatus, state.taxId, state.customerId, StorageManager.getUserId())
+                        ? await services.createMainData(state.orderDate, state.description, state.orderStatus, state.customerId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.orderDate, state.description, state.orderStatus, state.taxId, state.customerId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.orderDate, state.description, state.orderStatus, state.customerId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -435,20 +541,13 @@ const App = {
                             state.orderDate = response?.data?.content?.data.orderDate ? DateFormatManager.parseBusinessDate(response.data.content.data.orderDate) : null;
                             state.description = response?.data?.content?.data.description ?? '';
                             state.customerId = response?.data?.content?.data.customerId ?? '';
-                            state.taxId = response?.data?.content?.data.taxId ?? '';
-                            taxListLookup.trackingChange = true;
                             state.orderStatus = String(response?.data?.content?.data.orderStatus ?? '');
                             state.showComplexDiv = true;
 
                             await methods.refreshInventoryAvailability();
                             await methods.refreshPaymentSummary(state.id);
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Save Successful',
-                                timer: 1000,
-                                showConfirmButton: false
-                            });
+                            Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
                         } else {
                             Swal.fire({
                                 icon: 'success',
@@ -485,9 +584,7 @@ const App = {
             onMainModalHidden: () => {
                 state.errors.orderDate = '';
                 state.errors.customerId = '';
-                state.errors.taxId = '';
                 state.errors.orderStatus = '';
-                taxListLookup.trackingChange = false;
             }
         };
 
@@ -520,32 +617,6 @@ const App = {
             refresh: () => {
                 if (customerListLookup.obj) {
                     customerListLookup.obj.value = state.customerId;
-                }
-            }
-        };
-
-        const taxListLookup = {
-            obj: null,
-            trackingChange: false,
-            create: () => {
-                if (state.taxListLookupData && Array.isArray(state.taxListLookupData)) {
-                    taxListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.taxListLookupData,
-                        fields: { value: 'id', text: 'name' },
-                        placeholder: 'Select a Tax',
-                        change: async (e) => {
-                            state.taxId = e.value;
-                            if (e.isInteracted && taxListLookup.trackingChange) {
-                                await methods.handleFormSubmit();
-                            }
-                        }
-                    });
-                    taxListLookup.obj.appendTo(taxIdRef.value);
-                }
-            },
-            refresh: () => {
-                if (taxListLookup.obj) {
-                    taxListLookup.obj.value = state.taxId;
                 }
             }
         };
@@ -620,14 +691,6 @@ const App = {
         );
 
         Vue.watch(
-            () => state.taxId,
-            (newVal, oldVal) => {
-                taxListLookup.refresh();
-                state.errors.taxId = '';
-            }
-        );
-
-        Vue.watch(
             () => state.orderStatus,
             (newVal, oldVal) => {
                 salesOrderStatusListLookup.refresh();
@@ -666,9 +729,20 @@ const App = {
                         { field: 'orderDate', headerText: 'SO Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
                         { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'taxName', headerText: 'Tax', width: 150, minWidth: 150 },
                         { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N2' },
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
+                        {
+                            field: 'paymentStatusText',
+                            headerText: '',
+                            width: 150,
+                            minWidth: 150,
+                            textAlign: 'Center',
+                            allowFiltering: false,
+                            allowSorting: false,
+                            showColumnMenu: false,
+                            disableHtmlEncode: false,
+                            template: '<button type="button" class="payment-status-action payment-status-action-${paymentStatusClass}">${paymentStatusText}</button>'
+                        }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -682,7 +756,32 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'orderDate', 'customerName', 'orderStatusName', 'taxName', 'afterTaxAmount', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'orderDate', 'customerName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
+
+                        const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
+                        paymentActions.forEach(paymentAction => {
+                            paymentAction.addEventListener('mousedown', e => e.stopPropagation());
+                            paymentAction.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const row = paymentAction.closest('tr');
+                                if (!row) return;
+                                const rowData = mainGrid.obj.getRowInfo(row).rowData;
+                                if (!rowData) return;
+                                await showPaymentPopup(
+                                    rowData.id,
+                                    rowData.number,
+                                    NumberFormatManager.formatToLocale(rowData.afterTaxAmount ?? 0),
+                                    rowData.cashTransactionId,
+                                    rowData.cashTransactionStatus,
+                                    rowData.cashTransactionCashAccountId,
+                                    rowData.cashTransactionAmount,
+                                    rowData.cashTransactionDescription,
+                                    rowData.cashTransactionCashCategoryId,
+                                    rowData.cashTransactionDate
+                                );
+                            });
+                        });
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -730,8 +829,6 @@ const App = {
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
-                                state.taxId = selectedRecord.taxId ?? '';
-                                taxListLookup.trackingChange = true;
                                 state.orderStatus = String(selectedRecord.orderStatus ?? '');
                                 state.showComplexDiv = true;
 
@@ -753,7 +850,6 @@ const App = {
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
-                                state.taxId = selectedRecord.taxId ?? '';
                                 state.orderStatus = String(selectedRecord.orderStatus ?? '');
                                 state.showComplexDiv = false;
 
@@ -787,6 +883,7 @@ const App = {
         let priceObj;
         let quantityObj;
         let totalObj;
+        let taxObj;
         let numberObj;
         let summaryObj;
         let warrantyObj;
@@ -1192,7 +1289,7 @@ const App = {
                         },
                         {
                             field: 'total',
-                            headerText: 'Total',
+                            headerText: 'Subtotal',
                             width: 200, validationRules: { required: false }, type: 'number', format: 'N2', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1215,6 +1312,60 @@ const App = {
                                     totalObj.appendTo(args.element);
                                 }
                             }
+                        },
+                        {
+                            field: 'taxId',
+                            headerText: 'Tax',
+                            width: 180,
+                            validationRules: { required: true },
+                            valueAccessor: (field, data, column) => {
+                                const tax = state.taxListLookupData.find(item => item.id === data[field]);
+                                return tax ? tax.name : (data.taxName ?? '');
+                            },
+                            editType: 'dropdownedit',
+                            edit: {
+                                create: () => {
+                                    let taxElem = document.createElement('input');
+                                    return taxElem;
+                                },
+                                read: () => {
+                                    return taxObj?.value ?? null;
+                                },
+                                destroy: () => {
+                                    if (taxObj) {
+                                        taxObj.destroy();
+                                        taxObj = null;
+                                    }
+                                },
+                                write: (args) => {
+                                    taxObj = new ej.dropdowns.DropDownList({
+                                        dataSource: state.taxListLookupData,
+                                        fields: { value: 'id', text: 'name' },
+                                        value: args.rowData.taxId ?? null,
+                                        placeholder: 'Select Tax',
+                                        floatLabelType: 'Never'
+                                    });
+                                    taxObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'taxAmount',
+                            headerText: 'Tax Amount',
+                            allowEditing: false,
+                            width: 160,
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
+                        },
+                        {
+                            field: 'afterTaxAmount',
+                            headerText: 'Total Amount',
+                            allowEditing: false,
+                            width: 170,
+                            type: 'number',
+                            format: 'N2',
+                            textAlign: 'Right'
                         },
                         {
                             field: 'productNumber',
@@ -1356,7 +1507,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, salesOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId);
                             await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
@@ -1373,7 +1524,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, salesOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId);
                             await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
@@ -1390,17 +1541,41 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data[0];
 
-                            await services.deleteSecondaryData(data?.id, userId);
-                            await methods.refreshInventoryAvailability();
-                            await methods.populateSecondaryData(salesOrderId);
-                            secondaryGrid.refresh();
+                            try {
+                                const response = await services.deleteSecondaryData(data?.id, userId);
+                                if (response?.data?.code === 200) {
+                                    await methods.refreshInventoryAvailability();
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Delete Successful',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Delete Successful',
+                                        timer: 2000,
+                                        showConfirmButton: false
+                                    });
+                                } else {
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
+
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Delete Failed',
+                                        text: response?.data?.message ?? 'Unable to delete this item.',
+                                        confirmButtonText: 'OK'
+                                    });
+                                }
+                            } catch (error) {
+                                await methods.populateSecondaryData(salesOrderId);
+                                secondaryGrid.refresh();
+
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Delete Failed',
+                                    text: error.response?.data?.message ?? 'Unable to delete this item.',
+                                    confirmButtonText: 'OK'
+                                });
+                            }
                         }
 
                         await methods.populateMainData();
@@ -1425,11 +1600,106 @@ const App = {
             }
         };
 
+        const showPaymentPopup = async (
+            orderId,
+            orderNumber,
+            totalAmount,
+            existingTransactionId = null,
+            existingStatus = null,
+            existingCashAccountId = null,
+            existingAmount = null,
+            existingDescription = null,
+            existingCashCategoryId = null,
+            existingTransactionDate = null) => {
+            const isReadOnly = existingStatus === 2;
+            const totalAmountValue = typeof totalAmount === 'number' ? totalAmount : (NumberFormatManager.parseLocaleNumber(totalAmount) ?? 0);
+            const displayAmount = existingAmount !== null && existingAmount !== undefined
+                ? NumberFormatManager.formatToLocale(existingAmount)
+                : NumberFormatManager.formatToLocale(totalAmountValue);
+            const displayDescription = existingDescription ?? `Thu tiền đơn ${orderNumber}`;
+            const accountOptions = state.cashAccountListData
+                .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
+                .join('');
+            const defaultCashCategoryId = existingCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
+            const statusHtml = isReadOnly
+                ? `<div class="mb-3"><label class="form-label fw-bold">Status</label><input class="form-control" value="Đã Thanh Toán" disabled></div>`
+                : `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Nháp</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Đã Thanh Toán</option></select></div>`;
+            const result = await Swal.fire({
+                title: `Thanh Toán ${orderNumber}`,
+                html: `
+                    <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select" ${isReadOnly ? 'disabled' : ''}>${accountOptions}</select></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Số tiền</label><input id="swal-amount" class="form-control" value="${displayAmount}" ${isReadOnly ? 'disabled' : ''}></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
+                    ${statusHtml}
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Lưu',
+                cancelButtonText: 'Bỏ qua',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const accountId = document.getElementById('swal-account').value;
+                    const categoryId = defaultCashCategoryId;
+                    const rawAmountValue = document.getElementById('swal-amount').value ?? '0';
+                    const parsedAmount = NumberFormatManager.parseLocaleNumber(rawAmountValue) ?? 0;
+                    const status = isReadOnly ? existingStatus : parseInt(document.getElementById('swal-payment-status').value);
+                    if (status === 2 && !accountId) {
+                        Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
+                        return false;
+                    }
+                    return {
+                        cashAccountId: accountId || null,
+                        cashCategoryId: categoryId || null,
+                        // Category auto-set to 'Bán hàng'
+                        amount: isReadOnly && existingAmount !== null && existingAmount !== undefined ? existingAmount : parsedAmount,
+                        description: document.getElementById('swal-desc').value,
+                        status
+                    };
+                }
+            });
+
+            if (result.isConfirmed && result.value) {
+                try {
+                    const payload = {
+                        transactionDate: existingTransactionDate ?? new Date().toISOString(),
+                        transactionType: 0,
+                        status: result.value.status,
+                        amount: result.value.amount,
+                        description: result.value.description,
+                        cashAccountId: result.value.cashAccountId,
+                        cashCategoryId: result.value.cashCategoryId ?? null,
+                        sourceModule: 'SalesOrder',
+                        sourceModuleId: orderId,
+                        sourceModuleNumber: orderNumber,
+                        createdById: StorageManager.getUserId()
+                    };
+                    if (existingTransactionId) {
+                        payload.id = existingTransactionId;
+                        payload.updatedById = StorageManager.getUserId();
+                        delete payload.createdById;
+                        await services.updateCashTransaction(payload);
+                    } else {
+                        await services.createCashTransaction(payload);
+                    }
+                    await methods.populateMainData();
+                    mainGrid.refresh();
+                    if (result.value.status === 2) {
+                        Swal.fire({ icon: 'success', title: 'Thanh toán thành công', timer: 1000, showConfirmButton: false });
+                    } else {
+                        Swal.fire({ icon: 'success', title: 'Đã lưu thành công', timer: 1000, showConfirmButton: false });
+                    }
+                } catch (err) {
+                    Swal.fire({ icon: 'error', title: 'Lỗi', text: err.response?.data?.message ?? 'Thử lại.' });
+                }
+            }
+        };
+
         Vue.onMounted(async () => {
             try {
                 await SecurityManager.authorizePage(['SalesOrders']);
                 await SecurityManager.validateToken();
 
+                await methods.populateCashAccountList();
+                await methods.populateCashCategoryList();
                 await methods.populateMainData();
                 await mainGrid.create(state.mainData);
 
@@ -1438,7 +1708,6 @@ const App = {
                 await methods.populateCustomerListLookupData();
                 customerListLookup.create();
                 await methods.populateTaxListLookupData();
-                taxListLookup.create();
                 await methods.populateSalesOrderStatusListLookupData();
                 salesOrderStatusListLookup.create();
                 orderDatePicker.create();
@@ -1464,7 +1733,6 @@ const App = {
             orderDateRef,
             numberRef,
             customerIdRef,
-            taxIdRef,
             orderStatusRef,
             secondaryGridRef,
             state,

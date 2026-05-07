@@ -1,0 +1,45 @@
+@page
+@{
+    ViewData["Title"] = "Cash Book Report List";
+}
+
+<div id="app" v-cloak>
+    <div class="row mb-3">
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Total Debit</div>
+                    <h4 class="mb-0">{{ state.summary.totalDebitText }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Total Credit</div>
+                    <h4 class="mb-0">{{ state.summary.totalCreditText }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Total Balance</div>
+                    <h4 class="mb-0">{{ state.summary.totalBalanceText }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="grid-container">
+                <div id="MainGrid" ref="mainGridRef"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="~/FrontEnd/Pages/CashBookReports/CashBookReportList.cshtml.js"></script>
+}

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -18,7 +18,6 @@ public class UpdatePurchaseOrderRequest : IRequest<UpdatePurchaseOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? VendorId { get; init; }
-    public string? TaxId { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -30,7 +29,6 @@ public class UpdatePurchaseOrderValidator : AbstractValidator<UpdatePurchaseOrde
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.VendorId).NotEmpty();
-        RuleFor(x => x.TaxId).NotEmpty();
     }
 }
 
@@ -67,7 +65,6 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
         entity.OrderStatus = (PurchaseOrderStatus)int.Parse(request.OrderStatus!);
         entity.Description = request.Description;
         entity.VendorId = request.VendorId;
-        entity.TaxId = request.TaxId;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);

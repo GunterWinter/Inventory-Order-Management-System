@@ -80,6 +80,7 @@ public static class DI
         services.AddScoped<ScrappingSeeder>();
         services.AddScoped<StockCountSeeder>();
         services.AddScoped<BatchCostingDemoSeeder>();
+        services.AddScoped<CashManagementSeeder>();
         return services;
     }
     public static IHost SeedDemoData(this IHost host)
@@ -157,6 +158,10 @@ public static class DI
             //stockCountSeeder.GenerateDataAsync().Wait();
 
         }
+
+        var cashManagementSeeder = serviceProvider.GetRequiredService<CashManagementSeeder>();
+        cashManagementSeeder.GenerateDataAsync().Wait();
+
         return host;
     }
 }

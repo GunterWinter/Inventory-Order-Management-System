@@ -337,6 +337,10 @@ const App = {
                     return { isValid, response: null };
                 }
 
+                if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.status))) {
+                    return { isValid: false, response: null };
+                }
+
                 try {
                     const response = state.id === ''
                         ? await services.createMainData(state.scrappingDate, state.description, state.status, state.warehouseId, StorageManager.getUserId())

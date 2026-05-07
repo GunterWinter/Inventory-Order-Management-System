@@ -21,6 +21,7 @@ public class UpdatePurchaseOrderItemRequest : IRequest<UpdatePurchaseOrderItemRe
     public string? WarehouseId { get; init; }
     public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
+    public string? TaxId { get; init; }
     public int? SupplierWarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
@@ -35,6 +36,7 @@ public class UpdatePurchaseOrderItemValidator : AbstractValidator<UpdatePurchase
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.BatchNumber).NotEmpty();
+        RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.UnitPrice).NotEmpty();
         RuleFor(x => x.Quantity).NotEmpty();
     }
@@ -85,10 +87,14 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
         entity.BatchNumber = request.BatchNumber;
         entity.SupplierWarrantyMonths = request.SupplierWarrantyMonths ?? entity.SupplierWarrantyMonths ?? 6;
         entity.Summary = request.Summary;
+        entity.TaxId = request.TaxId;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = request.Quantity;
 
-        entity.Total = entity.UnitPrice * entity.Quantity;
+        entity.Total = (entity.UnitPrice ?? 0d) * (entity.Quantity ?? 0d);
+        var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
+        entity.TaxAmount = (entity.Total ?? 0d) * taxPercentage / 100d;
+        entity.AfterTaxAmount = (entity.Total ?? 0d) + (entity.TaxAmount ?? 0d);
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -119,6 +125,28 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             .Where(x => x.Id == productId)
             .Select(x => x.DefaultWarehouseId)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<double> ResolveTaxPercentageAsync(string? taxId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taxId))
+        {
+            throw new Exception("Tax is required.");
+        }
+
+        var percentage = await _queryContext
+            .Set<Tax>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == taxId)
+            .Select(x => x.Percentage)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (percentage == null)
+        {
+            throw new Exception("Tax is invalid.");
+        }
+
+        return percentage.Value;
     }
 
     private async Task ValidateProductNotDuplicatedAsync(

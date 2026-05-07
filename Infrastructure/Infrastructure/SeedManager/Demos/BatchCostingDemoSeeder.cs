@@ -122,7 +122,7 @@ public class BatchCostingDemoSeeder
 
         var inbound = await SeedPurchaseAndGoodsReceiveAsync(
             vendor.Id,
-            tax.Id,
+            tax,
             warehouse.Id,
             product,
             quantity: 50d,
@@ -131,7 +131,7 @@ public class BatchCostingDemoSeeder
 
         var outbound = await SeedSalesAndDeliveryAsync(
             customer.Id,
-            tax.Id,
+            tax,
             warehouse.Id,
             product,
             quantity: 5d,
@@ -150,7 +150,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<(PurchaseOrder PurchaseOrder, PurchaseOrderItem PurchaseOrderItem, GoodsReceive GoodsReceive)> SeedPurchaseAndGoodsReceiveAsync(
         string? vendorId,
-        string? taxId,
+        Tax tax,
         string? warehouseId,
         Product product,
         double quantity,
@@ -161,12 +161,13 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(PurchaseOrder), "", "PO"),
             OrderDate = new DateTime(2026, 4, 1),
             OrderStatus = PurchaseOrderStatus.Confirmed,
-            Description = $"{DemoPrefix} - đơn mua nhập hàng demo",
-            VendorId = vendorId,
-            TaxId = taxId
+            Description = $"{DemoPrefix}đơn mua nhập hàng demo",
+            VendorId = vendorId
         };
         await _purchaseOrderRepository.CreateAsync(purchaseOrder);
 
+        var total = unitCost * quantity;
+        var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
         var purchaseOrderItem = new PurchaseOrderItem
         {
             PurchaseOrderId = purchaseOrder.Id,
@@ -174,9 +175,13 @@ public class BatchCostingDemoSeeder
             WarehouseId = warehouseId,
             Summary = $"{product.Name} - {DemoBatchNumber}",
             BatchNumber = DemoBatchNumber,
+            SupplierWarrantyMonths = product.DefaultWarrantyMonths ?? 6,
             UnitPrice = unitCost,
             Quantity = quantity,
-            Total = unitCost * quantity
+            TaxId = tax.Id,
+            Total = total,
+            TaxAmount = taxAmount,
+            AfterTaxAmount = total + taxAmount
         };
         await _purchaseOrderItemRepository.CreateAsync(purchaseOrderItem);
         await _unitOfWork.SaveAsync();
@@ -188,7 +193,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(GoodsReceive), "", "GR"),
             ReceiveDate = new DateTime(2026, 4, 2),
             Status = GoodsReceiveStatus.Confirmed,
-            Description = $"{DemoPrefix} - phiếu nhập kho từ đơn mua",
+            Description = $"{DemoPrefix}phiếu nhập kho từ đơn mua",
             PurchaseOrderId = purchaseOrder.Id
         };
         await _goodsReceiveRepository.CreateAsync(goodsReceive);
@@ -209,7 +214,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<(SalesOrder SalesOrder, SalesOrderItem SalesOrderItem, DeliveryOrder DeliveryOrder)> SeedSalesAndDeliveryAsync(
         string? customerId,
-        string? taxId,
+        Tax tax,
         string? warehouseId,
         Product product,
         double quantity,
@@ -220,21 +225,27 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(SalesOrder), "", "SO"),
             OrderDate = new DateTime(2026, 4, 5),
             OrderStatus = SalesOrderStatus.Confirmed,
-            Description = $"{DemoPrefix} - đơn bán thiết bị demo",
-            CustomerId = customerId,
-            TaxId = taxId
+            Description = $"{DemoPrefix}đơn bán thiết bị demo",
+            CustomerId = customerId
         };
         await _salesOrderRepository.CreateAsync(salesOrder);
 
+        var total = unitPrice * quantity;
+        var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
         var salesOrderItem = new SalesOrderItem
         {
             SalesOrderId = salesOrder.Id,
             ProductId = product.Id,
-            Summary = $"{product.Name} - bán cho khách demo",
+            WarehouseId = warehouseId,
+            Summary = $"{product.Name}bán cho khách demo",
             BatchNumber = DemoBatchNumber,
+            WarrantyMonths = product.DefaultWarrantyMonths ?? 3,
             UnitPrice = unitPrice,
             Quantity = quantity,
-            Total = unitPrice * quantity,
+            TaxId = tax.Id,
+            Total = total,
+            TaxAmount = taxAmount,
+            AfterTaxAmount = total + taxAmount,
             CogsAmount = 0d,
             ProfitAmount = 0d
         };
@@ -248,7 +259,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(DeliveryOrder), "", "DO"),
             DeliveryDate = new DateTime(2026, 4, 6),
             Status = DeliveryOrderStatus.Confirmed,
-            Description = $"{DemoPrefix} - phiếu xuất kho từ đơn bán",
+            Description = $"{DemoPrefix}phiếu xuất kho từ đơn bán",
             SalesOrderId = salesOrder.Id
         };
         await _deliveryOrderRepository.CreateAsync(deliveryOrder);
@@ -279,7 +290,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(SalesReturn), "", "SRN"),
             ReturnDate = new DateTime(2026, 4, 8),
             Status = SalesReturnStatus.Confirmed,
-            Description = $"{DemoPrefix} - khách trả lại một phần hàng",
+            Description = $"{DemoPrefix}khách trả lại một phần hàng",
             DeliveryOrderId = deliveryOrderId
         };
         await _salesReturnRepository.CreateAsync(salesReturn);
@@ -301,7 +312,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(PurchaseReturn), "", "PRN"),
             ReturnDate = new DateTime(2026, 4, 9),
             Status = PurchaseReturnStatus.Confirmed,
-            Description = $"{DemoPrefix} - trả lại một phần hàng cho nhà cung cấp",
+            Description = $"{DemoPrefix}trả lại một phần hàng cho nhà cung cấp",
             GoodsReceiveId = goodsReceiveId
         };
         await _purchaseReturnRepository.CreateAsync(purchaseReturn);
@@ -323,7 +334,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(TransferOut), "", "OUT"),
             TransferReleaseDate = new DateTime(2026, 4, 10),
             Status = TransferStatus.Confirmed,
-            Description = $"{DemoPrefix} - chuyển kho demo trong cùng kho vật lý",
+            Description = $"{DemoPrefix}chuyển kho demo trong cùng kho vật lý",
             WarehouseFromId = warehouseId,
             WarehouseToId = warehouseId
         };
@@ -347,7 +358,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(TransferIn), "", "IN"),
             TransferReceiveDate = new DateTime(2026, 4, 11),
             Status = TransferStatus.Confirmed,
-            Description = $"{DemoPrefix} - nhận chuyển kho demo",
+            Description = $"{DemoPrefix}nhận chuyển kho demo",
             TransferOutId = transferOutId
         };
         await _transferInRepository.CreateAsync(transferIn);
@@ -368,7 +379,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(PositiveAdjustment), "", "ADJ+"),
             AdjustmentDate = new DateTime(2026, 4, 12),
             Status = AdjustmentStatus.Confirmed,
-            Description = $"{DemoPrefix} - điều chỉnh tăng tồn kho"
+            Description = $"{DemoPrefix}điều chỉnh tăng tồn kho"
         };
         await _positiveAdjustmentRepository.CreateAsync(adjustment);
         await _unitOfWork.SaveAsync();
@@ -389,7 +400,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(NegativeAdjustment), "", "ADJ-"),
             AdjustmentDate = new DateTime(2026, 4, 13),
             Status = AdjustmentStatus.Confirmed,
-            Description = $"{DemoPrefix} - điều chỉnh giảm tồn kho"
+            Description = $"{DemoPrefix}điều chỉnh giảm tồn kho"
         };
         await _negativeAdjustmentRepository.CreateAsync(adjustment);
         await _unitOfWork.SaveAsync();
@@ -410,7 +421,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(Scrapping), "", "SCRP"),
             ScrappingDate = new DateTime(2026, 4, 14),
             Status = ScrappingStatus.Confirmed,
-            Description = $"{DemoPrefix} - hủy hàng demo",
+            Description = $"{DemoPrefix}hủy hàng demo",
             WarehouseId = warehouseId
         };
         await _scrappingRepository.CreateAsync(scrapping);
@@ -434,7 +445,7 @@ public class BatchCostingDemoSeeder
             Number = _numberSequenceService.GenerateNumber(nameof(StockCount), "", "SC"),
             CountDate = new DateTime(2026, 4, 15),
             Status = StockCountStatus.Confirmed,
-            Description = $"{DemoPrefix} - kiểm kê kho demo",
+            Description = $"{DemoPrefix}kiểm kê kho demo",
             WarehouseId = warehouseId
         };
         await _stockCountRepository.CreateAsync(stockCount);
@@ -577,10 +588,10 @@ public class BatchCostingDemoSeeder
         customer.State = "TP. Hồ Chí Minh";
         customer.ZipCode = "700000";
         customer.Country = "Việt Nam";
-        customer.PhoneNumber = "0909123456";
+        customer.PhoneNumber = "0123456789";
         customer.EmailAddress = "khachhang.demo@architech.vn";
-        customer.Website = "architech.vn";
-        customer.Description = "Khách hàng demo cho dự án thiết bị nhà thông minh và nội thất.";
+        customer.Website = "vippro123.vn";
+        customer.Description = "Khách hàng demo";
 
         if (isNewCustomer)
         {

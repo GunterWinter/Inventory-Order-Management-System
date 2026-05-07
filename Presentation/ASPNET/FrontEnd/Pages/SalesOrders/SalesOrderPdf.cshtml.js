@@ -50,9 +50,12 @@
                 const pdfData = response?.data?.content?.data || {};
                 state.items = (pdfData.salesOrderItemList || []).map(item => ({
                     ...item,
+                    taxName: item?.tax?.name || '',
                     unitPrice: NumberFormatManager.formatToLocale(item?.unitPrice || 0),
                     quantity: NumberFormatManager.formatToLocale(item?.quantity || 0),
                     total: NumberFormatManager.formatToLocale(item?.total || 0),
+                    taxAmount: NumberFormatManager.formatToLocale(item?.taxAmount || 0),
+                    afterTaxAmount: NumberFormatManager.formatToLocale(item?.afterTaxAmount || 0),
                 }));
                 state.customer = pdfData.customer || {};
                 state.orderNumber = pdfData.number || '';

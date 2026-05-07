@@ -6,7 +6,14 @@
     const localizedDropDownInstances = new Set();
     const localizedSyncfusionTextInstances = new Set();
     const LOCALIZED_DROPDOWN_TEXT_FIELD = '__localizedText';
-    const STATUS_OPTION_TEXTS = new Set(['Draft', 'Cancelled', 'Canceled', 'Confirmed', 'Archived', 'In', 'Out']);
+    const LOCALIZED_OPTION_TEXTS = new Set([
+        'Draft', 'Cancelled', 'Canceled', 'Confirmed', 'Archived',
+        'In', 'Out',
+        'Debit', 'Credit',
+        'Paid', 'Unpaid',
+        'Personal', 'Company',
+        'Open', 'Closed'
+    ]);
     let currentLocale = resolveLocale(getSavedLocale()) ?? detectBrowserLocale();
     let originalTitle = document.title;
     let isApplying = false;
@@ -75,7 +82,62 @@
         'My Profile': 'Hồ Sơ Của Tôi',
         'My Company': 'Thông Tin Doanh Nghiệp',
         'Tax': 'Thuế',
+        'Tax Amount': 'Tiền Thuế',
+        'Total Tax': 'Tổng Thuế',
+        'Before Tax Amount': 'Số Tiền Trước Thuế',
+        'After Tax Amount': 'Số Tiền Sau Thuế',
+        'Select Tax': 'Chọn Thuế',
         'Number Sequence': 'Mã Số Chứng Từ',
+        'Finance': 'Tài Chính',
+        'Cash Account': 'Tài Khoản Quỹ',
+        'Cash Category': 'Danh Mục Thu Chi',
+        'Cash Transaction': 'Giao Dịch Thu Chi',
+        'Cash Book Report': 'Báo Cáo Sổ Quỹ',
+        'Account Type': 'Loại Tài Khoản',
+        'Personal': 'Cá Nhân',
+        'Cash On Hand': 'Quỹ Tiền Mặt',
+        'Initial Balance': 'Số Dư Ban Đầu',
+        'Current Balance': 'Số Dư Hiện Tại',
+        'Bank Balance': 'Số Dư TK Ngân Hàng',
+        'Transaction Type': 'Loại Giao Dịch',
+        'Transaction Date': 'Ngày Giao Dịch',
+        'Transaction Info': 'Thông Tin Giao Dịch',
+        'Debit': 'Ghi Nợ',
+        'Credit': 'Ghi Có',
+        'Payment Status': 'Trạng Thái Thanh Toán',
+        'Unpaid': 'Chưa Thanh Toán',
+        'Paid': 'Đã Thanh Toán',
+        'Total Debit': 'Tổng Thu',
+        'Total Credit': 'Tổng Chi',
+        'Total Balance': 'Tổng Số Dư',
+        'Running Balance': 'Số Dư Lũy Kế',
+        'Select Account': 'Chọn Tài Khoản',
+        'Select Category (Optional)': 'Chọn Danh Mục (Tùy Chọn)',
+        'Select Type': 'Chọn Loại',
+        'Select Account Type': 'Chọn Loại Tài Khoản',
+        'Enter Amount': 'Nhập Số Tiền',
+        'Enter Initial Balance': 'Nhập Số Dư Ban Đầu',
+        'Enter Cash On Hand': 'Nhập Quỹ Tiền Mặt',
+        'Add Cash Account': 'Thêm Tài Khoản Quỹ',
+        'Edit Cash Account': 'Sửa Tài Khoản Quỹ',
+        'Delete Cash Account?': 'Xóa Tài Khoản Quỹ?',
+        'Add Cash Category': 'Thêm Danh Mục Thu Chi',
+        'Edit Cash Category': 'Sửa Danh Mục Thu Chi',
+        'Delete Cash Category?': 'Xóa Danh Mục Thu Chi?',
+        'Add Cash Transaction': 'Thêm Giao Dịch Thu Chi',
+        'Edit Cash Transaction': 'Sửa Giao Dịch Thu Chi',
+        'Delete Cash Transaction?': 'Xóa Giao Dịch Thu Chi?',
+        'Cash Account List': 'Danh Sách Tài Khoản Quỹ',
+        'Cash Category List': 'Danh Sách Danh Mục Thu Chi',
+        'Cash Transaction List': 'Danh Sách Giao Dịch Thu Chi',
+        'Cash Book Report List': 'Báo Cáo Sổ Quỹ',
+        'Account': 'Tài Khoản',
+        'Type': 'Loại',
+        'Amount': 'Số Tiền',
+        'Source': 'Nguồn',
+        'Select Date': 'Chọn Ngày',
+        'Select Status': 'Chọn Trạng Thái',
+        'Enter Name': 'Nhập Tên',
         'Login': 'Đăng Nhập',
         'Log Out': 'Đăng Xuất',
         'Logout': 'Đăng Xuất',
@@ -347,6 +409,9 @@
         'Must be a positive number and not zero': 'Phải là số dương và khác 0',
         'Please enter a valid email address.': 'Vui lòng nhập địa chỉ email hợp lệ.',
         'Password must be at least 6 characters.': 'Mật khẩu phải có ít nhất 6 ký tự.',
+        'Amount must be greater than 0.': 'Số tiền phải lớn hơn 0.',
+        'Unable to delete this item.': 'Không thể xóa dòng này.',
+        'Print PDF': 'In PDF',
         'Only draft goods receive can be updated.': 'Chỉ phiếu nhập kho ở trạng thái nháp mới được phép cập nhật.',
         'Only draft goods receive can be deleted.': 'Chỉ phiếu nhập kho ở trạng thái nháp mới được phép xóa.',
         'Only draft delivery order can be updated.': 'Chỉ phiếu xuất kho ở trạng thái nháp mới được phép cập nhật.',
@@ -416,7 +481,36 @@
         'roles': 'vai trò',
         'profile': 'hồ sơ',
         'tax': 'thuế',
+        'tax amount': 'tiền thuế',
+        'total tax': 'tổng thuế',
+        'before tax amount': 'số tiền trước thuế',
+        'after tax amount': 'số tiền sau thuế',
         'number sequence': 'mã số chứng từ',
+        'finance': 'tài chính',
+        'cash account': 'tài khoản quỹ',
+        'cash category': 'danh mục thu chi',
+        'cash transaction': 'giao dịch thu chi',
+        'cash book report': 'báo cáo sổ quỹ',
+        'account type': 'loại tài khoản',
+        'cash on hand': 'quỹ tiền mặt',
+        'initial balance': 'số dư ban đầu',
+        'current balance': 'số dư hiện tại',
+        'bank balance': 'số dư TK ngân hàng',
+        'transaction date': 'ngày giao dịch',
+        'transaction info': 'thông tin giao dịch',
+        'debit': 'ghi nợ',
+        'credit': 'ghi có',
+        'payment status': 'trạng thái thanh toán',
+        'unpaid': 'chưa thanh toán',
+        'paid': 'đã thanh toán',
+        'total debit': 'tổng thu',
+        'total credit': 'tổng chi',
+        'total balance': 'tổng số dư',
+        'running balance': 'số dư lũy kế',
+        'account': 'tài khoản',
+        'type': 'loại',
+        'amount': 'số tiền',
+        'source': 'nguồn',
         'order date': 'ngày chứng từ',
         'order number': 'số đơn hàng',
         'receive date': 'ngày nhập',
@@ -648,6 +742,14 @@
             }
         }
 
+        const templatedLabelMatch = value.match(/^(.+?):\s*(\$\{.+\})$/);
+        if (templatedLabelMatch) {
+            const labelText = translateNormalized(templatedLabelMatch[1], locale);
+            if (labelText !== templatedLabelMatch[1]) {
+                return `${labelText}: ${templatedLabelMatch[2]}`;
+            }
+        }
+
         const requiredMatch = value.match(/^(.+?) is required\.?$/i);
         if (requiredMatch) {
             return `${toSentenceCase(translateBusinessTerm(requiredMatch[1], locale))} là bắt buộc.`;
@@ -787,12 +889,12 @@
         return instance.__originalDataSource ?? instance.dataSource;
     }
 
-    function isStatusOptionSource(dataSource, textField) {
-        if (!Array.isArray(dataSource) || !dataSource.length || dataSource.length > STATUS_OPTION_TEXTS.size) {
+    function isLocalizedOptionSource(dataSource, textField) {
+        if (!Array.isArray(dataSource) || !dataSource.length || dataSource.length > LOCALIZED_OPTION_TEXTS.size) {
             return false;
         }
 
-        return dataSource.every(item => STATUS_OPTION_TEXTS.has(normalizeText(item?.[textField])));
+        return dataSource.every(item => LOCALIZED_OPTION_TEXTS.has(normalizeText(item?.[textField])));
     }
 
     function localizeDropDownDataSource(instance) {
@@ -803,7 +905,7 @@
 
         const originalFields = instance.__originalFields ?? { ...(instance.fields ?? {}) };
         const textField = originalFields.text || getDropDownTextField(instance);
-        if (!isStatusOptionSource(originalDataSource, textField)) {
+        if (!isLocalizedOptionSource(originalDataSource, textField)) {
             return false;
         }
 
@@ -937,8 +1039,31 @@
         return changed;
     }
 
+    function localizeGridAggregateTemplates(aggregates) {
+        if (!Array.isArray(aggregates)) {
+            return false;
+        }
+
+        let changed = false;
+        aggregates.forEach(aggregate => {
+            if (!Array.isArray(aggregate?.columns)) {
+                return;
+            }
+
+            aggregate.columns.forEach(column => {
+                changed = localizeStringProperty(column, 'groupCaptionTemplate', '__originalGroupCaptionTemplate') || changed;
+                changed = localizeStringProperty(column, 'footerTemplate', '__originalFooterTemplate') || changed;
+            });
+        });
+
+        return changed;
+    }
+
     function localizeGridText(instance) {
-        return localizeGridColumnHeaders(instance?.columns);
+        let changed = false;
+        changed = localizeGridColumnHeaders(instance?.columns) || changed;
+        changed = localizeGridAggregateTemplates(instance?.aggregates) || changed;
+        return changed;
     }
 
     function localizeChartText(instance) {

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -18,7 +18,6 @@ public class CreatePurchaseOrderRequest : IRequest<CreatePurchaseOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? VendorId { get; init; }
-    public string? TaxId { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -29,7 +28,6 @@ public class CreatePurchaseOrderValidator : AbstractValidator<CreatePurchaseOrde
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.VendorId).NotEmpty();
-        RuleFor(x => x.TaxId).NotEmpty();
     }
 }
 
@@ -63,7 +61,6 @@ public class CreatePurchaseOrderHandler : IRequestHandler<CreatePurchaseOrderReq
         entity.OrderStatus = (PurchaseOrderStatus)int.Parse(request.OrderStatus!);
         entity.Description = request.Description;
         entity.VendorId = request.VendorId;
-        entity.TaxId = request.TaxId;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);

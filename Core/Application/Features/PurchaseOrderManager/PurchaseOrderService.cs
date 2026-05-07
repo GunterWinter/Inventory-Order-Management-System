@@ -44,7 +44,6 @@ public class PurchaseOrderService
             .GetQuery()
             .ApplyIsDeletedFilter()
             .Where(x => x.Id == purchaseOrderId)
-            .Include(x => x.Tax)
             .SingleOrDefault();
 
         if (purchaseOrder == null)
@@ -57,11 +56,8 @@ public class PurchaseOrderService
             .ToList();
 
         purchaseOrder.BeforeTaxAmount = purchaseOrderItems.Sum(x => x.Total ?? 0);
-
-        var taxPercentage = purchaseOrder.Tax?.Percentage ?? 0;
-        purchaseOrder.TaxAmount = (purchaseOrder.BeforeTaxAmount ?? 0) * taxPercentage / 100;
-
-        purchaseOrder.AfterTaxAmount = (purchaseOrder.BeforeTaxAmount ?? 0) + (purchaseOrder.TaxAmount ?? 0);
+        purchaseOrder.TaxAmount = purchaseOrderItems.Sum(x => x.TaxAmount ?? 0);
+        purchaseOrder.AfterTaxAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0) + (x.TaxAmount ?? 0)));
 
         _purchaseOrderRepository.Update(purchaseOrder);
         _unitOfWork.Save();

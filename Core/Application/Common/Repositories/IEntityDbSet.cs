@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Common.Repositories;
@@ -42,5 +42,7 @@ public interface IEntityDbSet
     public DbSet<NegativeAdjustment> NegativeAdjustment { get; set; }
     public DbSet<PositiveAdjustment> PositiveAdjustment { get; set; }
     public DbSet<Scrapping> Scrapping { get; set; }
+    public DbSet<CashAccount> CashAccount { get; set; }
+    public DbSet<CashCategory> CashCategory { get; set; }
+    public DbSet<CashTransaction> CashTransaction { get; set; }
 }
-

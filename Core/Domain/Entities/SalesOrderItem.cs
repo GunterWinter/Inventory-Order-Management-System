@@ -15,8 +15,12 @@ public class SalesOrderItem : BaseEntity
     public double? CogsAmount { get; set; }   // tổng giá vốn thực xuất
     public double? ProfitAmount { get; set; } // tổng lãi
     public string? Summary { get; set; }
+    public string? TaxId { get; set; }
+    public Tax? Tax { get; set; }
     public double? UnitPrice { get; set; } = 0;
     public double? Quantity { get; set; } = 1;
     public double? Total { get; set; } = 0;
+    public double? TaxAmount { get; set; } = 0;
+    public double? AfterTaxAmount { get; set; } = 0;
 
 }

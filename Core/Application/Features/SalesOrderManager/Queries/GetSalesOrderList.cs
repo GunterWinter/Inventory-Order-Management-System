@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -18,8 +18,6 @@ public record GetSalesOrderListDto
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
     public string? CustomerName { get; init; }
-    public string? TaxId { get; init; }
-    public string? TaxName { get; init; }
     public double? BeforeTaxAmount { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
@@ -34,10 +32,6 @@ public class GetSalesOrderListProfile : Profile
             .ForMember(
                 dest => dest.CustomerName,
                 opt => opt.MapFrom(src => src.Customer != null ? src.Customer.Name : string.Empty)
-            )
-            .ForMember(
-                dest => dest.TaxName,
-                opt => opt.MapFrom(src => src.Tax != null ? src.Tax.Name : string.Empty)
             )
             .ForMember(
                 dest => dest.OrderStatusName,
@@ -76,7 +70,6 @@ public class GetSalesOrderListHandler : IRequestHandler<GetSalesOrderListRequest
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.Customer)
-            .Include(x => x.Tax)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);

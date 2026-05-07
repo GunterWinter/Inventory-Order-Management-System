@@ -77,6 +77,7 @@ public class SalesReturnSeeder
 
             foreach (var item in items)
             {
+                var warehouseId = item.WarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
                 var inventoryTransaction = new InventoryTransaction
                 {
                     ModuleId = salesReturn.Id,
@@ -86,8 +87,10 @@ public class SalesReturnSeeder
                     MovementDate = salesReturn.ReturnDate!.Value,
                     Status = (InventoryTransactionStatus)salesReturn.Status,
                     Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
-                    WarehouseId = GetRandomValue(warehouses, random),
+                    WarehouseId = warehouseId,
                     ProductId = item.ProductId,
+                    BatchNumber = item.BatchNumber,
+                    ModuleItemId = item.ModuleItemId,
                     Movement = item.Movement
                 };
 
