@@ -1,8 +1,10 @@
 using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.CashTransactionManager.Commands;
 
@@ -44,14 +46,20 @@ public class UpdateCashTransactionValidator : AbstractValidator<UpdateCashTransa
 public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactionRequest, UpdateCashTransactionResult>
 {
     private readonly ICommandRepository<CashTransaction> _repository;
+    private readonly ICommandRepository<CashAccount> _accountRepository;
+    private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCashTransactionHandler(
         ICommandRepository<CashTransaction> repository,
+        ICommandRepository<CashAccount> accountRepository,
+        IQueryContext queryContext,
         IUnitOfWork unitOfWork
         )
     {
         _repository = repository;
+        _accountRepository = accountRepository;
+        _queryContext = queryContext;
         _unitOfWork = unitOfWork;
     }
 
@@ -63,6 +71,8 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
         {
             throw new Exception($"Entity not found: {request.Id}");
         }
+
+        var previousAccountId = entity.CashAccountId;
 
         entity.UpdatedById = request.UpdatedById;
 
@@ -80,9 +90,47 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
 
+        // Recalculate balance for the current account
+        if (!string.IsNullOrEmpty(request.CashAccountId))
+        {
+            await RecalculateAccountBalance(request.CashAccountId, cancellationToken);
+        }
+
+        // If account changed, also recalculate the previous account
+        if (!string.IsNullOrEmpty(previousAccountId) && previousAccountId != request.CashAccountId)
+        {
+            await RecalculateAccountBalance(previousAccountId, cancellationToken);
+        }
+
         return new UpdateCashTransactionResult
         {
             Data = entity
         };
+    }
+
+    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
+    {
+        var account = await _accountRepository.GetAsync(cashAccountId, cancellationToken);
+        if (account == null) return;
+
+        var balances = await _queryContext
+            .CashTransaction
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var initialBalance = account.InitialBalance ?? 0d;
+        var totalDebit = balances?.TotalDebit ?? 0d;
+        var totalCredit = balances?.TotalCredit ?? 0d;
+        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
+
+        _accountRepository.Update(account);
+        await _unitOfWork.SaveAsync(cancellationToken);
     }
 }

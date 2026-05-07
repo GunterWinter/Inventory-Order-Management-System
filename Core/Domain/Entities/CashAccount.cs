@@ -11,4 +11,5 @@ public class CashAccount : BaseEntity
     public string? Description { get; set; }
     public double? InitialBalance { get; set; } = 0;
     public double? CashOnHand { get; set; }
+    public double? CurrentBalance { get; set; } = 0;
 }

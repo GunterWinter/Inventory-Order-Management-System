@@ -92,7 +92,6 @@
         'Cash Account': 'Tài Khoản Quỹ',
         'Cash Category': 'Danh Mục Thu Chi',
         'Cash Transaction': 'Giao Dịch Thu Chi',
-        'Cash Book Report': 'Báo Cáo Sổ Quỹ',
         'Account Type': 'Loại Tài Khoản',
         'Personal': 'Cá Nhân',
         'Cash On Hand': 'Quỹ Tiền Mặt',
@@ -110,7 +109,6 @@
         'Total Debit': 'Tổng Thu',
         'Total Credit': 'Tổng Chi',
         'Total Balance': 'Tổng Số Dư',
-        'Running Balance': 'Số Dư Lũy Kế',
         'Select Account': 'Chọn Tài Khoản',
         'Select Category (Optional)': 'Chọn Danh Mục (Tùy Chọn)',
         'Select Type': 'Chọn Loại',
@@ -130,7 +128,6 @@
         'Cash Account List': 'Danh Sách Tài Khoản Quỹ',
         'Cash Category List': 'Danh Sách Danh Mục Thu Chi',
         'Cash Transaction List': 'Danh Sách Giao Dịch Thu Chi',
-        'Cash Book Report List': 'Báo Cáo Sổ Quỹ',
         'Account': 'Tài Khoản',
         'Type': 'Loại',
         'Amount': 'Số Tiền',
@@ -490,7 +487,6 @@
         'cash account': 'tài khoản quỹ',
         'cash category': 'danh mục thu chi',
         'cash transaction': 'giao dịch thu chi',
-        'cash book report': 'báo cáo sổ quỹ',
         'account type': 'loại tài khoản',
         'cash on hand': 'quỹ tiền mặt',
         'initial balance': 'số dư ban đầu',
@@ -506,7 +502,6 @@
         'total debit': 'tổng thu',
         'total credit': 'tổng chi',
         'total balance': 'tổng số dư',
-        'running balance': 'số dư lũy kế',
         'account': 'tài khoản',
         'type': 'loại',
         'amount': 'số tiền',
@@ -799,10 +794,6 @@
             }
         }
 
-        const pdfMatch = value.match(/^(.+?) PDF$/i);
-        if (pdfMatch) {
-            return `PDF ${translateBusinessTerm(pdfMatch[1], locale)}`;
-        }
 
         const byMatch = value.match(/^(.+?) by (.+)$/i);
         if (byMatch) {

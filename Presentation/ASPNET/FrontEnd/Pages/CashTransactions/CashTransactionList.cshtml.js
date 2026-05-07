@@ -25,7 +25,15 @@ const App = {
                 amount: '',
                 status: ''
             },
-            isSubmitting: false
+            isSubmitting: false,
+            summary: {
+                totalDebit: 0,
+                totalCredit: 0,
+                totalBalance: 0,
+                totalDebitText: '0',
+                totalCreditText: '0',
+                totalBalanceText: '0'
+            }
         });
 
         const mainGridRef = Vue.ref(null);
@@ -121,6 +129,14 @@ const App = {
             populateCashCategoryList: async () => {
                 const response = await services.getCashCategoryList();
                 state.cashCategoryList = response?.data?.content?.data ?? [];
+            },
+            refreshSummary: () => {
+                state.summary.totalDebit = state.cashAccountList.reduce((sum, item) => sum + (item.totalDebit ?? 0), 0);
+                state.summary.totalCredit = state.cashAccountList.reduce((sum, item) => sum + (item.totalCredit ?? 0), 0);
+                state.summary.totalBalance = state.cashAccountList.reduce((sum, item) => sum + (item.currentBalance ?? 0), 0);
+                state.summary.totalDebitText = NumberFormatManager.formatToLocale(state.summary.totalDebit);
+                state.summary.totalCreditText = NumberFormatManager.formatToLocale(state.summary.totalCredit);
+                state.summary.totalBalanceText = NumberFormatManager.formatToLocale(state.summary.totalBalance);
             }
         };
 
@@ -260,6 +276,8 @@ const App = {
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
+                        await methods.populateCashAccountList();
+                        methods.refreshSummary();
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
@@ -318,6 +336,7 @@ const App = {
                 await methods.populateCashAccountList();
                 await methods.populateCashCategoryList();
                 await methods.populateMainData();
+                methods.refreshSummary();
                 await mainGrid.create(state.mainData);
 
                 transactionDatePicker.create();

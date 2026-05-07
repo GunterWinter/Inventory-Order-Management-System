@@ -12,6 +12,7 @@ const App = {
             purchaseOrderItemHistoryData: [],
             paymentStatusLookupData: [],
             cashAccountListData: [],
+            cashCategoryListData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -288,6 +289,14 @@ const App = {
                 } catch (error) {
                     throw error;
                 }
+            },
+            getCashCategoryList: async () => {
+                try {
+                    const response = await AxiosManager.get('/CashCategory/GetCashCategoryList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
             }
         };
 
@@ -357,6 +366,13 @@ const App = {
                 const response = await services.getCashAccountList();
                 state.cashAccountListData = response?.data?.content?.data ?? [];
             },
+            populateCashCategoryList: async () => {
+                const response = await services.getCashCategoryList();
+                state.cashCategoryListData = response?.data?.content?.data ?? [];
+            },
+            resolveCashCategoryId: (categoryName) => {
+                return state.cashCategoryListData.find(item => item.name === categoryName)?.id ?? null;
+            },
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
                 if (record) {
@@ -402,17 +418,7 @@ const App = {
 
                             await methods.refreshPaymentSummary(state.id);
 
-                            const isConfirmed = String(state.orderStatus) === '2';
-                            if (isConfirmed) {
-                                const existingPayment = state.paymentStatusLookupData.find(p => p.sourceModuleId === state.id);
-                                if (!existingPayment) {
-                                    await showPaymentPopup(state.id, state.number, state.totalAmount);
-                                } else {
-                                    Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
-                                }
-                            } else {
-                                Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
-                            }
+                            Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
                         } else {
                             Swal.fire({
                                 icon: 'success',
@@ -1369,6 +1375,7 @@ const App = {
                         amount: result.value.amount,
                         description: result.value.description,
                         cashAccountId: result.value.cashAccountId,
+                        cashCategoryId: methods.resolveCashCategoryId('Bán hàng') ?? null,
                         sourceModule: 'PurchaseOrder',
                         sourceModuleId: orderId,
                         sourceModuleNumber: orderNumber,
@@ -1397,6 +1404,7 @@ const App = {
                 await SecurityManager.validateToken();
 
                 await methods.populateCashAccountList();
+                await methods.populateCashCategoryList();
                 await methods.populateMainData();
                 await mainGrid.create(state.mainData);
 

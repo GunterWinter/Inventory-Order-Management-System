@@ -150,6 +150,9 @@ public class CashManagementSeeder
             description: $"{DemoPrefix}Thu tiền cho thuê mặt bằng",
             cashAccountId: companyAccount.Id,
             cashCategoryId: categories["Cho thuê mặt bằng"].Id);
+
+        await RecalculateAccountBalance(personalAccount.Id);
+        await RecalculateAccountBalance(companyAccount.Id);
     }
 
     private async Task<CashCategory> GetOrCreateCategoryAsync(string name, string description)
@@ -245,6 +248,34 @@ public class CashManagementSeeder
         };
 
         await _cashTransactionRepository.CreateAsync(entity);
+        await _unitOfWork.SaveAsync();
+    }
+
+    private async Task RecalculateAccountBalance(string cashAccountId)
+    {
+        var account = await _queryContext
+            .Set<CashAccount>()
+            .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == cashAccountId);
+        if (account == null) return;
+
+        var balances = await _queryContext
+            .Set<CashTransaction>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
+            })
+            .FirstOrDefaultAsync();
+
+        var initialBalance = account.InitialBalance ?? 0d;
+        var totalDebit = balances?.TotalDebit ?? 0d;
+        var totalCredit = balances?.TotalCredit ?? 0d;
+        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
+
+        _cashAccountRepository.Update(account);
         await _unitOfWork.SaveAsync();
     }
 }

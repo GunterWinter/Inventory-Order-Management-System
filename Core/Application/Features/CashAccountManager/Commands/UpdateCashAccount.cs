@@ -1,7 +1,10 @@
 using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.CashAccountManager.Commands;
 
@@ -33,14 +36,17 @@ public class UpdateCashAccountValidator : AbstractValidator<UpdateCashAccountReq
 public class UpdateCashAccountHandler : IRequestHandler<UpdateCashAccountRequest, UpdateCashAccountResult>
 {
     private readonly ICommandRepository<CashAccount> _repository;
+    private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCashAccountHandler(
         ICommandRepository<CashAccount> repository,
+        IQueryContext queryContext,
         IUnitOfWork unitOfWork
         )
     {
         _repository = repository;
+        _queryContext = queryContext;
         _unitOfWork = unitOfWork;
     }
 
@@ -60,6 +66,23 @@ public class UpdateCashAccountHandler : IRequestHandler<UpdateCashAccountRequest
         entity.Description = request.Description;
         entity.InitialBalance = request.InitialBalance ?? 0;
         entity.CashOnHand = request.CashOnHand;
+
+        // Recalculate CurrentBalance when InitialBalance might have changed
+        var balances = await _queryContext
+            .CashTransaction
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.CashAccountId == entity.Id && x.Status == CashTransactionStatus.Confirmed)
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var totalDebit = balances?.TotalDebit ?? 0d;
+        var totalCredit = balances?.TotalCredit ?? 0d;
+        entity.CurrentBalance = entity.InitialBalance + totalDebit - totalCredit;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
