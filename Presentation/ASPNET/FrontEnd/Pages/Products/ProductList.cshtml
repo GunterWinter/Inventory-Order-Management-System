@@ -87,6 +87,45 @@
                                             </div>
                                         </div>
 
+                                        <div class="row mb-2" v-if="state.physical">
+                                            <div class="col-md-12">
+                                                <label>Kiểu quản lý mã thiết bị</label>
+                                                <div class="border rounded p-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input"
+                                                               type="radio"
+                                                               id="SerialTrackingInternalAuto"
+                                                               name="SerialTrackingMode"
+                                                               v-model.number="state.serialTrackingMode"
+                                                               v-bind:value="1">
+                                                        <label class="form-check-label" for="SerialTrackingInternalAuto">Tự sinh mã nội bộ</label>
+                                                    </div>
+                                                    <div class="mt-2 ms-4" v-if="state.serialTrackingMode === 1">
+                                                        <label for="InternalSerialFixedCode">Mã cố định</label>
+                                                        <input id="InternalSerialFixedCode"
+                                                               class="form-control"
+                                                               v-model="state.internalSerialFixedCode"
+                                                               v-on:input="handler.handleInternalSerialFixedCodeInput"
+                                                               maxlength="4"
+                                                               placeholder="CAM">
+                                                        <small class="text-muted">Ví dụ mã tự sinh: {{ getInternalSerialPreview() }}</small>
+                                                        <label class="text-danger d-block">{{ state.errors.internalSerialFixedCode }}</label>
+                                                    </div>
+                                                    <div class="form-check mt-3">
+                                                        <input class="form-check-input"
+                                                               type="radio"
+                                                               id="SerialTrackingManufacturer"
+                                                               name="SerialTrackingMode"
+                                                               v-bind:value="2"
+                                                               disabled>
+                                                        <label class="form-check-label" for="SerialTrackingManufacturer">
+                                                            Nhập serial hãng <span class="badge bg-secondary">Đang phát triển</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div class="row mb-2">
                                             <div class="col-12">
                                                 <label for="Description">Description</label>

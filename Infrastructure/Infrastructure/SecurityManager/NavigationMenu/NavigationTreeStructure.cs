@@ -128,6 +128,11 @@ public static class NavigationTreeStructure
                     "IsModule": false
                 },
                 {
+                    "URL": "/WarrantyLookups/WarrantyLookup",
+                    "Name": "Warranty Lookup",
+                    "IsModule": false
+                },
+                {
                     "URL": "/Warehouses/WarehouseList",
                     "Name": "Warehouse",
                     "IsModule": false

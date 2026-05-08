@@ -1,6 +1,7 @@
 ﻿using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Common.Repositories;
+using Application.Features.ProductSerialManager;
 using Application.Features.NumberSequenceManager;
 using Application.Features.WarehouseManager;
 using Domain.Common;
@@ -17,6 +18,7 @@ public partial class InventoryTransactionService
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ProductSerialService _productSerialService;
 
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
 
@@ -26,7 +28,8 @@ public partial class InventoryTransactionService
         IQueryContext queryContext,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         IUnitOfWork unitOfWork,
-        ICommandRepository<SalesOrderItem> salesOrderItemRepository
+        ICommandRepository<SalesOrderItem> salesOrderItemRepository,
+        ProductSerialService productSerialService
         )
     {
         _numberSequenceService = numberSequenceService;
@@ -35,6 +38,7 @@ public partial class InventoryTransactionService
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _unitOfWork = unitOfWork;
         _salesOrderItemRepository = salesOrderItemRepository;
+        _productSerialService = productSerialService;
     }
 
     public double GetStock(string? warehouseId, string? productId, string? currentId = null)
@@ -95,6 +99,26 @@ public partial class InventoryTransactionService
         }
 
         await _unitOfWork.SaveAsync(cancellationToken);
+
+        foreach (var childId in childIds)
+        {
+            if (isDeleted == true || status == InventoryTransactionStatus.Cancelled)
+            {
+                await _productSerialService.ReleaseInventoryTransactionSerialsAsync(childId, updatedId, cancellationToken);
+                continue;
+            }
+
+            if (status == InventoryTransactionStatus.Archived)
+            {
+                continue;
+            }
+
+            var item = await _inventoryTransactionRepository.GetAsync(childId ?? string.Empty, cancellationToken);
+            if (item != null)
+            {
+                await _productSerialService.ApplyInventoryTransactionSerialsAsync(item, null, updatedId, cancellationToken);
+            }
+        }
     }
 
 
@@ -154,6 +178,45 @@ public partial class InventoryTransactionService
         }
 
         return transaction;
+    }
+
+    private async Task<List<InventoryTransaction>> EnrichProductSerialsAsync(
+        List<InventoryTransaction> transactions,
+        CancellationToken cancellationToken = default)
+    {
+        var transactionIds = transactions.Select(x => x.Id).ToList();
+        var serials = await _queryContext
+            .Set<ProductSerialMovement>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.ProductSerial)
+            .Where(x => transactionIds.Contains(x.InventoryTransactionId!))
+            .Select(x => new
+            {
+                x.InventoryTransactionId,
+                ProductSerialId = x.ProductSerialId,
+                InternalSerialNumber = x.ProductSerial != null ? x.ProductSerial.InternalSerialNumber : string.Empty
+            })
+            .ToListAsync(cancellationToken);
+
+        var serialLookup = serials
+            .GroupBy(x => x.InventoryTransactionId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var transaction in transactions)
+        {
+            if (serialLookup.TryGetValue(transaction.Id, out var transactionSerials))
+            {
+                transaction.ProductSerialIds = transactionSerials
+                    .Select(x => x.ProductSerialId)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Cast<string>()
+                    .ToList();
+                transaction.ProductSerialNumbers = string.Join(", ", transactionSerials.Select(x => x.InternalSerialNumber));
+            }
+        }
+
+        return transactions;
     }
 
     private void CalculateStock(InventoryTransaction transaction)

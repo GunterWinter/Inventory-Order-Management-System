@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -306,20 +306,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, productId, movement, createdById) => {
+            createSecondaryData: async (moduleId, productId, movement, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/TransferOutCreateInvenTrans', {
-                        moduleId, productId, movement, createdById
+                        moduleId, productId, movement, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, productId, movement, updatedById) => {
+            updateSecondaryData: async (id, productId, movement, updatedById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/TransferOutUpdateInvenTrans', {
-                        id, productId, movement, updatedById
+                        id, productId, movement, updatedById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -708,6 +708,9 @@ const App = {
                                         fields: { value: 'id', text: 'numberName' },
                                         value: args.rowData.productId,
                                         change: function (e) {
+                                            args.rowData.productId = e.value;
+                                            args.rowData.productSerialIds = [];
+                                            args.rowData.productSerialNumbers = '';
                                             if (movementObj) {
                                                 movementObj.value = 1;
                                             }
@@ -719,6 +722,14 @@ const App = {
                                 }
                             }
                         },
+                        ProductSerialPicker.createGridColumn({
+                            productListGetter: () => state.productListLookupData,
+                            warehouseIdGetter: (rowData) => state.warehouseFromId,
+                            moduleName: 'TransferOut',
+                            quantityField: 'movement',
+                            quantityObjGetter: () => movementObj,
+                            requireWarehouse: true
+                        }),
                         {
                             field: 'movement',
                             headerText: 'Movement',
@@ -782,10 +793,17 @@ const App = {
                             secondaryGrid.obj.excelExport();
                         }
                     },
+                    actionBegin: (args) => {
+                        ProductSerialPicker.validateGridSave(args, {
+                            productListGetter: () => state.productListLookupData,
+                            quantityField: 'movement',
+                            allowEmptySelection: false
+                        });
+                    },
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
                             try {
-                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.movement, StorageManager.getUserId());
+                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -814,7 +832,7 @@ const App = {
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.movement, StorageManager.getUserId());
+                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -907,3 +925,8 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
+
+
+

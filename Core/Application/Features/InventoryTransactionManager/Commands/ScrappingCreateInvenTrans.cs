@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -15,6 +15,7 @@ public class ScrappingCreateInvenTransRequest : IRequest<ScrappingCreateInvenTra
     public string? ProductId { get; init; }
     public double? Movement { get; init; }
     public string? CreatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 }
 
 public class ScrappingCreateInvenTransValidator : AbstractValidator<ScrappingCreateInvenTransRequest>
@@ -46,7 +47,8 @@ public class ScrappingCreateInvenTransHandler : IRequestHandler<ScrappingCreateI
             request.ProductId,
             request.Movement,
             request.CreatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new ScrappingCreateInvenTransResult
         {

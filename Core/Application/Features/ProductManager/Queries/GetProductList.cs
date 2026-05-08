@@ -2,6 +2,7 @@
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,8 @@ public record GetProductListDto
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
     public bool? Physical { get; init; }
+    public SerialTrackingMode? SerialTrackingMode { get; init; }
+    public string? InternalSerialFixedCode { get; init; }
     public string? DefaultWarehouseId { get; init; }
     public string? DefaultWarehouseName { get; init; }
     public int? DefaultWarrantyMonths { get; init; }

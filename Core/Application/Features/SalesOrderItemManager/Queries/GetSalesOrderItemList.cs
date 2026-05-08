@@ -31,6 +31,8 @@ public record GetSalesOrderItemListDto
     public string? BatchNumber { get; init; }
     public double? CogsAmount { get; init; }
     public double? ProfitAmount { get; init; }
+    public List<string>? ProductSerialIds { get; set; }
+    public string? ProductSerialNumbers { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -109,6 +111,28 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetSalesOrderItemListDto>>(entities);
+
+        var itemIds = dtos.Select(x => x.Id).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        var serials = await _context
+            .Set<ProductSerial>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => itemIds.Contains(x.SalesOrderItemId))
+            .Select(x => new { x.Id, x.SalesOrderItemId, x.InternalSerialNumber })
+            .ToListAsync(cancellationToken);
+
+        var serialLookup = serials
+            .GroupBy(x => x.SalesOrderItemId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var dto in dtos)
+        {
+            if (serialLookup.TryGetValue(dto.Id, out var itemSerials))
+            {
+                dto.ProductSerialIds = itemSerials.Select(x => x.Id).ToList();
+                dto.ProductSerialNumbers = string.Join(", ", itemSerials.Select(x => x.InternalSerialNumber));
+            }
+        }
 
         return new GetSalesOrderItemListResult
         {

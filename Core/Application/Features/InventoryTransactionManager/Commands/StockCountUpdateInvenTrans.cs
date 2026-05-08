@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -15,6 +15,7 @@ public class StockCountUpdateInvenTransRequest : IRequest<StockCountUpdateInvenT
     public string? ProductId { get; init; }
     public double? QtySCCount { get; init; }
     public string? UpdatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 
 }
 
@@ -24,7 +25,7 @@ public class StockCountUpdateInvenTransValidator : AbstractValidator<StockCountU
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
-        RuleFor(x => x.QtySCCount).NotEmpty();
+        RuleFor(x => x.QtySCCount).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.UpdatedById).NotEmpty();
     }
 }
@@ -47,7 +48,8 @@ public class StockCountUpdateInvenTransHandler : IRequestHandler<StockCountUpdat
             request.ProductId,
             request.QtySCCount,
             request.UpdatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new StockCountUpdateInvenTransResult
         {

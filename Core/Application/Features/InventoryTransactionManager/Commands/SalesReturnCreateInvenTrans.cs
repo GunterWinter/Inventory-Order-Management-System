@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -16,6 +16,7 @@ public class SalesReturnCreateInvenTransRequest : IRequest<SalesReturnCreateInve
     public string? ProductId { get; init; }
     public double? Movement { get; init; }
     public string? CreatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 }
 
 public class SalesReturnCreateInvenTransValidator : AbstractValidator<SalesReturnCreateInvenTransRequest>
@@ -49,7 +50,8 @@ public class SalesReturnCreateInvenTransHandler : IRequestHandler<SalesReturnCre
             request.ProductId,
             request.Movement,
             request.CreatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new SalesReturnCreateInvenTransResult
         {

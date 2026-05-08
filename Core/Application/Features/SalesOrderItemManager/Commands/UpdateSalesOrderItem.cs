@@ -2,6 +2,7 @@ using Application.Common.Repositories;
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Features.InventoryTransactionManager;
+using Application.Features.ProductSerialManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -28,6 +29,7 @@ public class UpdateSalesOrderItemRequest : IRequest<UpdateSalesOrderItemResult>
     public int? WarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
     public double? Quantity { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -54,13 +56,15 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
     private readonly SalesOrderService _salesOrderService;
     private readonly InventoryTransactionService _inventoryTransactionService;
     private readonly IQueryContext _queryContext;
+    private readonly ProductSerialService _productSerialService;
 
     public UpdateSalesOrderItemHandler(
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
         SalesOrderService salesOrderService,
         InventoryTransactionService inventoryTransactionService,
-        IQueryContext queryContext
+        IQueryContext queryContext,
+        ProductSerialService productSerialService
     )
     {
         _repository = repository;
@@ -68,6 +72,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         _salesOrderService = salesOrderService;
         _inventoryTransactionService = inventoryTransactionService;
         _queryContext = queryContext;
+        _productSerialService = productSerialService;
     }
 
     public async Task<UpdateSalesOrderItemResult> Handle(UpdateSalesOrderItemRequest request, CancellationToken cancellationToken)
@@ -82,11 +87,21 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
         await ValidateProductNotDuplicatedAsync(request.SalesOrderId, request.ProductId, entity.Id, cancellationToken);
 
+        var quantity = request.Quantity;
+        if (await _productSerialService.IsProductSerialTrackedAsync(request.ProductId, cancellationToken))
+        {
+            if (request.ProductSerialIds == null || request.ProductSerialIds.Count == 0)
+            {
+                throw new Exception("Serial-tracked products require selected serial numbers.");
+            }
+            quantity = request.ProductSerialIds.Count;
+        }
+
         await ValidateAvailableStockAsync(
             request.ProductId,
             request.WarehouseId,
             request.BatchNumber,
-            request.Quantity,
+            quantity,
             entity.Id,
             cancellationToken
         );
@@ -101,7 +116,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         entity.TaxId = request.TaxId;
         entity.WarrantyMonths = request.WarrantyMonths;
         entity.UnitPrice = request.UnitPrice;
-        entity.Quantity = request.Quantity;
+        entity.Quantity = quantity;
 
         entity.Total = (entity.UnitPrice ?? 0d) * (entity.Quantity ?? 0d);
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
@@ -110,6 +125,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ReserveSalesOrderItemSerialsAsync(entity, request.ProductSerialIds, entity.UpdatedById, cancellationToken);
 
         await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
             entity,

@@ -1,5 +1,6 @@
 using Application.Common.Repositories;
 using Application.Common.CQS.Queries;
+using Application.Features.ProductSerialManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -34,18 +35,21 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
     private readonly IUnitOfWork _unitOfWork;
     private readonly SalesOrderService _salesOrderService;
     private readonly IQueryContext _queryContext;
+    private readonly ProductSerialService _productSerialService;
 
     public DeleteSalesOrderItemHandler(
         ICommandRepository<SalesOrderItem> repository,
         IUnitOfWork unitOfWork,
         SalesOrderService salesOrderService,
-        IQueryContext queryContext
+        IQueryContext queryContext,
+        ProductSerialService productSerialService
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _salesOrderService = salesOrderService;
         _queryContext = queryContext;
+        _productSerialService = productSerialService;
     }
 
     public async Task<DeleteSalesOrderItemResult> Handle(DeleteSalesOrderItemRequest request, CancellationToken cancellationToken)
@@ -76,6 +80,7 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
 
         _repository.Delete(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ReleaseSalesOrderItemSerialsAsync(entity.Id, entity.UpdatedById, cancellationToken);
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
         await _salesOrderService.SynchronizeDeliveryOrderAsync(

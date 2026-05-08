@@ -87,6 +87,23 @@ const App = {
                 (!selectedProductIds.has(product.id) && getAvailableWarehouseOptions(product.id).length > 0)
             );
         };
+        const isSerialTrackedProduct = (productId) => {
+            const product = state.productListLookupData.find(item => item.id === productId);
+            return product?.physical === true && Number(product?.serialTrackingMode ?? 0) === 1;
+        };
+        const clearSerialSelection = (rowData) => {
+            rowData.productSerialIds = [];
+            rowData.productSerialNumbers = '';
+        };
+        const applySerialSelection = (rowData, selectedSerials) => {
+            if (!selectedSerials) {
+                return;
+            }
+
+            rowData.productSerialIds = selectedSerials.map(item => item.id);
+            rowData.productSerialNumbers = selectedSerials.map(item => item.internalSerialNumber).join(', ');
+            rowData.quantity = selectedSerials.length;
+        };
         const getAvailableBatchOptions = (productId, warehouseId) => {
             if (!productId) {
                 return [];
@@ -288,20 +305,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
-                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById
+                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
-                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -973,6 +990,7 @@ const App = {
                                             args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
                                             args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
                                             args.rowData.warrantyMonths = selectedProduct.defaultWarrantyMonths ?? null;
+                                            clearSerialSelection(args.rowData);
                                             if (productObj) {
                                                 productObj.value = selectedProduct.id;
                                                 productObj.dataBind();
@@ -1069,6 +1087,7 @@ const App = {
                                             const suggestedBatch = batchOptions[0] ?? null;
                                             args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
                                             args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
+                                            clearSerialSelection(args.rowData);
                                             refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
                                             if (batchObj) {
                                                 batchObj.dataSource = batchOptions;
@@ -1117,10 +1136,15 @@ const App = {
                                             currentBatchOptions.find(item => item.selectionKey === selectionValue) ??
                                             currentBatchOptions.find(item => item.batchNumber === normalizeBatchNumber(selectionValue));
 
+                                        const previousBatchNumber = args.rowData.batchNumber;
+                                        const previousWarehouseId = args.rowData.warehouseId;
                                         args.rowData.batchNumber = selectedBatch?.batchNumber ?? '';
                                         args.rowData.warehouseId = selectedBatch?.warehouseId ?? args.rowData.warehouseId ?? null;
                                         args.rowData.warehouseName = selectedBatch?.warehouseName ?? args.rowData.warehouseName ?? '';
                                         args.rowData.availableBatchQty = selectedBatch?.remainingQty ?? 0;
+                                        if (previousBatchNumber !== args.rowData.batchNumber || previousWarehouseId !== args.rowData.warehouseId) {
+                                            clearSerialSelection(args.rowData);
+                                        }
                                         refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
 
                                         if (warehouseObj && selectedBatch?.warehouseId) {
@@ -1252,6 +1276,67 @@ const App = {
                             }
                         },
                         {
+                            field: 'productSerialNumbers',
+                            headerText: 'Mã thiết bị',
+                            width: 220,
+                            valueAccessor: (field, data) => data.productSerialNumbers || (data.productSerialIds?.length ? `${data.productSerialIds.length} mã` : ''),
+                            edit: {
+                                create: () => {
+                                    const wrapper = document.createElement('div');
+                                    wrapper.className = 'd-flex gap-2 align-items-center';
+                                    wrapper.innerHTML = '<button type="button" class="btn btn-outline-primary btn-sm">Chọn mã thiết bị</button><span class="text-muted serial-count"></span>';
+                                    return wrapper;
+                                },
+                                read: () => {
+                                    return '';
+                                },
+                                write: (args) => {
+                                    const button = args.element.querySelector('button');
+                                    const label = args.element.querySelector('.serial-count');
+                                    const refreshLabel = () => {
+                                        const count = args.rowData.productSerialIds?.length ?? 0;
+                                        label.textContent = count ? `${count} mã` : 'Chưa chọn';
+                                    };
+
+                                    refreshLabel();
+                                    button.addEventListener('click', async () => {
+                                        if (!isSerialTrackedProduct(args.rowData.productId)) {
+                                            Swal.fire({
+                                                icon: 'info',
+                                                title: 'No serial tracking',
+                                                text: 'This product does not use device serial tracking.'
+                                            });
+                                            return;
+                                        }
+                                        if (!args.rowData.productId || !args.rowData.warehouseId || !args.rowData.batchNumber) {
+                                            Swal.fire({ icon: 'warning', title: 'Thiếu dữ liệu', text: 'Hãy chọn sản phẩm, kho và batch trước.' });
+                                            return;
+                                        }
+
+                                        const selectedSerials = await ProductSerialPicker.open({
+                                            productId: args.rowData.productId,
+                                            warehouseId: args.rowData.warehouseId,
+                                            batchNumber: args.rowData.batchNumber,
+                                            moduleName: 'DeliveryOrder',
+                                            moduleItemId: args.rowData.id,
+                                            selectedIds: args.rowData.productSerialIds ?? []
+                                        });
+
+                                        applySerialSelection(args.rowData, selectedSerials);
+                                        if (quantityObj) {
+                                            quantityObj.value = args.rowData.quantity ?? 0;
+                                            quantityObj.readonly = true;
+                                            quantityObj.dataBind();
+                                        }
+                                        if (priceObj && totalObj) {
+                                            totalObj.value = (priceObj.value ?? 0) * (args.rowData.quantity ?? 0);
+                                        }
+                                        refreshLabel();
+                                    });
+                                }
+                            }
+                        },
+                        {
                             field: 'quantity',
                             headerText: 'Quantity',
                             width: 200,
@@ -1276,6 +1361,7 @@ const App = {
                                 write: (args) => {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
+                                        readonly: isSerialTrackedProduct(args.rowData.productId),
                                         change: (e) => {
                                             if (priceObj && totalObj) {
                                                 const total = e.value * priceObj.value;
@@ -1480,6 +1566,24 @@ const App = {
                         }
 
                         const data = args.data ?? {};
+                        const isSerialTracked = isSerialTrackedProduct(data.productId);
+
+                        if (isSerialTracked) {
+                            const selectedSerialCount = data.productSerialIds?.length ?? 0;
+                            if (selectedSerialCount === 0) {
+                                args.cancel = true;
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Save Failed',
+                                    text: 'Please choose device serial numbers before saving this item.',
+                                    confirmButtonText: 'OK'
+                                });
+                                return;
+                            }
+
+                            data.quantity = selectedSerialCount;
+                        }
+
                         const quantity = Number(data.quantity ?? 0);
                         const availableBatchQty = Number(data.availableBatchQty ?? 0);
                         const currentRow = state.secondaryData.find(item => item.id === data.id);
@@ -1491,7 +1595,7 @@ const App = {
                             : 0;
                         const maxQuantity = availableBatchQty + currentQuantity;
 
-                        if (quantity > maxQuantity) {
+                        if (!isSerialTracked && quantity > maxQuantity) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'error',
@@ -1507,7 +1611,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId);
+                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
                             await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();
@@ -1524,7 +1628,7 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId);
+                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
                             await methods.refreshInventoryAvailability();
                             await methods.populateSecondaryData(salesOrderId);
                             secondaryGrid.refresh();

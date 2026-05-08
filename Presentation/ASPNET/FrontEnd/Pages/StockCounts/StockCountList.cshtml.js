@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -242,20 +242,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, productId, qtySCCount, createdById) => {
+            createSecondaryData: async (moduleId, productId, qtySCCount, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/StockCountCreateInvenTrans', {
-                        moduleId, productId, qtySCCount, createdById
+                        moduleId, productId, qtySCCount, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, productId, qtySCCount, updatedById) => {
+            updateSecondaryData: async (id, productId, qtySCCount, updatedById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/StockCountUpdateInvenTrans', {
-                        id, productId, qtySCCount, updatedById
+                        id, productId, qtySCCount, updatedById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -648,6 +648,9 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         change: function (e) {
+                                            args.rowData.productId = e.value;
+                                            args.rowData.productSerialIds = [];
+                                            args.rowData.productSerialNumbers = '';
                                             if (qtySCCountObj) {
                                                 qtySCCountObj.value = 1;
                                             }
@@ -661,6 +664,14 @@ const App = {
                             }
                         },
                         { field: 'qtySCSys', headerText: 'System Stock', width: 100, allowEditing: false, type: 'number', format: 'N2', textAlign: 'Right'},
+                        ProductSerialPicker.createGridColumn({
+                            productListGetter: () => state.productListLookupData,
+                            warehouseIdGetter: (rowData) => state.warehouseId,
+                            moduleName: 'StockCount',
+                            quantityField: 'qtySCCount',
+                            quantityObjGetter: () => qtySCCountObj,
+                            requireWarehouse: true
+                        }),
                         {
                             field: 'qtySCCount',
                             headerText: 'Counted',
@@ -725,10 +736,17 @@ const App = {
                             secondaryGrid.obj.excelExport();
                         }
                     },
+                    actionBegin: (args) => {
+                        ProductSerialPicker.validateGridSave(args, {
+                            productListGetter: () => state.productListLookupData,
+                            quantityField: 'qtySCCount',
+                            allowEmptySelection: true
+                        });
+                    },
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
                             try {
-                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId());
+                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -757,7 +775,7 @@ const App = {
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId());
+                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -848,3 +866,8 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
+
+
+

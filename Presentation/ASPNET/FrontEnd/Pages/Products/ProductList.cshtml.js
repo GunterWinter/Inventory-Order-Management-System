@@ -17,12 +17,15 @@ const App = {
             description: '',
             productGroupId: null,
             unitMeasureId: null,
-            physical: false,
+            physical: true,
+            serialTrackingMode: 1,
+            internalSerialFixedCode: 'CAM',
             errors: {
                 name: '',
                 referenceCode: '', 
                 unitPrice: '',
                 defaultWarrantyMonths: '',
+                internalSerialFixedCode: '',
                 productGroupId: '',
                 unitMeasureId: ''
             },
@@ -39,6 +42,14 @@ const App = {
         const referenceCodeRef = Vue.ref(null); 
         const unitPriceRef = Vue.ref(null);
         const defaultWarrantyMonthsRef = Vue.ref(null);
+        const normalizeInternalSerialFixedCode = (value) => (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
+        const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode || 1) : 0;
+        const getEffectiveInternalSerialFixedCode = () => getEffectiveSerialTrackingMode() === 1 ? normalizeInternalSerialFixedCode(state.internalSerialFixedCode) : null;
+        const getInternalSerialPreview = () => {
+            const fixedCode = getEffectiveInternalSerialFixedCode() || 'CAM';
+            const randomLength = Math.max(0, 12 - fixedCode.length);
+            return `${'D2FIAS923X'.slice(0, randomLength)}${fixedCode}`;
+        };
         const getUnitPriceValue = () => {
             if (typeof state.unitPrice === 'number') {
                 return state.unitPrice;
@@ -60,6 +71,7 @@ const App = {
             state.errors.referenceCode = '';
             state.errors.unitPrice = '';
             state.errors.defaultWarrantyMonths = '';
+            state.errors.internalSerialFixedCode = '';
             state.errors.productGroupId = '';
             state.errors.unitMeasureId = '';
 
@@ -81,6 +93,13 @@ const App = {
             if (defaultWarrantyMonthsValue != null && defaultWarrantyMonthsValue < 0) {
                 state.errors.defaultWarrantyMonths = 'Warranty months must be zero or greater.';
                 isValid = false;
+            }
+            if (state.physical && getEffectiveSerialTrackingMode() === 1) {
+                const fixedCode = getEffectiveInternalSerialFixedCode();
+                if (!fixedCode || fixedCode.length < 2 || fixedCode.length > 4) {
+                    state.errors.internalSerialFixedCode = 'Mã cố định phải có 2-4 ký tự chữ hoặc số.';
+                    isValid = false;
+                }
             }
             if (!state.productGroupId) {
                 state.errors.productGroupId = 'ProductGroup is required.';
@@ -105,12 +124,15 @@ const App = {
             state.description = '';
             state.productGroupId = null;
             state.unitMeasureId = null;
-            state.physical = false;
+            state.physical = true;
+            state.serialTrackingMode = 1;
+            state.internalSerialFixedCode = 'CAM';
             state.errors = {
                 name: '',
                 referenceCode: '',
                 unitPrice: '',
                 defaultWarrantyMonths: '',
+                internalSerialFixedCode: '',
                 productGroupId: '',
                 unitMeasureId: ''
             };
@@ -125,20 +147,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (name, referenceCode, unitPrice, physical, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById) => {
+            createMainData: async (name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/Product/CreateProduct', {
-                        name, referenceCode, unitPrice, physical, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById
+                        name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, referenceCode, unitPrice, physical, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById) => {
+            updateMainData: async (id, name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/Product/UpdateProduct', {
-                        id, name, referenceCode, unitPrice, physical, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById
+                        id, name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -409,6 +431,27 @@ const App = {
         );
 
         Vue.watch(
+            () => state.physical,
+            (newVal) => {
+                if (!newVal) {
+                    state.serialTrackingMode = 0;
+                    state.internalSerialFixedCode = '';
+                    state.errors.internalSerialFixedCode = '';
+                } else if (state.serialTrackingMode === 0) {
+                    state.serialTrackingMode = 1;
+                    state.internalSerialFixedCode = state.internalSerialFixedCode || 'CAM';
+                }
+            }
+        );
+
+        Vue.watch(
+            () => state.internalSerialFixedCode,
+            () => {
+                state.errors.internalSerialFixedCode = '';
+            }
+        );
+
+        Vue.watch(
             () => state.productGroupId,
             (newVal, oldVal) => {
                 state.errors.productGroupId = '';
@@ -432,6 +475,12 @@ const App = {
         );
 
         const handler = {
+            handleInternalSerialFixedCodeInput: function () {
+                const normalized = normalizeInternalSerialFixedCode(state.internalSerialFixedCode);
+                if (state.internalSerialFixedCode !== normalized) {
+                    state.internalSerialFixedCode = normalized;
+                }
+            },
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;
@@ -442,10 +491,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), state.physical, state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), state.physical, state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -463,7 +512,9 @@ const App = {
                             state.description = response?.data?.content?.data.description ?? '';
                             state.productGroupId = response?.data?.content?.data.productGroupId ?? '';
                             state.unitMeasureId = response?.data?.content?.data.unitMeasureId ?? '';
-                            state.physical = response?.data?.content?.data.physical ?? false;
+                            state.physical = response?.data?.content?.data.physical ?? true;
+                            state.serialTrackingMode = response?.data?.content?.data.serialTrackingMode ?? (state.physical ? 1 : 0);
+                            state.internalSerialFixedCode = response?.data?.content?.data.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
 
                             Swal.fire({
                                 icon: 'success',
@@ -586,6 +637,7 @@ const App = {
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
                         { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
+                        { field: 'internalSerialFixedCode', headerText: 'Mã thiết bị', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
@@ -600,7 +652,7 @@ const App = {
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], false);
                         // C?P NH?T autofit T? Ð?NG CAN CH?NH CHO referenceCode
-                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'internalSerialFixedCode', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -649,7 +701,9 @@ const App = {
                                 state.description = selectedRecord.description ?? '';
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
                                 state.unitMeasureId = selectedRecord.unitMeasureId ?? '';
-                                state.physical = selectedRecord.physical ?? false;
+                                state.physical = selectedRecord.physical ?? true;
+                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
+                                state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
                                 mainModal.obj.show();
                             }
                         }
@@ -669,7 +723,9 @@ const App = {
                                 state.description = selectedRecord.description ?? '';
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
                                 state.unitMeasureId = selectedRecord.unitMeasureId ?? '';
-                                state.physical = selectedRecord.physical ?? false;
+                                state.physical = selectedRecord.physical ?? true;
+                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
+                                state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
                                 mainModal.obj.show();
                             }
                         }
@@ -704,6 +760,7 @@ const App = {
             referenceCodeRef, 
             unitPriceRef,
             defaultWarrantyMonthsRef,
+            getInternalSerialPreview,
             state,
             handler,
         };

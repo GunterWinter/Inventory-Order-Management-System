@@ -1,6 +1,7 @@
 ﻿using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 
@@ -19,6 +20,8 @@ public class CreateProductRequest : IRequest<CreateProductResult>
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
     public bool? Physical { get; init; } = true;
+    public SerialTrackingMode? SerialTrackingMode { get; init; } = Domain.Enums.SerialTrackingMode.InternalAuto;
+    public string? InternalSerialFixedCode { get; init; }
     public string? DefaultWarehouseId { get; init; }
     public int? DefaultWarrantyMonths { get; init; }
     public string? UnitMeasureId { get; init; }
@@ -32,7 +35,12 @@ public class CreateProductValidator : AbstractValidator<CreateProductRequest>
     {
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.UnitPrice).NotEmpty();
-        RuleFor(x => x.Physical).NotEmpty();
+        RuleFor(x => x.Physical).NotNull();
+        RuleFor(x => x.InternalSerialFixedCode)
+            .NotEmpty()
+            .Length(2, 4)
+            .Matches("^[A-Za-z0-9]+$")
+            .When(x => x.Physical == true && x.SerialTrackingMode == SerialTrackingMode.InternalAuto);
         RuleFor(x => x.DefaultWarrantyMonths).GreaterThanOrEqualTo(0).When(x => x.DefaultWarrantyMonths.HasValue);
         RuleFor(x => x.UnitMeasureId).NotEmpty();
         RuleFor(x => x.ProductGroupId).NotEmpty();
@@ -65,6 +73,12 @@ public class CreateProductHandler : IRequestHandler<CreateProductRequest, Create
         entity.Name = request.Name;
         entity.UnitPrice = request.UnitPrice;
         entity.Physical = request.Physical;
+        entity.SerialTrackingMode = request.Physical == true
+            ? request.SerialTrackingMode ?? SerialTrackingMode.InternalAuto
+            : SerialTrackingMode.None;
+        entity.InternalSerialFixedCode = entity.SerialTrackingMode == SerialTrackingMode.InternalAuto
+            ? NormalizeInternalSerialFixedCode(request.InternalSerialFixedCode)
+            : null;
         entity.DefaultWarehouseId = request.DefaultWarehouseId;
         entity.DefaultWarrantyMonths = request.DefaultWarrantyMonths;
         entity.ReferenceCode = request.ReferenceCode;
@@ -79,5 +93,12 @@ public class CreateProductHandler : IRequestHandler<CreateProductRequest, Create
         {
             Data = entity
         };
+    }
+
+    private static string? NormalizeInternalSerialFixedCode(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim().ToUpperInvariant();
     }
 }

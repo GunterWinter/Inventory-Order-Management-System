@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -18,6 +18,7 @@ public class GoodsReceiveUpdateInvenTransRequest : IRequest<GoodsReceiveUpdateIn
     public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? UpdatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 }
 
 public class GoodsReceiveUpdateInvenTransValidator : AbstractValidator<GoodsReceiveUpdateInvenTransRequest>
@@ -56,7 +57,8 @@ public class GoodsReceiveUpdateInvenTransHandler
             request.UpdatedById,
             request.ModuleItemId,
             request.BatchNumber,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new GoodsReceiveUpdateInvenTransResult { Data = entity };
     }

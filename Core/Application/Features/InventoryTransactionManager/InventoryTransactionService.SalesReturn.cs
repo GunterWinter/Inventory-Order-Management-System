@@ -1,4 +1,4 @@
-﻿using Application.Common.Extensions;
+using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +13,8 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? createdById,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? productSerialIds = null
         )
     {
         var parent = await _queryContext
@@ -45,6 +46,7 @@ public partial class InventoryTransactionService
 
         await _inventoryTransactionRepository.CreateAsync(child, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, createdById, cancellationToken);
 
         return child;
     }
@@ -55,7 +57,8 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? updatedById,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? productSerialIds = null
         )
     {
         var child = await _inventoryTransactionRepository.GetAsync(id ?? string.Empty, cancellationToken);
@@ -75,6 +78,7 @@ public partial class InventoryTransactionService
 
         _inventoryTransactionRepository.Update(child);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, updatedById, cancellationToken);
 
         return child;
     }
@@ -96,6 +100,7 @@ public partial class InventoryTransactionService
 
         _inventoryTransactionRepository.Delete(child);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ReleaseInventoryTransactionSerialsAsync(id, updatedById, cancellationToken);
 
         return child;
     }
@@ -112,6 +117,6 @@ public partial class InventoryTransactionService
             .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)
             .ToListAsync(cancellationToken);
 
-        return childs;
+        return await EnrichProductSerialsAsync(childs, cancellationToken);
     }
 }

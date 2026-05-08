@@ -1,4 +1,4 @@
-﻿using Application.Common.Extensions;
+using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +12,8 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? createdById,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? productSerialIds = null
         )
     {
         var parent = await _queryContext
@@ -37,6 +38,8 @@ public partial class InventoryTransactionService
         child.MovementDate = parent.TransferReceiveDate;
         child.Status = (InventoryTransactionStatus?)parent.Status;
         child.WarehouseId = parent.TransferOut!.WarehouseToId;
+        child.WarehouseFromId = parent.TransferOut.WarehouseFromId;
+        child.WarehouseToId = parent.TransferOut.WarehouseToId;
 
         child.ProductId = productId;
         child.Movement = movement;
@@ -45,6 +48,7 @@ public partial class InventoryTransactionService
 
         await _inventoryTransactionRepository.CreateAsync(child, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, createdById, cancellationToken);
 
         return child;
     }
@@ -54,7 +58,8 @@ public partial class InventoryTransactionService
         string? productId,
         double? movement,
         string? updatedById,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? productSerialIds = null
         )
     {
         var child = await _inventoryTransactionRepository.GetAsync(id ?? string.Empty, cancellationToken);
@@ -65,6 +70,15 @@ public partial class InventoryTransactionService
         }
 
         child.UpdatedById = updatedById;
+        var parent = await _queryContext
+            .TransferIn
+            .Include(x => x.TransferOut)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == child.ModuleId, cancellationToken);
+
+        child.WarehouseId = parent?.TransferOut?.WarehouseToId;
+        child.WarehouseFromId = parent?.TransferOut?.WarehouseFromId;
+        child.WarehouseToId = parent?.TransferOut?.WarehouseToId;
 
         child.ProductId = productId;
         child.Movement = movement;
@@ -73,6 +87,7 @@ public partial class InventoryTransactionService
 
         _inventoryTransactionRepository.Update(child);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, updatedById, cancellationToken);
 
         return child;
     }
@@ -94,6 +109,7 @@ public partial class InventoryTransactionService
 
         _inventoryTransactionRepository.Delete(child);
         await _unitOfWork.SaveAsync(cancellationToken);
+        await _productSerialService.ReleaseInventoryTransactionSerialsAsync(id, updatedById, cancellationToken);
 
         return child;
     }
@@ -110,6 +126,6 @@ public partial class InventoryTransactionService
             .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)
             .ToListAsync(cancellationToken);
 
-        return childs;
+        return await EnrichProductSerialsAsync(childs, cancellationToken);
     }
 }

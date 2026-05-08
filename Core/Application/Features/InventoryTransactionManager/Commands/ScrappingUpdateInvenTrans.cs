@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -15,6 +15,7 @@ public class ScrappingUpdateInvenTransRequest : IRequest<ScrappingUpdateInvenTra
     public string? ProductId { get; init; }
     public double? Movement { get; init; }
     public string? UpdatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 
 }
 
@@ -47,7 +48,8 @@ public class ScrappingUpdateInvenTransHandler : IRequestHandler<ScrappingUpdateI
             request.ProductId,
             request.Movement,
             request.UpdatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new ScrappingUpdateInvenTransResult
         {

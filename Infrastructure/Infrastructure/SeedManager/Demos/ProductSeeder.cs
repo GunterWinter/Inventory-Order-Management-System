@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;

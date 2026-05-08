@@ -3,6 +3,7 @@ using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
+using Application.Features.ProductSerialManager;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,7 @@ public class PurchaseOrderService
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ProductSerialService _productSerialService;
 
     public PurchaseOrderService(
         ICommandRepository<PurchaseOrder> purchaseOrderRepository,
@@ -26,7 +28,8 @@ public class PurchaseOrderService
         IQueryContext queryContext,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        ProductSerialService productSerialService
         )
     {
         _purchaseOrderRepository = purchaseOrderRepository;
@@ -36,6 +39,7 @@ public class PurchaseOrderService
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
+        _productSerialService = productSerialService;
     }
 
     public void Recalculate(string purchaseOrderId)
@@ -170,7 +174,7 @@ public class PurchaseOrderService
 
             if (existingTransaction == null)
             {
-                await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
+                var transaction = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
                     goodsReceive.Id,
                     item.WarehouseId,
                     item.ProductId,
@@ -180,10 +184,12 @@ public class PurchaseOrderService
                     item.BatchNumber,
                     cancellationToken
                 );
+                item.PurchaseOrder = purchaseOrder;
+                await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
             }
             else
             {
-                await _inventoryTransactionService.GoodsReceiveUpdateInvenTrans(
+                var transaction = await _inventoryTransactionService.GoodsReceiveUpdateInvenTrans(
                     existingTransaction.Id,
                     item.WarehouseId,
                     item.ProductId,
@@ -193,6 +199,8 @@ public class PurchaseOrderService
                     item.BatchNumber,
                     cancellationToken
                 );
+                item.PurchaseOrder = purchaseOrder;
+                await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
             }
         }
 

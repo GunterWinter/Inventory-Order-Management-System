@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using FluentValidation;
 using MediatR;
 
@@ -15,6 +15,7 @@ public class StockCountCreateInvenTransRequest : IRequest<StockCountCreateInvenT
     public string? ProductId { get; init; }
     public double? QtySCCount { get; init; }
     public string? CreatedById { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
 }
 
 public class StockCountCreateInvenTransValidator : AbstractValidator<StockCountCreateInvenTransRequest>
@@ -23,7 +24,7 @@ public class StockCountCreateInvenTransValidator : AbstractValidator<StockCountC
     {
         RuleFor(x => x.ModuleId).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
-        RuleFor(x => x.QtySCCount).NotEmpty();
+        RuleFor(x => x.QtySCCount).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.CreatedById).NotEmpty();
     }
 }
@@ -46,7 +47,8 @@ public class StockCountCreateInvenTransHandler : IRequestHandler<StockCountCreat
             request.ProductId,
             request.QtySCCount,
             request.CreatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new StockCountCreateInvenTransResult
         {
