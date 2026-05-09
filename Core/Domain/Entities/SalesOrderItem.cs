@@ -1,4 +1,5 @@
 using Domain.Common;
+using System.Collections.Generic;
 
 namespace Domain.Entities;
 
@@ -22,5 +23,6 @@ public class SalesOrderItem : BaseEntity
     public double? Total { get; set; } = 0;
     public double? TaxAmount { get; set; } = 0;
     public double? AfterTaxAmount { get; set; } = 0;
+    public ICollection<ProductSerial> ProductSerials { get; set; } = new List<ProductSerial>();
 
 }

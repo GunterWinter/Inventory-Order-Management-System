@@ -56,10 +56,6 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
     public async Task<GetWarrantyLookupResult> Handle(GetWarrantyLookupRequest request, CancellationToken cancellationToken)
     {
         var search = request.Search?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return new GetWarrantyLookupResult { Data = new List<WarrantyLookupDto>() };
-        }
 
         var serialQuery = _context
             .Set<ProductSerial>()
@@ -70,7 +66,11 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .Include(x => x.SalesOrderItem)
                 .ThenInclude(x => x!.SalesOrder)
                     .ThenInclude(x => x!.Customer)
-            .Where(x =>
+            .Where(x => x.SalesOrderItemId != null);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            serialQuery = serialQuery.Where(x =>
                 (x.InternalSerialNumber ?? string.Empty).Contains(search) ||
                 (x.SalesOrderItem != null &&
                     x.SalesOrderItem.SalesOrder != null &&
@@ -79,6 +79,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
                         (x.SalesOrderItem.SalesOrder.Customer != null &&
                             (x.SalesOrderItem.SalesOrder.Customer.PhoneNumber ?? string.Empty).Contains(search))
                     )));
+        }
 
         var serials = await serialQuery
             .OrderBy(x => x.InternalSerialNumber)

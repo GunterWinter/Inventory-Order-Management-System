@@ -31,6 +31,8 @@ public record GetSalesOrderItemBySalesOrderIdListDto
     public double? CogsAmount { get; init; }
     public double? ProfitAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
+    public List<string>? ProductSerialIds { get; set; }
+    public string? ProductSerialNumbers { get; set; }
 }
 
 public class GetSalesOrderItemBySalesOrderIdListProfile : Profile
@@ -98,12 +100,28 @@ public class GetSalesOrderItemBySalesOrderIdListHandler : IRequestHandler<GetSal
             .Include(x => x.Product)
             .Include(x => x.Warehouse)
             .Include(x => x.Tax)
+            .Include(x => x.ProductSerials)
             .Where(x => x.SalesOrderId == request.SalesOrderId)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetSalesOrderItemBySalesOrderIdListDto>>(entities);
+
+        // Populate serial data from navigation property
+        foreach (var dto in dtos)
+        {
+            var entity = entities.FirstOrDefault(e => e.Id == dto.Id);
+            if (entity?.ProductSerials != null && entity.ProductSerials.Any())
+            {
+                var serials = entity.ProductSerials
+                    .Where(s => !s.IsDeleted)
+                    .OrderBy(s => s.InternalSerialNumber)
+                    .ToList();
+                dto.ProductSerialIds = serials.Select(s => s.Id!).ToList();
+                dto.ProductSerialNumbers = string.Join(", ", serials.Select(s => s.InternalSerialNumber ?? ""));
+            }
+        }
 
         return new GetSalesOrderItemBySalesOrderIdListResult
         {

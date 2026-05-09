@@ -75,7 +75,9 @@ window.ProductSerialPicker = (() => {
             const checked = selectedIds.has(item.id) ? 'checked' : '';
             return `
                 <tr>
-                    <td><input type="checkbox" class="form-check-input product-serial-picker-check" value="${item.id}" ${checked}></td>
+                    <td class="text-center" style="width: 48px; vertical-align: middle;">
+                        <input type="checkbox" class="form-check-input product-serial-picker-check" value="${item.id}" ${checked} style="margin: 0 !important; float: none !important; position: static !important; cursor: pointer;">
+                    </td>
                     <td>${item.internalSerialNumber ?? ''}</td>
                     <td>${item.productName ?? ''}</td>
                     <td>${item.warehouseName ?? ''}</td>

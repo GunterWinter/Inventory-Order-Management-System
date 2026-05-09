@@ -32,7 +32,7 @@
                 <div id="MainGrid" ref="mainGridRef"></div>
             </div>
 
-            <div class="grid-container mt-3" v-if="state.selectedSerialNumber">
+            <div class="grid-container mt-3" v-show="state.selectedSerialNumber">
                 <h5 class="mb-2">Movement History: {{ state.selectedSerialNumber }}</h5>
                 <div id="MovementGrid" ref="movementGridRef"></div>
             </div>

@@ -323,13 +323,15 @@ public class ProductSerialService
             return;
         }
 
-        var movements = await _queryContext
+        var movementData = await _queryContext
             .Set<ProductSerialMovement>()
+            .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.InventoryTransactionId == inventoryTransactionId)
+            .Select(x => new { x.Id, x.ProductSerialId })
             .ToListAsync(cancellationToken);
 
-        var serialIds = movements.Select(x => x.ProductSerialId).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        var serialIds = movementData.Select(x => x.ProductSerialId).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
         var serials = await _queryContext
             .Set<ProductSerial>()
             .ApplyIsDeletedFilter(false)
@@ -348,10 +350,14 @@ public class ProductSerialService
             }
         }
 
-        foreach (var movement in movements)
+        foreach (var md in movementData)
         {
-            movement.UpdatedById = userId;
-            _productSerialMovementRepository.Delete(movement);
+            var movement = await _productSerialMovementRepository.GetAsync(md.Id ?? string.Empty, cancellationToken);
+            if (movement != null)
+            {
+                movement.UpdatedById = userId;
+                _productSerialMovementRepository.Delete(movement);
+            }
         }
 
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -435,16 +441,22 @@ public class ProductSerialService
         string? userId,
         CancellationToken cancellationToken)
     {
-        var existingMovements = await _queryContext
+        var existingMovementIds = await _queryContext
             .Set<ProductSerialMovement>()
+            .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.InventoryTransactionId == transaction.Id)
+            .Select(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var movement in existingMovements)
+        foreach (var movementId in existingMovementIds)
         {
-            movement.UpdatedById = userId;
-            _productSerialMovementRepository.Delete(movement);
+            var movement = await _productSerialMovementRepository.GetAsync(movementId ?? string.Empty, cancellationToken);
+            if (movement != null)
+            {
+                movement.UpdatedById = userId;
+                _productSerialMovementRepository.Delete(movement);
+            }
         }
 
         foreach (var serial in serials)

@@ -1295,7 +1295,7 @@ const App = {
                                     const label = args.element.querySelector('.serial-count');
                                     const refreshLabel = () => {
                                         const count = args.rowData.productSerialIds?.length ?? 0;
-                                        label.textContent = count ? `${count} mã` : 'Chưa chọn';
+                                        //label.textContent = count ? `${count} mã` : '';
                                     };
 
                                     refreshLabel();
@@ -1318,6 +1318,7 @@ const App = {
                                             warehouseId: args.rowData.warehouseId,
                                             batchNumber: args.rowData.batchNumber,
                                             moduleName: 'DeliveryOrder',
+                                            moduleId: state.id,
                                             moduleItemId: args.rowData.id,
                                             selectedIds: args.rowData.productSerialIds ?? []
                                         });
@@ -1569,6 +1570,14 @@ const App = {
                         const isSerialTracked = isSerialTrackedProduct(data.productId);
 
                         if (isSerialTracked) {
+                            // Sync serial data from rowData (where the picker stored it)
+                            const editedRow = secondaryGrid.obj?.getRowObjectFromUID?.(args.row?.getAttribute?.('data-uid'));
+                            const rowData = args.rowData ?? {};
+                            if (rowData.productSerialIds?.length) {
+                                data.productSerialIds = rowData.productSerialIds;
+                                data.productSerialNumbers = rowData.productSerialNumbers;
+                            }
+
                             const selectedSerialCount = data.productSerialIds?.length ?? 0;
                             if (selectedSerialCount === 0) {
                                 args.cancel = true;
