@@ -11,8 +11,8 @@ public record WarrantyLookupMovementDto
     public string? ModuleName { get; init; }
     public string? ModuleId { get; init; }
     public string? ModuleItemId { get; init; }
-    public string? FromWarehouseId { get; init; }
-    public string? ToWarehouseId { get; init; }
+    public string? FromWarehouseName { get; init; }
+    public string? ToWarehouseName { get; init; }
     public DateTime? MovementDate { get; init; }
     public string? StatusName { get; init; }
 }
@@ -31,6 +31,7 @@ public record WarrantyLookupDto
     public DateTime? SalesOrderDate { get; init; }
     public DateTime? CustomerWarrantyEndDate { get; init; }
     public bool IsCustomerWarrantyValid { get; init; }
+    public DateTime? SupplierWarrantyEndDate { get; init; }
     public List<WarrantyLookupMovementDto>? Movements { get; init; }
 }
 
@@ -57,7 +58,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
     {
         var search = request.Search?.Trim() ?? string.Empty;
 
-        var serialQuery = _context
+        IQueryable<ProductSerial> serialQuery = _context
             .Set<ProductSerial>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
@@ -65,8 +66,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .Include(x => x.CurrentWarehouse)
             .Include(x => x.SalesOrderItem)
                 .ThenInclude(x => x!.SalesOrder)
-                    .ThenInclude(x => x!.Customer)
-            .Where(x => x.SalesOrderItemId != null);
+                    .ThenInclude(x => x!.Customer);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -91,6 +91,8 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .Set<ProductSerialMovement>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
+            .Include(x => x.FromWarehouse)
+            .Include(x => x.ToWarehouse)
             .Where(x => serialIds.Contains(x.ProductSerialId!))
             .OrderByDescending(x => x.MovementDate)
             .Select(x => new
@@ -101,8 +103,8 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
                     ModuleName = x.ModuleName,
                     ModuleId = x.ModuleId,
                     ModuleItemId = x.ModuleItemId,
-                    FromWarehouseId = x.FromWarehouseId,
-                    ToWarehouseId = x.ToWarehouseId,
+                    FromWarehouseName = x.FromWarehouse != null ? x.FromWarehouse.Name : null,
+                    ToWarehouseName = x.ToWarehouse != null ? x.ToWarehouse.Name : null,
                     MovementDate = x.MovementDate,
                     StatusName = x.Status.ToString()
                 }
@@ -128,6 +130,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             SalesOrderDate = x.SalesOrderItem?.SalesOrder?.OrderDate,
             CustomerWarrantyEndDate = x.CustomerWarrantyEndDate,
             IsCustomerWarrantyValid = x.CustomerWarrantyEndDate != null && x.CustomerWarrantyEndDate.Value.Date >= today,
+            SupplierWarrantyEndDate = x.SupplierWarrantyEndDate,
             Movements = movementLookup.TryGetValue(x.Id, out var itemMovements) ? itemMovements : new List<WarrantyLookupMovementDto>()
         }).ToList();
 

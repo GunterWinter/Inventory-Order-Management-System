@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -13,6 +13,27 @@
             display: none !important;
         }
     </style>
+    <style>
+        .view-mode-hidden {
+            display: none !important;
+        }
+        .view-mode-margin {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('viewMode') === 'true') {
+                document.querySelector('.main-sidebar')?.classList.add('view-mode-hidden');
+                document.querySelector('.main-header')?.classList.add('view-mode-hidden');
+                document.querySelector('.main-footer')?.classList.add('view-mode-hidden');
+                document.querySelector('.content-wrapper')?.classList.add('view-mode-margin');
+            }
+        });
+    </script>
 
     @* vue *@
     <script src="~/lib/vue/vue.global.prod.js"></script>

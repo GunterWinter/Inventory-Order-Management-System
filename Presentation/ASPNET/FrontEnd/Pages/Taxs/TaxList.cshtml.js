@@ -105,7 +105,7 @@ const App = {
                             headerText: 'Percentage',
                             width: 100,
                             minWidth: 100,
-                            format: 'N2'
+                            format: 'N0'
                         },
                         { field: 'description', headerText: 'Description', width: 400, minWidth: 400 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
@@ -223,7 +223,7 @@ const App = {
             create: () => {
                 percentageText.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Enter Percentage',
-                    format: 'n2',
+                    format: 'N0',
                     min: 0,
                     max: 100,
                     step: 0.01,

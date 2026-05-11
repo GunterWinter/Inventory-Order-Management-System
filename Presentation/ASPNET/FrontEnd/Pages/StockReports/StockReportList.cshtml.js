@@ -72,9 +72,7 @@ const App = {
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },
                         { field: 'batchNumber', headerText: 'Batch Number', width: 170 },
-                        { field: 'stock', headerText: 'Stock', width: 140, type: 'number', format: 'N2', textAlign: 'Right' },
-                        { field: 'supplierWarrantyMonths', headerText: 'Supplier Warranty (Months)', width: 210, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'supplierWarrantyRemaining', headerText: 'Supplier Warranty Remaining', width: 220, type: 'number', format: 'N1', textAlign: 'Right' },
+                        { field: 'stock', headerText: 'Stock', width: 140, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'statusName', headerText: 'Status', width: 120 },
                         { field: 'createdAtUtc', headerText: 'Last Updated', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
@@ -85,7 +83,7 @@ const App = {
                                     type: 'Sum',
                                     field: 'stock',
                                     groupCaptionTemplate: 'Stock: ${Sum}',
-                                    format: 'N2'
+                                    format: 'N0'
                                 }
                             ]
                         }

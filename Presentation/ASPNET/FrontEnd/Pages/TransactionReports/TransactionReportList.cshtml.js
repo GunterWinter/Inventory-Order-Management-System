@@ -80,7 +80,7 @@ const App = {
                         { field: 'batchNumber', headerText: 'Batch Number', width: 120 },
                         { field: 'movementDate', headerText: 'Movement Date', width: 100, format: 'yyyy-MM-dd' },
                         { field: 'number', headerText: 'Number', width: 100 },
-                        { field: 'movement', headerText: 'Movement', width: 100, type: 'number', format: 'N2', textAlign: 'Right' },
+                        { field: 'movement', headerText: 'Movement', width: 100, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'transTypeName', headerText: 'Trans Type', width: 100 },
                         { field: 'stock', headerText: 'Stock', width: 150, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
                         { field: 'statusName', headerText: 'Status', width: 100 },
@@ -98,7 +98,7 @@ const App = {
                                     type: 'Sum',
                                     field: 'stock',
                                     groupCaptionTemplate: 'Stock: ${Sum}',
-                                    format: 'N2'
+                                    format: 'N0'
                                 }
                             ]
                         }

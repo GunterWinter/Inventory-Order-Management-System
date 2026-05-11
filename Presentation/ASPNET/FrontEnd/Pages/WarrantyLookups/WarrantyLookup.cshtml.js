@@ -4,12 +4,28 @@ const App = {
             search: '',
             mainData: [],
             movementData: [],
-            selectedSerialNumber: ''
+            selectedSerialNumber: '',
+            docTitle: 'Document Detail',
+            docLoading: false,
+            docData: null,
+            docItems: [],
+            docType: null
         });
 
         const searchTextRef = Vue.ref(null);
         const mainGridRef = Vue.ref(null);
         const movementGridRef = Vue.ref(null);
+        const documentModalRef = Vue.ref(null);
+        
+        const documentModal = {
+            obj: null,
+            create: () => {
+                documentModal.obj = new bootstrap.Modal(documentModalRef.value, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+            }
+        };
 
         const services = {
             lookupWarranty: async (search) => {
@@ -44,9 +60,11 @@ const App = {
                     ...item,
                     salesOrderDate: item.salesOrderDate ? DateFormatManager.parseServerDate(item.salesOrderDate) : null,
                     customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseServerDate(item.customerWarrantyEndDate) : null,
+                    supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseServerDate(item.supplierWarrantyEndDate) : null,
                     warrantyStatus: item.customerWarrantyEndDate
-                        ? (item.isCustomerWarrantyValid ? 'Valid' : 'Expired')
-                        : ''
+                        ? (window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized(item.isCustomerWarrantyValid ? 'Valid' : 'Expired') : (item.isCustomerWarrantyValid ? 'Valid' : 'Expired'))
+                        : (window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized('N/A') : 'N/A'),
+                    statusName: window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized(item.statusName) : item.statusName
                 }));
                 state.movementData = [];
                 state.selectedSerialNumber = '';
@@ -62,13 +80,100 @@ const App = {
                 mainGrid.refresh();
                 movementGrid.refresh();
             },
-            showMovements: (record) => {
-                state.selectedSerialNumber = record?.internalSerialNumber ?? '';
-                state.movementData = (record?.movements ?? []).map(item => ({
-                    ...item,
-                    movementDate: item.movementDate ? DateFormatManager.parseServerDate(item.movementDate) : null
+            showMovements: (rowData) => {
+                state.selectedSerialNumber = rowData.internalSerialNumber;
+                state.movementData = (rowData.movements ?? []).map(m => ({
+                    ...m,
+                    movementDate: m.movementDate ? DateFormatManager.parseServerDate(m.movementDate) : null
                 }));
                 movementGrid.refresh();
+            },
+            formatDate: (dateString) => {
+                if (!dateString) return '';
+                return DateFormatManager.formatToLocale(DateFormatManager.parseServerDate(dateString));
+            },
+            formatNumber: (value) => {
+                if (!value && value !== 0) return '';
+                return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            },
+            formatStatus: (statusValue) => {
+                if (!statusValue) return '';
+                // basic mapping
+                const statuses = {
+                    '1': 'Draft',
+                    '2': 'Confirmed',
+                    '3': 'Processing',
+                    '4': 'Completed',
+                    '5': 'Cancelled'
+                };
+                return statuses[statusValue] || statusValue;
+            },
+            openDocumentModal: async (moduleName, moduleId) => {
+                if (!moduleName || !moduleId) return;
+
+                let targetModule = moduleName;
+                let targetId = moduleId;
+                
+                state.docTitle = moduleName === 'GoodsReceive' || moduleName === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
+                state.docType = null;
+                state.docData = null;
+                state.docItems = [];
+                state.docLoading = true;
+                
+                if (documentModal.obj) {
+                    documentModal.obj.show();
+                }
+
+                if (moduleName === 'GoodsReceive') {
+                    try {
+                        const res = await AxiosManager.get('/GoodsReceive/GetGoodsReceiveSingle?id=' + moduleId, {});
+                        const poId = res?.data?.content?.data?.purchaseOrderId;
+                        if (poId) {
+                            targetModule = 'PurchaseOrder';
+                            targetId = poId;
+                        }
+                    } catch (e) {
+                        console.error('Failed to get parent order', e);
+                    }
+                } else if (moduleName === 'DeliveryOrder') {
+                    try {
+                        const res = await AxiosManager.get('/DeliveryOrder/GetDeliveryOrderSingle?id=' + moduleId, {});
+                        const soId = res?.data?.content?.data?.salesOrderId;
+                        if (soId) {
+                            targetModule = 'SalesOrder';
+                            targetId = soId;
+                        }
+                    } catch (e) {
+                        console.error('Failed to get parent order', e);
+                    }
+                }
+
+                try {
+                    const endpoint = `/${targetModule}/Get${targetModule}Single?id=${targetId}`;
+                    const res = await AxiosManager.get(endpoint, {});
+                    const data = res?.data?.content?.data;
+                    if (data) {
+                        state.docType = targetModule;
+                        state.docData = data;
+                        state.docItems = data.purchaseOrderItemList || data.salesOrderItemList || [];
+                        state.docTitle = targetModule === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
+                    } else {
+                        state.docTitle = 'Document not found';
+                    }
+                } catch (e) {
+                    console.error('Failed to get document data', e);
+                    state.docTitle = 'Error loading document';
+                } finally {
+                    state.docLoading = false;
+                }
+            },
+            closeDocumentModal: () => {
+                state.documentIframeSrc = null;
+                state.docData = null;
+                state.docItems = [];
+                if (documentModal.obj) {
+                    documentModal.obj.hide();
+                }
             }
         };
 
@@ -78,8 +183,9 @@ const App = {
                 await SecurityManager.validateToken();
 
                 searchText.create();
-                await mainGrid.create(state.mainData);
-                await movementGrid.create(state.movementData);
+                await mainGrid.create([]);
+                await movementGrid.create([]);
+                documentModal.create();
             } catch (e) {
                 console.error('page init error:', e);
             }
@@ -115,6 +221,7 @@ const App = {
                         { field: 'customerPhoneNumber', headerText: 'Phone', width: 150 },
                         { field: 'salesOrderDate', headerText: 'Sold Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'customerWarrantyEndDate', headerText: 'Warranty End', width: 160, format: 'yyyy-MM-dd' },
+                        { field: 'supplierWarrantyEndDate', headerText: 'Supplier Warranty End', width: 220, format: 'yyyy-MM-dd' },
                         { field: 'warrantyStatus', headerText: 'Warranty Status', width: 160 }
                     ],
                     toolbar: ['ExcelExport', 'Search'],
@@ -156,12 +263,13 @@ const App = {
                     columns: [
                         { field: 'movementDate', headerText: 'Movement Date', width: 170, format: 'yyyy-MM-dd' },
                         { field: 'moduleName', headerText: 'Module', width: 170 },
-                        { field: 'moduleId', headerText: 'Document Id', width: 220 },
-                        { field: 'moduleItemId', headerText: 'Line Id', width: 220 },
-                        { field: 'fromWarehouseId', headerText: 'From Warehouse', width: 180 },
-                        { field: 'toWarehouseId', headerText: 'To Warehouse', width: 180 },
+                        { field: 'fromWarehouseName', headerText: 'From Warehouse', width: 180 },
+                        { field: 'toWarehouseName', headerText: 'To Warehouse', width: 180 },
                         { field: 'statusName', headerText: 'Status', width: 130 }
-                    ]
+                    ],
+                    recordClick: (args) => {
+                        methods.openDocumentModal(args.rowData.moduleName, args.rowData.moduleId);
+                    }
                 });
 
                 movementGrid.obj.appendTo(movementGridRef.value);
@@ -177,6 +285,7 @@ const App = {
             searchTextRef,
             mainGridRef,
             movementGridRef,
+            documentModalRef,
             state,
             methods
         };

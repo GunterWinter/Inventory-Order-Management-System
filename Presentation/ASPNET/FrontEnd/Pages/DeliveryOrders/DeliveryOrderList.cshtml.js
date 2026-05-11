@@ -23,7 +23,7 @@ const App = {
             },
             showComplexDiv: false,
             isSubmitting: false,
-            totalMovementFormatted: '0.00'
+            totalMovementFormatted: '0'
         });
 
         const mainGridRef = Vue.ref(null);
@@ -657,7 +657,7 @@ const App = {
                             headerText: 'Movement',
                             width: 200,
                             type: 'number',
-                            format: 'N2',
+                            format: 'N0',
                             textAlign: 'Right'
                         },
                         {

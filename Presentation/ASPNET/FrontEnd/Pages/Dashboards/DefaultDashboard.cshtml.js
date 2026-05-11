@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             cardsData: {},
@@ -127,7 +127,7 @@
                         { field: 'salesOrder.number', headerText: '#Number', width: 90 },
                         { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
                         { field: 'product.name', headerText: 'Product', width: 150 },
-                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N2', textAlign: 'Right' },
+                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N0', textAlign: 'Right' },
                     ],
                 }, salesOrderGridRef.value);
             },
@@ -191,7 +191,7 @@
                         { field: 'purchaseOrder.number', headerText: '#Number', width: 90 },
                         { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
                         { field: 'product.name', headerText: 'Product', width: 150 },
-                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N2', textAlign: 'Right' },
+                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N0', textAlign: 'Right' },
                     ],
                 }, purchaseOrderGridRef.value);
             },

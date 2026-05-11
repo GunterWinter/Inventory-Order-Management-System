@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -21,7 +21,7 @@
             },
             showComplexDiv: false,
             isSubmitting: false,
-            totalMovementFormatted: '0.00'
+            totalMovementFormatted: '0'
         });
 
         const mainGridRef = Vue.ref(null);
@@ -663,7 +663,7 @@
                                 }
                             }
                         },
-                        { field: 'qtySCSys', headerText: 'System Stock', width: 100, allowEditing: false, type: 'number', format: 'N2', textAlign: 'Right'},
+                        { field: 'qtySCSys', headerText: 'System Stock', width: 100, allowEditing: false, type: 'number', format: 'N0', textAlign: 'Right'},
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
                             warehouseIdGetter: (rowData) => state.warehouseId,
@@ -682,7 +682,7 @@
                                     return args['value'] >= 0;
                                 }, 'Must be a non-negative number']
                             },
-                            type: 'number', format: 'N2', textAlign: 'Right',
+                            type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     qtySCCountElem = document.createElement('input');

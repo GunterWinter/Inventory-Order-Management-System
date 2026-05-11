@@ -28,9 +28,10 @@ const App = {
             },
             showComplexDiv: false,
             isSubmitting: false,
-            subTotalAmount: '0.00',
-            taxAmount: '0.00',
-            totalAmount: '0.00'
+            subTotalAmount: '0',
+            taxAmount: '0',
+            totalAmount: '0',
+            isViewMode: false
         });
 
         const mainGridRef = Vue.ref(null);
@@ -127,9 +128,9 @@ const App = {
                 description: ''
             };
             state.secondaryData = [];
-            state.subTotalAmount = '0.00';
-            state.taxAmount = '0.00';
-            state.totalAmount = '0.00';
+            state.subTotalAmount = '0';
+            state.taxAmount = '0';
+            state.totalAmount = '0';
             state.showComplexDiv = false;
         };
 
@@ -600,7 +601,7 @@ const App = {
                         { field: 'orderDate', headerText: 'PO Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'vendorName', headerText: 'Vendor', width: 200, minWidth: 200 },
                         { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N0' },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
                         {
                             field: 'paymentStatusText',
@@ -758,10 +759,11 @@ const App = {
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
+                const allowEdit = !state.isViewMode;
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: true },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -971,7 +973,7 @@ const App = {
                         {
                             field: 'unitPrice',
                             headerText: 'Unit Price',
-                            width: 200, validationRules: { required: true }, type: 'number', format: 'N2', textAlign: 'Right',
+                            width: 200, validationRules: { required: true }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let priceElem = document.createElement('input');
@@ -1011,7 +1013,7 @@ const App = {
                                     return args['value'] > 0;
                                 }, 'Must be a positive number and not zero']
                             },
-                            type: 'number', format: 'N2', textAlign: 'Right',
+                            type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let quantityElem = document.createElement('input');
@@ -1041,7 +1043,7 @@ const App = {
                         {
                             field: 'total',
                             headerText: 'Subtotal',
-                            width: 200, validationRules: { required: false }, type: 'number', format: 'N2', textAlign: 'Right',
+                            width: 200, validationRules: { required: false }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let totalElem = document.createElement('input');
@@ -1106,7 +1108,7 @@ const App = {
                             allowEditing: false,
                             width: 160,
                             type: 'number',
-                            format: 'N2',
+                            format: 'N0',
                             textAlign: 'Right'
                         },
                         {
@@ -1115,7 +1117,7 @@ const App = {
                             allowEditing: false,
                             width: 170,
                             type: 'number',
-                            format: 'N2',
+                            format: 'N0',
                             textAlign: 'Right'
                         },
                         {
@@ -1175,7 +1177,7 @@ const App = {
                             }
                         },
                     ],
-                    toolbar: [
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
@@ -1424,7 +1426,28 @@ const App = {
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
+                const urlParams = new URLSearchParams(window.location.search);
+                const viewMode = urlParams.get('viewMode') === 'true';
+                const viewId = urlParams.get('id');
 
+                if (viewMode && viewId) {
+                    state.isViewMode = true;
+                    const selectedRecord = state.mainData.find(x => x.id === viewId);
+                    if (selectedRecord) {
+                        state.mainTitle = 'View Purchase Order';
+                        state.id = selectedRecord.id ?? '';
+                        state.number = selectedRecord.number ?? '';
+                        state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
+                        state.description = selectedRecord.description ?? '';
+                        state.vendorId = selectedRecord.vendorId ?? '';
+                        state.orderStatus = String(selectedRecord.orderStatus ?? '');
+                        state.showComplexDiv = true;
+
+                        await methods.populateSecondaryData(selectedRecord.id);
+                        secondaryGrid.refresh();
+                        mainModal.obj.show();
+                    }
+                }
             }
         });
 

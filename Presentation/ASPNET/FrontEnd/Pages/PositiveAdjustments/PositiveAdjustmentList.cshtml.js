@@ -20,7 +20,7 @@ const App = {
             },
             showComplexDiv: false,
             isSubmitting: false,
-            totalMovementFormatted: '0.00'
+            totalMovementFormatted: '0'
         });
 
         const mainGridRef = Vue.ref(null);
@@ -637,7 +637,7 @@ const App = {
                                     return args['value'] > 0;
                                 }, 'Must be a positive number and not zero']
                             },
-                            type: 'number', format: 'N2', textAlign: 'Right',
+                            type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     const movementElem = document.createElement('input');

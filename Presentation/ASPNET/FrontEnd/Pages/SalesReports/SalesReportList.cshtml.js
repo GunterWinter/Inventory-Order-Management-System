@@ -61,12 +61,12 @@ const App = {
                         { field: 'productNumber', headerText: 'Product Number', width: 200, minWidth: 200 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 160, minWidth: 160 },
                         { field: 'productName', headerText: 'Product Name', width: 200, minWidth: 200 },
-                        { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N0' },
                         { field: 'quantity', headerText: 'Quantity', width: 150, minWidth: 150 },
-                        { field: 'total', headerText: 'Subtotal', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'total', headerText: 'Subtotal', width: 150, minWidth: 150, format: 'N0' },
                         { field: 'taxName', headerText: 'Tax', width: 150, minWidth: 150 },
-                        { field: 'taxAmount', headerText: 'Tax Amount', width: 150, minWidth: 150, format: 'N2' },
-                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N2' },
+                        { field: 'taxAmount', headerText: 'Tax Amount', width: 150, minWidth: 150, format: 'N0' },
+                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N0' },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
@@ -76,19 +76,19 @@ const App = {
                                     type: 'Sum',
                                     field: 'total',
                                     groupCaptionTemplate: 'Subtotal: ${Sum}',
-                                    format: 'N2'
+                                    format: 'N0'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'taxAmount',
                                     groupCaptionTemplate: 'Tax: ${Sum}',
-                                    format: 'N2'
+                                    format: 'N0'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'afterTaxAmount',
                                     groupCaptionTemplate: 'Total Amount: ${Sum}',
-                                    format: 'N2'
+                                    format: 'N0'
                                 }
                             ]
                         }

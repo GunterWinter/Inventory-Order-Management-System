@@ -3,7 +3,7 @@
     const DEFAULT_CURRENCY = 'VND';
     const GROUP_SEPARATOR = '.';
     const DECIMAL_SEPARATOR = ',';
-    const MAX_FRACTION_DIGITS = 2;
+    const MAX_FRACTION_DIGITS = 0;
     const MONEY_FORMAT = 'N0';
     const MONEY_FIELD_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|sales)/i;
 
