@@ -20,6 +20,8 @@ public record GetCashTransactionListDto
     public string? CashAccountName { get; init; }
     public string? CashCategoryId { get; init; }
     public string? CashCategoryName { get; init; }
+    public string? CustomerId { get; init; }
+    public string? CustomerName { get; init; }
     public string? SourceModule { get; init; }
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
@@ -53,6 +55,7 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.CashAccount)
             .Include(x => x.CashCategory)
+            .Include(x => x.Customer)
             .AsQueryable();
 
         var entities = await query
@@ -69,6 +72,8 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
                 CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
                 CashCategoryId = x.CashCategoryId,
                 CashCategoryName = x.CashCategory != null ? x.CashCategory.Name : null,
+                CustomerId = x.CustomerId,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
                 SourceModule = x.SourceModule,
                 SourceModuleId = x.SourceModuleId,
                 SourceModuleNumber = x.SourceModuleNumber,

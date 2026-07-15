@@ -1,0 +1,72 @@
+@page
+@{
+    ViewData["Title"] = "Customer Finance Report";
+}
+
+<div id="app" v-cloak>
+    <div class="row mb-3">
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Total Received</div>
+                    <h4 class="mb-0">{{ state.summary.totalReceivedText }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Total Spent</div>
+                    <h4 class="mb-0">{{ state.summary.totalSpentText }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-muted">Profit</div>
+                    <h4 class="mb-0">{{ state.summary.profitText }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <label for="Customer">Customer</label>
+                            <div id="CustomerDropDown" ref="customerRef"></div>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label for="FromDate">From Date</label>
+                            <input id="FromDatePicker" ref="fromDateRef" />
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label for="ToDate">To Date</label>
+                            <input id="ToDatePicker" ref="toDateRef" />
+                        </div>
+                        <div class="col-md-2 mb-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-secondary w-100" v-on:click="handler.handleClearFilters">Clear Filters</button>
+                        </div>
+                    </div>
+                    <div class="text-muted small">Only confirmed transactions linked to a customer are included.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="grid-container">
+                <div id="MainGrid" ref="mainGridRef"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="~/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js"></script>
+}

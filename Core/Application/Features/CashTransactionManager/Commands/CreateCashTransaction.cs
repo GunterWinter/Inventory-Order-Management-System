@@ -23,6 +23,7 @@ public class CreateCashTransactionRequest : IRequest<CreateCashTransactionResult
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
+    public string? CustomerId { get; init; }
     public string? SourceModule { get; init; }
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
@@ -78,6 +79,7 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
         entity.Description = request.Description;
         entity.CashAccountId = request.CashAccountId;
         entity.CashCategoryId = request.CashCategoryId;
+        entity.CustomerId = request.CustomerId;
         entity.SourceModule = request.SourceModule;
         entity.SourceModuleId = request.SourceModuleId;
         entity.SourceModuleNumber = request.SourceModuleNumber;

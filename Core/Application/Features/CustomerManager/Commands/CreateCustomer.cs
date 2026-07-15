@@ -40,12 +40,6 @@ public class CreateCustomerValidator : AbstractValidator<CreateCustomerRequest>
     public CreateCustomerValidator()
     {
         RuleFor(x => x.Name).NotEmpty();
-        RuleFor(x => x.Street).NotEmpty();
-        RuleFor(x => x.City).NotEmpty();
-        RuleFor(x => x.State).NotEmpty();
-        RuleFor(x => x.ZipCode).NotEmpty();
-        RuleFor(x => x.PhoneNumber).NotEmpty();
-        RuleFor(x => x.EmailAddress).NotEmpty();
         RuleFor(x => x.CustomerGroupId).NotEmpty();
         RuleFor(x => x.CustomerCategoryId).NotEmpty();
     }

@@ -1,4 +1,4 @@
-﻿using Infrastructure.DataAccessManager.EFCore.Contexts;
+using Infrastructure.DataAccessManager.EFCore.Contexts;
 using Infrastructure.SeedManager.Demos;
 using Infrastructure.SeedManager.Systems;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +17,7 @@ public static class DI
         services.AddScoped<UserAdminSeeder>();
         services.AddScoped<CompanySeeder>();
         services.AddScoped<SystemWarehouseSeeder>();
+        services.AddScoped<ProductSerialWarehouseRepair>();
 
         return services;
     }
@@ -43,6 +44,9 @@ public static class DI
             systemWarehouseSeeder.GenerateDataAsync().Wait();
 
         }
+
+        var repair = serviceProvider.GetRequiredService<ProductSerialWarehouseRepair>();
+        repair.RepairAsync().Wait();
 
         return host;
     }

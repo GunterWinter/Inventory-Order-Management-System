@@ -19,6 +19,7 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CashAccountId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CashCategoryId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.CustomerId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModule).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModuleId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModuleNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
@@ -31,6 +32,11 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
         builder.HasOne(x => x.CashCategory)
             .WithMany()
             .HasForeignKey(x => x.CashCategoryId)
+            .OnDelete(Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Customer)
+            .WithMany()
+            .HasForeignKey(x => x.CustomerId)
             .OnDelete(Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict);
 
         builder.HasIndex(e => e.Number);

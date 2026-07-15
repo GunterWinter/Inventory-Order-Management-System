@@ -20,7 +20,6 @@ public class UpdateCashAccountRequest : IRequest<UpdateCashAccountResult>
     public int? AccountType { get; init; }
     public string? Description { get; init; }
     public double? InitialBalance { get; init; }
-    public double? CashOnHand { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -65,7 +64,6 @@ public class UpdateCashAccountHandler : IRequestHandler<UpdateCashAccountRequest
         entity.AccountType = (Domain.Enums.CashAccountType?)request.AccountType;
         entity.Description = request.Description;
         entity.InitialBalance = request.InitialBalance ?? 0;
-        entity.CashOnHand = request.CashOnHand;
 
         // Recalculate CurrentBalance when InitialBalance might have changed
         var balances = await _queryContext

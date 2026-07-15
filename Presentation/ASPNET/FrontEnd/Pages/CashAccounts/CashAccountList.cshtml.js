@@ -10,7 +10,6 @@ const App = {
             accountType: null,
             description: '',
             initialBalance: 0,
-            cashOnHand: null,
             errors: {
                 name: '',
                 accountType: ''
@@ -23,11 +22,10 @@ const App = {
         const nameRef = Vue.ref(null);
         const accountTypeRef = Vue.ref(null);
         const initialBalanceRef = Vue.ref(null);
-        const cashOnHandRef = Vue.ref(null);
 
         const accountTypeOptions = [
-            { value: 0, text: 'Personal' },
-            { value: 1, text: 'Company' }
+            { value: 0, text: 'Cash' },
+            { value: 1, text: 'Bank' }
         ];
 
         const validateForm = function () {
@@ -54,7 +52,6 @@ const App = {
             state.accountType = null;
             state.description = '';
             state.initialBalance = 0;
-            state.cashOnHand = null;
             state.errors = {
                 name: '',
                 accountType: ''
@@ -70,20 +67,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (name, accountType, description, initialBalance, cashOnHand, createdById) => {
+            createMainData: async (name, accountType, description, initialBalance, createdById) => {
                 try {
                     const response = await AxiosManager.post('/CashAccount/CreateCashAccount', {
-                        name, accountType, description, initialBalance, cashOnHand, createdById
+                        name, accountType, description, initialBalance, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, accountType, description, initialBalance, cashOnHand, updatedById) => {
+            updateMainData: async (id, name, accountType, description, initialBalance, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/CashAccount/UpdateCashAccount', {
-                        id, name, accountType, description, initialBalance, cashOnHand, updatedById
+                        id, name, accountType, description, initialBalance, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -108,7 +105,7 @@ const App = {
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                    accountTypeName: item.accountType === 0 ? 'Personal' : item.accountType === 1 ? 'Company' : ''
+                    accountTypeName: item.accountType === 0 ? 'Cash' : item.accountType === 1 ? 'Bank' : ''
                 }));
             },
         };
@@ -169,30 +166,9 @@ const App = {
             }
         };
 
-        const cashOnHandInput = {
-            obj: null,
-            create: () => {
-                cashOnHandInput.obj = new ej.inputs.NumericTextBox({
-                    placeholder: 'Enter Cash On Hand',
-                    format: 'N0',
-                    min: 0,
-                    change: (args) => {
-                        state.cashOnHand = args.value;
-                    }
-                });
-                cashOnHandInput.obj.appendTo(cashOnHandRef.value);
-            },
-            refresh: () => {
-                if (cashOnHandInput.obj) {
-                    cashOnHandInput.obj.value = state.cashOnHand;
-                }
-            }
-        };
-
         Vue.watch(() => state.name, () => { state.errors.name = ''; nameText.refresh(); });
         Vue.watch(() => state.accountType, () => { state.errors.accountType = ''; accountTypeDropDown.refresh(); });
         Vue.watch(() => state.initialBalance, () => { initialBalanceInput.refresh(); });
-        Vue.watch(() => state.cashOnHand, () => { cashOnHandInput.refresh(); });
 
         const handler = {
             handleSubmit: async function () {
@@ -205,10 +181,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.accountType, state.description, state.initialBalance, state.cashOnHand, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.accountType, state.description, state.initialBalance, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.accountType, state.description, state.initialBalance, state.cashOnHand, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.accountType, state.description, state.initialBalance, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -221,7 +197,6 @@ const App = {
                             state.accountType = response?.data?.content?.data.accountType;
                             state.description = response?.data?.content?.data.description ?? '';
                             state.initialBalance = response?.data?.content?.data.initialBalance ?? 0;
-                            state.cashOnHand = response?.data?.content?.data.cashOnHand;
 
                             Swal.fire({
                                 icon: 'success',
@@ -281,7 +256,6 @@ const App = {
                 nameText.create();
                 accountTypeDropDown.create();
                 initialBalanceInput.create();
-                cashOnHandInput.create();
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', () => {
                     resetFormState();
@@ -329,8 +303,6 @@ const App = {
                         { field: 'totalDebit', headerText: 'Total Debit', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'totalCredit', headerText: 'Total Credit', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'currentBalance', headerText: 'Current Balance', width: 170, minWidth: 170, textAlign: 'Right', format: 'N0' },
-                        { field: 'cashOnHand', headerText: 'Cash On Hand', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'bankBalance', headerText: 'Bank Balance', width: 160, minWidth: 160, textAlign: 'Right', format: 'N0' },
                         { field: 'description', headerText: 'Description', width: 300, minWidth: 300 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
@@ -388,7 +360,6 @@ const App = {
                                 state.accountType = selectedRecord.accountType;
                                 state.description = selectedRecord.description ?? '';
                                 state.initialBalance = selectedRecord.initialBalance ?? 0;
-                                state.cashOnHand = selectedRecord.cashOnHand;
                                 mainModal.obj.show();
                             }
                         }
@@ -403,7 +374,6 @@ const App = {
                                 state.accountType = selectedRecord.accountType;
                                 state.description = selectedRecord.description ?? '';
                                 state.initialBalance = selectedRecord.initialBalance ?? 0;
-                                state.cashOnHand = selectedRecord.cashOnHand;
                                 mainModal.obj.show();
                             }
                         }
@@ -433,7 +403,6 @@ const App = {
             nameRef,
             accountTypeRef,
             initialBalanceRef,
-            cashOnHandRef,
             state,
             handler,
         };

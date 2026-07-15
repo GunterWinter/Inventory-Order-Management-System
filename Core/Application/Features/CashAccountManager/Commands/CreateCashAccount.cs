@@ -17,7 +17,6 @@ public class CreateCashAccountRequest : IRequest<CreateCashAccountResult>
     public int? AccountType { get; init; }
     public string? Description { get; init; }
     public double? InitialBalance { get; init; }
-    public double? CashOnHand { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -56,7 +55,6 @@ public class CreateCashAccountHandler : IRequestHandler<CreateCashAccountRequest
         entity.AccountType = (Domain.Enums.CashAccountType?)request.AccountType;
         entity.Description = request.Description;
         entity.InitialBalance = request.InitialBalance ?? 0;
-        entity.CashOnHand = request.CashOnHand;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);

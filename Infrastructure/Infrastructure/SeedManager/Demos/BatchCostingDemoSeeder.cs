@@ -2,6 +2,7 @@ using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
+using Application.Features.ProductSerialManager;
 using Application.Features.PurchaseOrderManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
@@ -23,6 +24,7 @@ public class BatchCostingDemoSeeder
     private readonly SalesOrderService _salesOrderService;
     private readonly InventoryTransactionService _inventoryTransactionService;
     private readonly NumberSequenceService _numberSequenceService;
+    private readonly ProductSerialService _productSerialService;
     private readonly IQueryContext _queryContext;
 
     private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
@@ -52,6 +54,7 @@ public class BatchCostingDemoSeeder
         SalesOrderService salesOrderService,
         InventoryTransactionService inventoryTransactionService,
         NumberSequenceService numberSequenceService,
+        ProductSerialService productSerialService,
         IQueryContext queryContext,
         ICommandRepository<PurchaseOrder> purchaseOrderRepository,
         ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
@@ -79,6 +82,7 @@ public class BatchCostingDemoSeeder
         _salesOrderService = salesOrderService;
         _inventoryTransactionService = inventoryTransactionService;
         _numberSequenceService = numberSequenceService;
+        _productSerialService = productSerialService;
         _queryContext = queryContext;
         _purchaseOrderRepository = purchaseOrderRepository;
         _purchaseOrderItemRepository = purchaseOrderItemRepository;
@@ -138,10 +142,10 @@ public class BatchCostingDemoSeeder
             unitPrice: 1_352_000d
         );
 
-        await SeedSalesReturnAsync(outbound.DeliveryOrder.Id, warehouse.Id, product.Id, quantity: 1d);
+        await SeedSalesReturnAsync(outbound.DeliveryOrder.Id, outbound.SalesOrderItem.Id, warehouse.Id, product.Id, quantity: 1d);
         await SeedPurchaseReturnAsync(inbound.GoodsReceive.Id, warehouse.Id, product.Id, quantity: 1d);
-        var transferOut = await SeedTransferOutAsync(warehouse.Id, product.Id, quantity: 2d);
-        await SeedTransferInAsync(transferOut.Id, product.Id, quantity: 2d);
+        var transfer = await SeedTransferOutAsync(warehouse.Id, product.Id, quantity: 2d);
+        await SeedTransferInAsync(transfer.TransferOut.Id, product.Id, quantity: 2d, transfer.SerialIds);
         await SeedPositiveAdjustmentAsync(warehouse.Id, product.Id, quantity: 1d);
         await SeedNegativeAdjustmentAsync(warehouse.Id, product.Id, quantity: 1d);
         await SeedScrappingAsync(warehouse.Id, product.Id, quantity: 1d);
@@ -199,7 +203,7 @@ public class BatchCostingDemoSeeder
         await _goodsReceiveRepository.CreateAsync(goodsReceive);
         await _unitOfWork.SaveAsync();
 
-        await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
+        var goodsReceiveTransaction = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
             moduleId: goodsReceive.Id,
             warehouseId: warehouseId,
             productId: product.Id,
@@ -207,6 +211,12 @@ public class BatchCostingDemoSeeder
             createdById: null,
             moduleItemId: purchaseOrderItem.Id,
             batchNumber: DemoBatchNumber
+        );
+
+        await _productSerialService.SyncPurchaseOrderItemSerialsAsync(
+            purchaseOrderItem,
+            goodsReceiveTransaction,
+            userId: null
         );
 
         return (purchaseOrder, purchaseOrderItem, goodsReceive);
@@ -252,6 +262,13 @@ public class BatchCostingDemoSeeder
         await _salesOrderItemRepository.CreateAsync(salesOrderItem);
         await _unitOfWork.SaveAsync();
 
+        var reservedSerialIds = await TakeInStockSerialIdsAsync(product.Id, warehouseId, (int)quantity);
+        await _productSerialService.ReserveSalesOrderItemSerialsAsync(
+            salesOrderItem,
+            reservedSerialIds,
+            userId: null
+        );
+
         _salesOrderService.Recalculate(salesOrder.Id);
 
         var deliveryOrder = new DeliveryOrder
@@ -283,7 +300,7 @@ public class BatchCostingDemoSeeder
         return (salesOrder, salesOrderItem, deliveryOrder);
     }
 
-    private async Task SeedSalesReturnAsync(string? deliveryOrderId, string? warehouseId, string? productId, double quantity)
+    private async Task SeedSalesReturnAsync(string? deliveryOrderId, string? salesOrderItemId, string? warehouseId, string? productId, double quantity)
     {
         var salesReturn = new SalesReturn
         {
@@ -296,12 +313,24 @@ public class BatchCostingDemoSeeder
         await _salesReturnRepository.CreateAsync(salesReturn);
         await _unitOfWork.SaveAsync();
 
+        var soldSerialIds = await _queryContext
+            .Set<ProductSerial>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && x.SalesOrderItemId == salesOrderItemId
+                && x.Status == ProductSerialStatus.Sold)
+            .OrderBy(x => x.InternalSerialNumber)
+            .Select(x => x.Id)
+            .Take((int)quantity)
+            .ToListAsync();
+
         await _inventoryTransactionService.SalesReturnCreateInvenTrans(
             salesReturn.Id,
             warehouseId,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: soldSerialIds
         );
     }
 
@@ -318,16 +347,18 @@ public class BatchCostingDemoSeeder
         await _purchaseReturnRepository.CreateAsync(purchaseReturn);
         await _unitOfWork.SaveAsync();
 
+        var returnSerialIds = await TakeInStockSerialIdsAsync(productId, warehouseId, (int)quantity);
         await _inventoryTransactionService.PurchaseReturnCreateInvenTrans(
             purchaseReturn.Id,
             warehouseId,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: returnSerialIds
         );
     }
 
-    private async Task<TransferOut> SeedTransferOutAsync(string? warehouseId, string? productId, double quantity)
+    private async Task<(TransferOut TransferOut, List<string> SerialIds)> SeedTransferOutAsync(string? warehouseId, string? productId, double quantity)
     {
         var transferOut = new TransferOut
         {
@@ -341,17 +372,19 @@ public class BatchCostingDemoSeeder
         await _transferOutRepository.CreateAsync(transferOut);
         await _unitOfWork.SaveAsync();
 
+        var transferSerialIds = await TakeInStockSerialIdsAsync(productId, warehouseId, (int)quantity);
         await _inventoryTransactionService.TransferOutCreateInvenTrans(
             transferOut.Id,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: transferSerialIds
         );
 
-        return transferOut;
+        return (transferOut, transferSerialIds);
     }
 
-    private async Task SeedTransferInAsync(string? transferOutId, string? productId, double quantity)
+    private async Task SeedTransferInAsync(string? transferOutId, string? productId, double quantity, List<string> serialIds)
     {
         var transferIn = new TransferIn
         {
@@ -368,7 +401,8 @@ public class BatchCostingDemoSeeder
             transferIn.Id,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: serialIds
         );
     }
 
@@ -405,12 +439,14 @@ public class BatchCostingDemoSeeder
         await _negativeAdjustmentRepository.CreateAsync(adjustment);
         await _unitOfWork.SaveAsync();
 
+        var adjustmentSerialIds = await TakeInStockSerialIdsAsync(productId, warehouseId, (int)quantity);
         await _inventoryTransactionService.NegativeAdjustmentCreateInvenTrans(
             adjustment.Id,
             warehouseId,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: adjustmentSerialIds
         );
     }
 
@@ -427,11 +463,13 @@ public class BatchCostingDemoSeeder
         await _scrappingRepository.CreateAsync(scrapping);
         await _unitOfWork.SaveAsync();
 
+        var scrappingSerialIds = await TakeInStockSerialIdsAsync(productId, warehouseId, (int)quantity);
         await _inventoryTransactionService.ScrappingCreateInvenTrans(
             scrapping.Id,
             productId,
             quantity,
-            createdById: null
+            createdById: null,
+            productSerialIds: scrappingSerialIds
         );
     }
 
@@ -451,12 +489,36 @@ public class BatchCostingDemoSeeder
         await _stockCountRepository.CreateAsync(stockCount);
         await _unitOfWork.SaveAsync();
 
+        var countedSerialIds = await TakeInStockSerialIdsAsync(productId, warehouseId, (int)countedQty);
         await _inventoryTransactionService.StockCountCreateInvenTrans(
             stockCount.Id,
             productId,
             countedQty,
-            createdById: null
+            createdById: null,
+            productSerialIds: countedSerialIds
         );
+    }
+
+    private async Task<List<string>> TakeInStockSerialIdsAsync(string? productId, string? warehouseId, int count)
+    {
+        var serialIds = await _queryContext
+            .Set<ProductSerial>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && x.ProductId == productId
+                && x.CurrentWarehouseId == warehouseId
+                && x.Status == ProductSerialStatus.InStock)
+            .OrderBy(x => x.InternalSerialNumber)
+            .Select(x => x.Id)
+            .Take(count)
+            .ToListAsync();
+
+        if (serialIds.Count < count)
+        {
+            throw new Exception($"Not enough in-stock serial numbers for demo seeding: needed {count}, found {serialIds.Count}.");
+        }
+
+        return serialIds;
     }
 
     private async Task<Tax> GetOrCreateTaxAsync()
@@ -641,6 +703,8 @@ public class BatchCostingDemoSeeder
         product.Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.";
         product.UnitPrice = 1_352_000d;
         product.Physical = true;
+        product.SerialTrackingMode = SerialTrackingMode.InternalAuto;
+        product.InternalSerialFixedCode = "SM";
         product.DefaultWarehouseId = defaultWarehouseId;
         product.DefaultWarrantyMonths = 3;
         product.UnitMeasureId = unitMeasureId;

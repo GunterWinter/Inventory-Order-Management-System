@@ -49,17 +49,21 @@ public class CashManagementSeeder
 
         var personalAccount = await GetOrCreateAccountAsync(
             "TKCN",
-            CashAccountType.Personal,
-            "Tài khoản cá nhân ",
-            initialBalance: 0d,
-            cashOnHand: 510_000d);
+            CashAccountType.Bank,
+            "Tài khoản ngân hàng cá nhân",
+            initialBalance: 0d);
 
         var companyAccount = await GetOrCreateAccountAsync(
             "TKCT",
-            CashAccountType.Company,
-            "Tài khoản công ty",
-            initialBalance: 50_000_000d,
-            cashOnHand: null);
+            CashAccountType.Bank,
+            "Tài khoản ngân hàng công ty",
+            initialBalance: 50_000_000d);
+
+        var cashFundAccount = await GetOrCreateAccountAsync(
+            "QTM",
+            CashAccountType.Cash,
+            "Quỹ tiền mặt",
+            initialBalance: 0d);
 
         var demoAlreadySeeded = await _queryContext
             .Set<CashTransaction>()
@@ -183,8 +187,7 @@ public class CashManagementSeeder
         string name,
         CashAccountType accountType,
         string description,
-        double initialBalance,
-        double? cashOnHand)
+        double initialBalance)
     {
         var account = await _queryContext
             .Set<CashAccount>()
@@ -200,7 +203,6 @@ public class CashManagementSeeder
         account.AccountType = accountType;
         account.Description = description;
         account.InitialBalance = initialBalance;
-        account.CashOnHand = cashOnHand;
 
         if (isNew)
         {
@@ -253,9 +255,7 @@ public class CashManagementSeeder
 
     private async Task RecalculateAccountBalance(string cashAccountId)
     {
-        var account = await _queryContext
-            .Set<CashAccount>()
-            .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == cashAccountId);
+        var account = await _cashAccountRepository.GetAsync(cashAccountId);
         if (account == null) return;
 
         var balances = await _queryContext

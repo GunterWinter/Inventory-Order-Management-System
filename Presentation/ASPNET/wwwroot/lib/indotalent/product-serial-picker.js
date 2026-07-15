@@ -50,6 +50,14 @@ window.ProductSerialPicker = (() => {
                 </div>
             </div>`;
         document.body.appendChild(modal);
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            if (document.querySelector('.modal.show')) {
+                document.body.classList.add('modal-open');
+                document.body.style.overflow = 'hidden';
+            }
+        });
+
         return modal;
     };
 

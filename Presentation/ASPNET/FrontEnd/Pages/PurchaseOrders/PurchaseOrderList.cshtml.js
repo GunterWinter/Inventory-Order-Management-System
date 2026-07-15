@@ -325,7 +325,7 @@ const App = {
                         ...item,
                         orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                        paymentStatusText: payment ? (payment.status === 2 ? 'Đã Thanh Toán' : 'Chưa Thanh Toán') : (item.orderStatus === 2 ? 'Chưa Thanh Toán' : ''),
+                        paymentStatusText: payment ? (payment.status === 2 ? 'Paid' : 'Unpaid') : (item.orderStatus === 2 ? 'Unpaid' : ''),
                         paymentStatusClass: payment ? (payment.status === 2 ? 'paid' : 'unpaid') : (item.orderStatus === 2 ? 'unpaid' : 'none'),
                         cashTransactionId: payment?.cashTransactionId ?? null,
                         cashTransactionDate: payment?.transactionDate ?? null,
@@ -830,14 +830,14 @@ const App = {
                                                     numberObj.value = selectedProduct.number;
                                                 }
                                                 if (priceObj) {
-                                                    priceObj.value = selectedProduct.unitPrice;
+                                                    priceObj.value = selectedProduct.unitPrice ?? null;
                                                 }
                                                 if (summaryObj) {
                                                     summaryObj.value = selectedProduct.description;
                                                 }
                                                 if (quantityObj) {
                                                     quantityObj.value = 1;
-                                                    const total = selectedProduct.unitPrice * quantityObj.value;
+                                                    const total = (selectedProduct.unitPrice ?? 0) * quantityObj.value;
                                                     if (totalObj) {
                                                         totalObj.value = total;
                                                     }
@@ -1338,25 +1338,25 @@ const App = {
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
             const statusHtml = isReadOnly
-                ? `<div class="mb-3"><label class="form-label fw-bold">Status</label><input class="form-control" value="Đã Thanh Toán" disabled></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Nháp</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Đã Thanh Toán</option></select></div>`;
+                ? `<div class="mb-3"><label class="form-label fw-bold">Status</label><select class="form-select" disabled><option selected>Paid</option></select></div>`
+                : `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Draft</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Paid</option></select></div>`;
             const result = await Swal.fire({
-                title: `Thanh Toán ${orderNumber}`,
+                title: `Payment ${orderNumber}`,
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select" ${isReadOnly ? 'disabled' : ''}>${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Số tiền</label><input id="swal-amount" class="form-control" value="${displayAmount}" ${isReadOnly ? 'disabled' : ''}></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Account</label><select id="swal-account" class="form-select" ${isReadOnly ? 'disabled' : ''}>${accountOptions}</select></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Amount</label><input id="swal-amount" class="form-control" value="${displayAmount}" ${isReadOnly ? 'disabled' : ''}></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
                     ${statusHtml}
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Lưu',
-                cancelButtonText: 'Bỏ qua',
+                confirmButtonText: 'Save',
+                cancelButtonText: 'Cancel',
                 focusConfirm: false,
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(document.getElementById('swal-amount').value) ?? 0;
                     if (!accountId) {
-                        Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
+                        Swal.showValidationMessage('Please select a payment account.');
                         return false;
                     }
                     return {
@@ -1377,7 +1377,7 @@ const App = {
                         amount: result.value.amount,
                         description: result.value.description,
                         cashAccountId: result.value.cashAccountId,
-                        cashCategoryId: methods.resolveCashCategoryId('Bán hàng') ?? null,
+                        cashCategoryId: methods.resolveCashCategoryId('Mua hàng') ?? null,
                         sourceModule: 'PurchaseOrder',
                         sourceModuleId: orderId,
                         sourceModuleNumber: orderNumber,
@@ -1393,9 +1393,9 @@ const App = {
                     }
                     await methods.populateMainData();
                     mainGrid.refresh();
-                    Swal.fire({ icon: 'success', title: 'Thanh toán thành công', timer: 1000, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: 'Payment Successful', timer: 1000, showConfirmButton: false });
                 } catch (err) {
-                    Swal.fire({ icon: 'error', title: 'Lỗi', text: err.response?.data?.message ?? 'Thử lại.' });
+                    Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message ?? 'Please try again.' });
                 }
             }
         };

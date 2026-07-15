@@ -23,6 +23,7 @@ public class UpdateCashTransactionRequest : IRequest<UpdateCashTransactionResult
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
+    public string? CustomerId { get; init; }
     public string? SourceModule { get; init; }
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
@@ -72,6 +73,11 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
             throw new Exception($"Entity not found: {request.Id}");
         }
 
+        if (entity.SourceModule == "CashTransfer")
+        {
+            throw new Exception("Cash transfer legs cannot be edited. Delete the transfer and create a new one.");
+        }
+
         var previousAccountId = entity.CashAccountId;
 
         entity.UpdatedById = request.UpdatedById;
@@ -83,6 +89,7 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
         entity.Description = request.Description;
         entity.CashAccountId = request.CashAccountId;
         entity.CashCategoryId = request.CashCategoryId;
+        entity.CustomerId = request.CustomerId;
         entity.SourceModule = request.SourceModule;
         entity.SourceModuleId = request.SourceModuleId;
         entity.SourceModuleNumber = request.SourceModuleNumber;

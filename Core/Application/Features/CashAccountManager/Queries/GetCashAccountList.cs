@@ -16,11 +16,9 @@ public record GetCashAccountListDto
     public CashAccountType? AccountType { get; init; }
     public string? Description { get; init; }
     public double? InitialBalance { get; init; }
-    public double? CashOnHand { get; init; }
     public double? TotalDebit { get; init; }
     public double? TotalCredit { get; init; }
     public double? CurrentBalance { get; init; }
-    public double? BankBalance { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -84,7 +82,6 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
             var totalDebit = balance?.TotalDebit ?? 0d;
             var totalCredit = balance?.TotalCredit ?? 0d;
             var currentBalance = initialBalance + totalDebit - totalCredit;
-            var bankBalance = currentBalance - (entity.CashOnHand ?? 0d);
 
             return new GetCashAccountListDto
             {
@@ -94,11 +91,9 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
                 AccountType = entity.AccountType,
                 Description = entity.Description,
                 InitialBalance = entity.InitialBalance,
-                CashOnHand = entity.CashOnHand,
                 TotalDebit = totalDebit,
                 TotalCredit = totalCredit,
                 CurrentBalance = currentBalance,
-                BankBalance = bankBalance,
                 CreatedAtUtc = entity.CreatedAtUtc
             };
         }).ToList();

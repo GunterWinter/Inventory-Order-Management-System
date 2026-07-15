@@ -82,10 +82,7 @@ const App = {
                 isValid = false;
             }
             const unitPriceValue = getUnitPriceValue();
-            if (unitPriceValue == null) {
-                state.errors.unitPrice = 'Unit price is required.';
-                isValid = false;
-            } else if (unitPriceValue < 0) {
+            if (unitPriceValue != null && unitPriceValue < 0) {
                 state.errors.unitPrice = 'Unit price must be zero or greater.';
                 isValid = false;
             }
@@ -97,7 +94,7 @@ const App = {
             if (state.physical && getEffectiveSerialTrackingMode() === 1) {
                 const fixedCode = getEffectiveInternalSerialFixedCode();
                 if (!fixedCode || fixedCode.length < 2 || fixedCode.length > 4) {
-                    state.errors.internalSerialFixedCode = 'Mã cố định phải có 2-4 ký tự chữ hoặc số.';
+                    state.errors.internalSerialFixedCode = 'Fixed Code must be 2-4 letters or digits.';
                     isValid = false;
                 }
             }
@@ -637,7 +634,7 @@ const App = {
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
                         { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
-                        { field: 'internalSerialFixedCode', headerText: 'Mã thiết bị', width: 150, minWidth: 150 },
+                        { field: 'internalSerialFixedCode', headerText: 'Device Code', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [

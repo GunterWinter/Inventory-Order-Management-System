@@ -60,6 +60,32 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
 
         entity.UpdatedById = request.DeletedById;
 
+        // Deleting one leg of a cash transfer removes the paired leg as well
+        string? siblingAccountId = null;
+        if (entity.SourceModule == "CashTransfer" && !string.IsNullOrEmpty(entity.SourceModuleId))
+        {
+            var siblingId = await _queryContext
+                .CashTransaction
+                .AsNoTracking()
+                .Where(x => !x.IsDeleted
+                    && x.SourceModule == "CashTransfer"
+                    && x.SourceModuleId == entity.SourceModuleId
+                    && x.Id != entity.Id)
+                .Select(x => x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrEmpty(siblingId))
+            {
+                var sibling = await _repository.GetAsync(siblingId, cancellationToken);
+                if (sibling != null)
+                {
+                    siblingAccountId = sibling.CashAccountId;
+                    sibling.UpdatedById = request.DeletedById;
+                    _repository.Delete(sibling);
+                }
+            }
+        }
+
         _repository.Delete(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
 
@@ -67,6 +93,11 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         if (!string.IsNullOrEmpty(cashAccountId))
         {
             await RecalculateAccountBalance(cashAccountId, cancellationToken);
+        }
+
+        if (!string.IsNullOrEmpty(siblingAccountId) && siblingAccountId != cashAccountId)
+        {
+            await RecalculateAccountBalance(siblingAccountId, cancellationToken);
         }
 
         return new DeleteCashTransactionResult

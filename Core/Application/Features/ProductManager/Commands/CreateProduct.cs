@@ -34,7 +34,7 @@ public class CreateProductValidator : AbstractValidator<CreateProductRequest>
     public CreateProductValidator()
     {
         RuleFor(x => x.Name).NotEmpty();
-        RuleFor(x => x.UnitPrice).NotEmpty();
+        RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0).When(x => x.UnitPrice.HasValue);
         RuleFor(x => x.Physical).NotNull();
         RuleFor(x => x.InternalSerialFixedCode)
             .NotEmpty()

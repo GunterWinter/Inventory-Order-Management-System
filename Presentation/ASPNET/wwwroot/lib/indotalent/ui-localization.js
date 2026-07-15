@@ -11,7 +11,7 @@
         'In', 'Out',
         'Debit', 'Credit',
         'Paid', 'Unpaid',
-        'Personal', 'Company',
+        'Cash', 'Bank',
         'Open', 'Closed'
     ]);
     let currentLocale = resolveLocale(getSavedLocale()) ?? detectBrowserLocale();
@@ -93,11 +93,10 @@
         'Cash Category': 'Danh Mục Thu Chi',
         'Cash Transaction': 'Giao Dịch Thu Chi',
         'Account Type': 'Loại Tài Khoản',
-        'Personal': 'Cá Nhân',
-        'Cash On Hand': 'Quỹ Tiền Mặt',
+        'Cash': 'Tiền Mặt',
+        'Bank': 'Ngân Hàng',
         'Initial Balance': 'Số Dư Ban Đầu',
         'Current Balance': 'Số Dư Hiện Tại',
-        'Bank Balance': 'Số Dư TK Ngân Hàng',
         'Transaction Type': 'Loại Giao Dịch',
         'Transaction Date': 'Ngày Giao Dịch',
         'Transaction Info': 'Thông Tin Giao Dịch',
@@ -115,7 +114,6 @@
         'Select Account Type': 'Chọn Loại Tài Khoản',
         'Enter Amount': 'Nhập Số Tiền',
         'Enter Initial Balance': 'Nhập Số Dư Ban Đầu',
-        'Enter Cash On Hand': 'Nhập Quỹ Tiền Mặt',
         'Add Cash Account': 'Thêm Tài Khoản Quỹ',
         'Edit Cash Account': 'Sửa Tài Khoản Quỹ',
         'Delete Cash Account?': 'Xóa Tài Khoản Quỹ?',
@@ -134,8 +132,53 @@
         'Source': 'Nguồn',
         'Select Date': 'Chọn Ngày',
         'Select Status': 'Chọn Trạng Thái',
+        'Fund Transfer': 'Điều Chuyển Quỹ',
+        'Transfer': 'Điều Chuyển',
+        'Transfer Info': 'Thông Tin Điều Chuyển',
+        'Transfer Date': 'Ngày Điều Chuyển',
+        'From Account': 'Từ Tài Khoản',
+        'To Account': 'Đến Tài Khoản',
+        'Select Source Account': 'Chọn Tài Khoản Nguồn',
+        'Select Destination Account': 'Chọn Tài Khoản Đích',
+        'Source and destination accounts must be different.': 'Tài khoản nguồn và tài khoản đích phải khác nhau.',
+        'Cash transfer legs cannot be edited. Delete the transfer and create a new one.': 'Không thể sửa từng dòng của điều chuyển quỹ. Hãy xóa điều chuyển và tạo lại.',
+        'Delete Cash Transfer?': 'Xóa Điều Chuyển Quỹ?',
+        'Select a Customer (Optional)': 'Chọn Khách Hàng (Tùy Chọn)',
+        'Customer Finance Report': 'Báo Cáo Tài Chính',
+        'Total Received': 'Tổng Thu',
+        'Total Spent': 'Tổng Chi',
+        'Received': 'Thu',
+        'Spent': 'Chi',
+        'Net': 'Chênh Lệch',
+        'From Date': 'Từ Ngày',
+        'To Date': 'Đến Ngày',
+        'Clear Filters': 'Xóa Bộ Lọc',
+        'Only confirmed transactions linked to a customer are included.': 'Chỉ bao gồm các giao dịch đã xác nhận có gắn khách hàng.',
+        'Device Code Management': 'Kiểu Quản Lý Mã Thiết Bị',
+        'Auto-generate Internal Code': 'Tự Sinh Mã Nội Bộ',
+        'Fixed Code': 'Mã Cố Định',
+        'Manufacturer Serial Entry': 'Nhập Serial Hãng',
+        'In Development': 'Đang Phát Triển',
+        'Example generated code': 'Ví dụ mã tự sinh',
+        'Device Code': 'Mã Thiết Bị',
+        'Enter internal code/SKU...': 'Nhập mã nội bộ/SKU...',
+        'Clear': 'Xóa',
+        'Serial number, SO number, or customer phone': 'Số serial, số đơn bán hàng hoặc số điện thoại khách hàng',
+        'Movement History': 'Lịch Sử Giao Dịch',
+        'Batch': 'Số Lô',
+        'Qty': 'SL',
+        'Error': 'Lỗi',
+        'Payment Successful': 'Thanh Toán Thành Công',
+        'Missing Data': 'Thiếu Dữ Liệu',
+        'Please select product, warehouse and batch first.': 'Hãy chọn sản phẩm, kho và batch trước.',
+        'Please select a payment account.': 'Vui lòng chọn tài khoản thanh toán.',
+        'Select Device Code': 'Chọn Mã Thiết Bị',
+        'Fixed Code must be 2-4 letters or digits.': 'Mã cố định phải có 2-4 ký tự chữ hoặc số.',
+        'Number (System Code)': 'Number (Mã HT)',
+        'Reference Code (Custom Code)': 'Reference Code (Mã tùy chỉnh)',
         'Enter Name': 'Nhập Tên',
         'Login': 'Đăng Nhập',
+        'Log In': 'Đăng Nhập',
         'Log Out': 'Đăng Xuất',
         'Logout': 'Đăng Xuất',
         'Register': 'Đăng Ký',
@@ -449,7 +492,17 @@
         'ReturnedToSupplier': 'Trả Nhà Cung Cấp',
         'Missing': 'Thất Lạc',
         'Scrapped': 'Hủy Bỏ',
-        'Supplier Warranty End': 'Hạn BH Nhà Cung Cấp'
+        'Supplier Warranty End': 'Hạn BH Nhà Cung Cấp',
+        'StockCount': 'Kho Kiểm Kê',
+        'SalesReturn': 'Phiếu Hàng Bán Trả Lại',
+        'PurchaseReturn': 'Phiếu Trả Hàng Mua',
+        'TransferOut': 'Phiếu Chuyển Kho Đi',
+        'TransferIn': 'Phiếu Chuyển Kho Đến',
+        'PositiveAdjustment': 'Phiếu Điều Chỉnh Tăng',
+        'NegativeAdjustment': 'Phiếu Điều Chỉnh Giảm',
+        'Document not found': 'Không tìm thấy chứng từ',
+        'Error loading document': 'Lỗi tải chứng từ',
+        'Internal serial, SO number, or customer phone': 'Serial nội bộ, số đơn bán hoặc SĐT khách hàng'
     };
 
     const termTranslations = {
@@ -522,10 +575,13 @@
         'cash category': 'danh mục thu chi',
         'cash transaction': 'giao dịch thu chi',
         'account type': 'loại tài khoản',
-        'cash on hand': 'quỹ tiền mặt',
         'initial balance': 'số dư ban đầu',
         'current balance': 'số dư hiện tại',
-        'bank balance': 'số dư TK ngân hàng',
+        'fund transfer': 'điều chuyển quỹ',
+        'transfer date': 'ngày điều chuyển',
+        'from account': 'từ tài khoản',
+        'to account': 'đến tài khoản',
+        'customer finance report': 'báo cáo tài chính khách hàng',
         'transaction date': 'ngày giao dịch',
         'transaction info': 'thông tin giao dịch',
         'debit': 'ghi nợ',
@@ -890,6 +946,11 @@
         const remainingStockMatch = value.match(/^Quantity must not exceed remaining stock \((.+)\)\.$/i);
         if (remainingStockMatch) {
             return `Số lượng không được vượt quá tồn còn lại (${remainingStockMatch[1]}).`;
+        }
+
+        const paymentDocMatch = value.match(/^Payment (\S+)$/);
+        if (paymentDocMatch) {
+            return `Thanh Toán ${paymentDocMatch[1]}`;
         }
 
         const translatedTerm = translateBusinessTerm(value, locale);

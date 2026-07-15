@@ -119,8 +119,8 @@ public class ProductSerialService
             .AsNoTracking()
             .SingleAsync(x => x.Id == item.ProductId, cancellationToken);
 
-        var existing = await _queryContext
-            .Set<ProductSerial>()
+        var existing = await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.PurchaseOrderItemId == item.Id)
             .OrderBy(x => x.CreatedAtUtc)
@@ -213,8 +213,8 @@ public class ProductSerialService
             }
         }
 
-        var previous = await _queryContext
-            .Set<ProductSerial>()
+        var previous = await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SalesOrderItemId == item.Id)
             .ToListAsync(cancellationToken);
@@ -250,16 +250,30 @@ public class ProductSerialService
             return;
         }
 
-        var serials = await _queryContext
-            .Set<ProductSerial>()
+        var serials = await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SalesOrderItemId == salesOrderItemId && x.Status == ProductSerialStatus.Reserved)
             .ToListAsync(cancellationToken);
+
+        string? itemWarehouseId = null;
+        if (serials.Any(x => string.IsNullOrWhiteSpace(x.CurrentWarehouseId)))
+        {
+            itemWarehouseId = await _queryContext.Set<SalesOrderItem>()
+                .AsNoTracking()
+                .Where(x => x.Id == salesOrderItemId)
+                .Select(x => x.WarehouseId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         foreach (var serial in serials)
         {
             serial.SalesOrderItemId = null;
             serial.Status = ProductSerialStatus.InStock;
+            if (string.IsNullOrWhiteSpace(serial.CurrentWarehouseId) && !string.IsNullOrWhiteSpace(itemWarehouseId))
+            {
+                serial.CurrentWarehouseId = itemWarehouseId;
+            }
             serial.UpdatedById = userId;
             _productSerialRepository.Update(serial);
         }
@@ -328,15 +342,20 @@ public class ProductSerialService
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.InventoryTransactionId == inventoryTransactionId)
-            .Select(x => new { x.Id, x.ProductSerialId })
+            .Select(x => new { x.Id, x.ProductSerialId, x.FromWarehouseId })
             .ToListAsync(cancellationToken);
 
         var serialIds = movementData.Select(x => x.ProductSerialId).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
-        var serials = await _queryContext
-            .Set<ProductSerial>()
+        var serials = await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => serialIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
+
+        var fromWarehouseMap = movementData
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProductSerialId))
+            .GroupBy(x => x.ProductSerialId)
+            .ToDictionary(g => g.Key!, g => g.First().FromWarehouseId, StringComparer.OrdinalIgnoreCase);
 
         foreach (var serial in serials)
         {
@@ -344,6 +363,10 @@ public class ProductSerialService
                 serial.Status == ProductSerialStatus.Pending ||
                 serial.Status == ProductSerialStatus.InTransfer)
             {
+                if (serial.Status == ProductSerialStatus.InTransfer && fromWarehouseMap.TryGetValue(serial.Id, out var fromWarehouseId) && !string.IsNullOrWhiteSpace(fromWarehouseId))
+                {
+                    serial.CurrentWarehouseId = fromWarehouseId;
+                }
                 serial.Status = ProductSerialStatus.InStock;
                 serial.UpdatedById = userId;
                 _productSerialRepository.Update(serial);
@@ -420,8 +443,8 @@ public class ProductSerialService
 
     private async Task<List<ProductSerial>> GetSerialsByIdsAsync(IReadOnlyCollection<string> serialIds, CancellationToken cancellationToken)
     {
-        return await _queryContext
-            .Set<ProductSerial>()
+        return await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => serialIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
@@ -470,7 +493,7 @@ public class ProductSerialService
                 ModuleId = transaction.ModuleId,
                 ModuleItemId = transaction.ModuleItemId,
                 FromWarehouseId = ResolveFromWarehouse(transaction),
-                ToWarehouseId = ResolveToWarehouse(transaction),
+                ToWarehouseId = ResolveInStockWarehouse(transaction),
                 MovementDate = transaction.MovementDate,
                 Status = ResolveTargetStatus(transaction)
             }, cancellationToken);
@@ -492,7 +515,7 @@ public class ProductSerialService
 
             if (targetStatus == ProductSerialStatus.InStock)
             {
-                serial.CurrentWarehouseId = ResolveToWarehouse(transaction) ?? transaction.WarehouseId;
+                serial.CurrentWarehouseId = ResolveInStockWarehouse(transaction) ?? transaction.WarehouseId;
                 serial.BatchNumber = transaction.BatchNumber ?? serial.BatchNumber;
             }
             else if (targetStatus is ProductSerialStatus.Sold or ProductSerialStatus.ReturnedToSupplier or ProductSerialStatus.Missing or ProductSerialStatus.Scrapped)
@@ -534,8 +557,8 @@ public class ProductSerialService
         }
 
         var counted = countedSerialIds.ToList();
-        var missingSerials = await _queryContext
-            .Set<ProductSerial>()
+        var missingSerials = await _productSerialRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x =>
                 x.ProductId == transaction.ProductId &&
@@ -634,6 +657,13 @@ public class ProductSerialService
     private static string? ResolveToWarehouse(InventoryTransaction transaction)
     {
         return transaction.WarehouseToId ?? transaction.WarehouseId;
+    }
+
+    private static string? ResolveInStockWarehouse(InventoryTransaction transaction)
+    {
+        return transaction.ModuleName == nameof(StockCount)
+            ? (transaction.WarehouseId ?? ResolveToWarehouse(transaction))
+            : ResolveToWarehouse(transaction);
     }
 
     private static int ResolveTransactionQuantity(InventoryTransaction transaction)

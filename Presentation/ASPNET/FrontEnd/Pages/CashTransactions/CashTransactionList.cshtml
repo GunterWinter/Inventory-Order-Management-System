@@ -81,10 +81,16 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
+                                                <label for="Customer">Customer</label>
+                                                <div id="CustomerDropDown" ref="customerRef"></div>
+                                            </div>
+                                            <div class="col-md-6">
                                                 <label for="Amount">Amount</label>
                                                 <input ref="amountRef" v-model="state.amount">
                                                 <label class="text-danger">{{ state.errors.amount }}</label>
                                             </div>
+                                        </div>
+                                        <div class="row mb-2">
                                             <div class="col-md-6">
                                                 <label for="Status">Status</label>
                                                 <div id="StatusDropDown" ref="statusRef"></div>
@@ -114,6 +120,74 @@
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
                         <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Delete' : 'Save' }}</span>
                         <span v-else>{{ state.deleteMode ? 'Deleting...' : 'Saving...' }}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" ref="transferModalRef" id="TransferModal" aria-hidden="true" tabindex="-1" data-bs-focus="false" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Fund Transfer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="TransferForm">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5>Transfer Info</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="TransferDate">Transfer Date</label>
+                                                <input id="TransferDatePicker" ref="transferDateRef" />
+                                                <label class="text-danger">{{ state.transfer.errors.transferDate }}</label>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="TransferAmount">Amount</label>
+                                                <input ref="transferAmountRef" v-model="state.transfer.amount">
+                                                <label class="text-danger">{{ state.transfer.errors.amount }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="FromAccount">From Account</label>
+                                                <div id="FromAccountDropDown" ref="fromAccountRef"></div>
+                                                <label class="text-danger">{{ state.transfer.errors.fromCashAccountId }}</label>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="ToAccount">To Account</label>
+                                                <div id="ToAccountDropDown" ref="toAccountRef"></div>
+                                                <label class="text-danger">{{ state.transfer.errors.toCashAccountId }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-12">
+                                                <label for="TransferDescription">Description</label>
+                                                <textarea v-model="state.transfer.description" id="TransferDescription" name="TransferDescription" class="form-control" rows="3"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button"
+                            id="TransferSaveButton"
+                            class="btn btn-primary"
+                            v-on:click="handler.handleTransferSubmit"
+                            v-bind:disabled="state.transfer.isSubmitting">
+                        <span class="spinner-border spinner-border-sm me-2" v-if="state.transfer.isSubmitting" role="status" aria-hidden="true"></span>
+                        <span v-if="!state.transfer.isSubmitting">Save</span>
+                        <span v-else>Saving...</span>
                     </button>
                 </div>
             </div>

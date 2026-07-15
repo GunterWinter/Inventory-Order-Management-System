@@ -16,7 +16,6 @@ public class CashAccountConfiguration : BaseEntityConfiguration<CashAccount>
         builder.Property(x => x.AccountType).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.InitialBalance).IsRequired(false);
-        builder.Property(x => x.CashOnHand).IsRequired(false);
         builder.Property(x => x.CurrentBalance).IsRequired(false);
 
         builder.HasIndex(e => e.Name);

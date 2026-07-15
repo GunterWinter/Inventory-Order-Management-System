@@ -42,11 +42,6 @@ public class UpdateVendorValidator : AbstractValidator<UpdateVendorRequest>
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
-        RuleFor(x => x.Street).NotEmpty();
-        RuleFor(x => x.City).NotEmpty();
-        RuleFor(x => x.State).NotEmpty();
-        RuleFor(x => x.ZipCode).NotEmpty();
-        RuleFor(x => x.PhoneNumber).NotEmpty();
         RuleFor(x => x.VendorGroupId).NotEmpty();
         RuleFor(x => x.VendorCategoryId).NotEmpty();
     }

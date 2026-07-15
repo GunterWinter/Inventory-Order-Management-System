@@ -103,7 +103,8 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseOrderItem', N'SupplierWarrantyMonths') IS NULL ALTER TABLE [dbo].[PurchaseOrderItem] ADD [SupplierWarrantyMonths] int NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarrantyMonths') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarrantyMonths] int NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarehouseId') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarehouseId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'BatchNumber') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [BatchNumber] nvarchar(50) NULL;"
+            "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'BatchNumber') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [BatchNumber] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'CustomerId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [CustomerId] nvarchar(50) NULL;"
         };
 
         foreach (var command in commands)

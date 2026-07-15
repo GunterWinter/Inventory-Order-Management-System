@@ -599,34 +599,34 @@ const App = {
                         state.errors.customerCategoryId = 'Customer Category is required.';
                         isValid = false;
                     }
-                    if (!state.street) {
-                        state.errors.street = 'Street is required.';
-                        isValid = false;
-                    }
-                    if (!state.city) {
-                        state.errors.city = 'City is required.';
-                        isValid = false;
-                    }
-                    if (!state.state) {
-                        state.errors.state = 'State is required.';
-                        isValid = false;
-                    }
-                    if (!state.zipCode) {
-                        state.errors.zipCode = 'Zip Code is required.';
-                        isValid = false;
-                    }
-                    if (!state.country) {
-                        state.errors.country = 'Country is required.';
-                        isValid = false;
-                    }
-                    if (!state.phoneNumber) {
-                        state.errors.phoneNumber = 'Phone Number is required.';
-                        isValid = false;
-                    }
-                    if (!state.emailAddress) {
-                        state.errors.emailAddress = 'Email Address is required.';
-                        isValid = false;
-                    }
+                    // if (!state.street) {
+                    //     state.errors.street = 'Street is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.city) {
+                    //     state.errors.city = 'City is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.state) {
+                    //     state.errors.state = 'State is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.zipCode) {
+                    //     state.errors.zipCode = 'Zip Code is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.country) {
+                    //     state.errors.country = 'Country is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.phoneNumber) {
+                    //     state.errors.phoneNumber = 'Phone Number is required.';
+                    //     isValid = false;
+                    // }
+                    // if (!state.emailAddress) {
+                    //     state.errors.emailAddress = 'Email Address is required.';
+                    //     isValid = false;
+                    // }
 
                     if (!isValid) return;
 

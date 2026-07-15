@@ -62,9 +62,10 @@ const App = {
                     customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseServerDate(item.customerWarrantyEndDate) : null,
                     supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseServerDate(item.supplierWarrantyEndDate) : null,
                     warrantyStatus: item.customerWarrantyEndDate
-                        ? (window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized(item.isCustomerWarrantyValid ? 'Valid' : 'Expired') : (item.isCustomerWarrantyValid ? 'Valid' : 'Expired'))
-                        : (window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized('N/A') : 'N/A'),
-                    statusName: window.uiLocalization?.translateNormalized ? window.uiLocalization.translateNormalized(item.statusName) : item.statusName
+                        ? (window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.isCustomerWarrantyValid ? 'Valid' : 'Expired') : (item.isCustomerWarrantyValid ? 'Valid' : 'Expired'))
+                        : (window.UiLocalization?.translateText ? window.UiLocalization.translateText('N/A') : 'N/A'),
+                    statusName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.statusName) : item.statusName,
+                    warehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.warehouseName) : item.warehouseName
                 }));
                 state.movementData = [];
                 state.selectedSerialNumber = '';
@@ -84,7 +85,11 @@ const App = {
                 state.selectedSerialNumber = rowData.internalSerialNumber;
                 state.movementData = (rowData.movements ?? []).map(m => ({
                     ...m,
-                    movementDate: m.movementDate ? DateFormatManager.parseServerDate(m.movementDate) : null
+                    movementDate: m.movementDate ? DateFormatManager.parseServerDate(m.movementDate) : null,
+                    moduleName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.moduleName) : m.moduleName,
+                    fromWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.fromWarehouseName) : m.fromWarehouseName,
+                    toWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.toWarehouseName) : m.toWarehouseName,
+                    statusName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.statusName) : m.statusName
                 }));
                 movementGrid.refresh();
             },

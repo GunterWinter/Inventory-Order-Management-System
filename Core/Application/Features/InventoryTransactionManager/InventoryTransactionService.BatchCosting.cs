@@ -29,11 +29,11 @@ public partial class InventoryTransactionService
             cancellationToken
         );
 
-        var totalCogs = unitCost * quantity;
+        var totalCogs = Math.Round(unitCost * quantity, 0, MidpointRounding.AwayFromZero);
         var totalSales = salesUnitPrice * quantity;
 
         salesOrderItem.CogsAmount = totalCogs;
-        salesOrderItem.ProfitAmount = totalSales - totalCogs;
+        salesOrderItem.ProfitAmount = Math.Round(totalSales - totalCogs, 0, MidpointRounding.AwayFromZero);
         salesOrderItem.UpdatedById = updatedById;
 
         _salesOrderItemRepository.Update(salesOrderItem);

@@ -30,6 +30,20 @@ public class CashTransactionController : BaseApiController
     }
 
     [Authorize]
+    [HttpPost("CreateCashTransfer")]
+    public async Task<ActionResult<ApiSuccessResult<CreateCashTransferResult>>> CreateCashTransferAsync(CreateCashTransferRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<CreateCashTransferResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(CreateCashTransferAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
     [HttpPost("UpdateCashTransaction")]
     public async Task<ActionResult<ApiSuccessResult<UpdateCashTransactionResult>>> UpdateCashTransactionAsync(UpdateCashTransactionRequest request, CancellationToken cancellationToken)
     {
