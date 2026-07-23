@@ -147,9 +147,10 @@
 
         Vue.watch(
             () => state.purchaseOrderId,
-            (newVal, oldVal) => {
+            async (newVal, oldVal) => {
                 purchaseOrderListLookup.refresh();
                 state.errors.purchaseOrderId = '';
+                await methods.populateProductListLookupData();
             }
         );
 
@@ -181,6 +182,24 @@
             (newVal, oldVal) => {
                 purchaseReturnStatusListLookup.refresh();
                 state.errors.status = '';
+            
+                // --- INJECTED CODE: Lock form if not Draft ---
+                const isReadOnly = newVal > 0;
+                if (typeof returnDatePicker !== 'undefined' && returnDatePicker.obj) returnDatePicker.obj.enabled = !isReadOnly;
+                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
+                if (typeof purchaseOrderListLookup !== 'undefined' && purchaseOrderListLookup.obj) purchaseOrderListLookup.obj.enabled = !isReadOnly;
+                
+                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
+                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
+                    
+                    // Toggle grid toolbar buttons if the toolbar module exists
+                    try {
+                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
+                    } catch(e) { }
+                }
+                // --- END INJECTED CODE ---
             }
         );
 
@@ -313,13 +332,28 @@
                 state.purchaseReturnStatusListLookupData = response?.data?.content?.data;
             },
             populateProductListLookupData: async () => {
-                const response = await services.getProductListLookupData();
-                state.productListLookupData = response?.data?.content?.data
-                    .filter(product => product.physical === true)
-                    .map(product => ({
-                        ...product,
-                        numberName: `${product.number} - ${product.name}`
-                    })) || [];
+                if (state.purchaseOrderId) {
+                    try {
+                        const response = await AxiosManager.get('/PurchaseOrderItem/GetPurchaseOrderItemByPurchaseOrderIdList?purchaseOrderId=' + state.purchaseOrderId, {});
+                        const productsMap = new Map();
+                        response?.data?.content?.data?.forEach(item => {
+                            if (!productsMap.has(item.productId)) {
+                                productsMap.set(item.productId, {
+                                    id: item.productId,
+                                    name: item.productName,
+                                    referenceCode: item.productReferenceCode,
+                                    physical: true,
+                                    serialTrackingMode: 1
+                                });
+                            }
+                        });
+                        state.productListLookupData = Array.from(productsMap.values());
+                    } catch (error) {
+                        state.productListLookupData = [];
+                    }
+                } else {
+                    state.productListLookupData = [];
+                }
             },
             populateWarehouseListLookupData: async () => {
                 const response = await services.getWarehouseListLookupData();
@@ -682,7 +716,7 @@
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
-                                return product ? `${product.numberName}` : '';
+                                return product ? `${product.name}` : '';
                             },
                             editType: 'dropdownedit',
                             edit: {
@@ -699,7 +733,7 @@
                                 write: function (args) {
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.productListLookupData,
-                                        fields: { value: 'id', text: 'numberName' },
+                                        fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         change: function (e) {
                                             args.rowData.productId = e.value;
@@ -725,6 +759,7 @@
                             productListGetter: () => state.productListLookupData,
                             warehouseIdGetter: (rowData) => rowData.warehouseId,
                             moduleName: 'PurchaseReturn',
+                            moduleIdGetter: () => state.purchaseOrderId,
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
                             requireWarehouse: true
@@ -754,6 +789,9 @@
                                 write: function (args) {
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
+                                        format: 'n0',
+                                        decimals: 0,
+                                        validateDecimalOnType: true,
                                     });
                                     movementObj.appendTo(args.element);
                                 }

@@ -19,5 +19,7 @@ public enum ProductSerialStatus
     [Description("Missing")]
     Missing = 6,
     [Description("Scrapped")]
-    Scrapped = 7
+    Scrapped = 7,
+    [Description("Returned By Customer")]
+    ReturnedByCustomer = 8
 }

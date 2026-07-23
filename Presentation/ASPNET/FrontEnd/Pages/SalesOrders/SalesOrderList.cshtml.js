@@ -884,6 +884,25 @@ const App = {
             (newVal, oldVal) => {
                 salesOrderStatusListLookup.refresh();
                 state.errors.orderStatus = '';
+            
+                // --- INJECTED CODE: Lock form if not Draft ---
+                const isReadOnly = newVal > 0;
+                if (typeof customerListLookup !== 'undefined' && customerListLookup.obj) customerListLookup.obj.enabled = !isReadOnly;
+                if (typeof salesTypeListLookup !== 'undefined' && salesTypeListLookup.obj) salesTypeListLookup.obj.enabled = !isReadOnly;
+                if (typeof orderDatePicker !== 'undefined' && orderDatePicker.obj) orderDatePicker.obj.enabled = !isReadOnly;
+                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
+                
+                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
+                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
+                    
+                    // Toggle grid toolbar buttons if the toolbar module exists
+                    try {
+                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
+                    } catch(e) { }
+                }
+                // --- END INJECTED CODE ---
             }
         );
 
@@ -1546,6 +1565,9 @@ const App = {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
                                         readonly: isSerialTrackedProduct(args.rowData.productId),
+                                        format: 'n0',
+                                        decimals: 0,
+                                        validateDecimalOnType: true,
                                         change: (e) => {
                                             if (priceObj && totalObj) {
                                                 const total = e.value * priceObj.value;

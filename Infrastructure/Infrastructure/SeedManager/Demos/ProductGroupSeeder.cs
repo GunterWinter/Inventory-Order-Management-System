@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 
 namespace Infrastructure.SeedManager.Demos;
@@ -21,11 +21,13 @@ public class ProductGroupSeeder
     {
         var productGroups = new List<ProductGroup>
         {
+            new ProductGroup { Name = "Thiết bị điện" },
+            new ProductGroup { Name = "Điện máy gia dụng" },
+            new ProductGroup { Name = "Nội thất văn phòng" },
+            new ProductGroup { Name = "Nội thất gia đình" },
             new ProductGroup { Name = "Thiết bị nhà thông minh" },
-            new ProductGroup { Name = "Công tắc thông minh" },
-            new ProductGroup { Name = "Cảm biến thông minh" },
             new ProductGroup { Name = "Camera an ninh" },
-            new ProductGroup { Name = "Nội thất" },
+            new ProductGroup { Name = "Công tắc và ổ cắm" },
             new ProductGroup { Name = "Phụ kiện lắp đặt" }
         };
 

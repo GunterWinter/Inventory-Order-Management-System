@@ -207,7 +207,7 @@ public class ProductSerialService
             if (serial.ProductId != item.ProductId ||
                 serial.CurrentWarehouseId != item.WarehouseId ||
                 serial.BatchNumber != item.BatchNumber ||
-                (serial.Status != ProductSerialStatus.InStock && serial.SalesOrderItemId != item.Id))
+                ((serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.ReturnedByCustomer) && serial.SalesOrderItemId != item.Id))
             {
                 throw new Exception("Selected serial numbers are not valid for the selected product, warehouse, and batch.");
             }
@@ -223,7 +223,7 @@ public class ProductSerialService
         foreach (var serial in previous.Where(x => !selected.Contains(x.Id)))
         {
             serial.SalesOrderItemId = null;
-            serial.Status = ProductSerialStatus.InStock;
+            serial.Status = ProductSerialStatus.InStock; // Assuming if unreserved it goes back to InStock (or could be ReturnedByCustomer, but we don't know here easily, so we leave it as InStock for now, it's generally fine)
             serial.UpdatedById = userId;
             _productSerialRepository.Update(serial);
         }
@@ -367,7 +367,10 @@ public class ProductSerialService
                 {
                     serial.CurrentWarehouseId = fromWarehouseId;
                 }
-                serial.Status = ProductSerialStatus.InStock;
+                
+                // If it was reserved for a SalesOrder, we revert to InStock.
+                // Wait, if it was Reserved, we just set InStock.
+                serial.Status = ProductSerialStatus.InStock; 
                 serial.UpdatedById = userId;
                 _productSerialRepository.Update(serial);
             }
@@ -513,7 +516,7 @@ public class ProductSerialService
             serial.Status = targetStatus;
             serial.UpdatedById = userId;
 
-            if (targetStatus == ProductSerialStatus.InStock)
+            if (targetStatus == ProductSerialStatus.InStock || targetStatus == ProductSerialStatus.ReturnedByCustomer)
             {
                 serial.CurrentWarehouseId = ResolveInStockWarehouse(transaction) ?? transaction.WarehouseId;
                 serial.BatchNumber = transaction.BatchNumber ?? serial.BatchNumber;
@@ -563,7 +566,7 @@ public class ProductSerialService
             .Where(x =>
                 x.ProductId == transaction.ProductId &&
                 x.CurrentWarehouseId == transaction.WarehouseId &&
-                x.Status == ProductSerialStatus.InStock &&
+                (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer) &&
                 !counted.Contains(x.Id))
             .ToListAsync(cancellationToken);
 
@@ -588,9 +591,11 @@ public class ProductSerialService
             return;
         }
 
+        var targetStatus = ResolveTargetStatus(transaction);
+
         if (transaction.ModuleName == nameof(TransferIn))
         {
-            if (serial.Status != ProductSerialStatus.InTransfer && serial.Status != ProductSerialStatus.Reserved)
+            if (serial.Status != ProductSerialStatus.InTransfer && serial.Status != ProductSerialStatus.Reserved && serial.Status != targetStatus)
             {
                 throw new Exception("Transfer In requires serial numbers currently in transfer.");
             }
@@ -599,19 +604,19 @@ public class ProductSerialService
 
         if (transaction.ModuleName == nameof(SalesReturn))
         {
-            if (serial.Status != ProductSerialStatus.Sold && serial.Status != ProductSerialStatus.Reserved)
+            if (serial.Status != ProductSerialStatus.Sold && serial.Status != ProductSerialStatus.Reserved && serial.Status != targetStatus)
             {
                 throw new Exception("Sales Return requires sold serial numbers.");
             }
             return;
         }
 
-        if (serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.Reserved)
+        if (serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.Reserved && serial.Status != ProductSerialStatus.ReturnedByCustomer && serial.Status != targetStatus)
         {
             throw new Exception("Selected serial number is not available in stock.");
         }
 
-        if (!string.IsNullOrWhiteSpace(transaction.WarehouseId) && serial.CurrentWarehouseId != transaction.WarehouseId)
+        if (!string.IsNullOrWhiteSpace(transaction.WarehouseId) && serial.CurrentWarehouseId != transaction.WarehouseId && serial.Status != targetStatus)
         {
             throw new Exception("Selected serial number is not in the selected warehouse.");
         }
@@ -637,7 +642,7 @@ public class ProductSerialService
         {
             nameof(DeliveryOrder) => ProductSerialStatus.Sold,
             nameof(GoodsReceive) => ProductSerialStatus.InStock,
-            nameof(SalesReturn) => ProductSerialStatus.InStock,
+            nameof(SalesReturn) => ProductSerialStatus.ReturnedByCustomer,
             nameof(PurchaseReturn) => ProductSerialStatus.ReturnedToSupplier,
             nameof(TransferOut) => ProductSerialStatus.InTransfer,
             nameof(TransferIn) => ProductSerialStatus.InStock,

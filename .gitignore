@@ -399,3 +399,4 @@ FodyWeavers.xsd
 /Presentation/ASPNET/ASPNET.csproj.user
 /Presentation/ASPNET/appsettings.json
 *.json
+/Presentation/ASPNET/appsettings.json

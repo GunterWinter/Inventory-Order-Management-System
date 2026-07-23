@@ -181,6 +181,24 @@
             (newVal, oldVal) => {
                 goodsReceiveStatusListLookup.refresh();
                 state.errors.status = '';
+            
+                // --- INJECTED CODE: Lock form if not Draft ---
+                const isReadOnly = newVal > 0;
+                if (typeof receiveDatePicker !== 'undefined' && receiveDatePicker.obj) receiveDatePicker.obj.enabled = !isReadOnly;
+                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
+                if (typeof purchaseOrderListLookup !== 'undefined' && purchaseOrderListLookup.obj) purchaseOrderListLookup.obj.enabled = !isReadOnly;
+                
+                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
+                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
+                    
+                    // Toggle grid toolbar buttons if the toolbar module exists
+                    try {
+                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
+                    } catch(e) { }
+                }
+                // --- END INJECTED CODE ---
             }
         );
 
@@ -318,7 +336,7 @@
                     .filter(product => product.physical === true)
                     .map(product => ({
                         ...product,
-                        numberName: `${product.number} - ${product.name}`
+                        name: `${product.name}`
                     })) || [];
             },
             populateWarehouseListLookupData: async () => {
@@ -645,7 +663,7 @@
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
-                                return product ? `${product.numberName}` : '';
+                                return product ? `${product.name}` : '';
                             }
                         },
                         {

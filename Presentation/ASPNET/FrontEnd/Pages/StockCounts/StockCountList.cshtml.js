@@ -166,6 +166,24 @@
             (newVal, oldVal) => {
                 statusListLookup.refresh();
                 state.errors.status = '';
+            
+                // --- INJECTED CODE: Lock form if not Draft ---
+                const isReadOnly = newVal > 0;
+                if (typeof countDatePicker !== 'undefined' && countDatePicker.obj) countDatePicker.obj.enabled = !isReadOnly;
+                if (typeof warehouseListLookup !== 'undefined' && warehouseListLookup.obj) warehouseListLookup.obj.enabled = !isReadOnly;
+                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
+                
+                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
+                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
+                    
+                    // Toggle grid toolbar buttons if the toolbar module exists
+                    try {
+                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
+                    } catch(e) { }
+                }
+                // --- END INJECTED CODE ---
             }
         );
 
@@ -707,6 +725,9 @@
                                 write: function (args) {
                                     qtySCCountObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.qtySCCount ?? 0,
+                                        format: 'n0',
+                                        decimals: 0,
+                                        validateDecimalOnType: true,
                                     });
                                     qtySCCountObj.appendTo(qtySCCountElem);
                                 }

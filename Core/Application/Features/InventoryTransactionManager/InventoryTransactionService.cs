@@ -108,7 +108,7 @@ public partial class InventoryTransactionService
                 continue;
             }
 
-            if (status == InventoryTransactionStatus.Archived)
+            if (status == InventoryTransactionStatus.Archived || status == InventoryTransactionStatus.Draft)
             {
                 continue;
             }

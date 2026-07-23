@@ -185,7 +185,10 @@ public class PurchaseOrderService
                     cancellationToken
                 );
                 item.PurchaseOrder = purchaseOrder;
-                await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
+                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
+                {
+                    await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
+                }
             }
             else
             {
@@ -200,7 +203,10 @@ public class PurchaseOrderService
                     cancellationToken
                 );
                 item.PurchaseOrder = purchaseOrder;
-                await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
+                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
+                {
+                    await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
+                }
             }
         }
 

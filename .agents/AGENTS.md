@@ -47,3 +47,49 @@
 ## Returns Reference Invariants
 - SalesReturn domain entity, DTOs, APIs, and UI must exclusively reference SalesOrder / SalesOrderId. Do NOT reference DeliveryOrder.
 - PurchaseReturn domain entity, DTOs, APIs, and UI must exclusively reference PurchaseOrder / PurchaseOrderId. Do NOT reference GoodsReceive.
+
+## Product Dropdown & Grid Name Invariants
+- Khi hiển thị danh sách sản phẩm (Products) trên Dropdown List hoặc Grid (Syncfusion), **LUÔN LUÔN** hiển thị duy nhất thuộc tính `name` (tên sản phẩm), tuyệt đối không tự ý ghép mã (number) vào tên (không dùng chuỗi như `number - name`).
+- Thuộc tính `value` của Dropdown phải là `id`, và `text` là `name`.
+- Bất cứ khi nào cấu hình thuộc tính `valueAccessor` cho các cột `Product`, chỉ trả về `product.name`.
+
+## Syncfusion Grid Inline Edit Reference Code
+- Trong Syncfusion Grid, nếu một trường là read-only (ví dụ `Ref Code`) nhưng cần tự động cập nhật khi người dùng chọn `Product` ở cùng một hàng:
+  - Do cơ chế `edit` của Syncfusion tạo ra các thẻ `<input>` bao phủ bên trên `<td>`, KHÔNG ĐƯỢC DÙNG `.innerText` trên `args.element.closest('tr').querySelector('[e-mappinguid]')`.
+  - **Bắt buộc** truy vấn phần tử input ẩn hoặc bị disable bằng: `args.element.closest('tr').querySelector('input[name="tên_trường"]')` và cập nhật `.value`. Ví dụ: `refCell.value = args.rowData.productReferenceCode;`
+
+## Background Task Management (Cleanup)
+- When starting long-running background tasks (such as `dotnet run`, `npm start`, or any dev server/daemon) using the `run_command` tool to test API endpoints or functionality:
+  - You **MUST ALWAYS** explicitly kill the task using the `manage_task` tool (with `Action: "kill"`) immediately after you finish testing or before concluding your final response to the user.
+  - Never leave background servers running and locking files, unless the user explicitly requested you to "leave the server running".
+
+## Product Lookup Data & Serial Picker Invariants
+
+### Data Source Migration Safety
+- Khi thay đổi nguồn dữ liệu (data source) của `state.productListLookupData` hoặc bất kỳ lookup data nào, **BẮT BUỘC** kiểm tra **tất cả consumer** của dữ liệu đó trong cùng file JS:
+  - `valueAccessor` functions trong grid columns
+  - `fields: { value, text }` trong dropdown configs
+  - `ProductSerialPicker.createGridColumn()` — cần `serialTrackingMode` để `isSerialTrackedProduct()` hoạt động
+  - Bất kỳ function nào dùng `.find()` trên lookup data
+- Khi map dữ liệu sản phẩm từ API khác (ví dụ từ `SalesOrderItem`, `PurchaseOrderItem`), **LUÔN LUÔN** bao gồm đủ các thuộc tính: `id`, `name`, `referenceCode`, `physical: true`, `serialTrackingMode: 1`.
+
+### ProductSerialPicker Module Filtering
+- Trong các form Return (SalesReturn, PurchaseReturn), khi cấu hình `ProductSerialPicker.createGridColumn()`, **BẮT BUỘC** truyền `moduleIdGetter` để backend `GetProductSerialPickerList` có thể lọc serial theo đơn hàng gốc:
+  - SalesReturn: `moduleIdGetter: () => state.salesOrderId`
+  - PurchaseReturn: `moduleIdGetter: () => state.purchaseOrderId`
+- Nếu thiếu `moduleIdGetter`, backend sẽ trả về **tất cả** serial có trạng thái phù hợp thay vì chỉ serial thuộc đơn hàng cụ thể.
+
+## Multi-Step Workflow Change Safety
+- Khi thay đổi hoặc chặn một bước trong multi-step workflow (ví dụ: `SynchronizeGoodsReceiveAsync`), **BẮT BUỘC** trace và kiểm tra **TẤT CẢ** các bước phụ thuộc downstream trong cùng flow:
+  - Nếu bước A tạo dữ liệu (ví dụ: serial devices) và bước B sử dụng dữ liệu đó (ví dụ: `ApplyInventoryTransactionSerialsAsync`), thì khi chặn bước A, **PHẢI** đồng thời chặn/skip bước B.
+  - Cụ thể với `PropagateParentUpdate`: nếu status là `Draft`, phải skip `ApplyInventoryTransactionSerialsAsync` vì chưa có serial nào được tạo.
+
+## Syncfusion NumericTextBox Format Invariants
+- Mọi `new ej.inputs.NumericTextBox({...})` cho các trường quantity, movement, hoặc số nguyên **BẮT BUỘC** phải có:
+  ```javascript
+  format: 'n0',
+  decimals: 0,
+  validateDecimalOnType: true,
+  ```
+- **Lý do**: Nếu thiếu `format`, NumericTextBox mặc định dùng `'n2'` (2 chữ số thập phân). Kết hợp với `number-format-manager.js` (`MAX_FRACTION_DIGITS = 0`), giá trị `50,00` (vi-VN locale) sẽ bị parse thành `5000`.
+- Chỉ các trường tiền tệ (price, amount, total...) mới được dùng format mặc định vì `normalizeMoneyNumericTextBox` đã xử lý riêng.

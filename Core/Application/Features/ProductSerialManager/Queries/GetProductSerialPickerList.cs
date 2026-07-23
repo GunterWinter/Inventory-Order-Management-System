@@ -88,6 +88,32 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
             query = query.Where(x => transferOutSerialIds.Contains(x.Id));
         }
 
+        if (request.ModuleName == nameof(SalesReturn) && !string.IsNullOrWhiteSpace(request.ModuleId))
+        {
+            var salesOrderItemIds = await _context
+                .Set<SalesOrderItem>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.SalesOrderId == request.ModuleId)
+                .Select(x => x.Id!)
+                .ToListAsync(cancellationToken);
+
+            query = query.Where(x => salesOrderItemIds.Contains(x.SalesOrderItemId!));
+        }
+
+        if (request.ModuleName == nameof(PurchaseReturn) && !string.IsNullOrWhiteSpace(request.ModuleId))
+        {
+            var purchaseOrderItemIds = await _context
+                .Set<PurchaseOrderItem>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.PurchaseOrderId == request.ModuleId)
+                .Select(x => x.Id!)
+                .ToListAsync(cancellationToken);
+
+            query = query.Where(x => purchaseOrderItemIds.Contains(x.PurchaseOrderItemId!));
+        }
+
         var data = await query
             .OrderBy(x => x.InternalSerialNumber)
             .Select(x => new ProductSerialPickerDto
@@ -115,7 +141,7 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
         {
             nameof(SalesReturn) => new[] { ProductSerialStatus.Sold },
             nameof(TransferIn) => new[] { ProductSerialStatus.InTransfer },
-            _ => new[] { ProductSerialStatus.InStock }
+            _ => new[] { ProductSerialStatus.InStock, ProductSerialStatus.ReturnedByCustomer }
         };
     }
 

@@ -55,6 +55,9 @@ const App = {
 
         const methods = {
             lookupWarranty: async () => {
+                if (searchText.obj) {
+                    state.search = searchText.obj.value;
+                }
                 const response = await services.lookupWarranty(state.search);
                 state.mainData = (response?.data?.content?.data ?? []).map(item => ({
                     ...item,

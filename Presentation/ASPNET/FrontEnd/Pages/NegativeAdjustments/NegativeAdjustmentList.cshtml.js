@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -129,6 +129,23 @@
             (newVal, oldVal) => {
                 negativeAdjustmentStatusListLookup.refresh();
                 state.errors.status = '';
+            
+                // --- INJECTED CODE: Lock form if not Draft ---
+                const isReadOnly = newVal > 0;
+                if (typeof adjustmentDatePicker !== 'undefined' && adjustmentDatePicker.obj) adjustmentDatePicker.obj.enabled = !isReadOnly;
+                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
+                
+                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
+                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
+                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
+                    
+                    // Toggle grid toolbar buttons if the toolbar module exists
+                    try {
+                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
+                    } catch(e) { }
+                }
+                // --- END INJECTED CODE ---
             }
         );
 
@@ -254,7 +271,7 @@
                     .filter(product => product.physical === true)
                     .map(product => ({
                         ...product,
-                        numberName: `${product.number} - ${product.name}`
+                        name: `${product.name}`
                     })) || [];
             },
             populateWarehouseListLookupData: async () => {
@@ -581,11 +598,7 @@
                                             args.rowData.warehouseId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
-                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
-                                            if (refCell) {
-                                                const p = state.productListLookupData.find(x => x.id === e.value);
-                                                refCell.innerText = p ? p.referenceCode || '' : '';
-                                            }
+
                                         }
                                     });
                                     warehouseObj.appendTo(args.element);
@@ -611,7 +624,7 @@
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
-                                return product ? `${product.numberName}` : '';
+                                return product ? `${product.name}` : '';
                             },
                             editType: 'dropdownedit',
                             edit: {
@@ -628,16 +641,17 @@
                                 write: function (args) {
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.productListLookupData,
-                                        fields: { value: 'id', text: 'numberName' },
+                                        fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         change: function (e) {
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
-                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            const p = state.productListLookupData.find(x => x.id === e.value);
+                                            args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
+                                            const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
                                             if (refCell) {
-                                                const p = state.productListLookupData.find(x => x.id === e.value);
-                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                                refCell.value = args.rowData.productReferenceCode;
                                             }
                                             if (movementObj) {
                                                 movementObj.value = 1;
@@ -683,6 +697,9 @@
                                 write: function (args) {
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
+                                        format: 'n0',
+                                        decimals: 0,
+                                        validateDecimalOnType: true,
                                     });
                                     movementObj.appendTo(args.element);
                                 }

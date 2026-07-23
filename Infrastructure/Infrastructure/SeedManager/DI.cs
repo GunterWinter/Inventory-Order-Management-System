@@ -119,6 +119,10 @@ public static class DI
             var productGroupSeeder = serviceProvider.GetRequiredService<ProductGroupSeeder>();
             productGroupSeeder.GenerateDataAsync().Wait();
 
+            var productSeeder = serviceProvider.GetRequiredService<ProductSeeder>();
+            productSeeder.GenerateDataAsync().Wait();
+
+
             // Khong seed du lieu random cho customer/vendor/product/warehouse o day.
             // BatchCostingDemoSeeder se tao bo du lieu demo co chu dich de de nhin va de test FIFO theo lo.
 

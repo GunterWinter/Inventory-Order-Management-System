@@ -71,14 +71,10 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
         if (!string.IsNullOrWhiteSpace(search))
         {
             serialQuery = serialQuery.Where(x =>
-                (x.InternalSerialNumber ?? string.Empty).Contains(search) ||
-                (x.SalesOrderItem != null &&
-                    x.SalesOrderItem.SalesOrder != null &&
-                    (
-                        (x.SalesOrderItem.SalesOrder.Number ?? string.Empty).Contains(search) ||
-                        (x.SalesOrderItem.SalesOrder.Customer != null &&
-                            (x.SalesOrderItem.SalesOrder.Customer.PhoneNumber ?? string.Empty).Contains(search))
-                    )));
+                (x.InternalSerialNumber != null && x.InternalSerialNumber.Contains(search)) ||
+                (x.SalesOrderItem != null && x.SalesOrderItem.SalesOrder != null && x.SalesOrderItem.SalesOrder.Number != null && x.SalesOrderItem.SalesOrder.Number.Contains(search)) ||
+                (x.SalesOrderItem != null && x.SalesOrderItem.SalesOrder != null && x.SalesOrderItem.SalesOrder.Customer != null && x.SalesOrderItem.SalesOrder.Customer.PhoneNumber != null && x.SalesOrderItem.SalesOrder.Customer.PhoneNumber.Contains(search))
+            );
         }
 
         var serials = await serialQuery
