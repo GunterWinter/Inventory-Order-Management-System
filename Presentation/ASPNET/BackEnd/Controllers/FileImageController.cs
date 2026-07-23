@@ -1,4 +1,4 @@
-﻿using Application.Features.FileImageManager.Commands;
+using Application.Features.FileImageManager.Commands;
 using Application.Features.FileImageManager.Queries;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
@@ -61,7 +61,7 @@ public class FileImageController : BaseApiController
     }
 
 
-    [Authorize]
+    [AllowAnonymous]
     [HttpGet("GetImage")]
     public async Task<IActionResult> GetImageAsync(
         [FromQuery] string imageName,

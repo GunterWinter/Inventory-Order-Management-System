@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -18,7 +18,7 @@ public class UpdatePurchaseReturnRequest : IRequest<UpdatePurchaseReturnResult>
     public DateTime? ReturnDate { get; init; }
     public string? Status { get; init; }
     public string? Description { get; init; }
-    public string? GoodsReceiveId { get; init; }
+    public string? PurchaseOrderId { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -29,7 +29,7 @@ public class UpdatePurchaseReturnValidator : AbstractValidator<UpdatePurchaseRet
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.ReturnDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
-        RuleFor(x => x.GoodsReceiveId).NotEmpty();
+        RuleFor(x => x.PurchaseOrderId).NotEmpty();
     }
 }
 
@@ -65,7 +65,7 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
         entity.ReturnDate = request.ReturnDate;
         entity.Status = (PurchaseReturnStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
-        entity.GoodsReceiveId = request.GoodsReceiveId;
+        entity.PurchaseOrderId = request.PurchaseOrderId;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -87,4 +87,5 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
         };
     }
 }
+
 

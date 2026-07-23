@@ -1,4 +1,4 @@
-﻿using Application.Features.SalesOrderManager.Commands;
+using Application.Features.SalesOrderManager.Commands;
 using Application.Features.SalesOrderManager.Queries;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
@@ -17,8 +17,14 @@ public class SalesOrderController : BaseApiController
 
     [Authorize]
     [HttpPost("CreateSalesOrder")]
-    public async Task<ActionResult<ApiSuccessResult<CreateSalesOrderResult>>> CreateSalesOrderAsync(CreateSalesOrderRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<CreateSalesOrderResult>>> CreateSalesOrderAsync([FromBody] CreateSalesOrderRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<CreateSalesOrderResult>
@@ -31,8 +37,14 @@ public class SalesOrderController : BaseApiController
 
     [Authorize]
     [HttpPost("UpdateSalesOrder")]
-    public async Task<ActionResult<ApiSuccessResult<UpdateSalesOrderResult>>> UpdateSalesOrderAsync(UpdateSalesOrderRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<UpdateSalesOrderResult>>> UpdateSalesOrderAsync([FromBody] UpdateSalesOrderRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<UpdateSalesOrderResult>
@@ -45,8 +57,14 @@ public class SalesOrderController : BaseApiController
 
     [Authorize]
     [HttpPost("DeleteSalesOrder")]
-    public async Task<ActionResult<ApiSuccessResult<DeleteSalesOrderResult>>> DeleteSalesOrderAsync(DeleteSalesOrderRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<DeleteSalesOrderResult>>> DeleteSalesOrderAsync([FromBody] DeleteSalesOrderRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<DeleteSalesOrderResult>
@@ -107,6 +125,45 @@ public class SalesOrderController : BaseApiController
         {
             Code = StatusCodes.Status200OK,
             Message = $"Success executing {nameof(GetSalesOrderSingleAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpGet("GetSalesTypeList")]
+    public async Task<ActionResult<ApiSuccessResult<GetSalesTypeListResult>>> GetSalesTypeListAsync(
+        CancellationToken cancellationToken
+        )
+    {
+        var request = new GetSalesTypeListRequest { };
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetSalesTypeListResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetSalesTypeListAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpPost("CreateSalesOrderFromPurchaseOrder")]
+    public async Task<ActionResult<ApiSuccessResult<CreateSalesOrderFromPurchaseOrderResult>>> CreateSalesOrderFromPurchaseOrderAsync(
+        [FromBody] CreateSalesOrderFromPurchaseOrderRequest request,
+        CancellationToken cancellationToken
+        )
+    {
+        if (request == null)
+        {
+            return BadRequest("Request body cannot be null.");
+        }
+
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<CreateSalesOrderFromPurchaseOrderResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(CreateSalesOrderFromPurchaseOrderAsync)}",
             Content = response
         });
     }

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -18,6 +18,8 @@ public class UpdateProductRequest : IRequest<UpdateProductResult>
     public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
+    public double? CostPrice { get; init; }
+    public string? ImageUrl { get; init; }
     public bool? Physical { get; init; } = true;
     public SerialTrackingMode? SerialTrackingMode { get; init; } = Domain.Enums.SerialTrackingMode.InternalAuto;
     public string? InternalSerialFixedCode { get; init; }
@@ -35,6 +37,7 @@ public class UpdateProductValidator : AbstractValidator<UpdateProductRequest>
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0).When(x => x.UnitPrice.HasValue);
+        RuleFor(x => x.CostPrice).GreaterThanOrEqualTo(0).When(x => x.CostPrice.HasValue);
         RuleFor(x => x.Physical).NotNull();
         RuleFor(x => x.InternalSerialFixedCode)
             .NotEmpty()
@@ -75,6 +78,8 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
 
         entity.Name = request.Name;
         entity.UnitPrice = request.UnitPrice;
+        entity.CostPrice = request.CostPrice;
+        entity.ImageUrl = request.ImageUrl;
         entity.Physical = request.Physical;
         entity.SerialTrackingMode = request.Physical == true
             ? request.SerialTrackingMode ?? SerialTrackingMode.InternalAuto

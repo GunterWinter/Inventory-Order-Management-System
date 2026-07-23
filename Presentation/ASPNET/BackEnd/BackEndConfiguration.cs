@@ -1,4 +1,5 @@
-﻿using Application;
+using Application;
+using ASPNET.BackEnd.Common.Converters;
 using ASPNET.BackEnd.Common.Handlers;
 using Infrastructure;
 using Infrastructure.DataAccessManager.EFCore;
@@ -35,6 +36,7 @@ public static class BackEndConfiguration
             {
                 options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
                 options.JsonSerializerOptions.WriteIndented = true;
+                options.JsonSerializerOptions.Converters.Add(new FlexibleEnumConverterFactory());
             });
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(c =>

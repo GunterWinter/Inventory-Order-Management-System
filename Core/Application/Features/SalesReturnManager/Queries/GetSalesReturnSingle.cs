@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -51,9 +51,8 @@ public class GetSalesReturnSingleHandler : IRequestHandler<GetSalesReturnSingleR
         var queryData = _context
             .SalesReturn
             .AsNoTracking()
-            .Include(x => x.DeliveryOrder)
-                .ThenInclude(x => x.SalesOrder)
-                    .ThenInclude(x => x.Customer)
+            .Include(x => x.SalesOrder)
+                .ThenInclude(x => x.Customer)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

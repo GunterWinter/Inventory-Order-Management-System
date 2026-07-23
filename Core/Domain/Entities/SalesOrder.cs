@@ -11,6 +11,7 @@ public class SalesOrder : BaseEntity
     public string? Description { get; set; }
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }
+    public SalesType? SalesType { get; set; } = Domain.Enums.SalesType.Retail;
     public double? BeforeTaxAmount { get; set; }
     public double? TaxAmount { get; set; }
     public double? AfterTaxAmount { get; set; }

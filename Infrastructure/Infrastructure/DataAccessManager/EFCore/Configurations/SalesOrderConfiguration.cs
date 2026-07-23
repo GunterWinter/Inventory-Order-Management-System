@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
@@ -16,6 +16,7 @@ public class SalesOrderConfiguration : BaseEntityConfiguration<SalesOrder>
         builder.Property(x => x.OrderStatus).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CustomerId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.SalesType).IsRequired(false);
         builder.Property(x => x.BeforeTaxAmount).IsRequired(false);
         builder.Property(x => x.TaxAmount).IsRequired(false);
         builder.Property(x => x.AfterTaxAmount).IsRequired(false);

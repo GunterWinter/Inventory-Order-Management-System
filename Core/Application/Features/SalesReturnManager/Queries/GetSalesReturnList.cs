@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -16,8 +16,8 @@ public record GetSalesReturnListDto
     public SalesReturnStatus? Status { get; init; }
     public string? StatusName { get; init; }
     public string? Description { get; init; }
-    public string? DeliveryOrderId { get; init; }
-    public string? DeliveryOrderNumber { get; init; }
+    public string? SalesOrderId { get; init; }
+    public string? SalesOrderNumber { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -27,8 +27,8 @@ public class GetSalesReturnListProfile : Profile
     {
         CreateMap<SalesReturn, GetSalesReturnListDto>()
             .ForMember(
-                dest => dest.DeliveryOrderNumber,
-                opt => opt.MapFrom(src => src.DeliveryOrder != null ? src.DeliveryOrder.Number : string.Empty)
+                dest => dest.SalesOrderNumber,
+                opt => opt.MapFrom(src => src.SalesOrder != null ? src.SalesOrder.Number : string.Empty)
             )
             .ForMember(
                 dest => dest.StatusName,
@@ -66,7 +66,7 @@ public class GetSalesReturnListHandler : IRequestHandler<GetSalesReturnListReque
             .SalesReturn
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
-            .Include(x => x.DeliveryOrder)
+            .Include(x => x.SalesOrder)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);
@@ -81,6 +81,9 @@ public class GetSalesReturnListHandler : IRequestHandler<GetSalesReturnListReque
 
 
 }
+
+
+
 
 
 

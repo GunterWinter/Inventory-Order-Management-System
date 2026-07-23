@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -572,6 +572,11 @@ const App = {
             }
         };
 
+                let warehouseObj = null;
+        let productObj = null;
+        let movementObj = null;
+        let qtySCCountObj = null;
+
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
@@ -641,6 +646,11 @@ const App = {
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
                                             if (movementObj) {
                                                 movementObj.value = 1;
                                             }
@@ -855,6 +865,8 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
 
 
 

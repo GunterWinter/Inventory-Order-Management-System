@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Purchase Return List";
 }
@@ -42,9 +42,9 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="GoodsReceiveId">Goods Receive</label>
-                                                <div ref="goodsReceiveIdRef"></div>
-                                                <label class="text-danger">{{ state.errors.goodsReceiveId }}</label>
+                                                <label for="purchaseOrderId">Purchase Order</label>
+                                                <div ref="purchaseOrderIdRef"></div>
+                                                <label class="text-danger">{{ state.errors.purchaseOrderId }}</label>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="Status">Status</label>
@@ -125,3 +125,4 @@
 @section scripts {
     <script src="~/FrontEnd/Pages/PurchaseReturns/PurchaseReturnList.cshtml.js"></script>
 }
+

@@ -1,9 +1,9 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
-            goodsReceiveListLookupData: [],
+            purchaseOrderListLookupData: [],
             purchaseReturnStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
@@ -13,11 +13,11 @@ const App = {
             number: '',
             returnDate: '',
             description: '',
-            goodsReceiveId: null,
+            purchaseOrderId: null,
             status: null,
             errors: {
                 returnDate: '',
-                goodsReceiveId: '',
+                purchaseOrderId: '',
                 status: '',
                 description: ''
             },
@@ -30,13 +30,13 @@ const App = {
         const mainModalRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
         const returnDateRef = Vue.ref(null);
-        const goodsReceiveIdRef = Vue.ref(null);
+        const purchaseOrderIdRef = Vue.ref(null);
         const statusRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
 
         const validateForm = function () {
             state.errors.returnDate = '';
-            state.errors.goodsReceiveId = '';
+            state.errors.purchaseOrderId = '';
             state.errors.status = '';
 
             let isValid = true;
@@ -45,8 +45,8 @@ const App = {
                 state.errors.returnDate = 'Return date is required.';
                 isValid = false;
             }
-            if (!state.goodsReceiveId) {
-                state.errors.goodsReceiveId = 'Goods Receive is required.';
+            if (!state.purchaseOrderId) {
+                state.errors.purchaseOrderId = 'Purchase Order is required.';
                 isValid = false;
             }
             if (!state.status) {
@@ -62,11 +62,11 @@ const App = {
             state.number = '';
             state.returnDate = '';
             state.description = '';
-            state.goodsReceiveId = null;
+            state.purchaseOrderId = null;
             state.status = null;
             state.errors = {
                 returnDate: '',
-                goodsReceiveId: '',
+                purchaseOrderId: '',
                 status: '',
                 description: ''
             };
@@ -112,14 +112,14 @@ const App = {
             }
         };
 
-        const goodsReceiveListLookup = {
+        const purchaseOrderListLookup = {
             obj: null,
             create: () => {
-                if (state.goodsReceiveListLookupData && Array.isArray(state.goodsReceiveListLookupData)) {
-                    goodsReceiveListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.goodsReceiveListLookupData,
+                if (state.purchaseOrderListLookupData && Array.isArray(state.purchaseOrderListLookupData)) {
+                    purchaseOrderListLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.purchaseOrderListLookupData,
                         fields: { value: 'id', text: 'number' },
-                        placeholder: 'Select Goods Receive',
+                        placeholder: 'Select Purchase Order',
                         filterBarPlaceholder: 'Search',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
@@ -129,27 +129,27 @@ const App = {
                             if (e.text !== '') {
                                 query = query.where('number', 'startsWith', e.text, true);
                             }
-                            e.updateData(state.goodsReceiveListLookupData, query);
+                            e.updateData(state.purchaseOrderListLookupData, query);
                         },
                         change: (e) => {
-                            state.goodsReceiveId = e.value;
+                            state.purchaseOrderId = e.value;
                         }
                     });
-                    goodsReceiveListLookup.obj.appendTo(goodsReceiveIdRef.value);
+                    purchaseOrderListLookup.obj.appendTo(purchaseOrderIdRef.value);
                 }
             },
             refresh: () => {
-                if (goodsReceiveListLookup.obj) {
-                    goodsReceiveListLookup.obj.value = state.goodsReceiveId
+                if (purchaseOrderListLookup.obj) {
+                    purchaseOrderListLookup.obj.value = state.purchaseOrderId
                 }
             },
         };
 
         Vue.watch(
-            () => state.goodsReceiveId,
+            () => state.purchaseOrderId,
             (newVal, oldVal) => {
-                goodsReceiveListLookup.refresh();
-                state.errors.goodsReceiveId = '';
+                purchaseOrderListLookup.refresh();
+                state.errors.purchaseOrderId = '';
             }
         );
 
@@ -193,20 +193,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (returnDate, description, status, goodsReceiveId, createdById) => {
+            createMainData: async (returnDate, description, status, purchaseOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseReturn/CreatePurchaseReturn', {
-                        returnDate, description, status, goodsReceiveId, createdById
+                        returnDate, description, status, purchaseOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, returnDate, description, status, goodsReceiveId, updatedById) => {
+            updateMainData: async (id, returnDate, description, status, purchaseOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseReturn/UpdatePurchaseReturn', {
-                        id, returnDate, description, status, goodsReceiveId, updatedById
+                        id, returnDate, description, status, purchaseOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -223,9 +223,9 @@ const App = {
                     throw error;
                 }
             },
-            getGoodsReceiveListLookupData: async () => {
+            getpurchaseOrderListLookupData: async () => {
                 try {
-                    const response = await AxiosManager.get('/GoodsReceive/GetGoodsReceiveList', {});
+                    const response = await AxiosManager.get('/PurchaseOrder/GetPurchaseOrderList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -304,9 +304,9 @@ const App = {
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
-            populateGoodsReceiveListLookupData: async () => {
-                const response = await services.getGoodsReceiveListLookupData();
-                state.goodsReceiveListLookupData = response?.data?.content?.data;
+            populatepurchaseOrderListLookupData: async () => {
+                const response = await services.getpurchaseOrderListLookupData();
+                state.purchaseOrderListLookupData = response?.data?.content?.data;
             },
             populatePurchaseReturnStatusListLookupData: async () => {
                 const response = await services.getPurchaseReturnStatusListLookupData();
@@ -343,7 +343,7 @@ const App = {
             },
             onMainModalHidden: () => {
                 state.errors.returnDate = '';
-                state.errors.goodsReceiveId = '';
+                state.errors.purchaseOrderId = '';
                 state.errors.status = '';
             }
         };
@@ -363,10 +363,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.returnDate, state.description, state.status, state.goodsReceiveId, StorageManager.getUserId())
+                        ? await services.createMainData(state.returnDate, state.description, state.status, state.purchaseOrderId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.returnDate, state.description, state.status, state.goodsReceiveId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.returnDate, state.description, state.status, state.purchaseOrderId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -433,11 +433,11 @@ const App = {
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
-                await methods.populateGoodsReceiveListLookupData();
+                await methods.populatepurchaseOrderListLookupData();
                 await methods.populatePurchaseReturnStatusListLookupData();
                 numberText.create();
                 returnDatePicker.create();
-                goodsReceiveListLookup.create();
+                purchaseOrderListLookup.create();
                 purchaseReturnStatusListLookup.create();
 
                 await secondaryGrid.create(state.secondaryData);
@@ -483,7 +483,7 @@ const App = {
                         },
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
                         { field: 'returnDate', headerText: 'Return Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'goodsReceiveNumber', headerText: 'Goods Receive', width: 150, minWidth: 150 },
+                        { field: 'purchaseOrderNumber', headerText: 'Purchase Order', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
@@ -499,7 +499,7 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'returnDate', 'goodsReceiveNumber', 'statusName', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'returnDate', 'purchaseOrderNumber', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -543,7 +543,7 @@ const App = {
                                 state.number = selectedRecord.number ?? '';
                                 state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.goodsReceiveId = selectedRecord.goodsReceiveId ?? '';
+                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
                                 secondaryGrid.refresh();
@@ -561,7 +561,7 @@ const App = {
                                 state.number = selectedRecord.number ?? '';
                                 state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.goodsReceiveId = selectedRecord.goodsReceiveId ?? '';
+                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
                                 secondaryGrid.refresh();
@@ -585,6 +585,11 @@ const App = {
                 mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
+
+                let warehouseObj = null;
+        let productObj = null;
+        let movementObj = null;
+        let qtySCCountObj = null;
 
         const secondaryGrid = {
             obj: null,
@@ -642,7 +647,17 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.warehouseId,
                                         placeholder: 'Select a Warehouse',
-                                        floatLabelType: 'Never'
+                                        floatLabelType: 'Never',
+                                        change: function (e) {
+                                            args.rowData.warehouseId = e.value;
+                                            args.rowData.productSerialIds = [];
+                                            args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
+                                        }
                                     });
                                     warehouseObj.appendTo(args.element);
                                 }
@@ -690,6 +705,11 @@ const App = {
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
                                             if (movementObj) {
                                                 movementObj.value = 1;
                                             }
@@ -703,7 +723,7 @@ const App = {
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
-                            warehouseIdGetter: (rowData) => args.rowData.warehouseId,
+                            warehouseIdGetter: (rowData) => rowData.warehouseId,
                             moduleName: 'PurchaseReturn',
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
@@ -894,7 +914,7 @@ const App = {
             secondaryGridRef,
             numberRef,
             returnDateRef,
-            goodsReceiveIdRef,
+            purchaseOrderIdRef,
             statusRef,
             state,
             handler,
@@ -903,6 +923,15 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
+
+
+
+
+
+
+
 
 
 

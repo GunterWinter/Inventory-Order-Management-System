@@ -19,6 +19,19 @@ public class JsonStructureItem
 public static class NavigationTreeStructure
 {
 
+    /* 
+    Unused modules:
+    {
+        "URL": "/PositiveAdjustments/PositiveAdjustmentList",
+        "Name": "Positive Adjustment",
+        "IsModule": false
+    },
+    {
+        "URL": "/NegativeAdjustments/NegativeAdjustmentList",
+        "Name": "Negative Adjustment",
+        "IsModule": false
+    }
+    */
     public static readonly string JsonStructure = """
     [
         {
@@ -157,16 +170,7 @@ public static class NavigationTreeStructure
                     "Name": "Transfer In",
                     "IsModule": false
                 },
-                {
-                    "URL": "/PositiveAdjustments/PositiveAdjustmentList",
-                    "Name": "Positive Adjustment",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/NegativeAdjustments/NegativeAdjustmentList",
-                    "Name": "Negative Adjustment",
-                    "IsModule": false
-                },
+
                 {
                     "URL": "/Scrappings/ScrappingList",
                     "Name": "Scrapping",
@@ -296,7 +300,11 @@ public static class NavigationTreeStructure
     {
         var json = JsonStructure;
 
-        var menus = JsonSerializer.Deserialize<List<JsonStructureItem>>(json);
+        var options = new JsonSerializerOptions
+        {
+            ReadCommentHandling = JsonCommentHandling.Skip
+        };
+        var menus = JsonSerializer.Deserialize<List<JsonStructureItem>>(json, options);
 
         List<MenuNavigationTreeNodeDto> nodes = new List<MenuNavigationTreeNodeDto>();
 
@@ -346,7 +354,11 @@ public static class NavigationTreeStructure
     public static List<string> GetCompleteFirstMenuNavigationSegment()
     {
         var json = JsonStructure;
-        var menus = JsonSerializer.Deserialize<List<JsonStructureItem>>(json);
+        var options = new JsonSerializerOptions
+        {
+            ReadCommentHandling = JsonCommentHandling.Skip
+        };
+        var menus = JsonSerializer.Deserialize<List<JsonStructureItem>>(json, options);
         var result = new List<string>();
 
         if (menus != null)

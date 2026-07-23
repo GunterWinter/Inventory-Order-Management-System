@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
@@ -16,6 +16,8 @@ public class ProductConfiguration : BaseEntityConfiguration<Product>
         builder.Property(x => x.ReferenceCode).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.UnitPrice).IsRequired(false);
+        builder.Property(x => x.CostPrice).IsRequired(false);
+        builder.Property(x => x.ImageUrl).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Physical).IsRequired(false);
         builder.Property(x => x.SerialTrackingMode).IsRequired(false);
         builder.Property(x => x.InternalSerialFixedCode).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);

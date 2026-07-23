@@ -254,7 +254,7 @@ const App = {
                 cashCategoryDropDown.obj = new ej.dropdowns.DropDownList({
                     dataSource: state.cashCategoryList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Select Category (Optional)',
+                    placeholder: 'Select Category',
                     allowFiltering: true,
                     change: (args) => { state.cashCategoryId = args.value; }
                 });
@@ -269,7 +269,7 @@ const App = {
                 customerDropDown.obj = new ej.dropdowns.DropDownList({
                     dataSource: state.customerList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Select a Customer (Optional)',
+                    placeholder: 'Select a Customer',
                     allowFiltering: true,
                     showClearButton: true,
                     filtering: (e) => {

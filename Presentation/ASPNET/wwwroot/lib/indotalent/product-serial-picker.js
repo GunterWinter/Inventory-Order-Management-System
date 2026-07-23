@@ -111,7 +111,7 @@ window.ProductSerialPicker = (() => {
 
     const isSerialTrackedProduct = (productList, productId) => {
         const product = (productList ?? []).find(item => item.id === productId);
-        return product?.physical === true && Number(product?.serialTrackingMode ?? 0) === 1;
+        return product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
     };
 
     const applySelectionToRow = (rowData, selectedSerials, quantityField) => {
@@ -142,7 +142,6 @@ window.ProductSerialPicker = (() => {
                 const label = args.element.querySelector('.serial-count');
                 const productList = options.productListGetter?.() ?? [];
                 const quantityField = options.quantityField ?? 'movement';
-                const quantityObj = options.quantityObjGetter?.();
                 const refreshLabel = () => {
                     const count = args.rowData.productSerialIds?.length ?? 0;
                     label.textContent = count ? `${count} serials` : 'None';
@@ -154,17 +153,19 @@ window.ProductSerialPicker = (() => {
                         Swal.fire({
                             icon: 'info',
                             title: 'No serial tracking',
-                            text: 'This product does not use device serial tracking.'
+                            text: 'Hàng hóa này không sử dụng theo dõi số seri.'
                         });
                         return;
                     }
+
+                    const quantityObj = options.quantityObjGetter?.();
 
                     const warehouseId = options.warehouseIdGetter?.(args.rowData);
                     if (!args.rowData.productId || (options.requireWarehouse !== false && !warehouseId)) {
                         Swal.fire({
                             icon: 'warning',
-                            title: 'Missing data',
-                            text: 'Please choose product and warehouse before choosing serial numbers.'
+                            title: 'Thiếu dữ liệu',
+                            text: 'Làm ơn chọn sản phẩm và kho trước khi chọn số seri.'
                         });
                         return;
                     }
@@ -208,8 +209,8 @@ window.ProductSerialPicker = (() => {
             args.cancel = true;
             Swal.fire({
                 icon: 'warning',
-                title: 'Save Failed',
-                text: 'Please choose device serial numbers before saving this item.',
+                title: 'Lưu thất bại',
+                text: 'Làm ơn chọn số seri thiết bị trước khi lưu.',
                 confirmButtonText: 'OK'
             });
             return false;

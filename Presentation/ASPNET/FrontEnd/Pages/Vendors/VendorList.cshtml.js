@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -880,6 +880,11 @@ const App = {
             }
         };
 
+                let warehouseObj = null;
+        let productObj = null;
+        let movementObj = null;
+        let qtySCCountObj = null;
+
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
@@ -1060,5 +1065,6 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
 
 

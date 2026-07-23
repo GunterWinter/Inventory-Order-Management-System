@@ -93,7 +93,7 @@ const App = {
                 customerDropDown.obj = new ej.dropdowns.DropDownList({
                     dataSource: state.customerList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Select a Customer (Optional)',
+                    placeholder: 'Select a Customer',
                     allowFiltering: true,
                     showClearButton: true,
                     filtering: (e) => {

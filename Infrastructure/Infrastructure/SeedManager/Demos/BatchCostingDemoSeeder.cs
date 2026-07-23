@@ -142,8 +142,8 @@ public class BatchCostingDemoSeeder
             unitPrice: 1_352_000d
         );
 
-        await SeedSalesReturnAsync(outbound.DeliveryOrder.Id, outbound.SalesOrderItem.Id, warehouse.Id, product.Id, quantity: 1d);
-        await SeedPurchaseReturnAsync(inbound.GoodsReceive.Id, warehouse.Id, product.Id, quantity: 1d);
+        await SeedSalesReturnAsync(outbound.SalesOrder.Id, outbound.SalesOrderItem.Id, warehouse.Id, product.Id, quantity: 1d);
+        await SeedPurchaseReturnAsync(inbound.PurchaseOrder.Id, warehouse.Id, product.Id, quantity: 1d);
         var transfer = await SeedTransferOutAsync(warehouse.Id, product.Id, quantity: 2d);
         await SeedTransferInAsync(transfer.TransferOut.Id, product.Id, quantity: 2d, transfer.SerialIds);
         await SeedPositiveAdjustmentAsync(warehouse.Id, product.Id, quantity: 1d);
@@ -300,7 +300,7 @@ public class BatchCostingDemoSeeder
         return (salesOrder, salesOrderItem, deliveryOrder);
     }
 
-    private async Task SeedSalesReturnAsync(string? deliveryOrderId, string? salesOrderItemId, string? warehouseId, string? productId, double quantity)
+    private async Task SeedSalesReturnAsync(string? salesOrderId, string? salesOrderItemId, string? warehouseId, string? productId, double quantity)
     {
         var salesReturn = new SalesReturn
         {
@@ -308,7 +308,7 @@ public class BatchCostingDemoSeeder
             ReturnDate = new DateTime(2026, 4, 8),
             Status = SalesReturnStatus.Confirmed,
             Description = $"{DemoPrefix}khách trả lại một phần hàng",
-            DeliveryOrderId = deliveryOrderId
+            SalesOrderId = salesOrderId
         };
         await _salesReturnRepository.CreateAsync(salesReturn);
         await _unitOfWork.SaveAsync();
@@ -334,7 +334,7 @@ public class BatchCostingDemoSeeder
         );
     }
 
-    private async Task SeedPurchaseReturnAsync(string? goodsReceiveId, string? warehouseId, string? productId, double quantity)
+    private async Task SeedPurchaseReturnAsync(string? purchaseOrderId, string? warehouseId, string? productId, double quantity)
     {
         var purchaseReturn = new PurchaseReturn
         {
@@ -342,7 +342,7 @@ public class BatchCostingDemoSeeder
             ReturnDate = new DateTime(2026, 4, 9),
             Status = PurchaseReturnStatus.Confirmed,
             Description = $"{DemoPrefix}trả lại một phần hàng cho nhà cung cấp",
-            GoodsReceiveId = goodsReceiveId
+            PurchaseOrderId = purchaseOrderId
         };
         await _purchaseReturnRepository.CreateAsync(purchaseReturn);
         await _unitOfWork.SaveAsync();

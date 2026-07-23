@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -18,7 +18,7 @@ public class UpdateSalesReturnRequest : IRequest<UpdateSalesReturnResult>
     public DateTime? ReturnDate { get; init; }
     public string? Status { get; init; }
     public string? Description { get; init; }
-    public string? DeliveryOrderId { get; init; }
+    public string? SalesOrderId { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -29,7 +29,7 @@ public class UpdateSalesReturnValidator : AbstractValidator<UpdateSalesReturnReq
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.ReturnDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
-        RuleFor(x => x.DeliveryOrderId).NotEmpty();
+        RuleFor(x => x.SalesOrderId).NotEmpty();
     }
 }
 
@@ -65,7 +65,7 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
         entity.ReturnDate = request.ReturnDate;
         entity.Status = (SalesReturnStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
-        entity.DeliveryOrderId = request.DeliveryOrderId;
+        entity.SalesOrderId = request.SalesOrderId;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -87,4 +87,5 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
         };
     }
 }
+
 

@@ -70,13 +70,18 @@
                                                 <input ref="numberRef" v-model="state.number" readonly>
                                             </div>
                                         </div>
-                                        <div class="row mb-2">
-                                            <div class="col-md-6">
-                                                <label for="CustomerId">Customer</label>
-                                                <div ref="customerIdRef"></div>
-                                                <label class="text-danger">{{ state.errors.customerId }}</label>
-                                            </div>
-                                        </div>
+                                         <div class="row mb-2">
+                                             <div class="col-md-6">
+                                                 <label for="CustomerId">Customer</label>
+                                                 <div ref="customerIdRef"></div>
+                                                 <label class="text-danger">{{ state.errors.customerId }}</label>
+                                             </div>
+                                             <div class="col-md-6">
+                                                 <label for="SalesType">Loại xuất bán</label>
+                                                 <div ref="salesTypeRef"></div>
+                                                 <label class="text-danger">{{ state.errors.salesType }}</label>
+                                             </div>
+                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
                                                 <label for="OrderStatus">Order Status</label>

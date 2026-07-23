@@ -1,4 +1,4 @@
-﻿using Application.Common.Extensions;
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -20,27 +20,27 @@ public class CreateSalesReturnRequest : IRequest<CreateSalesReturnResult>
     public DateTime? ReturnDate { get; init; }
     public string? Status { get; init; }
     public string? Description { get; init; }
-    public string? DeliveryOrderId { get; init; }
+    public string? SalesOrderId { get; init; }
     public string? CreatedById { get; init; }
 }
 
 public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest, CreateSalesReturnResult>
 {
-    private readonly ICommandRepository<SalesReturn> _deliveryOrderRepository;
+    private readonly ICommandRepository<SalesReturn> _SalesOrderRepository;
     private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreateSalesReturnHandler(
-        ICommandRepository<SalesReturn> deliveryOrderRepository,
+        ICommandRepository<SalesReturn> SalesOrderRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
         InventoryTransactionService inventoryTransactionService
         )
     {
-        _deliveryOrderRepository = deliveryOrderRepository;
+        _SalesOrderRepository = SalesOrderRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -56,15 +56,15 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
         entity.ReturnDate = request.ReturnDate;
         entity.Status = (SalesReturnStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
-        entity.DeliveryOrderId = request.DeliveryOrderId;
+        entity.SalesOrderId = request.SalesOrderId;
 
-        await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
+        await _SalesOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
         var items = await _itemRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.DeliveryOrderId && x.ModuleName == nameof(DeliveryOrder))
+            .Where(x => x.ModuleId == entity.SalesOrderId && x.ModuleName == nameof(SalesOrder))
             .Include(x => x.Product)
             .ToListAsync(cancellationToken);
 
@@ -90,3 +90,4 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
         };
     }
 }
+

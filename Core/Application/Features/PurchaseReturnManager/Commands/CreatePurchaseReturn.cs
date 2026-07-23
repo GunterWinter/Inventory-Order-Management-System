@@ -1,4 +1,4 @@
-﻿using Application.Common.Extensions;
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -20,7 +20,7 @@ public class CreatePurchaseReturnRequest : IRequest<CreatePurchaseReturnResult>
     public DateTime? ReturnDate { get; init; }
     public string? Status { get; init; }
     public string? Description { get; init; }
-    public string? GoodsReceiveId { get; init; }
+    public string? PurchaseOrderId { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -30,7 +30,7 @@ public class CreatePurchaseReturnValidator : AbstractValidator<CreatePurchaseRet
     {
         RuleFor(x => x.ReturnDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
-        RuleFor(x => x.GoodsReceiveId).NotEmpty();
+        RuleFor(x => x.PurchaseOrderId).NotEmpty();
     }
 }
 
@@ -67,7 +67,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         entity.ReturnDate = request.ReturnDate;
         entity.Status = (PurchaseReturnStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
-        entity.GoodsReceiveId = request.GoodsReceiveId;
+        entity.PurchaseOrderId = request.PurchaseOrderId;
 
         await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -75,7 +75,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         var items = await _itemRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.GoodsReceiveId && x.ModuleName == nameof(GoodsReceive))
+            .Where(x => x.ModuleId == entity.PurchaseOrderId && x.ModuleName == nameof(PurchaseOrder))
             .Include(x => x.Product)
             .ToListAsync(cancellationToken);
 
@@ -101,3 +101,4 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         };
     }
 }
+

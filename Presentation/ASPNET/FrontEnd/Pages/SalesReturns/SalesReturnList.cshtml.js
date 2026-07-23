@@ -1,9 +1,9 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
-            deliveryOrderListLookupData: [],
+            salesOrderListLookupData: [],
             salesReturnStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
@@ -13,11 +13,11 @@ const App = {
             number: '',
             returnDate: '',
             description: '',
-            deliveryOrderId: null,
+            salesOrderId: null,
             status: null,
             errors: {
                 returnDate: '',
-                deliveryOrderId: '',
+                salesOrderId: '',
                 status: '',
                 description: ''
             },
@@ -30,14 +30,14 @@ const App = {
         const mainModalRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
         const returnDateRef = Vue.ref(null);
-        const deliveryOrderIdRef = Vue.ref(null);
+        const salesOrderIdRef = Vue.ref(null);
         const statusRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
 
 
         const validateForm = function () {
             state.errors.returnDate = '';
-            state.errors.deliveryOrderId = '';
+            state.errors.salesOrderId = '';
             state.errors.status = '';
 
             let isValid = true;
@@ -46,8 +46,8 @@ const App = {
                 state.errors.returnDate = 'Return date is required.';
                 isValid = false;
             }
-            if (!state.deliveryOrderId) {
-                state.errors.deliveryOrderId = 'Delivery Order is required.';
+            if (!state.salesOrderId) {
+                state.errors.salesOrderId = 'Sales Order is required.';
                 isValid = false;
             }
             if (!state.status) {
@@ -63,11 +63,11 @@ const App = {
             state.number = '';
             state.returnDate = '';
             state.description = '';
-            state.deliveryOrderId = null;
+            state.salesOrderId = null;
             state.status = null;
             state.errors = {
                 returnDate: '',
-                deliveryOrderId: '',
+                salesOrderId: '',
                 status: '',
                 description: ''
             };
@@ -113,14 +113,14 @@ const App = {
             }
         };
 
-        const deliveryOrderListLookup = {
+        const salesOrderListLookup = {
             obj: null,
             create: () => {
-                if (state.deliveryOrderListLookupData && Array.isArray(state.deliveryOrderListLookupData)) {
-                    deliveryOrderListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.deliveryOrderListLookupData,
+                if (state.salesOrderListLookupData && Array.isArray(state.salesOrderListLookupData)) {
+                    salesOrderListLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.salesOrderListLookupData,
                         fields: { value: 'id', text: 'number' },
-                        placeholder: 'Select Delivery Order',
+                        placeholder: 'Select Sales Order',
                         filterBarPlaceholder: 'Search',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
@@ -130,27 +130,27 @@ const App = {
                             if (e.text !== '') {
                                 query = query.where('number', 'startsWith', e.text, true);
                             }
-                            e.updateData(state.deliveryOrderListLookupData, query);
+                            e.updateData(state.salesOrderListLookupData, query);
                         },
                         change: (e) => {
-                            state.deliveryOrderId = e.value;
+                            state.salesOrderId = e.value;
                         }
                     });
-                    deliveryOrderListLookup.obj.appendTo(deliveryOrderIdRef.value);
+                    salesOrderListLookup.obj.appendTo(salesOrderIdRef.value);
                 }
             },
             refresh: () => {
-                if (deliveryOrderListLookup.obj) {
-                    deliveryOrderListLookup.obj.value = state.deliveryOrderId;
+                if (salesOrderListLookup.obj) {
+                    salesOrderListLookup.obj.value = state.salesOrderId;
                 }
             },
         };
 
         Vue.watch(
-            () => state.deliveryOrderId,
+            () => state.salesOrderId,
             (newVal, oldVal) => {
-                deliveryOrderListLookup.refresh();
-                state.errors.deliveryOrderId = '';
+                salesOrderListLookup.refresh();
+                state.errors.salesOrderId = '';
             }
         );
 
@@ -194,20 +194,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (returnDate, description, status, deliveryOrderId, createdById) => {
+            createMainData: async (returnDate, description, status, salesOrderId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesReturn/CreateSalesReturn', {
-                        returnDate, description, status, deliveryOrderId, createdById
+                        returnDate, description, status, salesOrderId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, returnDate, description, status, deliveryOrderId, updatedById) => {
+            updateMainData: async (id, returnDate, description, status, salesOrderId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesReturn/UpdateSalesReturn', {
-                        id, returnDate, description, status, deliveryOrderId, updatedById
+                        id, returnDate, description, status, salesOrderId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -224,9 +224,9 @@ const App = {
                     throw error;
                 }
             },
-            getDeliveryOrderListLookupData: async () => {
+            getsalesOrderListLookupData: async () => {
                 try {
-                    const response = await AxiosManager.get('/DeliveryOrder/GetDeliveryOrderList', {});
+                    const response = await AxiosManager.get('/SalesOrder/GetSalesOrderList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -305,9 +305,9 @@ const App = {
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
-            populateDeliveryOrderListLookupData: async () => {
-                const response = await services.getDeliveryOrderListLookupData();
-                state.deliveryOrderListLookupData = response?.data?.content?.data;
+            populatesalesOrderListLookupData: async () => {
+                const response = await services.getsalesOrderListLookupData();
+                state.salesOrderListLookupData = response?.data?.content?.data;
             },
             populateSalesReturnStatusListLookupData: async () => {
                 const response = await services.getSalesReturnStatusListLookupData();
@@ -344,7 +344,7 @@ const App = {
             },
             onMainModalHidden: () => {
                 state.errors.returnDate = '';
-                state.errors.deliveryOrderId = '';
+                state.errors.salesOrderId = '';
                 state.errors.status = '';
             }
         };
@@ -364,10 +364,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.returnDate, state.description, state.status, state.deliveryOrderId, StorageManager.getUserId())
+                        ? await services.createMainData(state.returnDate, state.description, state.status, state.salesOrderId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.returnDate, state.description, state.status, state.deliveryOrderId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.returnDate, state.description, state.status, state.salesOrderId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -434,11 +434,11 @@ const App = {
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
-                await methods.populateDeliveryOrderListLookupData();
+                await methods.populatesalesOrderListLookupData();
                 await methods.populateSalesReturnStatusListLookupData();
                 numberText.create();
                 returnDatePicker.create();
-                deliveryOrderListLookup.create();
+                salesOrderListLookup.create();
                 salesReturnStatusListLookup.create();
 
                 await secondaryGrid.create(state.secondaryData);
@@ -484,7 +484,7 @@ const App = {
                         },
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
                         { field: 'returnDate', headerText: 'Return Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'deliveryOrderNumber', headerText: 'Delivery Order', width: 150, minWidth: 150 },
+                        { field: 'salesOrderNumber', headerText: 'Sales Order', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
@@ -500,7 +500,7 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'returnDate', 'deliveryOrderNumber', 'statusName', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'returnDate', 'salesOrderNumber', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -544,7 +544,7 @@ const App = {
                                 state.number = selectedRecord.number ?? '';
                                 state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.deliveryOrderId = selectedRecord.deliveryOrderId ?? '';
+                                state.salesOrderId = selectedRecord.salesOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
                                 secondaryGrid.refresh();
@@ -562,7 +562,7 @@ const App = {
                                 state.number = selectedRecord.number ?? '';
                                 state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.deliveryOrderId = selectedRecord.deliveryOrderId ?? '';
+                                state.salesOrderId = selectedRecord.salesOrderId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
                                 secondaryGrid.refresh();
@@ -586,6 +586,11 @@ const App = {
                 mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
+
+                let warehouseObj = null;
+        let productObj = null;
+        let movementObj = null;
+        let qtySCCountObj = null;
 
         const secondaryGrid = {
             obj: null,
@@ -642,7 +647,17 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.warehouseId,
                                         placeholder: 'Select a Warehouse',
-                                        floatLabelType: 'Never'
+                                        floatLabelType: 'Never',
+                                        change: function (e) {
+                                            args.rowData.warehouseId = e.value;
+                                            args.rowData.productSerialIds = [];
+                                            args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
+                                        }
                                     });
                                     warehouseObj.appendTo(args.element);
                                 }
@@ -690,6 +705,11 @@ const App = {
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
                                             if (movementObj) {
                                                 movementObj.value = 1;
                                             }
@@ -703,7 +723,7 @@ const App = {
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
-                            warehouseIdGetter: (rowData) => args.rowData.warehouseId,
+                            warehouseIdGetter: (rowData) => rowData.warehouseId,
                             moduleName: 'SalesReturn',
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
@@ -894,7 +914,7 @@ const App = {
             secondaryGridRef,
             numberRef,
             returnDateRef,
-            deliveryOrderIdRef,
+            salesOrderIdRef,
             statusRef,
             state,
             handler,
@@ -903,6 +923,15 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
+
+
+
+
+
+
+
 
 
 

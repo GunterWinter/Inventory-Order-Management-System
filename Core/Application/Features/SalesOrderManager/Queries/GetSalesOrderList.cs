@@ -18,6 +18,8 @@ public record GetSalesOrderListDto
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
     public string? CustomerName { get; init; }
+    public SalesType? SalesType { get; init; }
+    public string? SalesTypeName { get; init; }
     public double? BeforeTaxAmount { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
@@ -36,6 +38,10 @@ public class GetSalesOrderListProfile : Profile
             .ForMember(
                 dest => dest.OrderStatusName,
                 opt => opt.MapFrom(src => src.OrderStatus.HasValue ? src.OrderStatus.Value.ToFriendlyName() : string.Empty)
+            )
+            .ForMember(
+                dest => dest.SalesTypeName,
+                opt => opt.MapFrom(src => src.SalesType == SalesType.Retail ? "Xuất bán lẻ" : (src.SalesType == SalesType.Internal ? "Xuất nội bộ" : string.Empty))
             );
 
     }

@@ -19,10 +19,13 @@ const App = {
             orderDate: '',
             description: '',
             customerId: null,
+            salesType: 1,
             orderStatus: null,
+            salesTypeListLookupData: [],
             errors: {
                 orderDate: '',
                 customerId: '',
+                salesType: '',
                 orderStatus: '',
                 description: ''
             },
@@ -39,12 +42,38 @@ const App = {
         const orderDateRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
         const customerIdRef = Vue.ref(null);
+        const salesTypeRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
 
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
         const formatQuantity = (value) => NumberFormatManager.formatToLocale(value ?? 0);
+        const getErrorMessage = (error, defaultMsg = 'Please try again.') => {
+            if (!error) return defaultMsg;
+            if (typeof error === 'string') return error;
+            console.error('SalesOrder Error detail:', error);
+            const responseData = error.response?.data;
+            if (responseData) {
+                if (typeof responseData === 'string') return responseData;
+                if (responseData.message) return responseData.message;
+                if (responseData.detail) return responseData.detail;
+                if (responseData.title) return responseData.title;
+                if (responseData.errors && typeof responseData.errors === 'object') {
+                    const messages = [];
+                    for (const key in responseData.errors) {
+                        if (Array.isArray(responseData.errors[key])) {
+                            messages.push(`${key}: ${responseData.errors[key].join(', ')}`);
+                        } else if (typeof responseData.errors[key] === 'string') {
+                            messages.push(`${key}: ${responseData.errors[key]}`);
+                        }
+                    }
+                    if (messages.length > 0) return messages.join('\n');
+                }
+            }
+            if (error.message) return error.message;
+            return defaultMsg;
+        };
         const getBatchSelectionKey = (warehouseId, batchNumber) => `${warehouseId ?? ''}::${normalizeBatchNumber(batchNumber)}`;
         const findWarehouseNameById = (warehouseId) => state.warehouseListLookupData.find(item => item.id === warehouseId)?.name ?? '';
         const getSelectedProductIds = (currentRowId = null) => new Set(
@@ -221,10 +250,12 @@ const App = {
             state.orderDate = '';
             state.description = '';
             state.customerId = null;
+            state.salesType = 1;
             state.orderStatus = null;
             state.errors = {
                 orderDate: '',
                 customerId: '',
+                salesType: '',
                 orderStatus: '',
                 description: ''
             };
@@ -244,21 +275,29 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (orderDate, description, orderStatus, customerId, createdById) => {
+            createMainData: async (orderDate, description, orderStatus, customerId, salesType, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/CreateSalesOrder', {
-                        orderDate, description, orderStatus, customerId, createdById
+                        orderDate, description, orderStatus, customerId, salesType: Number(salesType ?? 1), createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, orderDate, description, orderStatus, customerId, updatedById) => {
+            updateMainData: async (id, orderDate, description, orderStatus, customerId, salesType, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/UpdateSalesOrder', {
-                        id, orderDate, description, orderStatus, customerId, updatedById
+                        id, orderDate, description, orderStatus, customerId, salesType: Number(salesType ?? 1), updatedById
                     });
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getSalesTypeListLookupData: async () => {
+                try {
+                    const response = await AxiosManager.get('/SalesOrder/GetSalesTypeList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -415,6 +454,10 @@ const App = {
                 const response = await services.getSalesOrderStatusListLookupData();
                 state.salesOrderStatusListLookupData = response?.data?.content?.data;
             },
+            populateSalesTypeListLookupData: async () => {
+                const response = await services.getSalesTypeListLookupData();
+                state.salesTypeListLookupData = response?.data?.content?.data;
+            },
             populateMainData: async () => {
                 const response = await services.getMainData();
                 const paymentResponse = await services.getPaymentStatusLookup();
@@ -528,9 +571,100 @@ const App = {
                     state.totalAmount = NumberFormatManager.formatToLocale(record.afterTaxAmount ?? 0);
                 }
             },
+            onSalesTypeChanged: async (newSalesType) => {
+                const isInternal = String(newSalesType) === '2' || Number(newSalesType) === 2;
+
+                if (state.secondaryData && Array.isArray(state.secondaryData) && state.secondaryData.length > 0) {
+                    for (const item of state.secondaryData) {
+                        const product = state.productListLookupData?.find(p => p.id === item.productId);
+                        if (product) {
+                            const targetUnitPrice = isInternal
+                                ? (product.costPrice ?? product.unitPrice ?? 0)
+                                : (product.unitPrice ?? 0);
+
+                            item.unitPrice = targetUnitPrice;
+                            item.total = targetUnitPrice * (item.quantity ?? 0);
+
+                            const tax = state.taxListLookupData?.find(t => t.id === item.taxId);
+                            const taxPercentage = tax ? (tax.percentage ?? 0) : (item.taxPercentage ?? 0);
+                            item.taxAmount = (item.total * taxPercentage) / 100;
+                            item.afterTaxAmount = item.total + item.taxAmount;
+
+                            if (state.id && item.id) {
+                                try {
+                                    await services.updateSecondaryData(
+                                        item.id,
+                                        item.unitPrice,
+                                        item.quantity,
+                                        item.summary,
+                                        item.productId,
+                                        item.warehouseId,
+                                        item.batchNumber,
+                                        item.warrantyMonths,
+                                        item.taxId,
+                                        state.id,
+                                        StorageManager.getUserId(),
+                                        item.productSerialIds ?? []
+                                    );
+                                } catch (err) {
+                                    console.error('Update SalesOrderItem price error:', err);
+                                }
+                            }
+                        }
+                    }
+
+                    if (secondaryGrid.obj) {
+                        secondaryGrid.refresh();
+                    }
+                }
+
+                if (secondaryGrid.obj && secondaryGrid.obj.isEdit && priceObj && selectedProduct) {
+                    const targetPrice = isInternal
+                        ? (selectedProduct.costPrice ?? selectedProduct.unitPrice ?? 0)
+                        : (selectedProduct.unitPrice ?? 0);
+
+                    priceObj.value = targetPrice;
+                    if (quantityObj && totalObj) {
+                        totalObj.value = targetPrice * (quantityObj.value ?? 0);
+                    }
+                }
+
+                if (state.id) {
+                    await methods.populateSecondaryData(state.id);
+                    await methods.populateMainData();
+                    if (mainGrid.obj) mainGrid.refresh();
+                } else {
+                    let subTotal = 0;
+                    let taxTotal = 0;
+                    let grandTotal = 0;
+                    state.secondaryData.forEach(item => {
+                        subTotal += item.total ?? 0;
+                        taxTotal += item.taxAmount ?? 0;
+                        grandTotal += item.afterTaxAmount ?? 0;
+                    });
+                    state.subTotalAmount = NumberFormatManager.formatToLocale(subTotal);
+                    state.taxAmount = NumberFormatManager.formatToLocale(taxTotal);
+                    state.totalAmount = NumberFormatManager.formatToLocale(grandTotal);
+                }
+            },
             handleFormSubmit: async () => {
                 state.isSubmitting = true;
                 await new Promise(resolve => setTimeout(resolve, 200));
+
+                if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                    secondaryGrid.obj.endEdit();
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                        state.isSubmitting = false;
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Dòng sản phẩm chưa hoàn tất',
+                            text: 'Vui lòng điền đầy đủ các trường bắt buộc (Hàng hóa, Kho hàng, Thuế, Số lượng) trên dòng đang chỉnh sửa trước khi lưu đơn hàng.',
+                            confirmButtonText: 'Đồng ý'
+                        });
+                        return;
+                    }
+                }
 
                 if (!validateForm()) {
                     state.isSubmitting = false;
@@ -544,10 +678,10 @@ const App = {
 
                 try {
                     const response = state.id === ''
-                        ? await services.createMainData(state.orderDate, state.description, state.orderStatus, state.customerId, StorageManager.getUserId())
+                        ? await services.createMainData(state.orderDate, state.description, state.orderStatus, state.customerId, state.salesType, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.orderDate, state.description, state.orderStatus, state.customerId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.orderDate, state.description, state.orderStatus, state.customerId, state.salesType, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -560,6 +694,7 @@ const App = {
                             state.orderDate = response?.data?.content?.data.orderDate ? DateFormatManager.parseBusinessDate(response.data.content.data.orderDate) : null;
                             state.description = response?.data?.content?.data.description ?? '';
                             state.customerId = response?.data?.content?.data.customerId ?? '';
+                            state.salesType = response?.data?.content?.data.salesType ?? 1;
                             state.orderStatus = String(response?.data?.content?.data.orderStatus ?? '');
                             state.showComplexDiv = true;
 
@@ -590,10 +725,11 @@ const App = {
                         });
                     }
                 } catch (error) {
+                    console.error('SalesOrder handleFormSubmit error:', error);
                     Swal.fire({
                         icon: 'error',
                         title: 'An Error Occurred',
-                        text: error.response?.data?.message ?? 'Please try again.',
+                        text: getErrorMessage(error, 'Please try again.'),
                         confirmButtonText: 'OK'
                     });
                 } finally {
@@ -603,6 +739,7 @@ const App = {
             onMainModalHidden: () => {
                 state.errors.orderDate = '';
                 state.errors.customerId = '';
+                state.errors.salesType = '';
                 state.errors.orderStatus = '';
             }
         };
@@ -636,6 +773,31 @@ const App = {
             refresh: () => {
                 if (customerListLookup.obj) {
                     customerListLookup.obj.value = state.customerId;
+                }
+            }
+        };
+
+        const salesTypeListLookup = {
+            obj: null,
+            create: () => {
+                if (state.salesTypeListLookupData && Array.isArray(state.salesTypeListLookupData)) {
+                    salesTypeListLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.salesTypeListLookupData,
+                        fields: { value: 'id', text: 'name' },
+                        placeholder: 'Chọn loại xuất',
+                        change: async (e) => {
+                            if (state.salesType !== e.value) {
+                                state.salesType = e.value;
+                                await methods.onSalesTypeChanged(e.value);
+                            }
+                        }
+                    });
+                    salesTypeListLookup.obj.appendTo(salesTypeRef.value);
+                }
+            },
+            refresh: () => {
+                if (salesTypeListLookup.obj) {
+                    salesTypeListLookup.obj.value = state.salesType != null ? String(state.salesType) : '1';
                 }
             }
         };
@@ -710,6 +872,14 @@ const App = {
         );
 
         Vue.watch(
+            () => state.salesType,
+            (newVal, oldVal) => {
+                salesTypeListLookup.refresh();
+                state.errors.salesType = '';
+            }
+        );
+
+        Vue.watch(
             () => state.orderStatus,
             (newVal, oldVal) => {
                 salesOrderStatusListLookup.refresh();
@@ -747,6 +917,7 @@ const App = {
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
                         { field: 'orderDate', headerText: 'SO Date', width: 150, format: 'yyyy-MM-dd' },
                         { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
+                        { field: 'salesTypeName', headerText: 'Loại xuất', width: 140, minWidth: 140 },
                         { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
                         { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N0' },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
@@ -775,7 +946,7 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'orderDate', 'customerName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
+                        mainGrid.obj.autoFitColumns(['number', 'orderDate', 'customerName', 'salesTypeName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
 
                         const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
                         paymentActions.forEach(paymentAction => {
@@ -848,6 +1019,7 @@ const App = {
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
+                                state.salesType = selectedRecord.salesType ?? 1;
                                 state.orderStatus = String(selectedRecord.orderStatus ?? '');
                                 state.showComplexDiv = true;
 
@@ -869,6 +1041,7 @@ const App = {
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                                 state.description = selectedRecord.description ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
+                                state.salesType = selectedRecord.salesType ?? 1;
                                 state.orderStatus = String(selectedRecord.orderStatus ?? '');
                                 state.showComplexDiv = false;
 
@@ -1008,11 +1181,14 @@ const App = {
                                                 warehouseObj.dataBind();
                                             }
                                             refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
+                                            const defaultPrice = (String(state.salesType) === '2' || Number(state.salesType) === 2)
+                                                ? (selectedProduct.costPrice ?? selectedProduct.unitPrice ?? null)
+                                                : (selectedProduct.unitPrice ?? null);
                                             if (numberObj) {
                                                 numberObj.value = selectedProduct.number;
                                             }
                                             if (priceObj) {
-                                                priceObj.value = selectedProduct.unitPrice ?? null;
+                                                priceObj.value = defaultPrice;
                                             }
                                             if (summaryObj) {
                                                 summaryObj.value = selectedProduct.description;
@@ -1022,7 +1198,7 @@ const App = {
                                             }
                                             if (quantityObj) {
                                                 quantityObj.value = 1;
-                                                const total = (selectedProduct.unitPrice ?? 0) * quantityObj.value;
+                                                const total = (defaultPrice ?? 0) * quantityObj.value;
                                                 if (totalObj) {
                                                     totalObj.value = total;
                                                 }
@@ -1670,6 +1846,50 @@ const App = {
                         }
 
                         const data = args.data ?? {};
+                        if (!data.productId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Hàng Hóa trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.warehouseId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Kho Hàng trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.taxId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Thuế trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.quantity || Number(data.quantity) <= 0) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Số lượng phải lớn hơn 0.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
                         const isSerialTracked = isSerialTrackedProduct(data.productId);
 
                         if (isSerialTracked) {
@@ -1687,7 +1907,7 @@ const App = {
                                 Swal.fire({
                                     icon: 'warning',
                                     title: 'Save Failed',
-                                    text: 'Please choose device serial numbers before saving this item.',
+                                    text: 'Làm ơn chọn số seri thiết bị trước khi lưu.',
                                     confirmButtonText: 'OK'
                                 });
                                 return;
@@ -1723,34 +1943,84 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
-                            await methods.refreshInventoryAvailability();
-                            await methods.populateSecondaryData(salesOrderId);
-                            secondaryGrid.refresh();
+                            try {
+                                const response = await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                if (response?.data?.code === 200) {
+                                    await methods.refreshInventoryAvailability();
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Save Successful',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Save Successful',
+                                        timer: 2000,
+                                        showConfirmButton: false
+                                    });
+                                } else {
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
+
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Save Failed',
+                                        text: response?.data?.message ?? 'Unable to save item.',
+                                        confirmButtonText: 'OK'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Create SalesOrderItem error:', error);
+                                await methods.populateSecondaryData(salesOrderId);
+                                secondaryGrid.refresh();
+
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Save Failed',
+                                    text: getErrorMessage(error, 'Unable to save item.'),
+                                    confirmButtonText: 'OK'
+                                });
+                            }
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
-                            await methods.refreshInventoryAvailability();
-                            await methods.populateSecondaryData(salesOrderId);
-                            secondaryGrid.refresh();
+                            try {
+                                const response = await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                if (response?.data?.code === 200) {
+                                    await methods.refreshInventoryAvailability();
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Save Successful',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Save Successful',
+                                        timer: 2000,
+                                        showConfirmButton: false
+                                    });
+                                } else {
+                                    await methods.populateSecondaryData(salesOrderId);
+                                    secondaryGrid.refresh();
+
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Save Failed',
+                                        text: response?.data?.message ?? 'Unable to update item.',
+                                        confirmButtonText: 'OK'
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Update SalesOrderItem error:', error);
+                                await methods.populateSecondaryData(salesOrderId);
+                                secondaryGrid.refresh();
+
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Save Failed',
+                                    text: getErrorMessage(error, 'Unable to update item.'),
+                                    confirmButtonText: 'OK'
+                                });
+                            }
                         }
                         if (args.requestType === 'delete') {
                             const salesOrderId = state.id;
@@ -1788,7 +2058,7 @@ const App = {
                                 Swal.fire({
                                     icon: 'error',
                                     title: 'Delete Failed',
-                                    text: error.response?.data?.message ?? 'Unable to delete this item.',
+                                    text: getErrorMessage(error, 'Unable to delete this item.'),
                                     confirmButtonText: 'OK'
                                 });
                             }
@@ -1905,7 +2175,8 @@ const App = {
                         Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
                     }
                 } catch (err) {
-                    Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message ?? 'Please try again.' });
+                    console.error('Payment Modal error:', err);
+                    Swal.fire({ icon: 'error', title: 'Error', text: getErrorMessage(err, 'Please try again.') });
                 }
             }
         };
@@ -1924,6 +2195,8 @@ const App = {
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
                 await methods.populateCustomerListLookupData();
                 customerListLookup.create();
+                await methods.populateSalesTypeListLookupData();
+                salesTypeListLookup.create();
                 await methods.populateTaxListLookupData();
                 await methods.populateSalesOrderStatusListLookupData();
                 salesOrderStatusListLookup.create();
@@ -1950,6 +2223,7 @@ const App = {
                         state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
                         state.description = selectedRecord.description ?? '';
                         state.customerId = selectedRecord.customerId ?? '';
+                        state.salesType = selectedRecord.salesType ?? 1;
                         state.orderStatus = String(selectedRecord.orderStatus ?? '');
                         state.showComplexDiv = true;
 
@@ -1971,6 +2245,7 @@ const App = {
             orderDateRef,
             numberRef,
             customerIdRef,
+            salesTypeRef,
             orderStatusRef,
             secondaryGridRef,
             state,

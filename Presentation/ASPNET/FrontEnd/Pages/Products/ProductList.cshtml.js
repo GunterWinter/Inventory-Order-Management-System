@@ -12,6 +12,8 @@ const App = {
             number: '',
             referenceCode: '', 
             unitPrice: '',
+            costPrice: '',
+            imageUrl: '',
             defaultWarehouseId: null,
             defaultWarrantyMonths: '',
             description: '',
@@ -24,6 +26,7 @@ const App = {
                 name: '',
                 referenceCode: '', 
                 unitPrice: '',
+                costPrice: '',
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
                 productGroupId: '',
@@ -41,7 +44,15 @@ const App = {
         const numberRef = Vue.ref(null);
         const referenceCodeRef = Vue.ref(null); 
         const unitPriceRef = Vue.ref(null);
+        const costPriceRef = Vue.ref(null);
+        const imageFileRef = Vue.ref(null);
         const defaultWarrantyMonthsRef = Vue.ref(null);
+        
+        const getImageUrl = (name) => {
+            if (!name) return '/noimage.png';
+            if (name.startsWith('http://') || name.startsWith('https://')) return name;
+            return '/api/FileImage/GetImage?imageName=' + encodeURIComponent(name);
+        };
         const normalizeInternalSerialFixedCode = (value) => (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
         const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode || 1) : 0;
         const getEffectiveInternalSerialFixedCode = () => getEffectiveSerialTrackingMode() === 1 ? normalizeInternalSerialFixedCode(state.internalSerialFixedCode) : null;
@@ -58,6 +69,14 @@ const App = {
             return NumberFormatManager.parseLocaleNumber(state.unitPrice);
         };
 
+        const getCostPriceValue = () => {
+            if (typeof state.costPrice === 'number') {
+                return state.costPrice;
+            }
+
+            return NumberFormatManager.parseLocaleNumber(state.costPrice);
+        };
+
         const getDefaultWarrantyMonthsValue = () => {
             if (state.defaultWarrantyMonths === '' || state.defaultWarrantyMonths == null) {
                 return null;
@@ -70,6 +89,7 @@ const App = {
             state.errors.name = '';
             state.errors.referenceCode = '';
             state.errors.unitPrice = '';
+            state.errors.costPrice = '';
             state.errors.defaultWarrantyMonths = '';
             state.errors.internalSerialFixedCode = '';
             state.errors.productGroupId = '';
@@ -84,6 +104,11 @@ const App = {
             const unitPriceValue = getUnitPriceValue();
             if (unitPriceValue != null && unitPriceValue < 0) {
                 state.errors.unitPrice = 'Unit price must be zero or greater.';
+                isValid = false;
+            }
+            const costPriceValue = getCostPriceValue();
+            if (costPriceValue != null && costPriceValue < 0) {
+                state.errors.costPrice = 'Cost price must be zero or greater.';
                 isValid = false;
             }
             const defaultWarrantyMonthsValue = getDefaultWarrantyMonthsValue();
@@ -116,6 +141,8 @@ const App = {
             state.number = '';
             state.referenceCode = ''; 
             state.unitPrice = '';
+            state.costPrice = '';
+            state.imageUrl = '';
             state.defaultWarehouseId = null;
             state.defaultWarrantyMonths = '';
             state.description = '';
@@ -128,11 +155,15 @@ const App = {
                 name: '',
                 referenceCode: '',
                 unitPrice: '',
+                costPrice: '',
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
                 productGroupId: '',
                 unitMeasureId: ''
             };
+            if (imageFileRef.value) {
+                imageFileRef.value.value = '';
+            }
         };
 
         const services = {
@@ -144,20 +175,34 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById) => {
+            createMainData: async (name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/Product/CreateProduct', {
-                        name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById
+                        name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById) => {
+            updateMainData: async (id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/Product/UpdateProduct', {
-                        id, name, referenceCode, unitPrice, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById
+                        id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById
+                    });
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            uploadImage: async (file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    const response = await AxiosManager.post('/FileImage/UploadImage', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data'
+                        }
                     });
                     return response;
                 } catch (error) {
@@ -365,6 +410,28 @@ const App = {
                 }
             }
         };
+        const costPriceNumber = {
+            obj: null,
+            create: () => {
+                costPriceNumber.obj = new ej.inputs.NumericTextBox({
+                    format: 'n0',
+                    placeholder: 'Enter Cost Price',
+                    min: 0,
+                    step: 1000,
+                    decimals: 0,
+                    validateDecimalOnType: false,
+                    change: (e) => {
+                        state.costPrice = e.value ?? '';
+                    }
+                });
+                costPriceNumber.obj.appendTo(costPriceRef.value);
+            },
+            refresh: () => {
+                if (costPriceNumber.obj) {
+                    costPriceNumber.obj.value = getCostPriceValue();
+                }
+            }
+        };
         const unitPriceNumber = {
             obj: null,
             create: () => {
@@ -428,6 +495,14 @@ const App = {
         );
 
         Vue.watch(
+            () => state.costPrice,
+            (newVal, oldVal) => {
+                state.errors.costPrice = '';
+                costPriceNumber.refresh();
+            }
+        );
+
+        Vue.watch(
             () => state.physical,
             (newVal) => {
                 if (!newVal) {
@@ -478,6 +553,22 @@ const App = {
                     state.internalSerialFixedCode = normalized;
                 }
             },
+            handleImageUpload: async function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                    const response = await services.uploadImage(file);
+                    if (response?.data?.content?.imageName) {
+                        state.imageUrl = response.data.content.imageName;
+                    }
+                } catch (error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Image Upload Failed',
+                        text: error.response?.data ?? 'Could not upload image file.'
+                    });
+                }
+            },
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;
@@ -488,10 +579,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -504,6 +595,8 @@ const App = {
                             state.referenceCode = response?.data?.content?.data.referenceCode ?? ''; 
                             state.name = response?.data?.content?.data.name ?? '';
                             state.unitPrice = response?.data?.content?.data.unitPrice ?? '';
+                            state.costPrice = response?.data?.content?.data.costPrice ?? '';
+                            state.imageUrl = response?.data?.content?.data.imageUrl ?? '';
                             state.defaultWarehouseId = response?.data?.content?.data.defaultWarehouseId ?? null;
                             state.defaultWarrantyMonths = response?.data?.content?.data.defaultWarrantyMonths ?? '';
                             state.description = response?.data?.content?.data.description ?? '';
@@ -576,7 +669,8 @@ const App = {
 
                 nameText.create();
                 numberText.create();
-                referenceCodeText.create(); // KH?I T?O COMPONENT M?I
+                referenceCodeText.create();
+                costPriceNumber.create();
                 unitPriceNumber.create();
                 defaultWarrantyMonthsNumber.create();
 
@@ -625,11 +719,26 @@ const App = {
                         {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
+                        {
+                            field: 'imageUrl',
+                            headerText: 'Image',
+                            width: 100,
+                            minWidth: 100,
+                            textAlign: 'Center',
+                            allowFiltering: false,
+                            allowSorting: false,
+                            disableHtmlEncode: false,
+                            valueAccessor: (field, data) => {
+                                const url = getImageUrl(data[field]);
+                                return `<img src="${url}" class="rounded" style="width: 38px; height: 38px; object-fit: cover;" />`;
+                            }
+                        },
                         { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
-                        { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 }, // THÊM C?T VÀO GRID
+                        { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
-                        { field: 'unitPrice', headerText: 'Unit Price', width: 150, minWidth: 150, format: 'N0' },
+                        { field: 'costPrice', headerText: 'Cost Price (Giá vốn)', width: 160, minWidth: 160, format: 'N0' },
+                        { field: 'unitPrice', headerText: 'Selling Price (Giá bán)', width: 170, minWidth: 170, format: 'N0' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
@@ -648,8 +757,7 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], false);
-                        // C?P NH?T autofit T? Ð?NG CAN CH?NH CHO referenceCode
-                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'internalSerialFixedCode', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'costPrice', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'internalSerialFixedCode', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -693,6 +801,8 @@ const App = {
                                 state.referenceCode = selectedRecord.referenceCode ?? '';
                                 state.name = selectedRecord.name ?? '';
                                 state.unitPrice = selectedRecord.unitPrice ?? '';
+                                state.costPrice = selectedRecord.costPrice ?? '';
+                                state.imageUrl = selectedRecord.imageUrl ?? '';
                                 state.defaultWarehouseId = selectedRecord.defaultWarehouseId ?? null;
                                 state.defaultWarrantyMonths = selectedRecord.defaultWarrantyMonths ?? '';
                                 state.description = selectedRecord.description ?? '';
@@ -715,6 +825,8 @@ const App = {
                                 state.referenceCode = selectedRecord.referenceCode ?? ''; 
                                 state.name = selectedRecord.name ?? '';
                                 state.unitPrice = selectedRecord.unitPrice ?? '';
+                                state.costPrice = selectedRecord.costPrice ?? '';
+                                state.imageUrl = selectedRecord.imageUrl ?? '';
                                 state.defaultWarehouseId = selectedRecord.defaultWarehouseId ?? null;
                                 state.defaultWarrantyMonths = selectedRecord.defaultWarrantyMonths ?? '';
                                 state.description = selectedRecord.description ?? '';
@@ -728,7 +840,6 @@ const App = {
                         }
                     }
                 });
-
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
@@ -756,8 +867,11 @@ const App = {
             numberRef,
             referenceCodeRef, 
             unitPriceRef,
+            costPriceRef,
+            imageFileRef,
             defaultWarrantyMonthsRef,
             getInternalSerialPreview,
+            getImageUrl,
             state,
             handler,
         };

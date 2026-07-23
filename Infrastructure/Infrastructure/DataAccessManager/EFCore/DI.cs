@@ -104,7 +104,12 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarrantyMonths') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarrantyMonths] int NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarehouseId') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarehouseId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'BatchNumber') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [BatchNumber] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'CustomerId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [CustomerId] nvarchar(50) NULL;"
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'CustomerId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [CustomerId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'CostPrice') IS NULL ALTER TABLE [dbo].[Product] ADD [CostPrice] float NULL ELSE IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'CostPrice') IS NOT NULL ALTER TABLE [dbo].[Product] ALTER COLUMN [CostPrice] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'ImageUrl') IS NULL ALTER TABLE [dbo].[Product] ADD [ImageUrl] nvarchar(500) NULL;",
+            "IF OBJECT_ID(N'[dbo].[SalesOrder]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrder', N'SalesType') IS NULL ALTER TABLE [dbo].[SalesOrder] ADD [SalesType] int NOT NULL DEFAULT 1;",
+            "IF OBJECT_ID(N'[dbo].[SalesReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesReturn', N'SalesOrderId') IS NULL ALTER TABLE [dbo].[SalesReturn] ADD [SalesOrderId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[PurchaseReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseReturn', N'PurchaseOrderId') IS NULL ALTER TABLE [dbo].[PurchaseReturn] ADD [PurchaseOrderId] nvarchar(50) NULL;"
         };
 
         foreach (var command in commands)

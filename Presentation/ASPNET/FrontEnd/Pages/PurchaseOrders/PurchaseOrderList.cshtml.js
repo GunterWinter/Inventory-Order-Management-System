@@ -386,6 +386,21 @@ const App = {
                 state.isSubmitting = true;
                 await new Promise(resolve => setTimeout(resolve, 200));
 
+                if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                    secondaryGrid.obj.endEdit();
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                        state.isSubmitting = false;
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Dòng sản phẩm chưa hoàn tất',
+                            text: 'Vui lòng điền đầy đủ các trường bắt buộc (Hàng hóa, Kho hàng, Thuế, Số lượng) trên dòng đang chỉnh sửa trước khi lưu đơn hàng.',
+                            confirmButtonText: 'Đồng ý'
+                        });
+                        return;
+                    }
+                }
+
                 if (!validateForm()) {
                     state.isSubmitting = false;
                     return;
@@ -623,11 +638,12 @@ const App = {
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
+                        { text: 'Tạo nhanh đơn bán hàng', tooltipText: 'Xuất nhanh ra công trình', prefixIcon: 'e-copy', id: 'CreateQuickSalesOrderCustom' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'orderDate', 'vendorName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
 
                         const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
@@ -657,16 +673,16 @@ const App = {
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
                         }
                     },
                     rowSelecting: () => {
@@ -726,6 +742,47 @@ const App = {
                                 secondaryGrid.refresh();
 
                                 mainModal.obj.show();
+                            }
+                        }
+
+                        if (args.item.id === 'CreateQuickSalesOrderCustom') {
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                try {
+                                    const response = await AxiosManager.post('/SalesOrder/CreateSalesOrderFromPurchaseOrder', {
+                                        purchaseOrderId: selectedRecord.id,
+                                        salesType: 2,
+                                        createdById: StorageManager.getUserId()
+                                    });
+
+                                    if (response.data.code === 200) {
+                                        const newSo = response.data.content?.data;
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'Tạo đơn bán hàng thành công',
+                                            html: `Đã tạo đơn bán hàng nháp <b>${newSo?.number || ''}</b> từ Đơn mua hàng.<br/>Bạn có muốn xem đơn bán hàng mới không?`,
+                                            showCancelButton: true,
+                                            confirmButtonText: 'Đến trang đơn bán hàng',
+                                            cancelButtonText: 'Đóng'
+                                        }).then((result) => {
+                                            if (result.isConfirmed) {
+                                                window.location.href = '/SalesOrders/SalesOrderList';
+                                            }
+                                        });
+                                    } else {
+                                        Swal.fire({
+                                            icon: 'error',
+                                            title: 'Tạo thất bại',
+                                            text: response.data.message ?? 'Vui lòng kiểm tra lại.'
+                                        });
+                                    }
+                                } catch (error) {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Có lỗi xảy ra',
+                                        text: error.response?.data?.message ?? 'Không thể tạo Sales Order.'
+                                    });
+                                }
                             }
                         }
 
@@ -829,15 +886,16 @@ const App = {
                                                 if (numberObj) {
                                                     numberObj.value = selectedProduct.number;
                                                 }
+                                                const defaultPrice = selectedProduct.costPrice ?? selectedProduct.unitPrice ?? null;
                                                 if (priceObj) {
-                                                    priceObj.value = selectedProduct.unitPrice ?? null;
+                                                    priceObj.value = defaultPrice;
                                                 }
                                                 if (summaryObj) {
                                                     summaryObj.value = selectedProduct.description;
                                                 }
                                                 if (quantityObj) {
                                                     quantityObj.value = 1;
-                                                    const total = (selectedProduct.unitPrice ?? 0) * quantityObj.value;
+                                                    const total = (defaultPrice ?? 0) * quantityObj.value;
                                                     if (totalObj) {
                                                         totalObj.value = total;
                                                     }
@@ -1207,6 +1265,56 @@ const App = {
                     toolbarClick: (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
+                        }
+                    },
+                    actionBegin: (args) => {
+                        if (args.requestType !== 'save') {
+                            return;
+                        }
+
+                        const data = args.data ?? {};
+                        if (!data.productId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Hàng Hóa trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.warehouseId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Kho Hàng trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.taxId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Thuế trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.quantity || Number(data.quantity) <= 0) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Số lượng phải lớn hơn 0.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
                         }
                     },
                     actionComplete: async (args) => {

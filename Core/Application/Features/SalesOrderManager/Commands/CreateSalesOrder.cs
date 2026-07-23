@@ -18,6 +18,7 @@ public class CreateSalesOrderRequest : IRequest<CreateSalesOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
+    public SalesType? SalesType { get; init; } = Domain.Enums.SalesType.Retail;
     public string? CreatedById { get; init; }
 }
 
@@ -58,9 +59,12 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderRequest, 
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(SalesOrder), "", "SO");
         entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = (SalesOrderStatus)int.Parse(request.OrderStatus!);
+        entity.OrderStatus = !string.IsNullOrEmpty(request.OrderStatus) && int.TryParse(request.OrderStatus, out var status)
+            ? (SalesOrderStatus)status
+            : SalesOrderStatus.Draft;
         entity.Description = request.Description;
         entity.CustomerId = request.CustomerId;
+        entity.SalesType = request.SalesType ?? SalesType.Retail;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);

@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -16,8 +16,8 @@ public record GetPurchaseReturnListDto
     public PurchaseReturnStatus? Status { get; init; }
     public string? StatusName { get; init; }
     public string? Description { get; init; }
-    public string? GoodsReceiveId { get; init; }
-    public string? GoodsReceiveNumber { get; init; }
+    public string? PurchaseOrderId { get; init; }
+    public string? PurchaseOrderNumber { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -27,8 +27,8 @@ public class GetPurchaseReturnListProfile : Profile
     {
         CreateMap<PurchaseReturn, GetPurchaseReturnListDto>()
             .ForMember(
-                dest => dest.GoodsReceiveNumber,
-                opt => opt.MapFrom(src => src.GoodsReceive != null ? src.GoodsReceive.Number : string.Empty)
+                dest => dest.PurchaseOrderNumber,
+                opt => opt.MapFrom(src => src.PurchaseOrder != null ? src.PurchaseOrder.Number : string.Empty)
             )
             .ForMember(
                 dest => dest.StatusName,
@@ -66,7 +66,7 @@ public class GetPurchaseReturnListHandler : IRequestHandler<GetPurchaseReturnLis
             .PurchaseReturn
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
-            .Include(x => x.GoodsReceive)
+            .Include(x => x.PurchaseOrder)
             .AsQueryable();
 
         var entities = await query.ToListAsync(cancellationToken);
@@ -81,6 +81,9 @@ public class GetPurchaseReturnListHandler : IRequestHandler<GetPurchaseReturnLis
 
 
 }
+
+
+
 
 
 

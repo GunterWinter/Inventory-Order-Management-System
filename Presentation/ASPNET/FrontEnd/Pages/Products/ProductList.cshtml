@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Product List";
 }
@@ -40,18 +40,36 @@
                                             </div>
                                         </div>
                                         
-                                        <div class="row mb-2">
-                                            <div class="col-md-6">
-                                                <label for="ReferenceCode">Reference Code (Custom Code)</label>
-                                                <input ref="referenceCodeRef" v-model="state.referenceCode" class="form-control" placeholder="Enter internal code/SKU...">
-                                                <label class="text-danger">{{ state.errors.referenceCode }}</label>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label for="UnitPrice">Unit Price</label>
-                                                <input ref="unitPriceRef" v-model="state.unitPrice">
-                                                <label class="text-danger">{{ state.errors.unitPrice }}</label>
-                                            </div>
-                                        </div>
+                                         <div class="row mb-2">
+                                             <div class="col-md-4">
+                                                 <label for="ReferenceCode">Reference Code (Custom Code)</label>
+                                                 <input ref="referenceCodeRef" v-model="state.referenceCode" class="form-control" placeholder="Enter internal code/SKU...">
+                                                 <label class="text-danger">{{ state.errors.referenceCode }}</label>
+                                             </div>
+                                             <div class="col-md-4">
+                                                 <label for="CostPrice">Cost Price (Giá vốn)</label>
+                                                 <input ref="costPriceRef" v-model="state.costPrice">
+                                                 <label class="text-danger">{{ state.errors.costPrice }}</label>
+                                             </div>
+                                             <div class="col-md-4">
+                                                 <label for="UnitPrice">Selling Price (Giá bán)</label>
+                                                 <input ref="unitPriceRef" v-model="state.unitPrice">
+                                                 <label class="text-danger">{{ state.errors.unitPrice }}</label>
+                                             </div>
+                                         </div>
+
+                                         <div class="row mb-2">
+                                             <div class="col-md-12">
+                                                 <label for="ImageUrl">Product Image (Hình ảnh)</label>
+                                                 <div class="d-flex align-items-center gap-3">
+                                                     <img :src="getImageUrl(state.imageUrl)" alt="Product Image" class="img-thumbnail" style="width: 70px; height: 70px; object-fit: cover;" />
+                                                     <div class="flex-grow-1">
+                                                         <input type="text" class="form-control mb-1" v-model="state.imageUrl" placeholder="Image file name or URL..." />
+                                                         <input type="file" ref="imageFileRef" accept="image/*" class="form-control form-control-sm" v-on:change="handler.handleImageUpload" />
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                         </div>
 
                                         <div class="row mb-2">
                                             <div class="col-md-6">

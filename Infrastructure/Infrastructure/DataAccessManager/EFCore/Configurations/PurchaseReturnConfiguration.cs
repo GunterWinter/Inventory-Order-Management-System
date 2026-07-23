@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
@@ -15,9 +15,10 @@ public class PurchaseReturnConfiguration : BaseEntityConfiguration<PurchaseRetur
         builder.Property(x => x.ReturnDate).IsRequired(false);
         builder.Property(x => x.Status).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
-        builder.Property(x => x.GoodsReceiveId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.PurchaseOrderId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
 
         builder.HasIndex(e => e.Number);
     }
 }
+
 

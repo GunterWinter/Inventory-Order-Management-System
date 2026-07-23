@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -516,6 +516,11 @@ const App = {
             }
         };
 
+                let warehouseObj = null;
+        let productObj = null;
+        let movementObj = null;
+        let qtySCCountObj = null;
+
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
@@ -571,7 +576,17 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.warehouseId,
                                         placeholder: 'Select a Warehouse',
-                                        floatLabelType: 'Never'
+                                        floatLabelType: 'Never',
+                                        change: function (e) {
+                                            args.rowData.warehouseId = e.value;
+                                            args.rowData.productSerialIds = [];
+                                            args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
+                                        }
                                     });
                                     warehouseObj.appendTo(args.element);
                                 }
@@ -619,6 +634,11 @@ const App = {
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
+                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            if (refCell) {
+                                                const p = state.productListLookupData.find(x => x.id === e.value);
+                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                            }
                                             if (movementObj) {
                                                 movementObj.value = 1;
                                             }
@@ -632,7 +652,7 @@ const App = {
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
-                            warehouseIdGetter: (rowData) => args.rowData.warehouseId,
+                            warehouseIdGetter: (rowData) => rowData.warehouseId,
                             moduleName: 'NegativeAdjustment',
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
@@ -831,6 +851,9 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
+
+
 
 
 

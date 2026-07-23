@@ -47,6 +47,7 @@ namespace Infrastructure.SeedManager.Demos
             product.ReferenceCode = "SM-SWITCH-001";
             product.Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.";
             product.UnitPrice = 1_352_000d;
+            product.CostPrice = 950_000d;
             product.Physical = true;
             product.DefaultWarehouseId = await _warehouseRepository.GetQuery().Where(x => !x.IsDeleted && x.SystemWarehouse == false).Select(x => x.Id).FirstOrDefaultAsync();
             product.DefaultWarrantyMonths = 3;

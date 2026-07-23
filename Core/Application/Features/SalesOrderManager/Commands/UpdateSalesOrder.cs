@@ -18,6 +18,7 @@ public class UpdateSalesOrderRequest : IRequest<UpdateSalesOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
+    public SalesType? SalesType { get; init; } = Domain.Enums.SalesType.Retail;
     public string? UpdatedById { get; init; }
 }
 
@@ -62,9 +63,12 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
         entity.UpdatedById = request.UpdatedById;
 
         entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = (SalesOrderStatus)int.Parse(request.OrderStatus!);
+        entity.OrderStatus = !string.IsNullOrEmpty(request.OrderStatus) && int.TryParse(request.OrderStatus, out var status)
+            ? (SalesOrderStatus)status
+            : entity.OrderStatus;
         entity.Description = request.Description;
         entity.CustomerId = request.CustomerId;
+        entity.SalesType = request.SalesType ?? SalesType.Retail;
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);

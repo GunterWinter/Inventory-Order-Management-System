@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
@@ -66,7 +66,7 @@ public class PurchaseReturnSeeder
                 Number = _numberSequenceService.GenerateNumber(nameof(PurchaseReturn), "", "PRN"),
                 ReturnDate = goodsReceive.ReceiveDate?.AddDays(random.Next(1, 5)),
                 Status = (PurchaseReturnStatus)random.Next(0, purchaseReturnStatusLength),
-                GoodsReceiveId = goodsReceive.Id,
+                PurchaseOrderId = goodsReceive.PurchaseOrderId,
             };
             await _purchaseReturnRepository.CreateAsync(purchaseReturn);
 

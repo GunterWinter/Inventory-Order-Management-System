@@ -20,6 +20,7 @@
     let isScheduled = false;
 
     const exactTranslations = {
+        'This field is required.': 'Trường này là bắt buộc.',
         'Dashboards': 'Bảng điều khiển',
         'Default Dashboard': 'Bảng điều khiển tổng quan',
         'WHMS - .NET 9 - Warehouse & Inventory Management System': 'WHMS - .NET 9 - Hệ thống quản lý kho và tồn kho',
@@ -109,7 +110,7 @@
         'Total Credit': 'Tổng Chi',
         'Total Balance': 'Tổng Số Dư',
         'Select Account': 'Chọn Tài Khoản',
-        'Select Category (Optional)': 'Chọn Danh Mục (Tùy Chọn)',
+        'Select Category': 'Chọn Danh Mục',
         'Select Type': 'Chọn Loại',
         'Select Account Type': 'Chọn Loại Tài Khoản',
         'Enter Amount': 'Nhập Số Tiền',
@@ -143,7 +144,7 @@
         'Source and destination accounts must be different.': 'Tài khoản nguồn và tài khoản đích phải khác nhau.',
         'Cash transfer legs cannot be edited. Delete the transfer and create a new one.': 'Không thể sửa từng dòng của điều chuyển quỹ. Hãy xóa điều chuyển và tạo lại.',
         'Delete Cash Transfer?': 'Xóa Điều Chuyển Quỹ?',
-        'Select a Customer (Optional)': 'Chọn Khách Hàng (Tùy Chọn)',
+        'Select a Customer': 'Chọn Khách Hàng',
         'Customer Finance Report': 'Báo Cáo Tài Chính',
         'Total Received': 'Tổng Thu',
         'Total Spent': 'Tổng Chi',
@@ -156,7 +157,7 @@
         'Only confirmed transactions linked to a customer are included.': 'Chỉ bao gồm các giao dịch đã xác nhận có gắn khách hàng.',
         'Device Code Management': 'Kiểu Quản Lý Mã Thiết Bị',
         'Auto-generate Internal Code': 'Tự Sinh Mã Nội Bộ',
-        'Fixed Code': 'Mã Cố Định',
+        'Fixed Code': 'Mã Cố Định', 
         'Manufacturer Serial Entry': 'Nhập Serial Hãng',
         'In Development': 'Đang Phát Triển',
         'Example generated code': 'Ví dụ mã tự sinh',
@@ -308,6 +309,12 @@
         'Please check your credentials.': 'Vui lòng kiểm tra lại thông tin đăng nhập.',
         'Please check your data.': 'Vui lòng kiểm tra lại dữ liệu.',
         'Please check your email. You are being redirected...': 'Vui lòng kiểm tra email. Hệ thống đang chuyển hướng...',
+        'This field is required.': 'Trường này là bắt buộc.',
+        'This field is required': 'Trường này là bắt buộc',
+        'This field': 'Trường này',
+        'Value is required': 'Trường này là bắt buộc',
+        'Retail': 'Xuất bán lẻ',
+        'Internal': 'Xuất nội bộ',
         'Form will be closed...': 'Biểu mẫu sẽ được đóng...',
         'Passwords do not match.': 'Mật khẩu không khớp.',
         'Password and Confirm Password must match.': 'Mật khẩu và mật khẩu xác nhận phải khớp nhau.',
@@ -768,7 +775,9 @@
         'returnedtosupplier': 'trả nhà cung cấp',
         'missing': 'thất lạc',
         'scrapped': 'hủy bỏ',
-        'supplier warranty end': 'hạn bh nhà cung cấp'
+        'supplier warranty end': 'hạn bh nhà cung cấp',
+        'this field': 'trường này',
+        'this field is required': 'trường này là bắt buộc'
     };
 
     function normalizeText(value) {

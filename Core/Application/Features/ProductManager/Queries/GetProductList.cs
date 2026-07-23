@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -16,6 +16,8 @@ public record GetProductListDto
     public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
     public double? UnitPrice { get; init; }
+    public double? CostPrice { get; init; }
+    public string? ImageUrl { get; init; }
     public bool? Physical { get; init; }
     public SerialTrackingMode? SerialTrackingMode { get; init; }
     public string? InternalSerialFixedCode { get; init; }
