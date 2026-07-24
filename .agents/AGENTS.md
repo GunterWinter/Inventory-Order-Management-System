@@ -93,3 +93,41 @@
   ```
 - **Lý do**: Nếu thiếu `format`, NumericTextBox mặc định dùng `'n2'` (2 chữ số thập phân). Kết hợp với `number-format-manager.js` (`MAX_FRACTION_DIGITS = 0`), giá trị `50,00` (vi-VN locale) sẽ bị parse thành `5000`.
 - Chỉ các trường tiền tệ (price, amount, total...) mới được dùng format mặc định vì `normalizeMoneyNumericTextBox` đã xử lý riêng.
+
+## Auto-Copy Workflow Serial ID Resolution
+- Khi một module **auto-copy items** từ module khác (ví dụ: `CreateTransferIn` copy items từ `TransferOut`), nếu sản phẩm là serial-tracked:
+  - **BẮT BUỘC** query `ProductSerialMovement` records từ source module's inventory transaction (`InventoryTransactionId == sourceItem.Id`)
+  - Truyền danh sách `productSerialId` đã resolve cho target module's `CreateInvenTrans` method
+  - Nếu không có serial movements (non-serial product), truyền `null` để skip serial processing
+- **Lý do**: `ApplyInventoryTransactionSerialsAsync` với `productSerialIds = null` sẽ fallback vào `ResolveSerialIdsForTransactionAsync`, nhưng transaction mới chưa có movements → exception.
+
+## Serial Tracking System Invariants
+
+### SerialTrackingMode Enum
+- `SerialTrackingMode` có đúng 3 giá trị: `None = 0`, `InternalAuto = 1`, `ManufacturerSerial = 2`.
+- **KHÔNG TỒN TẠI** giá trị `Serial`. Để kiểm tra sản phẩm có theo dõi serial hay không, dùng: `product.SerialTrackingMode != SerialTrackingMode.None`.
+
+### Serial Reservation Flow (SO → DO Pipeline)
+- Khi tạo `SalesOrderItem` bằng code (quick export, auto-copy), nếu sản phẩm là serial-tracked, **BẮT BUỘC** phải reserve serial cho SO item **TRƯỚC KHI** gọi `SynchronizeDeliveryOrderAsync`:
+  1. Tạo `SalesOrderItem`
+  2. Query `ProductSerial` có `Status == InStock`, `SalesOrderItemId == null`, cùng product/warehouse/batch
+  3. Gọi `ProductSerialService.ReserveSalesOrderItemSerialsAsync(soItem, serialIds, userId)`
+  4. Sau đó mới gọi `SynchronizeDeliveryOrderAsync`
+- **Lý do**: `ResolveSerialIdsForTransactionAsync` cho DeliveryOrder tìm serial qua `SalesOrderItemId`. Nếu chưa reserve → trả về empty → exception `"Serial-tracked products require selected serial numbers."`.
+
+### Key ProductSerialService Methods
+- `ReserveSalesOrderItemSerialsAsync`: Gán `SalesOrderItemId` + `Status=Reserved` — dùng trước SO→DO sync
+- `ReleaseSalesOrderItemSerialsAsync`: Xóa `SalesOrderItemId` + `Status=InStock` — dùng khi hủy/xóa SO item
+- `ApplyInventoryTransactionSerialsAsync`: Tạo `ProductSerialMovement`, cập nhật serial status — gọi nội bộ bởi `*CreateInvenTrans`
+- `IsProductSerialTrackedAsync`: Kiểm tra `SerialTrackingMode != None` — guard check trước khi thao tác serial
+
+## Quick Export & Partial Quantity Invariants
+- **Editable Preview Grid**: Whenever a "Quick Export" or "Transfer" feature presents a preview grid, it **MUST** be an inline-editable grid (`allowEditing: true`) allowing the user to adjust the `quantity` and `unitPrice` before submission.
+- **Dynamic Pricing Recalculation**: Dropdowns that dictate pricing strategy (e.g., Sales Type: Retail vs Internal) **MUST** bind to a `change` event that loops through the preview grid's `currentViewRecords` and dynamically updates the `unitPrice` and `total` via `grid.setCellValue()`.
+- **Partial Export Tracking**: For partial exports, track the cumulative exported quantity directly on the source item using a `double?` field (e.g., `QuickSalesExportedQuantity`). **DO NOT** use a boolean flag or a single foreign key ID like `QuickSalesOrderId`, as they prevent multiple partial exports.
+- **Remaining Quantity Validation**: The frontend must calculate and display `Remaining = Total Quantity - Exported Quantity`. The backend must explicitly validate that the requested export quantity does not exceed the remaining quantity.
+
+
+## Syncfusion Grid Selection State Bleed
+- **Clear Selection on Data Source Change**: When implementing master-detail views or re-using a Syncfusion grid (e.g., secondaryGrid) for different parent records, **ALWAYS** call `grid.clearSelection()` before or immediately after assigning the new data source. Syncfusion caches selected IDs (when `persistSelection: true` is used) and this leads to state bleed where items from the previous parent appear as selected in the new parent's context.
+

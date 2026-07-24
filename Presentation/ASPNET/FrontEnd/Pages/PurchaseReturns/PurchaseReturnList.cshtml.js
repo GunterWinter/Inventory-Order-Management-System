@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -182,6 +182,13 @@
             (newVal, oldVal) => {
                 purchaseReturnStatusListLookup.refresh();
                 state.errors.status = '';
+
+                // Filter Draft out of dropdown when status > 0
+                StatusDropdownHelper.applyToDropdown(
+                    purchaseReturnStatusListLookup.obj,
+                    state.purchaseReturnStatusListLookupData,
+                    newVal
+                );
             
                 // --- INJECTED CODE: Lock form if not Draft ---
                 const isReadOnly = newVal > 0;

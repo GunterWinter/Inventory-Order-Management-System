@@ -79,7 +79,6 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
 
         var serials = await serialQuery
             .OrderBy(x => x.InternalSerialNumber)
-            .Take(100)
             .ToListAsync(cancellationToken);
 
         var serialIds = serials.Select(x => x.Id).ToList();

@@ -1,4 +1,5 @@
-﻿using Application.Common.Extensions;
+using Application.Common.CQS.Queries;
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -41,13 +42,15 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public CreateTransferInHandler(
         ICommandRepository<TransferIn> deliveryOrderRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
         _deliveryOrderRepository = deliveryOrderRepository;
@@ -55,6 +58,7 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<CreateTransferInResult> Handle(CreateTransferInRequest request, CancellationToken cancellationToken = default)
@@ -82,12 +86,22 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
         {
             if (item?.Product?.Physical ?? false)
             {
+                // Resolve serial IDs from TransferOut movements for this item
+                var transferOutSerialIds = await _queryContext
+                    .Set<ProductSerialMovement>()
+                    .AsNoTracking()
+                    .ApplyIsDeletedFilter(false)
+                    .Where(x => x.InventoryTransactionId == item.Id)
+                    .Select(x => x.ProductSerialId!)
+                    .ToListAsync(cancellationToken);
+
                 await _inventoryTransactionService.TransferInCreateInvenTrans(
                     entity.Id,
                     item.ProductId,
                     item.Movement,
                     entity.CreatedById,
-                    cancellationToken
+                    cancellationToken,
+                    transferOutSerialIds.Count > 0 ? transferOutSerialIds : null
                     );
 
             }

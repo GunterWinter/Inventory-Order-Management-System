@@ -129,6 +129,13 @@ const App = {
             (newVal, oldVal) => {
                 positiveAdjustmentStatusListLookup.refresh();
                 state.errors.status = '';
+
+                // Filter Draft out of dropdown when status > 0
+                StatusDropdownHelper.applyToDropdown(
+                    positiveAdjustmentStatusListLookup.obj,
+                    state.positiveAdjustmentStatusListLookupData,
+                    newVal
+                );
             
                 // --- INJECTED CODE: Lock form if not Draft ---
                 const isReadOnly = newVal > 0;

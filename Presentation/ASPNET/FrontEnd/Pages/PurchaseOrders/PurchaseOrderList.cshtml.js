@@ -13,13 +13,14 @@ const App = {
             paymentStatusLookupData: [],
             cashAccountListData: [],
             cashCategoryListData: [],
+            customerListLookupData: [],
             mainTitle: null,
             id: '',
             number: '',
             orderDate: '',
             description: '',
             vendorId: null,
-            orderStatus: null,
+            orderStatus: '0',
             errors: {
                 orderDate: '',
                 vendorId: '',
@@ -31,7 +32,14 @@ const App = {
             subTotalAmount: '0',
             taxAmount: '0',
             totalAmount: '0',
-            isViewMode: false
+            isViewMode: false,
+            quickSalesSelectedItems: [],
+            quickSalesCustomerId: null,
+            quickSalesSalesType: '2',
+            isQuickSalesSubmitting: false,
+            quickSalesErrors: {
+                customerId: ''
+            }
         });
 
         const mainGridRef = Vue.ref(null);
@@ -41,6 +49,10 @@ const App = {
         const vendorIdRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
+        const quickSalesModalRef = Vue.ref(null);
+        const quickSalesCustomerIdRef = Vue.ref(null);
+        const quickSalesPreviewGridRef = Vue.ref(null);
+        const quickSalesSalesTypeRef = Vue.ref(null);
 
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
@@ -106,7 +118,7 @@ const App = {
                 state.errors.vendorId = 'Vendor is required.';
                 isValid = false;
             }
-            if (!state.orderStatus) {
+            if (state.orderStatus === null || state.orderStatus === undefined || state.orderStatus === '') {
                 state.errors.orderStatus = 'Order status is required.';
                 isValid = false;
             }
@@ -120,7 +132,7 @@ const App = {
             state.orderDate = '';
             state.description = '';
             state.vendorId = null;
-            state.orderStatus = null;
+            state.orderStatus = '0';
             state.errors = {
                 orderDate: '',
                 vendorId: '',
@@ -294,6 +306,24 @@ const App = {
             getCashCategoryList: async () => {
                 try {
                     const response = await AxiosManager.get('/CashCategory/GetCashCategoryList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getCustomerListLookupData: async () => {
+                try {
+                    const response = await AxiosManager.get('/Customer/GetCustomerList', {});
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            createQuickSalesOrderFromItems: async (purchaseOrderId, items, customerId, createdById, salesType) => {
+                try {
+                    const response = await AxiosManager.post('/SalesOrder/CreateQuickSalesOrderFromItems', {
+                        purchaseOrderId, items, customerId, createdById, salesType
+                    });
                     return response;
                 } catch (error) {
                     throw error;
@@ -472,6 +502,93 @@ const App = {
                 state.errors.orderDate = '';
                 state.errors.vendorId = '';
                 state.errors.orderStatus = '';
+            },
+            populateCustomerListLookupData: async () => {
+                const response = await services.getCustomerListLookupData();
+                state.customerListLookupData = response?.data?.content?.data ?? [];
+            },
+            handleQuickSalesSubmit: async () => {
+                state.quickSalesErrors.customerId = '';
+                if (!state.quickSalesCustomerId) {
+                    state.quickSalesErrors.customerId = 'Vui lòng chọn khách hàng.';
+                    return;
+                }
+
+                // End any pending edit in the preview grid
+                if (quickSalesPreviewGrid.obj && quickSalesPreviewGrid.obj.isEdit) {
+                    quickSalesPreviewGrid.obj.endEdit();
+                    await new Promise(r => setTimeout(r, 150));
+                }
+
+                const gridData = quickSalesPreviewGrid.obj ? quickSalesPreviewGrid.obj.dataSource : [];
+                if (!gridData || gridData.length === 0) {
+                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để xuất nhanh.' });
+                    return;
+                }
+
+                // Validate quantities
+                for (const row of gridData) {
+                    if (!row.exportQuantity || row.exportQuantity <= 0) {
+                        Swal.fire({ icon: 'warning', title: 'Số lượng không hợp lệ', text: `Số lượng xuất phải lớn hơn 0.` });
+                        return;
+                    }
+                    if (row.exportQuantity > row.remainingQuantity) {
+                        const product = state.productListLookupData.find(p => p.id === row.productId);
+                        Swal.fire({ icon: 'warning', title: 'Số lượng vượt quá', text: `Sản phẩm "${product?.name || ''}" chỉ còn lại ${row.remainingQuantity}, không thể xuất ${row.exportQuantity}.` });
+                        return;
+                    }
+                }
+
+                state.isQuickSalesSubmitting = true;
+                try {
+                    const items = gridData.map(row => ({
+                        purchaseOrderItemId: row.id,
+                        quantity: row.exportQuantity,
+                        unitPrice: row.exportUnitPrice
+                    }));
+                    const response = await services.createQuickSalesOrderFromItems(
+                        state.id,
+                        items,
+                        state.quickSalesCustomerId,
+                        StorageManager.getUserId(),
+                        parseInt(state.quickSalesSalesType)
+                    );
+
+                    if (response.data.code === 200) {
+                        const newSo = response.data.content?.data;
+                        quickSalesModal.obj.hide();
+
+                        await methods.populateSecondaryData(state.id);
+                        secondaryGrid.refresh();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Xuất nhanh thành công',
+                            html: `Đã tạo đơn bán hàng <b>${newSo?.number || ''}</b>.<br/>Bạn có muốn xem đơn bán hàng mới không?`,
+                            showCancelButton: true,
+                            confirmButtonText: 'Đến trang đơn bán hàng',
+                            cancelButtonText: 'Đóng'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = '/SalesOrders/SalesOrderList';
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Xuất nhanh thất bại',
+                            text: response.data.message ?? 'Vui lòng kiểm tra lại.'
+                        });
+                    }
+                } catch (error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Có lỗi xảy ra',
+                        text: error.response?.data?.message ?? 'Không thể tạo đơn bán hàng.'
+                    });
+                } finally {
+                    state.isQuickSalesSubmitting = false;
+                }
             }
         };
 
@@ -516,6 +633,7 @@ const App = {
                         dataSource: state.purchaseOrderStatusListLookupData,
                         fields: { value: 'id', text: 'name' },
                         placeholder: 'Select an Order Status',
+                        value: state.orderStatus,
                         change: (e) => {
                             state.orderStatus = e.value;
                         }
@@ -582,22 +700,32 @@ const App = {
             (newVal, oldVal) => {
                 purchaseOrderStatusListLookup.refresh();
                 state.errors.orderStatus = '';
-            
+
+                // Filter Draft out of dropdown when status > 0
+                StatusDropdownHelper.applyToDropdown(
+                    purchaseOrderStatusListLookup.obj,
+                    state.purchaseOrderStatusListLookupData,
+                    newVal
+                );
+
                 // --- INJECTED CODE: Lock form if not Draft ---
                 const isReadOnly = newVal > 0;
                 if (typeof vendorListLookup !== 'undefined' && vendorListLookup.obj) vendorListLookup.obj.enabled = !isReadOnly;
                 if (typeof orderDatePicker !== 'undefined' && orderDatePicker.obj) orderDatePicker.obj.enabled = !isReadOnly;
                 if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
-                
+
                 if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
                     secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
                     secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
                     secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
-                    
+
                     // Toggle grid toolbar buttons if the toolbar module exists
                     try {
                         secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
-                    } catch(e) { }
+                        // QuickExport only enabled when Confirmed (status=2)
+                        const isConfirmed = String(newVal) === '2';
+                        secondaryGrid.obj.toolbarModule.enableItems(['QuickExportCustom'], isConfirmed);
+                    } catch (e) { }
                 }
                 // --- END INJECTED CODE ---
             }
@@ -656,12 +784,11 @@ const App = {
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
-                        { text: 'Tạo nhanh đơn bán hàng', tooltipText: 'Xuất nhanh ra công trình', prefixIcon: 'e-copy', id: 'CreateQuickSalesOrderCustom' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'orderDate', 'vendorName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
 
                         const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
@@ -691,16 +818,16 @@ const App = {
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom', 'CreateQuickSalesOrderCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowSelecting: () => {
@@ -737,6 +864,9 @@ const App = {
                                 state.showComplexDiv = true;
 
                                 await methods.populateSecondaryData(selectedRecord.id);
+                                if (secondaryGrid.obj) {
+                                    secondaryGrid.obj.clearSelection();
+                                }
                                 secondaryGrid.refresh();
 
                                 mainModal.obj.show();
@@ -763,46 +893,7 @@ const App = {
                             }
                         }
 
-                        if (args.item.id === 'CreateQuickSalesOrderCustom') {
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                try {
-                                    const response = await AxiosManager.post('/SalesOrder/CreateSalesOrderFromPurchaseOrder', {
-                                        purchaseOrderId: selectedRecord.id,
-                                        salesType: 2,
-                                        createdById: StorageManager.getUserId()
-                                    });
 
-                                    if (response.data.code === 200) {
-                                        const newSo = response.data.content?.data;
-                                        Swal.fire({
-                                            icon: 'success',
-                                            title: 'Tạo đơn bán hàng thành công',
-                                            html: `Đã tạo đơn bán hàng nháp <b>${newSo?.number || ''}</b> từ Đơn mua hàng.<br/>Bạn có muốn xem đơn bán hàng mới không?`,
-                                            showCancelButton: true,
-                                            confirmButtonText: 'Đến trang đơn bán hàng',
-                                            cancelButtonText: 'Đóng'
-                                        }).then((result) => {
-                                            if (result.isConfirmed) {
-                                                window.location.href = '/SalesOrders/SalesOrderList';
-                                            }
-                                        });
-                                    } else {
-                                        Swal.fire({
-                                            icon: 'error',
-                                            title: 'Tạo thất bại',
-                                            text: response.data.message ?? 'Vui lòng kiểm tra lại.'
-                                        });
-                                    }
-                                } catch (error) {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Có lỗi xảy ra',
-                                        text: error.response?.data?.message ?? 'Không thể tạo Sales Order.'
-                                    });
-                                }
-                            }
-                        }
 
                         if (args.item.id === 'PrintPDFCustom') {
                             if (mainGrid.obj.getSelectedRecords().length) {
@@ -850,7 +941,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'productName', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple' },
                     autoFit: false,
                     showColumnMenu: false,
                     gridLines: 'Horizontal',
@@ -1255,14 +1346,47 @@ const App = {
                                 }
                             }
                         },
+                        {
+                            field: 'quickSalesExportedQuantity',
+                            headerText: 'Đã xuất',
+                            allowEditing: false,
+                            width: 100,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            valueAccessor: (field, data, column) => {
+                                return data.quickSalesExportedQuantity || 0;
+                            }
+                        },
+                        {
+                            field: 'remainingQuantity',
+                            headerText: 'Còn lại',
+                            allowEditing: false,
+                            width: 100,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            valueAccessor: (field, data, column) => {
+                                return (data.quantity || 0) - (data.quickSalesExportedQuantity || 0);
+                            }
+                        },
                     ],
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        { type: 'Separator' },
+                        { text: 'Xuất nhanh', tooltipText: 'Xuất nhanh các mặt hàng đã chọn ra đơn bán hàng', prefixIcon: 'e-export', id: 'QuickExportCustom' },
                     ],
                     beforeDataBound: () => { },
-                    dataBound: function () { },
+                    dataBound: function () {
+                        if (!state.isViewMode) {
+                            try {
+                                const isConfirmed = String(state.orderStatus) === '2';
+                                secondaryGrid.obj.toolbarModule.enableItems(['QuickExportCustom'], isConfirmed);
+                            } catch (e) { }
+                        }
+                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
@@ -1278,14 +1402,76 @@ const App = {
                             secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
-                    rowSelecting: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length) {
-                            secondaryGrid.obj.clearSelection();
-                        }
-                    },
                     toolbarClick: (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
+                        }
+
+                        if (args.item.id === 'QuickExportCustom') {
+                            // Only allow quick export when PO status is Confirmed
+                            if (String(state.orderStatus) !== '2') {
+                                Swal.fire({ icon: 'warning', title: 'Không thể xuất nhanh', text: 'Chỉ cho phép xuất nhanh khi đơn hàng đã được xác nhận (Confirmed).' });
+                                return;
+                            }
+
+                            const selectedRecords = secondaryGrid.obj.getSelectedRecords();
+                            if (!selectedRecords || selectedRecords.length === 0) {
+                                Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để xuất nhanh.' });
+                                return;
+                            }
+
+                            // Check if any selected items have no remaining quantity
+                            const fullyExported = selectedRecords.filter(item => {
+                                const remaining = (item.quantity || 0) - (item.quickSalesExportedQuantity || 0);
+                                return remaining <= 0;
+                            });
+                            if (fullyExported.length > 0) {
+                                const names = fullyExported.map(item => {
+                                    const product = state.productListLookupData.find(p => p.id === item.productId);
+                                    return product ? product.name : item.productId;
+                                }).join(', ');
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Sản phẩm đã xuất hết',
+                                    html: `Các sản phẩm sau đã xuất hết số lượng: <b>${names}</b>.<br/>Vui lòng bỏ chọn các sản phẩm này.`
+                                });
+                                return;
+                            }
+
+                            // Store selected items and open the quick sales modal
+                            state.quickSalesSelectedItems = selectedRecords;
+                            state.quickSalesCustomerId = null;
+                            state.quickSalesErrors.customerId = '';
+
+                            // Prepare preview data with editable fields
+                            const isInternalType = state.quickSalesSalesType === '2';
+                            const previewData = selectedRecords.map(item => {
+                                const product = state.productListLookupData.find(p => p.id === item.productId);
+                                const remaining = (item.quantity || 0) - (item.quickSalesExportedQuantity || 0);
+                                const unitPrice = isInternalType
+                                    ? (product?.costPrice ?? item.unitPrice ?? 0)
+                                    : (product?.unitPrice ?? item.unitPrice ?? 0);
+                                return {
+                                    id: item.id,
+                                    productId: item.productId,
+                                    warehouseId: item.warehouseId,
+                                    batchNumber: item.batchNumber,
+                                    remainingQuantity: remaining,
+                                    exportQuantity: remaining,
+                                    exportUnitPrice: unitPrice,
+                                    exportTotal: unitPrice * remaining
+                                };
+                            });
+
+                            // Create/refresh preview grid
+                            quickSalesPreviewGrid.createOrRefresh(previewData);
+
+                            // Reset and refresh customer dropdown
+                            if (quickSalesCustomerLookup.obj) {
+                                quickSalesCustomerLookup.obj.value = null;
+                            }
+
+                            quickSalesModal.obj.show();
                         }
                     },
                     actionBegin: (args) => {
@@ -1434,6 +1620,249 @@ const App = {
             }
         };
 
+        const quickSalesModal = {
+            obj: null,
+            create: () => {
+                quickSalesModal.obj = new bootstrap.Modal(quickSalesModalRef.value, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+
+                // Restore scroll on parent modal when this modal closes
+                quickSalesModalRef.value.addEventListener('hidden.bs.modal', () => {
+                    if (document.querySelector('.modal.show')) {
+                        document.body.classList.add('modal-open');
+                        document.body.style.overflow = 'hidden';
+                    }
+                });
+            }
+        };
+
+        const quickSalesCustomerLookup = {
+            obj: null,
+            create: () => {
+                if (state.customerListLookupData && Array.isArray(state.customerListLookupData)) {
+                    quickSalesCustomerLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.customerListLookupData,
+                        fields: { value: 'id', text: 'name' },
+                        placeholder: 'Chọn khách hàng',
+                        filterBarPlaceholder: 'Tìm kiếm',
+                        sortOrder: 'Ascending',
+                        allowFiltering: true,
+                        filtering: (e) => {
+                            e.preventDefaultAction = true;
+                            let query = new ej.data.Query();
+                            if (e.text !== '') {
+                                query = query.where('name', 'startsWith', e.text, true);
+                            }
+                            e.updateData(state.customerListLookupData, query);
+                        },
+                        change: (e) => {
+                            state.quickSalesCustomerId = e.value;
+                            state.quickSalesErrors.customerId = '';
+                        }
+                    });
+                    quickSalesCustomerLookup.obj.appendTo(quickSalesCustomerIdRef.value);
+                }
+            }
+        };
+
+        const quickSalesSalesTypeLookup = {
+            obj: null,
+            create: () => {
+                quickSalesSalesTypeLookup.obj = new ej.dropdowns.DropDownList({
+                    dataSource: [
+                        { id: '2', name: 'Nội bộ (giá vốn)' },
+                        { id: '1', name: 'Bán lẻ (giá bán)' }
+                    ],
+                    fields: { value: 'id', text: 'name' },
+                    value: state.quickSalesSalesType,
+                    change: (e) => {
+                        state.quickSalesSalesType = e.value;
+
+                        // Update prices in preview grid based on sales type
+                        if (quickSalesPreviewGrid.obj) {
+                            const isInternal = e.value === '2';
+                            const records = quickSalesPreviewGrid.obj.getCurrentViewRecords();
+                            records.forEach((row) => {
+                                const product = state.productListLookupData.find(p => p.id === row.productId);
+                                const newPrice = isInternal
+                                    ? (product?.costPrice ?? row.exportUnitPrice ?? 0)
+                                    : (product?.unitPrice ?? row.exportUnitPrice ?? 0);
+                                quickSalesPreviewGrid.obj.setCellValue(row.id, 'exportUnitPrice', newPrice);
+                                quickSalesPreviewGrid.obj.setCellValue(row.id, 'exportTotal', newPrice * (row.exportQuantity || 0));
+                            });
+                        }
+                    }
+                });
+                quickSalesSalesTypeLookup.obj.appendTo(quickSalesSalesTypeRef.value);
+            }
+        };
+
+        const quickSalesPreviewGrid = {
+            obj: null,
+            createOrRefresh: (dataSource) => {
+                if (quickSalesPreviewGrid.obj) {
+                    quickSalesPreviewGrid.obj.dataSource = dataSource;
+                    quickSalesPreviewGrid.obj.refresh();
+                    return;
+                }
+
+                let exportQtyObj = null;
+                let exportPriceObj = null;
+
+                quickSalesPreviewGrid.obj = new ej.grids.Grid({
+                    height: 300,
+                    dataSource: dataSource,
+                    allowSelection: false,
+                    allowSorting: false,
+                    allowFiltering: false,
+                    allowPaging: false,
+                    gridLines: 'Horizontal',
+                    editSettings: { allowEditing: true, allowAdding: false, allowDeleting: false, mode: 'Batch' },
+                    columns: [
+                        { field: 'id', isPrimaryKey: true, visible: false },
+                        {
+                            field: 'productId',
+                            headerText: 'Sản phẩm',
+                            allowEditing: false,
+                            width: 200,
+                            valueAccessor: (field, data, column) => {
+                                const product = state.productListLookupData.find(item => item.id === data[field]);
+                                return product ? product.name : '';
+                            }
+                        },
+                        {
+                            field: 'warehouseId',
+                            headerText: 'Kho',
+                            allowEditing: false,
+                            width: 140,
+                            valueAccessor: (field, data, column) => {
+                                const wh = state.warehouseListLookupData.find(item => item.id === data[field]);
+                                return wh ? wh.name : '';
+                            }
+                        },
+                        { field: 'batchNumber', headerText: 'Số Lô', width: 100, allowEditing: false },
+                        { field: 'remainingQuantity', headerText: 'Còn lại', width: 90, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        {
+                            field: 'exportQuantity',
+                            headerText: 'SL xuất',
+                            width: 100,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            edit: {
+                                create: () => {
+                                    const elem = document.createElement('input');
+                                    return elem;
+                                },
+                                read: () => {
+                                    return exportQtyObj ? exportQtyObj.value : 0;
+                                },
+                                destroy: () => {
+                                    if (exportQtyObj) exportQtyObj.destroy();
+                                },
+                                write: (args) => {
+                                    exportQtyObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.exportQuantity,
+                                        min: 1,
+                                        max: args.rowData.remainingQuantity,
+                                        format: 'n0',
+                                        decimals: 0,
+                                        validateDecimalOnType: true,
+                                        change: (e) => {
+                                            if (args.rowData) {
+                                                args.rowData.exportQuantity = e.value;
+                                                const newTotal = (e.value || 0) * (args.rowData.exportUnitPrice || 0);
+                                                args.rowData.exportTotal = newTotal;
+                                                
+                                                if (quickSalesPreviewGrid.obj) {
+                                                    const actualRow = quickSalesPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
+                                                    if (actualRow) {
+                                                        actualRow.exportQuantity = e.value;
+                                                        actualRow.exportTotal = newTotal;
+                                                    }
+                                                }
+                                                
+                                                const tr = args.element.closest('tr');
+                                                if (tr && quickSalesPreviewGrid.obj) {
+                                                    const cellIndex = quickSalesPreviewGrid.obj.getColumnIndexByField('exportTotal');
+                                                    if (cellIndex !== -1 && tr.cells[cellIndex]) {
+                                                        tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                    exportQtyObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'exportUnitPrice',
+                            headerText: 'Đơn giá',
+                            width: 130,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            edit: {
+                                create: () => {
+                                    const elem = document.createElement('input');
+                                    return elem;
+                                },
+                                read: () => {
+                                    return exportPriceObj ? exportPriceObj.value : 0;
+                                },
+                                destroy: () => {
+                                    if (exportPriceObj) exportPriceObj.destroy();
+                                },
+                                write: (args) => {
+                                    exportPriceObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.exportUnitPrice,
+                                        min: 0,
+                                        format: 'N0',
+                                        change: (e) => {
+                                            if (args.rowData) {
+                                                args.rowData.exportUnitPrice = e.value;
+                                                const newTotal = (args.rowData.exportQuantity || 0) * (e.value || 0);
+                                                args.rowData.exportTotal = newTotal;
+                                                
+                                                if (quickSalesPreviewGrid.obj) {
+                                                    const actualRow = quickSalesPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
+                                                    if (actualRow) {
+                                                        actualRow.exportUnitPrice = e.value;
+                                                        actualRow.exportTotal = newTotal;
+                                                    }
+                                                }
+                                                
+                                                const tr = args.element.closest('tr');
+                                                if (tr && quickSalesPreviewGrid.obj) {
+                                                    const cellIndex = quickSalesPreviewGrid.obj.getColumnIndexByField('exportTotal');
+                                                    if (cellIndex !== -1 && tr.cells[cellIndex]) {
+                                                        tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                    exportPriceObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        { field: 'exportTotal', headerText: 'Thành tiền', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                    ],
+                    cellSave: (args) => {
+                        // Recalculate total after cell save
+                        const row = args.rowData;
+                        if (row) {
+                            row.exportTotal = (row.exportQuantity || 0) * (row.exportUnitPrice || 0);
+                        }
+                    }
+                });
+                quickSalesPreviewGrid.obj.appendTo(quickSalesPreviewGridRef.value);
+            }
+        };
+
         const showPaymentPopup = async (
             orderId,
             orderNumber,
@@ -1552,6 +1981,11 @@ const App = {
                 await methods.populateWarehouseListLookupData();
                 await methods.populatePurchaseOrderItemHistoryData();
                 await secondaryGrid.create(state.secondaryData);
+
+                await methods.populateCustomerListLookupData();
+                quickSalesModal.create();
+                quickSalesCustomerLookup.create();
+                quickSalesSalesTypeLookup.create();
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
@@ -1592,10 +2026,15 @@ const App = {
             vendorIdRef,
             orderStatusRef,
             secondaryGridRef,
+            quickSalesModalRef,
+            quickSalesCustomerIdRef,
+            quickSalesPreviewGridRef,
+            quickSalesSalesTypeRef,
             state,
             methods,
             handler: {
-                handleSubmit: methods.handleFormSubmit
+                handleSubmit: methods.handleFormSubmit,
+                handleQuickSalesSubmit: methods.handleQuickSalesSubmit
             }
         };
     }

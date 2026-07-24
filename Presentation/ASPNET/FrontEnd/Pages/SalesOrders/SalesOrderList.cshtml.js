@@ -884,6 +884,13 @@ const App = {
             (newVal, oldVal) => {
                 salesOrderStatusListLookup.refresh();
                 state.errors.orderStatus = '';
+
+                // Filter Draft out of dropdown when status > 0
+                StatusDropdownHelper.applyToDropdown(
+                    salesOrderStatusListLookup.obj,
+                    state.salesOrderStatusListLookupData,
+                    newVal
+                );
             
                 // --- INJECTED CODE: Lock form if not Draft ---
                 const isReadOnly = newVal > 0;

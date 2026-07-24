@@ -20,4 +20,5 @@ public class PurchaseOrderItem : BaseEntity
     public double? Total { get; set; } = 0;
     public double? TaxAmount { get; set; } = 0;
     public double? AfterTaxAmount { get; set; } = 0;
+    public double? QuickSalesExportedQuantity { get; set; } = 0;
 }

@@ -28,6 +28,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public double? Total { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
+    public double? QuickSalesExportedQuantity { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -59,7 +60,8 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListProfile : Profile
             .ForMember(
                 dest => dest.TaxName,
                 opt => opt.MapFrom(src => src.Tax != null ? src.Tax.Name : string.Empty)
-            );
+            )
+            ;
 
     }
 }
@@ -96,6 +98,7 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListHandler : IRequestHandler<
             .Include(x => x.Product)
             .Include(x => x.Warehouse)
             .Include(x => x.Tax)
+
             .Where(x => x.PurchaseOrderId == request.PurchaseOrderId)
             .AsQueryable();
 

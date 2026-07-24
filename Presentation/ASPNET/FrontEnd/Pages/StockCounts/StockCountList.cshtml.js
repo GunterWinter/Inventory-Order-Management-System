@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -166,6 +166,13 @@
             (newVal, oldVal) => {
                 statusListLookup.refresh();
                 state.errors.status = '';
+
+                // Filter Draft out of dropdown when status > 0
+                StatusDropdownHelper.applyToDropdown(
+                    statusListLookup.obj,
+                    state.stockCountStatusListLookupData,
+                    newVal
+                );
             
                 // --- INJECTED CODE: Lock form if not Draft ---
                 const isReadOnly = newVal > 0;
@@ -651,7 +658,7 @@
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
-                                return product ? `${product.numberName}` : '';
+                                return product ? `${product.name}` : '';
                             },
                             editType: 'dropdownedit',
                             edit: {
@@ -674,10 +681,11 @@
                                             args.rowData.productId = e.value;
                                             args.rowData.productSerialIds = [];
                                             args.rowData.productSerialNumbers = '';
-                                            const refCell = args.element.closest('tr').querySelector('[e-mappinguid="productReferenceCode"]');
+                                            const p = state.productListLookupData.find(x => x.id === e.value);
+                                            args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
+                                            const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
                                             if (refCell) {
-                                                const p = state.productListLookupData.find(x => x.id === e.value);
-                                                refCell.innerText = p ? p.referenceCode || '' : '';
+                                                refCell.value = args.rowData.productReferenceCode;
                                             }
                                             if (qtySCCountObj) {
                                                 qtySCCountObj.value = 1;

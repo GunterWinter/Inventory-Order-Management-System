@@ -29,6 +29,15 @@
         goodsReceives: { endpoint: '/GoodsReceive/GetGoodsReceiveList', sheetName: 'GoodsReceives' },
         transferOuts: { endpoint: '/TransferOut/GetTransferOutList', sheetName: 'TransferOuts' },
         todos: { endpoint: '/Todo/GetTodoList', sheetName: 'Todos' },
+        cashAccounts: { endpoint: '/CashAccount/GetCashAccountList', sheetName: 'CashAccounts' },
+        cashCategories: { endpoint: '/CashCategory/GetCashCategoryList', sheetName: 'CashCategories' },
+        transactionTypes: {
+            sheetName: 'TransactionTypes',
+            data: [
+                { id: '0', name: 'Debit' },
+                { id: '1', name: 'Credit' }
+            ]
+        },
         statuses: {
             sheetName: 'Statuses',
             data: [
@@ -119,6 +128,31 @@
             endpoint: '/Warehouse/CreateWarehouse',
             fileName: 'warehouses-template.xlsx',
             columns: simpleColumns
+        },
+        todos: {
+            title: 'Todo',
+            endpoint: '/Todo/CreateTodo',
+            fileName: 'todos-template.xlsx',
+            columns: [
+                { header: 'Title', key: 'title', required: true, example: 'Sample todo' },
+                { header: 'Status', key: 'status', required: true, lookup: 'statuses', example: 'Draft' },
+                { header: 'Description', key: 'description', example: '' }
+            ]
+        },
+        cashtransactions: {
+            title: 'Cash Transaction',
+            endpoint: '/CashTransaction/CreateCashTransaction',
+            fileName: 'cash-transactions-template.xlsx',
+            columns: [
+                { header: 'Transaction Date', key: 'transactionDate', required: true, type: 'date', example: '2026-04-29' },
+                { header: 'Transaction Type', key: 'transactionType', required: true, lookup: 'transactionTypes', example: 'Credit' },
+                { header: 'Status', key: 'status', required: true, lookup: 'statuses', example: 'Draft' },
+                { header: 'Amount', key: 'amount', required: true, type: 'number', example: 1000000 },
+                { header: 'Description', key: 'description', example: '' },
+                { header: 'Cash Account', key: 'cashAccountId', required: true, lookup: 'cashAccounts', example: 'Sample Account' },
+                { header: 'Cash Category', key: 'cashCategoryId', lookup: 'cashCategories', example: 'Sample Category' },
+                { header: 'Customer', key: 'customerId', lookup: 'customers', example: 'Sample Customer' }
+            ]
         },
         taxs: {
             title: 'Tax',
