@@ -165,29 +165,29 @@
         </div>
     </div>
 
-    <div class="modal fade" ref="quickSalesModalRef" id="QuickSalesModal" aria-hidden="true" tabindex="-1" data-bs-focus="false" data-bs-backdrop="static">
+    <div class="modal fade" ref="costAllocationModalRef" id="CostAllocationModal" aria-hidden="true" tabindex="-1" data-bs-focus="false" data-bs-backdrop="static">
         <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title"><i class="bi bi-box-arrow-right me-2"></i>Xuất nhanh đơn bán hàng</h5>
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-pie-chart me-2"></i>Chia đơn chi phí</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="QuickSalesCustomerId" class="form-label fw-bold">Khách hàng <span class="text-danger">*</span></label>
-                            <div ref="quickSalesCustomerIdRef"></div>
-                            <label class="text-danger">{{ state.quickSalesErrors.customerId }}</label>
+                            <label for="CostAllocationCashAccountId" class="form-label fw-bold">Tài khoản tiền <span class="text-danger">*</span></label>
+                            <div ref="costAllocationCashAccountIdRef"></div>
+                            <label class="text-danger">{{ state.costAllocationErrors.cashAccountId }}</label>
                         </div>
                         <div class="col-md-6">
-                            <label for="QuickSalesSalesType" class="form-label fw-bold">Loại xuất bán</label>
-                            <div ref="quickSalesSalesTypeRef"></div>
+                            <label for="CostAllocationCashCategoryId" class="form-label fw-bold">Danh mục thu chi</label>
+                            <div ref="costAllocationCashCategoryIdRef"></div>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <div class="text-muted">
-                                <small>Đã chọn <strong>{{ state.quickSalesSelectedItems.length }}</strong> sản phẩm để xuất nhanh</small>
+                                <small>Đã chọn <strong>{{ state.costAllocationSelectedItems.length }}</strong> sản phẩm để chia chi phí. Thêm nhiều dòng nếu cùng 1 sản phẩm chia cho nhiều khách.</small>
                             </div>
                         </div>
                     </div>
@@ -195,11 +195,11 @@
                         <div class="col-md-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h6 class="mb-0">Chi tiết sản phẩm xuất nhanh</h6>
+                                    <h6 class="mb-0">Chi tiết phân bổ chi phí</h6>
                                 </div>
                                 <div class="card-body p-0">
                                     <div class="grid-container">
-                                        <div id="QuickSalesPreviewGrid" ref="quickSalesPreviewGridRef"></div>
+                                        <div id="CostAllocationPreviewGrid" ref="costAllocationPreviewGridRef"></div>
                                     </div>
                                 </div>
                             </div>
@@ -209,12 +209,12 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                     <button type="button"
-                            id="QuickSalesSaveButton"
-                            class="btn btn-success"
-                            v-on:click="handler.handleQuickSalesSubmit"
-                            v-bind:disabled="state.isQuickSalesSubmitting">
-                        <span class="spinner-border spinner-border-sm me-2" v-if="state.isQuickSalesSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isQuickSalesSubmitting">Xác nhận xuất nhanh</span>
+                            id="CostAllocationSaveButton"
+                            class="btn btn-primary"
+                            v-on:click="handler.handleCostAllocationSubmit"
+                            v-bind:disabled="state.isCostAllocationSubmitting">
+                        <span class="spinner-border spinner-border-sm me-2" v-if="state.isCostAllocationSubmitting" role="status" aria-hidden="true"></span>
+                        <span v-if="!state.isCostAllocationSubmitting">Xác nhận chia đơn</span>
                         <span v-else>Đang xử lý...</span>
                     </button>
                 </div>

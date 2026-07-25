@@ -33,12 +33,12 @@ const App = {
             taxAmount: '0',
             totalAmount: '0',
             isViewMode: false,
-            quickSalesSelectedItems: [],
-            quickSalesCustomerId: null,
-            quickSalesSalesType: '2',
-            isQuickSalesSubmitting: false,
-            quickSalesErrors: {
-                customerId: ''
+            costAllocationSelectedItems: [],
+            costAllocationCashAccountId: null,
+            costAllocationCashCategoryId: null,
+            isCostAllocationSubmitting: false,
+            costAllocationErrors: {
+                cashAccountId: ''
             }
         });
 
@@ -49,10 +49,10 @@ const App = {
         const vendorIdRef = Vue.ref(null);
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
-        const quickSalesModalRef = Vue.ref(null);
-        const quickSalesCustomerIdRef = Vue.ref(null);
-        const quickSalesPreviewGridRef = Vue.ref(null);
-        const quickSalesSalesTypeRef = Vue.ref(null);
+        const costAllocationModalRef = Vue.ref(null);
+        const costAllocationCashAccountIdRef = Vue.ref(null);
+        const costAllocationCashCategoryIdRef = Vue.ref(null);
+        const costAllocationPreviewGridRef = Vue.ref(null);
 
         const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
@@ -319,11 +319,19 @@ const App = {
                     throw error;
                 }
             },
-            createQuickSalesOrderFromItems: async (purchaseOrderId, items, customerId, createdById, salesType) => {
+            allocatePurchaseOrderCosts: async (purchaseOrderId, cashAccountId, cashCategoryId, items, createdById) => {
                 try {
-                    const response = await AxiosManager.post('/SalesOrder/CreateQuickSalesOrderFromItems', {
-                        purchaseOrderId, items, customerId, createdById, salesType
+                    const response = await AxiosManager.post('/PurchaseOrder/AllocatePurchaseOrderCosts', {
+                        purchaseOrderId, cashAccountId, cashCategoryId, items, createdById
                     });
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            getCostAllocationsByPurchaseOrderId: async (purchaseOrderId) => {
+                try {
+                    const response = await AxiosManager.get(`/PurchaseOrder/GetCostAllocationsByPurchaseOrderId?purchaseOrderId=${purchaseOrderId}`, {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -507,76 +515,105 @@ const App = {
                 const response = await services.getCustomerListLookupData();
                 state.customerListLookupData = response?.data?.content?.data ?? [];
             },
-            handleQuickSalesSubmit: async () => {
-                state.quickSalesErrors.customerId = '';
-                if (!state.quickSalesCustomerId) {
-                    state.quickSalesErrors.customerId = 'Vui lòng chọn khách hàng.';
+            handleCostAllocationSubmit: async () => {
+                state.costAllocationErrors.cashAccountId = '';
+                if (!state.costAllocationCashAccountId) {
+                    state.costAllocationErrors.cashAccountId = 'Vui lòng chọn tài khoản tiền.';
                     return;
                 }
 
                 // End any pending edit in the preview grid
-                if (quickSalesPreviewGrid.obj && quickSalesPreviewGrid.obj.isEdit) {
-                    quickSalesPreviewGrid.obj.endEdit();
+                if (costAllocationPreviewGrid.obj && costAllocationPreviewGrid.obj.isEdit) {
+                    costAllocationPreviewGrid.obj.endEdit();
                     await new Promise(r => setTimeout(r, 150));
                 }
 
-                const gridData = quickSalesPreviewGrid.obj ? quickSalesPreviewGrid.obj.dataSource : [];
+                const gridData = costAllocationPreviewGrid.obj ? costAllocationPreviewGrid.obj.dataSource : [];
                 if (!gridData || gridData.length === 0) {
-                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để xuất nhanh.' });
+                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để chia chi phí.' });
                     return;
                 }
 
                 // Validate quantities
+                const byPoItem = {};
                 for (const row of gridData) {
-                    if (!row.exportQuantity || row.exportQuantity <= 0) {
-                        Swal.fire({ icon: 'warning', title: 'Số lượng không hợp lệ', text: `Số lượng xuất phải lớn hơn 0.` });
+                    if (row.allocateQuantity < 0) {
+                        Swal.fire({ icon: 'warning', title: 'Số lượng không hợp lệ', text: 'Số lượng phân bổ không được âm.' });
                         return;
                     }
-                    if (row.exportQuantity > row.remainingQuantity) {
-                        const product = state.productListLookupData.find(p => p.id === row.productId);
-                        Swal.fire({ icon: 'warning', title: 'Số lượng vượt quá', text: `Sản phẩm "${product?.name || ''}" chỉ còn lại ${row.remainingQuantity}, không thể xuất ${row.exportQuantity}.` });
+                    
+                    if (!byPoItem[row.poItemId]) {
+                        const poItem = state.secondaryData.find(x => x.id === row.poItemId);
+                        byPoItem[row.poItemId] = { 
+                            total: 0, 
+                            maxQty: poItem ? poItem.quantity : 0, 
+                            name: '' 
+                        };
+                    }
+                    byPoItem[row.poItemId].total += (row.allocateQuantity || 0);
+                    const product = state.productListLookupData.find(p => p.id === row.productId);
+                    byPoItem[row.poItemId].name = product?.name || '';
+                }
+
+                for (const [poItemId, info] of Object.entries(byPoItem)) {
+                    if (info.total > info.maxQty) {
+                        Swal.fire({ icon: 'warning', title: 'Tổng phân bổ vượt quá', text: `Sản phẩm "${info.name}" tổng phân bổ (${info.total}) vượt quá số lượng mua (${info.maxQty}).` });
                         return;
                     }
                 }
 
-                state.isQuickSalesSubmitting = true;
+                // Validate: if allocateQuantity > 0, must have a customerId
+                for (const row of gridData) {
+                    if ((row.allocateQuantity || 0) > 0 && !row.customerId) {
+                        const product = state.productListLookupData.find(p => p.id === row.productId);
+                        Swal.fire({ icon: 'warning', title: 'Thiếu khách hàng', text: `Sản phẩm "${product?.name || ''}" có số lượng chia > 0 nhưng chưa chọn khách hàng.` });
+                        return;
+                    }
+                }
+
+                state.isCostAllocationSubmitting = true;
                 try {
-                    const items = gridData.map(row => ({
-                        purchaseOrderItemId: row.id,
-                        quantity: row.exportQuantity,
-                        unitPrice: row.exportUnitPrice
-                    }));
-                    const response = await services.createQuickSalesOrderFromItems(
+                    // Only send rows that have a customer and quantity > 0
+                    const items = gridData
+                        .filter(row => row.customerId && (row.allocateQuantity || 0) > 0)
+                        .map(row => ({
+                            purchaseOrderItemId: row.poItemId,
+                            customerId: row.customerId,
+                            quantity: row.allocateQuantity,
+                            unitPrice: row.allocateUnitPrice
+                        }));
+                    const response = await services.allocatePurchaseOrderCosts(
                         state.id,
+                        state.costAllocationCashAccountId,
+                        state.costAllocationCashCategoryId,
                         items,
-                        state.quickSalesCustomerId,
-                        StorageManager.getUserId(),
-                        parseInt(state.quickSalesSalesType)
+                        StorageManager.getUserId()
                     );
 
                     if (response.data.code === 200) {
-                        const newSo = response.data.content?.data;
-                        quickSalesModal.obj.hide();
+                        const result = response.data.content;
+                        costAllocationModal.obj.hide();
 
                         await methods.populateSecondaryData(state.id);
                         secondaryGrid.refresh();
 
+                        const txCount = result?.createdTransactions?.length ?? 0;
                         Swal.fire({
                             icon: 'success',
-                            title: 'Xuất nhanh thành công',
-                            html: `Đã tạo đơn bán hàng <b>${newSo?.number || ''}</b>.<br/>Bạn có muốn xem đơn bán hàng mới không?`,
+                            title: 'Chia đơn chi phí thành công',
+                            html: `Đã tạo <b>${txCount}</b> giao dịch chi.<br/>Bạn có muốn xem trang Finance không?`,
                             showCancelButton: true,
-                            confirmButtonText: 'Đến trang đơn bán hàng',
+                            confirmButtonText: 'Đến trang Finance',
                             cancelButtonText: 'Đóng'
                         }).then((result) => {
                             if (result.isConfirmed) {
-                                window.location.href = '/SalesOrders/SalesOrderList';
+                                window.location.href = '/CashTransactions/CashTransactionList';
                             }
                         });
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: 'Xuất nhanh thất bại',
+                            title: 'Chia đơn thất bại',
                             text: response.data.message ?? 'Vui lòng kiểm tra lại.'
                         });
                     }
@@ -584,10 +621,93 @@ const App = {
                     Swal.fire({
                         icon: 'error',
                         title: 'Có lỗi xảy ra',
-                        text: error.response?.data?.message ?? 'Không thể tạo đơn bán hàng.'
+                        text: error.response?.data?.message ?? 'Không thể chia đơn chi phí.'
                     });
                 } finally {
-                    state.isQuickSalesSubmitting = false;
+                    state.isCostAllocationSubmitting = false;
+                }
+            },
+            openCostAllocationModal: async () => {
+                try {
+                    Swal.fire({ title: 'Loading...', allowOutsideClick: false });
+                    Swal.showLoading();
+
+                    const response = await services.getCostAllocationsByPurchaseOrderId(state.id);
+                    const allAllocations = response?.data?.content?.data || [];
+                    const customerAllocations = allAllocations.filter(x => x.customerId !== null);
+                    
+                    const prefillCashAccountId = response?.data?.content?.cashAccountId || null;
+                    const prefillCashCategoryId = response?.data?.content?.cashCategoryId || null;
+
+                    let previewData = [];
+                    if (customerAllocations.length > 0) {
+                        previewData = customerAllocations.map((alloc, idx) => {
+                            const poItem = state.secondaryData.find(x => x.id === alloc.purchaseOrderItemId);
+                            return {
+                                id: alloc.id,
+                                poItemId: alloc.purchaseOrderItemId,
+                                productId: poItem ? poItem.productId : '',
+                                warehouseId: poItem ? poItem.warehouseId : '',
+                                batchNumber: poItem ? poItem.batchNumber : '',
+                                remainingQuantity: poItem ? (poItem.quantity || 0) : 0, 
+                                customerId: alloc.customerId,
+                                allocateQuantity: alloc.quantity,
+                                allocateUnitPrice: alloc.unitPrice,
+                                allocateTotal: alloc.quantity * alloc.unitPrice
+                            };
+                        });
+                    }
+
+                    // Ensure every PO item has at least one row, even if empty, so the user can clone it
+                    const poItems = state.secondaryData.filter(x => (x.quantity || 0) > 0);
+                    for (const item of poItems) {
+                        const hasRow = previewData.some(x => x.poItemId === item.id);
+                        if (!hasRow) {
+                            previewData.push({
+                                id: `alloc_def_${item.id}_${Date.now()}`,
+                                poItemId: item.id,
+                                productId: item.productId,
+                                warehouseId: item.warehouseId,
+                                batchNumber: item.batchNumber,
+                                remainingQuantity: item.quantity || 0,
+                                customerId: null,
+                                allocateQuantity: 0,
+                                allocateUnitPrice: item.unitPrice ?? 0,
+                                allocateTotal: 0
+                            });
+                        }
+                    }
+
+                    // Calculate dynamic remaining quantity for each PO item
+                    const totalAllocByItem = {};
+                    previewData.forEach(row => {
+                        if (!totalAllocByItem[row.poItemId]) totalAllocByItem[row.poItemId] = 0;
+                        totalAllocByItem[row.poItemId] += (row.allocateQuantity || 0);
+                    });
+                    
+                    previewData.forEach(row => {
+                        const poItem = state.secondaryData.find(x => x.id === row.poItemId);
+                        row.remainingQuantity = (poItem?.quantity || 0) - (totalAllocByItem[row.poItemId] || 0);
+                    });
+
+                    // Reset state
+                    state.costAllocationCashAccountId = prefillCashAccountId;
+                    state.costAllocationCashCategoryId = prefillCashCategoryId;
+                    state.costAllocationErrors.cashAccountId = '';
+
+                    costAllocationPreviewGrid.createOrRefresh(previewData);
+
+                    if (costAllocationCashAccountLookup.obj) {
+                        costAllocationCashAccountLookup.obj.value = prefillCashAccountId;
+                    }
+                    if (costAllocationCashCategoryLookup.obj) {
+                        costAllocationCashCategoryLookup.obj.value = prefillCashCategoryId;
+                    }
+
+                    Swal.close();
+                    costAllocationModal.obj.show();
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Lỗi', text: 'Không thể tải dữ liệu chia đơn.' });
                 }
             }
         };
@@ -1347,15 +1467,15 @@ const App = {
                             }
                         },
                         {
-                            field: 'quickSalesExportedQuantity',
-                            headerText: 'Đã xuất',
+                            field: 'allocatedQuantity',
+                            headerText: 'Đã chia',
                             allowEditing: false,
                             width: 100,
                             type: 'number',
                             format: 'N0',
                             textAlign: 'Right',
                             valueAccessor: (field, data, column) => {
-                                return data.quickSalesExportedQuantity || 0;
+                                return data.allocatedQuantity || 0;
                             }
                         },
                         {
@@ -1367,7 +1487,7 @@ const App = {
                             format: 'N0',
                             textAlign: 'Right',
                             valueAccessor: (field, data, column) => {
-                                return (data.quantity || 0) - (data.quickSalesExportedQuantity || 0);
+                                return (data.quantity || 0) - (data.allocatedQuantity || 0);
                             }
                         },
                     ],
@@ -1376,14 +1496,14 @@ const App = {
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
-                        { text: 'Xuất nhanh', tooltipText: 'Xuất nhanh các mặt hàng đã chọn ra đơn bán hàng', prefixIcon: 'e-export', id: 'QuickExportCustom' },
+                        { text: 'Chia đơn', tooltipText: 'Chia chi phí các mặt hàng đã chọn cho khách hàng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
                         if (!state.isViewMode) {
                             try {
                                 const isConfirmed = String(state.orderStatus) === '2';
-                                secondaryGrid.obj.toolbarModule.enableItems(['QuickExportCustom'], isConfirmed);
+                                secondaryGrid.obj.toolbarModule.enableItems(['CostAllocateCustom'], isConfirmed);
                             } catch (e) { }
                         }
                     },
@@ -1407,71 +1527,12 @@ const App = {
                             secondaryGrid.obj.excelExport();
                         }
 
-                        if (args.item.id === 'QuickExportCustom') {
-                            // Only allow quick export when PO status is Confirmed
+                        if (args.item.id === 'CostAllocateCustom') {
                             if (String(state.orderStatus) !== '2') {
-                                Swal.fire({ icon: 'warning', title: 'Không thể xuất nhanh', text: 'Chỉ cho phép xuất nhanh khi đơn hàng đã được xác nhận (Confirmed).' });
+                                Swal.fire({ icon: 'warning', title: 'Không thể chia đơn', text: 'Chỉ cho phép chia đơn khi đơn hàng đã được xác nhận (Confirmed).' });
                                 return;
                             }
-
-                            const selectedRecords = secondaryGrid.obj.getSelectedRecords();
-                            if (!selectedRecords || selectedRecords.length === 0) {
-                                Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để xuất nhanh.' });
-                                return;
-                            }
-
-                            // Check if any selected items have no remaining quantity
-                            const fullyExported = selectedRecords.filter(item => {
-                                const remaining = (item.quantity || 0) - (item.quickSalesExportedQuantity || 0);
-                                return remaining <= 0;
-                            });
-                            if (fullyExported.length > 0) {
-                                const names = fullyExported.map(item => {
-                                    const product = state.productListLookupData.find(p => p.id === item.productId);
-                                    return product ? product.name : item.productId;
-                                }).join(', ');
-                                Swal.fire({
-                                    icon: 'warning',
-                                    title: 'Sản phẩm đã xuất hết',
-                                    html: `Các sản phẩm sau đã xuất hết số lượng: <b>${names}</b>.<br/>Vui lòng bỏ chọn các sản phẩm này.`
-                                });
-                                return;
-                            }
-
-                            // Store selected items and open the quick sales modal
-                            state.quickSalesSelectedItems = selectedRecords;
-                            state.quickSalesCustomerId = null;
-                            state.quickSalesErrors.customerId = '';
-
-                            // Prepare preview data with editable fields
-                            const isInternalType = state.quickSalesSalesType === '2';
-                            const previewData = selectedRecords.map(item => {
-                                const product = state.productListLookupData.find(p => p.id === item.productId);
-                                const remaining = (item.quantity || 0) - (item.quickSalesExportedQuantity || 0);
-                                const unitPrice = isInternalType
-                                    ? (product?.costPrice ?? item.unitPrice ?? 0)
-                                    : (product?.unitPrice ?? item.unitPrice ?? 0);
-                                return {
-                                    id: item.id,
-                                    productId: item.productId,
-                                    warehouseId: item.warehouseId,
-                                    batchNumber: item.batchNumber,
-                                    remainingQuantity: remaining,
-                                    exportQuantity: remaining,
-                                    exportUnitPrice: unitPrice,
-                                    exportTotal: unitPrice * remaining
-                                };
-                            });
-
-                            // Create/refresh preview grid
-                            quickSalesPreviewGrid.createOrRefresh(previewData);
-
-                            // Reset and refresh customer dropdown
-                            if (quickSalesCustomerLookup.obj) {
-                                quickSalesCustomerLookup.obj.value = null;
-                            }
-
-                            quickSalesModal.obj.show();
+                            methods.openCostAllocationModal();
                         }
                     },
                     actionBegin: (args) => {
@@ -1620,16 +1681,16 @@ const App = {
             }
         };
 
-        const quickSalesModal = {
+        const costAllocationModal = {
             obj: null,
             create: () => {
-                quickSalesModal.obj = new bootstrap.Modal(quickSalesModalRef.value, {
+                costAllocationModal.obj = new bootstrap.Modal(costAllocationModalRef.value, {
                     backdrop: 'static',
                     keyboard: false
                 });
 
                 // Restore scroll on parent modal when this modal closes
-                quickSalesModalRef.value.addEventListener('hidden.bs.modal', () => {
+                costAllocationModalRef.value.addEventListener('hidden.bs.modal', () => {
                     if (document.querySelector('.modal.show')) {
                         document.body.classList.add('modal-open');
                         document.body.style.overflow = 'hidden';
@@ -1638,14 +1699,14 @@ const App = {
             }
         };
 
-        const quickSalesCustomerLookup = {
+        const costAllocationCashAccountLookup = {
             obj: null,
             create: () => {
-                if (state.customerListLookupData && Array.isArray(state.customerListLookupData)) {
-                    quickSalesCustomerLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.customerListLookupData,
+                if (state.cashAccountListData && Array.isArray(state.cashAccountListData)) {
+                    costAllocationCashAccountLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.cashAccountListData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn khách hàng',
+                        placeholder: 'Chọn tài khoản tiền',
                         filterBarPlaceholder: 'Tìm kiếm',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
@@ -1655,98 +1716,162 @@ const App = {
                             if (e.text !== '') {
                                 query = query.where('name', 'startsWith', e.text, true);
                             }
-                            e.updateData(state.customerListLookupData, query);
+                            e.updateData(state.cashAccountListData, query);
                         },
                         change: (e) => {
-                            state.quickSalesCustomerId = e.value;
-                            state.quickSalesErrors.customerId = '';
+                            state.costAllocationCashAccountId = e.value;
+                            state.costAllocationErrors.cashAccountId = '';
                         }
                     });
-                    quickSalesCustomerLookup.obj.appendTo(quickSalesCustomerIdRef.value);
+                    costAllocationCashAccountLookup.obj.appendTo(costAllocationCashAccountIdRef.value);
                 }
             }
         };
 
-        const quickSalesSalesTypeLookup = {
+        const costAllocationCashCategoryLookup = {
             obj: null,
             create: () => {
-                quickSalesSalesTypeLookup.obj = new ej.dropdowns.DropDownList({
-                    dataSource: [
-                        { id: '2', name: 'Nội bộ (giá vốn)' },
-                        { id: '1', name: 'Bán lẻ (giá bán)' }
-                    ],
-                    fields: { value: 'id', text: 'name' },
-                    value: state.quickSalesSalesType,
-                    change: (e) => {
-                        state.quickSalesSalesType = e.value;
-
-                        // Update prices in preview grid based on sales type
-                        if (quickSalesPreviewGrid.obj) {
-                            const isInternal = e.value === '2';
-                            const records = quickSalesPreviewGrid.obj.getCurrentViewRecords();
-                            records.forEach((row) => {
-                                const product = state.productListLookupData.find(p => p.id === row.productId);
-                                const newPrice = isInternal
-                                    ? (product?.costPrice ?? row.exportUnitPrice ?? 0)
-                                    : (product?.unitPrice ?? row.exportUnitPrice ?? 0);
-                                quickSalesPreviewGrid.obj.setCellValue(row.id, 'exportUnitPrice', newPrice);
-                                quickSalesPreviewGrid.obj.setCellValue(row.id, 'exportTotal', newPrice * (row.exportQuantity || 0));
-                            });
+                if (state.cashCategoryListData && Array.isArray(state.cashCategoryListData)) {
+                    costAllocationCashCategoryLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.cashCategoryListData,
+                        fields: { value: 'id', text: 'name' },
+                        placeholder: 'Chọn danh mục (tùy chọn)',
+                        filterBarPlaceholder: 'Tìm kiếm',
+                        sortOrder: 'Ascending',
+                        allowFiltering: true,
+                        filtering: (e) => {
+                            e.preventDefaultAction = true;
+                            let query = new ej.data.Query();
+                            if (e.text !== '') {
+                                query = query.where('name', 'startsWith', e.text, true);
+                            }
+                            e.updateData(state.cashCategoryListData, query);
+                        },
+                        change: (e) => {
+                            state.costAllocationCashCategoryId = e.value;
                         }
-                    }
-                });
-                quickSalesSalesTypeLookup.obj.appendTo(quickSalesSalesTypeRef.value);
+                    });
+                    costAllocationCashCategoryLookup.obj.appendTo(costAllocationCashCategoryIdRef.value);
+                }
             }
         };
 
-        const quickSalesPreviewGrid = {
+        const costAllocationPreviewGrid = {
             obj: null,
             createOrRefresh: (dataSource) => {
-                if (quickSalesPreviewGrid.obj) {
-                    quickSalesPreviewGrid.obj.dataSource = dataSource;
-                    quickSalesPreviewGrid.obj.refresh();
+                if (costAllocationPreviewGrid.obj) {
+                    costAllocationPreviewGrid.obj.dataSource = dataSource;
+                    costAllocationPreviewGrid.obj.refresh();
                     return;
                 }
 
-                let exportQtyObj = null;
-                let exportPriceObj = null;
+                let allocQtyObj = null;
+                let allocPriceObj = null;
+                let customerDropObj = null;
 
-                quickSalesPreviewGrid.obj = new ej.grids.Grid({
-                    height: 300,
+                costAllocationPreviewGrid.obj = new ej.grids.Grid({
+                    height: 350,
                     dataSource: dataSource,
-                    allowSelection: false,
+                    allowSelection: true,
                     allowSorting: false,
                     allowFiltering: false,
                     allowPaging: false,
                     gridLines: 'Horizontal',
-                    editSettings: { allowEditing: true, allowAdding: false, allowDeleting: false, mode: 'Batch' },
+                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, mode: 'Batch' },
+                    toolbar: [{ text: 'Thêm dòng chia', tooltipText: 'Chọn dòng để chia thêm', prefixIcon: 'e-add', id: 'splitRowBtn' }, 'Delete'],
+                    toolbarClick: (args) => {
+                        if (args.item.id === 'splitRowBtn') {
+                            const selectedRecords = costAllocationPreviewGrid.obj.getSelectedRecords();
+                            if (selectedRecords.length === 0) {
+                                Swal.fire({ icon: 'info', title: 'Chưa chọn dòng', text: 'Vui lòng chọn 1 dòng sản phẩm để chia thêm.' });
+                                return;
+                            }
+                            if (costAllocationPreviewGrid.obj.isEdit) {
+                                costAllocationPreviewGrid.obj.endEdit();
+                            }
+                            const record = selectedRecords[0];
+                            const newRecord = {
+                                ...record,
+                                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                                customerId: null,
+                                allocateQuantity: 0,
+                                allocateTotal: 0
+                            };
+                            const ds = costAllocationPreviewGrid.obj.dataSource;
+                            const idx = ds.findIndex(x => x.id === record.id);
+                            ds.splice(idx + 1, 0, newRecord);
+                            costAllocationPreviewGrid.obj.refresh();
+                        }
+                    },
                     columns: [
                         { field: 'id', isPrimaryKey: true, visible: false },
+                        { field: 'poItemId', visible: false },
                         {
                             field: 'productId',
                             headerText: 'Sản phẩm',
                             allowEditing: false,
-                            width: 200,
+                            width: 180,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
                                 return product ? product.name : '';
                             }
                         },
+                        { field: 'remainingQuantity', headerText: 'Còn lại', width: 80, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                         {
-                            field: 'warehouseId',
-                            headerText: 'Kho',
-                            allowEditing: false,
-                            width: 140,
+                            field: 'customerId',
+                            headerText: 'Khách hàng',
+                            width: 180,
                             valueAccessor: (field, data, column) => {
-                                const wh = state.warehouseListLookupData.find(item => item.id === data[field]);
-                                return wh ? wh.name : '';
+                                if (!data.customerId) return '';
+                                const customer = state.customerListLookupData.find(item => item.id === data.customerId);
+                                return customer ? customer.name : '';
+                            },
+                            edit: {
+                                create: () => {
+                                    const elem = document.createElement('input');
+                                    return elem;
+                                },
+                                read: () => {
+                                    return customerDropObj ? customerDropObj.value : null;
+                                },
+                                destroy: () => {
+                                    if (customerDropObj) customerDropObj.destroy();
+                                },
+                                write: (args) => {
+                                    customerDropObj = new ej.dropdowns.DropDownList({
+                                        dataSource: state.customerListLookupData,
+                                        fields: { value: 'id', text: 'name' },
+                                        placeholder: 'Chọn khách hàng',
+                                        value: args.rowData.customerId || '',
+                                        allowFiltering: true,
+                                        filterBarPlaceholder: 'Tìm kiếm',
+                                        filtering: (e) => {
+                                            e.preventDefaultAction = true;
+                                            let query = new ej.data.Query();
+                                            if (e.text !== '') {
+                                                query = query.where('name', 'contains', e.text, true);
+                                            }
+                                            e.updateData(state.customerListLookupData, query);
+                                        },
+                                        change: (e) => {
+                                            if (args.rowData) {
+                                                args.rowData.customerId = e.value || null;
+                                                if (costAllocationPreviewGrid.obj) {
+                                                    const actualRow = costAllocationPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
+                                                    if (actualRow) {
+                                                        actualRow.customerId = e.value || null;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                    customerDropObj.appendTo(args.element);
+                                }
                             }
                         },
-                        { field: 'batchNumber', headerText: 'Số Lô', width: 100, allowEditing: false },
-                        { field: 'remainingQuantity', headerText: 'Còn lại', width: 90, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                         {
-                            field: 'exportQuantity',
-                            headerText: 'SL xuất',
+                            field: 'allocateQuantity',
+                            headerText: 'SL chia',
                             width: 100,
                             type: 'number',
                             format: 'N0',
@@ -1757,36 +1882,58 @@ const App = {
                                     return elem;
                                 },
                                 read: () => {
-                                    return exportQtyObj ? exportQtyObj.value : 0;
+                                    return allocQtyObj ? allocQtyObj.value : 0;
                                 },
                                 destroy: () => {
-                                    if (exportQtyObj) exportQtyObj.destroy();
+                                    if (allocQtyObj) allocQtyObj.destroy();
                                 },
                                 write: (args) => {
-                                    exportQtyObj = new ej.inputs.NumericTextBox({
-                                        value: args.rowData.exportQuantity,
-                                        min: 1,
-                                        max: args.rowData.remainingQuantity,
+                                    const maxAllowable = (args.rowData.allocateQuantity || 0) + (args.rowData.remainingQuantity || 0);
+                                    allocQtyObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.allocateQuantity,
+                                        min: 0,
+                                        max: maxAllowable,
                                         format: 'n0',
                                         decimals: 0,
                                         validateDecimalOnType: true,
                                         change: (e) => {
                                             if (args.rowData) {
-                                                args.rowData.exportQuantity = e.value;
-                                                const newTotal = (e.value || 0) * (args.rowData.exportUnitPrice || 0);
-                                                args.rowData.exportTotal = newTotal;
+                                                const oldQty = args.rowData.allocateQuantity || 0;
+                                                const newQty = e.value || 0;
+                                                const diff = newQty - oldQty;
                                                 
-                                                if (quickSalesPreviewGrid.obj) {
-                                                    const actualRow = quickSalesPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
-                                                    if (actualRow) {
-                                                        actualRow.exportQuantity = e.value;
-                                                        actualRow.exportTotal = newTotal;
-                                                    }
+                                                args.rowData.allocateQuantity = newQty;
+                                                const newTotal = newQty * (args.rowData.allocateUnitPrice || 0);
+                                                args.rowData.allocateTotal = newTotal;
+                                                
+                                                if (costAllocationPreviewGrid.obj) {
+                                                    const rows = costAllocationPreviewGrid.obj.dataSource.filter(x => x.poItemId === args.rowData.poItemId);
+                                                    rows.forEach(r => {
+                                                        r.remainingQuantity -= diff;
+                                                        if (r.id === args.rowData.id) {
+                                                            r.allocateQuantity = newQty;
+                                                            r.allocateTotal = newTotal;
+                                                        }
+                                                    });
+                                                    
+                                                    // Update UI for remainingQuantity and allocateTotal cells
+                                                    const allTrs = costAllocationPreviewGrid.obj.getContentTable().querySelectorAll('.e-row');
+                                                    const remainingCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('remainingQuantity');
+                                                    const totalCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
+                                                    
+                                                    allTrs.forEach(tr => {
+                                                        const rowData = costAllocationPreviewGrid.obj.getRowInfo(tr).rowData;
+                                                        if (rowData && rowData.poItemId === args.rowData.poItemId) {
+                                                            if (remainingCellIdx !== -1 && tr.cells[remainingCellIdx]) {
+                                                                tr.cells[remainingCellIdx].innerText = Intl.NumberFormat('en-US').format(rowData.remainingQuantity);
+                                                            }
+                                                        }
+                                                    });
                                                 }
                                                 
                                                 const tr = args.element.closest('tr');
-                                                if (tr && quickSalesPreviewGrid.obj) {
-                                                    const cellIndex = quickSalesPreviewGrid.obj.getColumnIndexByField('exportTotal');
+                                                if (tr && costAllocationPreviewGrid.obj) {
+                                                    const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
                                                     if (cellIndex !== -1 && tr.cells[cellIndex]) {
                                                         tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
                                                     }
@@ -1794,12 +1941,12 @@ const App = {
                                             }
                                         }
                                     });
-                                    exportQtyObj.appendTo(args.element);
+                                    allocQtyObj.appendTo(args.element);
                                 }
                             }
                         },
                         {
-                            field: 'exportUnitPrice',
+                            field: 'allocateUnitPrice',
                             headerText: 'Đơn giá',
                             width: 130,
                             type: 'number',
@@ -1811,33 +1958,33 @@ const App = {
                                     return elem;
                                 },
                                 read: () => {
-                                    return exportPriceObj ? exportPriceObj.value : 0;
+                                    return allocPriceObj ? allocPriceObj.value : 0;
                                 },
                                 destroy: () => {
-                                    if (exportPriceObj) exportPriceObj.destroy();
+                                    if (allocPriceObj) allocPriceObj.destroy();
                                 },
                                 write: (args) => {
-                                    exportPriceObj = new ej.inputs.NumericTextBox({
-                                        value: args.rowData.exportUnitPrice,
+                                    allocPriceObj = new ej.inputs.NumericTextBox({
+                                        value: args.rowData.allocateUnitPrice,
                                         min: 0,
                                         format: 'N0',
                                         change: (e) => {
                                             if (args.rowData) {
-                                                args.rowData.exportUnitPrice = e.value;
-                                                const newTotal = (args.rowData.exportQuantity || 0) * (e.value || 0);
-                                                args.rowData.exportTotal = newTotal;
+                                                args.rowData.allocateUnitPrice = e.value;
+                                                const newTotal = (args.rowData.allocateQuantity || 0) * (e.value || 0);
+                                                args.rowData.allocateTotal = newTotal;
                                                 
-                                                if (quickSalesPreviewGrid.obj) {
-                                                    const actualRow = quickSalesPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
+                                                if (costAllocationPreviewGrid.obj) {
+                                                    const actualRow = costAllocationPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
                                                     if (actualRow) {
-                                                        actualRow.exportUnitPrice = e.value;
-                                                        actualRow.exportTotal = newTotal;
+                                                        actualRow.allocateUnitPrice = e.value;
+                                                        actualRow.allocateTotal = newTotal;
                                                     }
                                                 }
                                                 
                                                 const tr = args.element.closest('tr');
-                                                if (tr && quickSalesPreviewGrid.obj) {
-                                                    const cellIndex = quickSalesPreviewGrid.obj.getColumnIndexByField('exportTotal');
+                                                if (tr && costAllocationPreviewGrid.obj) {
+                                                    const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
                                                     if (cellIndex !== -1 && tr.cells[cellIndex]) {
                                                         tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
                                                     }
@@ -1845,21 +1992,21 @@ const App = {
                                             }
                                         }
                                     });
-                                    exportPriceObj.appendTo(args.element);
+                                    allocPriceObj.appendTo(args.element);
                                 }
                             }
                         },
-                        { field: 'exportTotal', headerText: 'Thành tiền', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        { field: 'allocateTotal', headerText: 'Thành tiền', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                     ],
                     cellSave: (args) => {
                         // Recalculate total after cell save
                         const row = args.rowData;
                         if (row) {
-                            row.exportTotal = (row.exportQuantity || 0) * (row.exportUnitPrice || 0);
+                            row.allocateTotal = (row.allocateQuantity || 0) * (row.allocateUnitPrice || 0);
                         }
                     }
                 });
-                quickSalesPreviewGrid.obj.appendTo(quickSalesPreviewGridRef.value);
+                costAllocationPreviewGrid.obj.appendTo(costAllocationPreviewGridRef.value);
             }
         };
 
@@ -1983,9 +2130,9 @@ const App = {
                 await secondaryGrid.create(state.secondaryData);
 
                 await methods.populateCustomerListLookupData();
-                quickSalesModal.create();
-                quickSalesCustomerLookup.create();
-                quickSalesSalesTypeLookup.create();
+                costAllocationModal.create();
+                costAllocationCashAccountLookup.create();
+                costAllocationCashCategoryLookup.create();
             } catch (e) {
                 console.error('page init error:', e);
             } finally {
@@ -2026,15 +2173,15 @@ const App = {
             vendorIdRef,
             orderStatusRef,
             secondaryGridRef,
-            quickSalesModalRef,
-            quickSalesCustomerIdRef,
-            quickSalesPreviewGridRef,
-            quickSalesSalesTypeRef,
+            costAllocationModalRef,
+            costAllocationCashAccountIdRef,
+            costAllocationCashCategoryIdRef,
+            costAllocationPreviewGridRef,
             state,
             methods,
             handler: {
                 handleSubmit: methods.handleFormSubmit,
-                handleQuickSalesSubmit: methods.handleQuickSalesSubmit
+                handleCostAllocationSubmit: methods.handleCostAllocationSubmit
             }
         };
     }

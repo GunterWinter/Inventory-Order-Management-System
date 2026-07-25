@@ -28,7 +28,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public double? Total { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
-    public double? QuickSalesExportedQuantity { get; init; }
+    public double? AllocatedQuantity { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 

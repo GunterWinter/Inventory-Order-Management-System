@@ -247,7 +247,7 @@ public class BatchCostingDemoSeeder
             SalesOrderId = salesOrder.Id,
             ProductId = product.Id,
             WarehouseId = warehouseId,
-            Summary = $"{product.Name}bán cho khách demo",
+            Summary = $"{product.Name} - bán cho khách demo",
             BatchNumber = DemoBatchNumber,
             WarrantyMonths = product.DefaultWarrantyMonths ?? 3,
             UnitPrice = unitPrice,
@@ -523,8 +523,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<Tax> GetOrCreateTaxAsync()
     {
-        var tax = await _queryContext
-            .Set<Tax>()
+        var tax = await _taxRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == "VAT 10%");
 
         if (tax != null)
@@ -544,8 +543,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<Warehouse> GetOrCreateWarehouseAsync()
     {
-        var warehouse = await _queryContext
-            .Set<Warehouse>()
+        var warehouse = await _warehouseRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == DemoWarehouseName);
 
         if (warehouse != null)
@@ -570,8 +568,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<Vendor> GetOrCreateVendorAsync()
     {
-        var vendor = await _queryContext
-            .Set<Vendor>()
+        var vendor = await _vendorRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == DemoVendorName);
 
         var vendorGroupId = await _queryContext
@@ -620,8 +617,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<Customer> GetOrCreateCustomerAsync()
     {
-        var customer = await _queryContext
-            .Set<Customer>()
+        var customer = await _customerRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == DemoCustomerName);
 
         var customerGroupId = await _queryContext
@@ -670,8 +666,7 @@ public class BatchCostingDemoSeeder
 
     private async Task<Product> GetOrCreateProductAsync()
     {
-        var product = await _queryContext
-            .Set<Product>()
+        var product = await _productRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.ReferenceCode == DemoProductReferenceCode);
 
         var productGroupId = await _queryContext
@@ -702,6 +697,7 @@ public class BatchCostingDemoSeeder
         product.ReferenceCode = DemoProductReferenceCode;
         product.Description = "Sản phẩm demo cho kho thiết bị nhà thông minh.";
         product.UnitPrice = 1_352_000d;
+        product.CostPrice = 720_000d;
         product.Physical = true;
         product.SerialTrackingMode = SerialTrackingMode.InternalAuto;
         product.InternalSerialFixedCode = "SM";

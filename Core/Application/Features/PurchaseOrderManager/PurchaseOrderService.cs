@@ -96,7 +96,7 @@ public class PurchaseOrderService
                 !string.IsNullOrWhiteSpace(x.WarehouseId) &&
                 !string.IsNullOrWhiteSpace(x.ProductId) &&
                 !string.IsNullOrWhiteSpace(x.BatchNumber) &&
-                ((x.Quantity ?? 0) - (x.QuickSalesExportedQuantity ?? 0)) > 0)
+                ((x.Quantity ?? 0) - (x.AllocatedQuantity ?? 0)) > 0)
             .ToList();
 
         var goodsReceive = await _goodsReceiveRepository
@@ -170,7 +170,7 @@ public class PurchaseOrderService
 
         foreach (var item in receivableItems)
         {
-            var receivableQuantity = (item.Quantity ?? 0) - (item.QuickSalesExportedQuantity ?? 0);
+            var receivableQuantity = (item.Quantity ?? 0) - (item.AllocatedQuantity ?? 0);
             var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
 
             if (existingTransaction == null)

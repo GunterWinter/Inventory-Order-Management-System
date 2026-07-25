@@ -131,3 +131,15 @@
 ## Syncfusion Grid Selection State Bleed
 - **Clear Selection on Data Source Change**: When implementing master-detail views or re-using a Syncfusion grid (e.g., secondaryGrid) for different parent records, **ALWAYS** call `grid.clearSelection()` before or immediately after assigning the new data source. Syncfusion caches selected IDs (when `persistSelection: true` is used) and this leads to state bleed where items from the previous parent appear as selected in the new parent's context.
 
+
+## Seeder Entity Tracking Invariants
+- When fetching an entity within a Seeder for the purpose of updating it (Update() via a Repository), **ALWAYS** use the repository's GetQuery() method instead of _queryContext.Set<T>().
+- **Correct**: ar warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)
+- **Incorrect**: ar warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)
+- **Reason**: Multiple seeders run sequentially on the same scoped DataContext. Fetching via _queryContext (if it's a separate context or untracked) and then attaching to _warehouseRepository (which wraps DataContext) causes an identity tracking conflict if the entity was already cached by a previous seeder. Fetching via the repository guarantees you get the already-tracked instance.
+
+## Cost Allocation Implicit 'Kho' (Warehouse) Rule
+- In Purchase Order Cost Allocation UI, the "Kho" (Warehouse) fallback is IMPLICIT.
+- DO NOT explicitly create "Kho" records in the frontend grid or allow the user to select "Kho" from the dropdown.
+- The backend (AllocatePurchaseOrderCosts.cs) automatically computes Remaining Quantity = Total Quantity - Allocated Quantity for each PO item and implicitly assigns the remaining to CustomerId = null (Kho).
+- When fetching existing allocations in the frontend, always filter out customerId == null so the user only sees what was explicitly allocated to customers.

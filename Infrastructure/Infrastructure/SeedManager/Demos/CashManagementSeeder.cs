@@ -9,8 +9,8 @@ namespace Infrastructure.SeedManager.Demos;
 
 public class CashManagementSeeder
 {
-    private const string DemoPrefix = "";
-    private const string BatchDemoPrefix = "";
+    private const string DemoPrefix = "DEMO THU CHI ";
+    private const string BatchDemoPrefix = "DEMO THIẾT BỊ NHÀ THÔNG MINH";
 
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<CashAccount> _cashAccountRepository;
@@ -96,7 +96,7 @@ public class CashManagementSeeder
                 type: CashTransactionType.Debit,
                 status: CashTransactionStatus.Confirmed,
                 amount: demoSalesOrder.AfterTaxAmount ?? demoSalesOrder.BeforeTaxAmount ?? 0d,
-                description: $"{DemoPrefix} - Thu tiền đơn {demoSalesOrder.Number}",
+                description: $"{DemoPrefix}Thu tiền đơn {demoSalesOrder.Number}",
                 cashAccountId: personalAccount.Id,
                 cashCategoryId: categories["Bán hàng"].Id,
                 sourceModule: "SalesOrder",
@@ -111,7 +111,7 @@ public class CashManagementSeeder
                 type: CashTransactionType.Credit,
                 status: CashTransactionStatus.Draft,
                 amount: demoPurchaseOrder.AfterTaxAmount ?? demoPurchaseOrder.BeforeTaxAmount ?? 0d,
-                description: $"{DemoPrefix} - Nháp chi tiền đơn {demoPurchaseOrder.Number}",
+                description: $"{DemoPrefix}Nháp chi tiền đơn {demoPurchaseOrder.Number}",
                 cashAccountId: companyAccount.Id,
                 cashCategoryId: categories["Mua hàng"].Id,
                 sourceModule: "PurchaseOrder",
@@ -124,7 +124,7 @@ public class CashManagementSeeder
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Confirmed,
             amount: 50_000d,
-            description: $"{DemoPrefix}Chi tiền xăng xe giao hàng",
+            description: $"{DemoPrefix}chi tiền xăng xe giao hàng",
             cashAccountId: personalAccount.Id,
             cashCategoryId: categories["Xăng xe"].Id);
 
@@ -133,7 +133,7 @@ public class CashManagementSeeder
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Confirmed,
             amount: 2_500_000d,
-            description: $"{DemoPrefix} - Chi phí gia công tủ điện mẫu",
+            description: $"{DemoPrefix}chi phí gia công tủ điện mẫu",
             cashAccountId: companyAccount.Id,
             cashCategoryId: categories["Gia công"].Id);
 
@@ -142,7 +142,7 @@ public class CashManagementSeeder
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Draft,
             amount: 8_000_000d,
-            description: $"{DemoPrefix}Nháp chi lương nhân viên tháng 4",
+            description: $"{DemoPrefix}nháp chi lương nhân viên tháng 4",
             cashAccountId: personalAccount.Id,
             cashCategoryId: categories["Lương nhân viên"].Id);
 
@@ -151,7 +151,7 @@ public class CashManagementSeeder
             type: CashTransactionType.Debit,
             status: CashTransactionStatus.Confirmed,
             amount: 5_000_000d,
-            description: $"{DemoPrefix}Thu tiền cho thuê mặt bằng",
+            description: $"{DemoPrefix}thu tiền cho thuê mặt bằng",
             cashAccountId: companyAccount.Id,
             cashCategoryId: categories["Cho thuê mặt bằng"].Id);
 

@@ -126,6 +126,21 @@ public static class DI
             // Khong seed du lieu random cho customer/vendor/product/warehouse o day.
             // BatchCostingDemoSeeder se tao bo du lieu demo co chu dich de de nhin va de test FIFO theo lo.
 
+            var customerSeeder = serviceProvider.GetRequiredService<CustomerSeeder>();
+            customerSeeder.GenerateDataAsync().Wait();
+
+            var vendorSeeder = serviceProvider.GetRequiredService<VendorSeeder>();
+            vendorSeeder.GenerateDataAsync().Wait();
+
+            var warehouseSeeder = serviceProvider.GetRequiredService<WarehouseSeeder>();
+            warehouseSeeder.GenerateDataAsync().Wait();
+
+            var customerContactSeeder = serviceProvider.GetRequiredService<CustomerContactSeeder>();
+            customerContactSeeder.GenerateDataAsync().Wait();
+
+            var vendorContactSeeder = serviceProvider.GetRequiredService<VendorContactSeeder>();
+            vendorContactSeeder.GenerateDataAsync().Wait();
+
             var batchCostingDemoSeeder = serviceProvider.GetRequiredService<BatchCostingDemoSeeder>();
             batchCostingDemoSeeder.GenerateDataAsync().Wait();
 

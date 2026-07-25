@@ -23,7 +23,7 @@ public class PurchaseOrderItemConfiguration : BaseEntityConfiguration<PurchaseOr
         builder.Property(x => x.Total).IsRequired(false);
         builder.Property(x => x.TaxAmount).IsRequired(false);
         builder.Property(x => x.AfterTaxAmount).IsRequired(false);
-        builder.Property(x => x.QuickSalesExportedQuantity).IsRequired(false);
+        builder.Property(x => x.AllocatedQuantity).IsRequired(false);
 
     }
 }

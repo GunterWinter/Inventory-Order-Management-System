@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 
 namespace Infrastructure.SeedManager.Demos;
@@ -22,6 +22,7 @@ public class UnitMeasureSeeder
         var unitMeasures = new List<UnitMeasure>
         {
             new UnitMeasure { Name = "Cái" },
+            new UnitMeasure { Name = "Chiếc" },
             new UnitMeasure { Name = "Bộ" },
             new UnitMeasure { Name = "Mét" },
             new UnitMeasure { Name = "Cuộn" },

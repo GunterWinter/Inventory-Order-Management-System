@@ -1,4 +1,4 @@
-﻿using Application.Features.PurchaseOrderManager.Commands;
+using Application.Features.PurchaseOrderManager.Commands;
 using Application.Features.PurchaseOrderManager.Queries;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
@@ -111,6 +111,47 @@ public class PurchaseOrderController : BaseApiController
         });
     }
 
+
+    [Authorize]
+    [HttpPost("AllocatePurchaseOrderCosts")]
+    public async Task<ActionResult<ApiSuccessResult<AllocatePurchaseOrderCostsResult>>> AllocatePurchaseOrderCostsAsync(
+        [FromBody] AllocatePurchaseOrderCostsRequest request,
+        CancellationToken cancellationToken
+        )
+    {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<AllocatePurchaseOrderCostsResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(AllocatePurchaseOrderCostsAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpGet("GetCostAllocationsByPurchaseOrderId")]
+    public async Task<ActionResult<ApiSuccessResult<GetCostAllocationsByPurchaseOrderIdResult>>> GetCostAllocationsByPurchaseOrderIdAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string purchaseOrderId
+        )
+    {
+        var request = new GetCostAllocationsByPurchaseOrderIdRequest { PurchaseOrderId = purchaseOrderId };
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetCostAllocationsByPurchaseOrderIdResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetCostAllocationsByPurchaseOrderIdAsync)}",
+            Content = response
+        });
+    }
 
 }
 
