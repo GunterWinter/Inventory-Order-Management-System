@@ -17,6 +17,8 @@ public class CashTransaction : BaseEntity
     public CashCategory? CashCategory { get; set; }
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }
+    public string? VendorId { get; set; }
+    public Vendor? Vendor { get; set; }
     public string? SourceModule { get; set; }
     public string? SourceModuleId { get; set; }
     public string? SourceModuleNumber { get; set; }

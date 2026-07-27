@@ -227,6 +227,11 @@ public static class NavigationTreeStructure
                     "URL": "/CashTransactions/CustomerFinanceReport",
                     "Name": "Customer Finance Report",
                     "IsModule": false
+                },
+                {
+                    "URL": "/VendorDebtReports/VendorDebtReportList",
+                    "Name": "Vendor Debt Report",
+                    "IsModule": false
                 }
             ]
         },

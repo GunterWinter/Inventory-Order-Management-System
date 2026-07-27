@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -31,6 +31,7 @@
         const MaterialExportDateRef = Vue.ref(null);
         const purchaseOrderIdRef = Vue.ref(null);
         const statusRef = Vue.ref(null);
+        const customerIdRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
 
         const validateForm = function () {
@@ -42,15 +43,19 @@
             let isValid = true;
 
             if (!state.MaterialExportDate) {
-                state.errors.MaterialExportDate = 'MaterialExport date is required.';
+                state.errors.MaterialExportDate = 'Ngày xuất là bắt buộc.';
                 isValid = false;
             }
             if (!state.purchaseOrderId) {
-                state.errors.purchaseOrderId = 'PurchaseOrder is required.';
+                state.errors.purchaseOrderId = 'Đơn mua hàng là bắt buộc.';
                 isValid = false;
             }
-            if (!state.status) {
-                state.errors.status = 'Status is required.';
+            if (!state.customerId) {
+                state.errors.customerId = 'Khách hàng là bắt buộc.';
+                isValid = false;
+            }
+            if (!state.status && state.status !== 0 && state.status !== '0') {
+                state.errors.status = 'Trạng thái là bắt buộc.';
                 isValid = false;
             }
 
@@ -63,10 +68,12 @@
             state.MaterialExportDate = '';
             state.description = '';
             state.purchaseOrderId = null;
+            state.customerId = null;
             state.status = null;
             state.errors = {
                 MaterialExportDate: '',
                 purchaseOrderId: '',
+                customerId: '',
                 status: ''
             };
             state.secondaryData = [];
@@ -76,7 +83,7 @@
             obj: null,
             create: () => {
                 MaterialExportDatePicker.obj = new ej.calendars.DatePicker({
-                    placeholder: 'Select Date',
+                    placeholder: 'Chọn ngày',
                     format: 'yyyy-MM-dd',
                     locale: DateFormatManager.syncfusionDateLocale,
                     value: state.MaterialExportDate ? DateFormatManager.parseBusinessDate(state.MaterialExportDate) : null,
@@ -118,7 +125,7 @@
                     PurchaseOrderListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.purchaseOrderListLookupData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Select PurchaseOrder',
+                        placeholder: 'Chọn đơn mua hàng',
                         allowFiltering: true,
                         filtering: (e) => {
                             e.preventDefaultAction = true;
@@ -147,7 +154,6 @@
             (newVal, oldVal) => {
                 PurchaseOrderListLookup.refresh();
                 state.errors.purchaseOrderId = '';
-            state.errors.customerId = '';
             }
         );
 
@@ -452,7 +458,7 @@
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
-                            state.mainTitle = 'Edit MaterialExport';
+                            state.mainTitle = 'Sửa phiếu Xuất vật tư';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
                             await methods.populateSecondaryData(state.id);
@@ -461,15 +467,15 @@
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Save Successful',
+                                title: 'Lưu thành công',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
                         } else {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Delete Successful',
-                                text: 'Form will be closed...',
+                                title: 'Xóa thành công',
+                                text: 'Biểu mẫu sẽ được đóng...',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -481,17 +487,17 @@
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
-                            text: response.data.message ?? 'Please check your data.',
-                            confirmButtonText: 'Try Again'
+                            title: state.deleteMode ? 'Xóa thất bại' : 'Lưu thất bại',
+                            text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                            confirmButtonText: 'Thử lại'
                         });
                     }
                 } catch (error) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'An Error Occurred',
-                        text: error.response?.data?.message ?? 'Please try again.',
-                        confirmButtonText: 'OK'
+                        title: 'Đã xảy ra lỗi',
+                        text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                        confirmButtonText: 'Đồng ý'
                     });
                 } finally {
                     state.isSubmitting = false;
@@ -607,8 +613,9 @@
 
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
-                            state.mainTitle = 'Add MaterialExport';
+                            state.mainTitle = 'Thêm phiếu Xuất vật tư';
                             resetFormState();
+                            state.status = '0';
                             state.showComplexDiv = false;
                             mainModal.obj.show();
                         }
@@ -617,7 +624,7 @@
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Edit MaterialExport';
+                                state.mainTitle = 'Sửa phiếu Xuất vật tư';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
@@ -636,7 +643,7 @@
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete MaterialExport?';
+                                state.mainTitle = 'Xóa phiếu Xuất vật tư?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
@@ -751,7 +758,7 @@
                                                 movementObj.value = 1;
                                             }
                                         },
-                                        placeholder: 'Select a Product',
+                                        placeholder: 'Chọn hàng hóa',
                                         floatLabelType: 'Never'
                                     });
 
@@ -849,24 +856,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Save Successful',
+                                        title: 'Lưu thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Save Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Lưu thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }
@@ -878,24 +885,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Update Successful',
+                                        title: 'Cập nhật thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Update Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Cập nhật thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }
@@ -907,24 +914,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Delete Successful',
+                                        title: 'Xóa thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Delete Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Xóa thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }
@@ -955,6 +962,7 @@
             MaterialExportDateRef,
             purchaseOrderIdRef,
             statusRef,
+            customerIdRef,
             numberRef,
             state,
             handler,

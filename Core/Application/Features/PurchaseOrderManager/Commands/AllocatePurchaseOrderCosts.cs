@@ -38,7 +38,6 @@ public class AllocatePurchaseOrderCostsValidator : AbstractValidator<AllocatePur
     public AllocatePurchaseOrderCostsValidator()
     {
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
-        RuleFor(x => x.CashAccountId).NotEmpty();
         RuleFor(x => x.Items).NotEmpty();
     }
 }
@@ -98,16 +97,15 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
             throw new Exception("Chỉ có thể chia đơn cho đơn mua hàng đã được xác nhận (Confirmed).");
         }
 
-        // Load the CashAccount for description
-        var cashAccount = await _queryContext
-            .Set<CashAccount>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .FirstOrDefaultAsync(x => x.Id == request.CashAccountId, cancellationToken);
-
-        if (cashAccount == null)
+        // Load the CashAccount for description (optional - may be null for Draft)
+        CashAccount? cashAccount = null;
+        if (!string.IsNullOrWhiteSpace(request.CashAccountId))
         {
-            throw new Exception($"Không tìm thấy tài khoản tiền: {request.CashAccountId}");
+            cashAccount = await _queryContext
+                .Set<CashAccount>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .FirstOrDefaultAsync(x => x.Id == request.CashAccountId, cancellationToken);
         }
 
         // 1. Load and process old allocations
@@ -355,7 +353,7 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
             var customerName = isKho ? "Kho" : (customers.GetValueOrDefault(customerGroup.Key) ?? "N/A");
             var totalAmount = customerGroup.Sum(x => x.Quantity * x.UnitPrice);
 
-            var description = $"{cashAccount.Name} {vendorDescription} - {customerName}";
+            var description = $"{(cashAccount?.Name ?? "")} {vendorDescription} - {customerName}".Trim();
 
             var cashTransaction = new CashTransaction
             {
@@ -363,12 +361,13 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
                 Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
                 TransactionDate = DateTime.Today,
                 TransactionType = CashTransactionType.Credit,
-                Status = CashTransactionStatus.Confirmed,
+                Status = CashTransactionStatus.Draft,
                 Amount = totalAmount,
                 Description = description,
                 CashAccountId = request.CashAccountId,
                 CashCategoryId = request.CashCategoryId,
                 CustomerId = isKho ? null : customerGroup.Key,
+                VendorId = purchaseOrder.VendorId,
                 SourceModule = nameof(PurchaseOrder),
                 SourceModuleId = purchaseOrder.Id,
                 SourceModuleNumber = purchaseOrder.Number
@@ -380,15 +379,17 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
 
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        // Recalculate CashAccount balance
-        await RecalculateAccountBalance(request.CashAccountId!, cancellationToken);
-        var oldAccountIds = oldCashTransactions.Select(x => x.CashAccountId).Where(x => x != null).Distinct().ToList();
+        // Draft transactions do not affect account balance - no recalculation needed
+        // Old confirmed transactions that were deleted still need balance recalculation
+        var oldAccountIds = oldCashTransactions
+            .Where(x => x.Status == CashTransactionStatus.Confirmed)
+            .Select(x => x.CashAccountId)
+            .Where(x => x != null)
+            .Distinct()
+            .ToList();
         foreach (var oldAccId in oldAccountIds)
         {
-            if (oldAccId != request.CashAccountId)
-            {
-                await RecalculateAccountBalance(oldAccId!, cancellationToken);
-            }
+            await RecalculateAccountBalance(oldAccId!, cancellationToken);
         }
 
         return new AllocatePurchaseOrderCostsResult

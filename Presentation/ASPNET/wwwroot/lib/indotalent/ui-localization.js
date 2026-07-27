@@ -510,7 +510,16 @@
         'NegativeAdjustment': 'Phiếu Điều Chỉnh Giảm',
         'Document not found': 'Không tìm thấy chứng từ',
         'Error loading document': 'Lỗi tải chứng từ',
-        'Internal serial, SO number, or customer phone': 'Serial nội bộ, số đơn bán hoặc SĐT khách hàng'
+        'Internal serial, SO number, or customer phone': 'Serial nội bộ, số đơn bán hoặc SĐT khách hàng',
+        'CostAllocation': 'Phân Bổ Công Trình',
+        'MaterialExport': 'Phiếu Xuất Vật Tư',
+        'Material Export': 'Phiếu Xuất Vật Tư',
+        'Vendor Debt Report': 'Báo Cáo Công Nợ NCC',
+        'Vendor Debt': 'Công Nợ NCC',
+        'Total Purchase': 'Tổng Tiền Mua',
+        'Total Paid': 'Tổng Đã Thanh Toán',
+        'Remaining Debt': 'Còn Nợ',
+        'Vendor Name': 'Tên Nhà Cung Cấp'
     };
 
     const termTranslations = {
@@ -778,7 +787,16 @@
         'scrapped': 'hủy bỏ',
         'supplier warranty end': 'hạn bh nhà cung cấp',
         'this field': 'trường này',
-        'this field is required': 'trường này là bắt buộc'
+        'this field is required': 'trường này là bắt buộc',
+        'costallocation': 'phân bổ công trình',
+        'materialexport': 'phiếu xuất vật tư',
+        'material export': 'phiếu xuất vật tư',
+        'vendor debt report': 'báo cáo công nợ NCC',
+        'vendor debt': 'công nợ NCC',
+        'total purchase': 'tổng tiền mua',
+        'total paid': 'tổng đã thanh toán',
+        'remaining debt': 'còn nợ',
+        'vendor name': 'tên nhà cung cấp'
     };
 
     function normalizeText(value) {

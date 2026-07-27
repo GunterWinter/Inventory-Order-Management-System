@@ -106,4 +106,21 @@ public class CashTransactionController : BaseApiController
             Content = response
         });
     }
+
+    [Authorize]
+    [HttpGet("GetVendorDebtReport")]
+    public async Task<ActionResult<ApiSuccessResult<GetVendorDebtReportResult>>> GetVendorDebtReportAsync(
+        CancellationToken cancellationToken
+        )
+    {
+        var request = new GetVendorDebtReportRequest();
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetVendorDebtReportResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetVendorDebtReportAsync)}",
+            Content = response
+        });
+    }
 }

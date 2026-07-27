@@ -516,11 +516,6 @@ const App = {
                 state.customerListLookupData = response?.data?.content?.data ?? [];
             },
             handleCostAllocationSubmit: async () => {
-                state.costAllocationErrors.cashAccountId = '';
-                if (!state.costAllocationCashAccountId) {
-                    state.costAllocationErrors.cashAccountId = 'Vui lòng chọn tài khoản tiền.';
-                    return;
-                }
 
                 // End any pending edit in the preview grid
                 if (costAllocationPreviewGrid.obj && costAllocationPreviewGrid.obj.isEdit) {
@@ -530,7 +525,7 @@ const App = {
 
                 const gridData = costAllocationPreviewGrid.obj ? costAllocationPreviewGrid.obj.dataSource : [];
                 if (!gridData || gridData.length === 0) {
-                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để chia chi phí.' });
+                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để phân bổ công trình.' });
                     return;
                 }
 
@@ -584,8 +579,8 @@ const App = {
                         }));
                     const response = await services.allocatePurchaseOrderCosts(
                         state.id,
-                        state.costAllocationCashAccountId,
-                        state.costAllocationCashCategoryId,
+                        null,
+                        null,
                         items,
                         StorageManager.getUserId()
                     );
@@ -600,10 +595,10 @@ const App = {
                         const txCount = result?.createdTransactions?.length ?? 0;
                         Swal.fire({
                             icon: 'success',
-                            title: 'Chia đơn chi phí thành công',
-                            html: `Đã tạo <b>${txCount}</b> giao dịch chi.<br/>Bạn có muốn xem trang Finance không?`,
+                            title: 'Phân bổ công trình thành công',
+                            html: `Đã tạo <b>${txCount}</b> giao dịch chi (Nháp).<br/>Bạn có muốn xem trang Tài chính không?`,
                             showCancelButton: true,
-                            confirmButtonText: 'Đến trang Finance',
+                            confirmButtonText: 'Đến trang Tài chính',
                             cancelButtonText: 'Đóng'
                         }).then((result) => {
                             if (result.isConfirmed) {
@@ -613,7 +608,7 @@ const App = {
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: 'Chia đơn thất bại',
+                            title: 'Phân bổ thất bại',
                             text: response.data.message ?? 'Vui lòng kiểm tra lại.'
                         });
                     }
@@ -621,7 +616,7 @@ const App = {
                     Swal.fire({
                         icon: 'error',
                         title: 'Có lỗi xảy ra',
-                        text: error.response?.data?.message ?? 'Không thể chia đơn chi phí.'
+                        text: error.response?.data?.message ?? 'Không thể phân bổ công trình.'
                     });
                 } finally {
                     state.isCostAllocationSubmitting = false;
