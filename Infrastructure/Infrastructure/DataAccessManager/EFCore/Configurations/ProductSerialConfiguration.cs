@@ -22,6 +22,12 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.Property(x => x.SalesOrderItemId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SupplierWarrantyEndDate).IsRequired(false);
         builder.Property(x => x.CustomerWarrantyEndDate).IsRequired(false);
+        builder.Property(x => x.CostAllocationId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+
+        builder.HasOne(x => x.CostAllocation)
+            .WithMany()
+            .HasForeignKey(x => x.CostAllocationId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(x => x.InternalSerialNumber).IsUnique();
         builder.HasIndex(x => x.ProductId);
@@ -30,5 +36,6 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.HasIndex(x => x.BatchNumber);
         builder.HasIndex(x => x.PurchaseOrderItemId);
         builder.HasIndex(x => x.SalesOrderItemId);
+        builder.HasIndex(x => x.CostAllocationId);
     }
 }

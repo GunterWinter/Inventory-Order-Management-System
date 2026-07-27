@@ -43,7 +43,7 @@ public class ProductSerialService
                 !x.IsDeleted &&
                 x.Id == productId &&
                 x.Physical == true &&
-                x.SerialTrackingMode == SerialTrackingMode.InternalAuto,
+                x.SerialTrackingMode != SerialTrackingMode.None,
                 cancellationToken);
     }
 
@@ -398,6 +398,17 @@ public class ProductSerialService
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
                 .Where(x => x.SalesOrderItemId == transaction.ModuleItemId)
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        if (transaction.ModuleName == nameof(GoodsReceive) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
+        {
+            return await _queryContext
+                .Set<ProductSerial>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.PurchaseOrderItemId == transaction.ModuleItemId)
                 .Select(x => x.Id)
                 .ToListAsync(cancellationToken);
         }

@@ -5,25 +5,25 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.DataAccessManager.EFCore.Configurations;
 
-public class PurchaseOrderCostAllocationConfiguration : BaseEntityConfiguration<PurchaseOrderCostAllocation>
+public class MaterialExportItemConfiguration : BaseEntityConfiguration<MaterialExportItem>
 {
-    public override void Configure(EntityTypeBuilder<PurchaseOrderCostAllocation> builder)
+    public override void Configure(EntityTypeBuilder<MaterialExportItem> builder)
     {
         base.Configure(builder);
-        
-        builder.HasOne(x => x.PurchaseOrder)
-            .WithMany()
-            .HasForeignKey(x => x.PurchaseOrderId)
-            .OnDelete(DeleteBehavior.Restrict);
-            
+
         builder.HasOne(x => x.PurchaseOrderItem)
             .WithMany()
             .HasForeignKey(x => x.PurchaseOrderItemId)
             .OnDelete(DeleteBehavior.Restrict);
-            
-        builder.HasOne(x => x.Customer)
+
+        builder.HasOne(x => x.Product)
             .WithMany()
-            .HasForeignKey(x => x.CustomerId)
+            .HasForeignKey(x => x.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Warehouse)
+            .WithMany()
+            .HasForeignKey(x => x.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

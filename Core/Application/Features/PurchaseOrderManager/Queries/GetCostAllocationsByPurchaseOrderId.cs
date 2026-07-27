@@ -30,6 +30,11 @@ public class GetCostAllocationsByPurchaseOrderIdHandler : IRequestHandler<GetCos
     {
         var data = await _context.Set<PurchaseOrderCostAllocation>()
             .AsNoTracking()
+            .Include(x => x.Customer)
+            .Include(x => x.PurchaseOrderItem)
+                .ThenInclude(poi => poi!.Product)
+            .Include(x => x.PurchaseOrderItem)
+                .ThenInclude(poi => poi!.Warehouse)
             .Where(x => !x.IsDeleted && x.PurchaseOrderId == request.PurchaseOrderId)
             .ToListAsync(cancellationToken);
 

@@ -170,6 +170,11 @@ public static class NavigationTreeStructure
                     "Name": "Transfer In",
                     "IsModule": false
                 },
+                {
+                    "URL": "/MaterialExports/MaterialExportList",
+                    "Name": "Phiếu Xuất Vật Tư",
+                    "IsModule": false
+                },
 
                 {
                     "URL": "/Scrappings/ScrappingList",

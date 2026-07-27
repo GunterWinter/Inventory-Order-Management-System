@@ -57,6 +57,8 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<CashAccount> CashAccount { get; set; }
     public DbSet<CashCategory> CashCategory { get; set; }
     public DbSet<CashTransaction> CashTransaction { get; set; }
+    public DbSet<MaterialExport> MaterialExport { get; set; }
+    public DbSet<MaterialExportItem> MaterialExportItem { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,7 +93,6 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new SalesOrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseOrderConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseOrderItemConfiguration());
-        modelBuilder.ApplyConfiguration(new PurchaseOrderCostAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new InventoryTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new DeliveryOrderConfiguration());
         modelBuilder.ApplyConfiguration(new GoodsReceiveConfiguration());
@@ -103,12 +104,13 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new NegativeAdjustmentConfiguration());
         modelBuilder.ApplyConfiguration(new PositiveAdjustmentConfiguration());
         modelBuilder.ApplyConfiguration(new ScrappingConfiguration());
+        modelBuilder.ApplyConfiguration(new PurchaseOrderCostAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new CashAccountConfiguration());
         modelBuilder.ApplyConfiguration(new CashCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new CashTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new MaterialExportConfiguration());
+        modelBuilder.ApplyConfiguration(new MaterialExportItemConfiguration());
 
     }
 
 }
-
-

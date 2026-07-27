@@ -173,6 +173,9 @@ public partial class InventoryTransactionService
             case nameof(Scrapping):
                 ScrappingProcessing(transaction);
                 break;
+            case "CostAllocation":
+                CostAllocationProcessing(transaction);
+                break;
             default:
                 break;
         }
@@ -393,6 +396,21 @@ public partial class InventoryTransactionService
         CalculateStock(transaction);
         transaction.WarehouseFromId = transaction.WarehouseId;
         transaction.WarehouseToId = _warehouseService.GetScrappingWarehouse()!.Id;
+
+        return transaction;
+    }
+
+    private InventoryTransaction CostAllocationProcessing(InventoryTransaction transaction)
+    {
+        if (transaction == null)
+        {
+            throw new Exception("Inventory transaction is null");
+        }
+
+        transaction.TransType = InventoryTransType.Out;
+        CalculateStock(transaction);
+        transaction.WarehouseFromId = transaction.WarehouseId;
+        transaction.WarehouseToId = _warehouseService.GetCustomerWarehouse()!.Id;
 
         return transaction;
     }

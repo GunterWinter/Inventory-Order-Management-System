@@ -136,6 +136,8 @@
 - When fetching an entity within a Seeder for the purpose of updating it (Update() via a Repository), **ALWAYS** use the repository's GetQuery() method instead of _queryContext.Set<T>().
 - **Correct**: ar warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)
 - **Incorrect**: ar warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)
+- **Correct**:  ar warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)
+- **Incorrect**:  ar warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)
 - **Reason**: Multiple seeders run sequentially on the same scoped DataContext. Fetching via _queryContext (if it's a separate context or untracked) and then attaching to _warehouseRepository (which wraps DataContext) causes an identity tracking conflict if the entity was already cached by a previous seeder. Fetching via the repository guarantees you get the already-tracked instance.
 
 ## Cost Allocation Implicit 'Kho' (Warehouse) Rule
@@ -143,3 +145,6 @@
 - DO NOT explicitly create "Kho" records in the frontend grid or allow the user to select "Kho" from the dropdown.
 - The backend (AllocatePurchaseOrderCosts.cs) automatically computes Remaining Quantity = Total Quantity - Allocated Quantity for each PO item and implicitly assigns the remaining to CustomerId = null (Kho).
 - When fetching existing allocations in the frontend, always filter out customerId == null so the user only sees what was explicitly allocated to customers.
+- **Frontend Submit Filter**: When submitting cost allocations, the frontend MUST `.filter(row => row.customerId && row.allocateQuantity > 0)` before sending to the backend. Rows without a customer or with zero quantity are placeholder/Kho rows and must NOT be sent.
+- **Customer Required Validation**: If a grid row has `allocateQuantity > 0`, the frontend MUST validate that `customerId` is not null/empty before submission. Show a warning if missing.
+- **"Còn lại" Column Name**: The remaining quantity column in the cost allocation preview grid MUST use header text `'Còn lại'` (not `'Tổng SL'` or other variants). This was explicitly confirmed by the user.

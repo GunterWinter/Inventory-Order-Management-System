@@ -10,7 +10,7 @@ const App = {
             id: '',
             name: '',
             number: '',
-            referenceCode: '', 
+            referenceCode: '',
             unitPrice: '',
             costPrice: '',
             imageUrl: '',
@@ -24,7 +24,7 @@ const App = {
             internalSerialFixedCode: 'CAM',
             errors: {
                 name: '',
-                referenceCode: '', 
+                referenceCode: '',
                 unitPrice: '',
                 costPrice: '',
                 defaultWarrantyMonths: '',
@@ -42,12 +42,12 @@ const App = {
         const defaultWarehouseIdRef = Vue.ref(null);
         const nameRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
-        const referenceCodeRef = Vue.ref(null); 
+        const referenceCodeRef = Vue.ref(null);
         const unitPriceRef = Vue.ref(null);
         const costPriceRef = Vue.ref(null);
         const imageFileRef = Vue.ref(null);
         const defaultWarrantyMonthsRef = Vue.ref(null);
-        
+
         const getImageUrl = (name) => {
             if (!name) return '/noimage.png';
             if (name.startsWith('http://') || name.startsWith('https://')) return name;
@@ -139,7 +139,7 @@ const App = {
             state.id = '';
             state.name = '';
             state.number = '';
-            state.referenceCode = ''; 
+            state.referenceCode = '';
             state.unitPrice = '';
             state.costPrice = '';
             state.imageUrl = '';
@@ -592,7 +592,7 @@ const App = {
                             state.mainTitle = 'Edit Product';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
-                            state.referenceCode = response?.data?.content?.data.referenceCode ?? ''; 
+                            state.referenceCode = response?.data?.content?.data.referenceCode ?? '';
                             state.name = response?.data?.content?.data.name ?? '';
                             state.unitPrice = response?.data?.content?.data.unitPrice ?? '';
                             state.costPrice = response?.data?.content?.data.costPrice ?? '';
@@ -737,8 +737,8 @@ const App = {
                         { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
-                        { field: 'costPrice', headerText: 'Cost Price (Giá vốn)', width: 160, minWidth: 160, format: 'N0' },
-                        { field: 'unitPrice', headerText: 'Selling Price (Giá bán)', width: 170, minWidth: 170, format: 'N0' },
+                        { field: 'costPrice', headerText: 'Giá vốn', width: 160, minWidth: 160, format: 'N0' },
+                        { field: 'unitPrice', headerText: 'Giá bán', width: 170, minWidth: 170, format: 'N0' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
@@ -822,7 +822,7 @@ const App = {
                                 state.mainTitle = 'Delete Product?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
-                                state.referenceCode = selectedRecord.referenceCode ?? ''; 
+                                state.referenceCode = selectedRecord.referenceCode ?? '';
                                 state.name = selectedRecord.name ?? '';
                                 state.unitPrice = selectedRecord.unitPrice ?? '';
                                 state.costPrice = selectedRecord.costPrice ?? '';
@@ -865,7 +865,7 @@ const App = {
             defaultWarehouseIdRef,
             nameRef,
             numberRef,
-            referenceCodeRef, 
+            referenceCodeRef,
             unitPriceRef,
             costPriceRef,
             imageFileRef,

@@ -860,6 +860,40 @@ const App = {
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
+                    detailTemplate: '#detailtemplate',
+                    detailDataBound: async (e) => {
+                        let detailGrid = new ej.grids.Grid({
+                            dataSource: [],
+                            columns: [
+                                { field: 'purchaseOrderItem.product.name', headerText: 'Sản phẩm', width: 150 },
+                                { field: 'purchaseOrderItem.warehouse.name', headerText: 'Kho', width: 120 },
+                                { field: 'customer.name', headerText: 'Khách hàng', width: 150 },
+                                { field: 'quantity', headerText: 'Số lượng', width: 100, format: 'N0' }
+                            ]
+                        });
+                        
+                        let destElement = e.detailElement.querySelector('.allocation-detail-grid');
+                        if (destElement) {
+                            detailGrid.appendTo(destElement);
+                            try {
+                                const response = await axios.get('/api/purchase-order/GetCostAllocationsByPurchaseOrderId?purchaseOrderId=' + e.data.id);
+                                if (response?.data?.content?.data) {
+                                    let allocData = response.data.content.data;
+                                    allocData.forEach(x => {
+                                        if (!x.customer) {
+                                            x.customer = { name: 'Kho' };
+                                        }
+                                        if (!x.purchaseOrderItem) {
+                                            x.purchaseOrderItem = { product: { name: 'N/A' }, warehouse: { name: 'N/A' } };
+                                        }
+                                    });
+                                    detailGrid.dataSource = allocData;
+                                }
+                            } catch (err) {
+                                console.error('Error loading detail row:', err);
+                            }
+                        }
+                    },
                     allowGrouping: true,
                     groupSettings: { columns: ['vendorName'] },
                     allowTextWrap: true,

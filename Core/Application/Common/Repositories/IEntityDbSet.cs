@@ -47,4 +47,6 @@ public interface IEntityDbSet
     public DbSet<CashAccount> CashAccount { get; set; }
     public DbSet<CashCategory> CashCategory { get; set; }
     public DbSet<CashTransaction> CashTransaction { get; set; }
+    public DbSet<MaterialExport> MaterialExport { get; set; }
+    public DbSet<MaterialExportItem> MaterialExportItem { get; set; }
 }
