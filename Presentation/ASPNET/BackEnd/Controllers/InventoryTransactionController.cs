@@ -1,4 +1,4 @@
-﻿using Application.Features.InventoryTransactionManager.Commands;
+using Application.Features.InventoryTransactionManager.Commands;
 using Application.Features.InventoryTransactionManager.Queries;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
@@ -650,6 +650,82 @@ public class InventoryTransactionController : BaseApiController
         {
             Code = StatusCodes.Status200OK,
             Message = $"Success executing {nameof(StockCountGetInvenTransListAsync)}",
+            Content = response
+        });
+    }
+
+
+    [Authorize]
+    [HttpPost("MaterialExportCreateInvenTrans")]
+    public async Task<ActionResult<ApiSuccessResult<MaterialExportCreateInvenTransResult>>> MaterialExportCreateInvenTransAsync([FromBody] MaterialExportCreateInvenTransRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<MaterialExportCreateInvenTransResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(MaterialExportCreateInvenTransAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpPost("MaterialExportUpdateInvenTrans")]
+    public async Task<ActionResult<ApiSuccessResult<MaterialExportUpdateInvenTransResult>>> MaterialExportUpdateInvenTransAsync([FromBody] MaterialExportUpdateInvenTransRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<MaterialExportUpdateInvenTransResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(MaterialExportUpdateInvenTransAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpPost("MaterialExportDeleteInvenTrans")]
+    public async Task<ActionResult<ApiSuccessResult<MaterialExportDeleteInvenTransResult>>> MaterialExportDeleteInvenTransAsync([FromBody] MaterialExportDeleteInvenTransRequest request, CancellationToken cancellationToken)
+    {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<MaterialExportDeleteInvenTransResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(MaterialExportDeleteInvenTransAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpGet("MaterialExportGetInvenTransList")]
+    public async Task<ActionResult<ApiSuccessResult<MaterialExportGetInvenTransListResult>>> MaterialExportGetInvenTransListAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string moduleId
+        )
+    {
+        var request = new MaterialExportGetInvenTransListRequest { ModuleId = moduleId };
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<MaterialExportGetInvenTransListResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(MaterialExportGetInvenTransListAsync)}",
             Content = response
         });
     }

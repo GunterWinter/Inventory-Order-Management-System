@@ -131,7 +131,7 @@ const App = {
                             e.preventDefaultAction = true;
                             let query = new ej.data.Query();
                             if (e.text !== '') {
-                                query = query.where('name', 'startsWith', e.text, true);
+                                query = query.where('name', 'contains', e.text, true);
                             }
                             e.updateData(state.purchaseOrderListLookupData, query);
                         },
@@ -151,9 +151,12 @@ const App = {
 
         Vue.watch(
             () => state.purchaseOrderId,
-            (newVal, oldVal) => {
+            async (newVal, oldVal) => {
                 PurchaseOrderListLookup.refresh();
                 state.errors.purchaseOrderId = '';
+                if (newVal !== oldVal) {
+                    await methods.populateProductListLookupData();
+                }
             }
         );
 
@@ -277,7 +280,7 @@ const App = {
             },
             getpurchaseOrderListLookupData: async () => {
                 try {
-                    const response = await AxiosManager.get('/PurchaseOrder/GetPurchaseOrderList', {});
+                    const response = await AxiosManager.get('/MaterialExport/GetAvailablePurchaseOrders', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -307,20 +310,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, productId, movement, createdById, productSerialIds) => {
+            createSecondaryData: async (moduleId, productId, movement, createdById) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/MaterialExportCreateInvenTrans', {
-                        moduleId, productId, movement, createdById, productSerialIds
+                        moduleId, productId, movement, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, productId, movement, updatedById, productSerialIds) => {
+            updateSecondaryData: async (id, productId, movement, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/MaterialExportUpdateInvenTrans', {
-                        id, productId, movement, updatedById, productSerialIds
+                        id, productId, movement, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -352,13 +355,13 @@ const App = {
                 const response = await services.getMainData();
                 state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
-                    MaterialExportDate: DateFormatManager.parseBusinessDate(item.MaterialExportDate),
+                    MaterialExportDate: DateFormatManager.parseBusinessDate(item.materialExportDate),
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
             populatepurchaseOrderListLookupData: async () => {
                 const response = await services.getpurchaseOrderListLookupData();
-                state.purchaseOrderListLookupData = response?.data?.content?.data.filter(PurchaseOrder => PurchaseOrder.systemPurchaseOrder === false) || [];
+                state.purchaseOrderListLookupData = response?.data?.content?.data || [];
             },
             populatecustomerListLookupData: async () => {
                 const response = await services.getCustomerListLookupData();
@@ -381,13 +384,26 @@ const App = {
                 }
             },
             populateProductListLookupData: async () => {
-                const response = await services.getProductListLookupData();
-                state.productListLookupData = response?.data?.content?.data
-                    .filter(product => product.physical === true)
-                    .map(product => ({
-                        ...product,
-                        name: `${product.name}`
-                    })) || [];
+                if (state.purchaseOrderId) {
+                    try {
+                        const response = await AxiosManager.get('/MaterialExport/GetMaterialExportPOItems?purchaseOrderId=' + state.purchaseOrderId, {});
+                        state.productListLookupData = (response?.data?.content?.data ?? []).map(item => ({
+                            id: item.productId,
+                            name: item.productName,
+                            referenceCode: item.productReferenceCode,
+                            physical: true,
+                            serialTrackingMode: item.serialTrackingMode ?? 0,
+                            warehouseId: item.warehouseId,
+                            totalQuantity: item.totalQuantity ?? 0,
+                            stockQuantity: item.stockQuantity ?? 0,
+                            remainingQuantity: item.remainingQuantity ?? 0
+                        }));
+                    } catch (error) {
+                        state.productListLookupData = [];
+                    }
+                } else {
+                    state.productListLookupData = [];
+                }
             },
             refreshSummary: () => {
                 const totalMovement = state.secondaryData.reduce((sum, record) => sum + (record.movement ?? 0), 0);
@@ -616,6 +632,7 @@ const App = {
                                 state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
+                                await methods.populateProductListLookupData();
                                 await methods.populateSecondaryData(selectedRecord.id);
                                 secondaryGrid.refresh();
                                 state.showComplexDiv = true;
@@ -692,7 +709,7 @@ const App = {
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Ref Code',
+                            headerText: 'Mã Tham Khảo',
                             width: 140,
                             allowEditing: false,
                             disableHtmlEncode: false,
@@ -734,6 +751,7 @@ const App = {
                                             args.rowData.productSerialNumbers = '';
                                             const p = state.productListLookupData.find(x => x.id === e.value);
                                             args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
+                                            args.rowData.warehouseId = p ? p.warehouseId : null;
                                             const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
                                             if (refCell) {
                                                 refCell.value = args.rowData.productReferenceCode;
@@ -750,18 +768,10 @@ const App = {
                                 }
                             }
                         },
-                        ProductSerialPicker.createGridColumn({
-                            productListGetter: () => state.productListLookupData,
-                            purchaseOrderIdGetter: (rowData) => state.purchaseOrderId,
-                            moduleName: 'MaterialExport',
-                            quantityField: 'movement',
-                            quantityObjGetter: () => movementObj,
-                            requirePurchaseOrder: true
-                        }),
                         {
                             field: 'movement',
                             headerText: 'Số lượng',
-                            width: 200,
+                            width: 150,
                             validationRules: {
                                 required: true,
                                 custom: [(args) => {
@@ -789,6 +799,18 @@ const App = {
                                     });
                                     movementObj.appendTo(movementElem);
                                 }
+                            }
+                        },
+                        {
+                            field: 'remainingDisplay',
+                            headerText: 'Còn lại',
+                            width: 120,
+                            allowEditing: false,
+                            type: 'number', format: 'N0', textAlign: 'Right',
+                            valueAccessor: (field, data, column) => {
+                                const product = state.productListLookupData.find(p => p.id === data.productId);
+                                if (!product) return '';
+                                return product.stockQuantity > 0 ? product.stockQuantity : 0;
                             }
                         },
                     ],
@@ -825,16 +847,32 @@ const App = {
                         }
                     },
                     actionBegin: (args) => {
-                        ProductSerialPicker.validateGridSave(args, {
-                            productListGetter: () => state.productListLookupData,
-                            quantityField: 'movement',
-                            allowEmptySelection: false
-                        });
+                        if (args.requestType === 'save') {
+                            if (!args.data.productId) {
+                                args.cancel = true;
+                                Swal.fire({ icon: 'warning', title: 'Vui lòng chọn sản phẩm trước khi lưu.' });
+                                return;
+                            }
+                            if (!args.data.movement || args.data.movement <= 0) {
+                                args.cancel = true;
+                                Swal.fire({ icon: 'warning', title: 'Số lượng phải lớn hơn 0.' });
+                                return;
+                            }
+                            // Check against actual inventory stock
+                            const product = state.productListLookupData.find(p => p.id === args.data.productId);
+                            if (product) {
+                                if (args.data.movement > product.stockQuantity) {
+                                    args.cancel = true;
+                                    Swal.fire({ icon: 'warning', title: `Số lượng vượt quá tồn kho (${product.stockQuantity}). Không thể xuất ${args.data.movement}.` });
+                                    return;
+                                }
+                            }
+                        }
                     },
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
                             try {
-                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.movement, StorageManager.getUserId());
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -863,7 +901,7 @@ const App = {
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.movement, StorageManager.getUserId());
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {

@@ -634,21 +634,29 @@ const App = {
                     const prefillCashAccountId = response?.data?.content?.cashAccountId || null;
                     const prefillCashCategoryId = response?.data?.content?.cashCategoryId || null;
 
+                    // Calculate total allocated IN BACKEND for each PO item
+                    const backendAllocByItem = {};
+                    customerAllocations.forEach(alloc => {
+                        if (!backendAllocByItem[alloc.purchaseOrderItemId]) backendAllocByItem[alloc.purchaseOrderItemId] = 0;
+                        backendAllocByItem[alloc.purchaseOrderItemId] += (alloc.quantity || 0);
+                    });
+
                     let previewData = [];
                     if (customerAllocations.length > 0) {
                         previewData = customerAllocations.map((alloc, idx) => {
                             const poItem = state.secondaryData.find(x => x.id === alloc.purchaseOrderItemId);
+                            const calcPrice = poItem ? ((poItem.afterTaxAmount || 0) / (poItem.quantity > 0 ? poItem.quantity : 1)) : alloc.unitPrice;
                             return {
                                 id: alloc.id,
                                 poItemId: alloc.purchaseOrderItemId,
                                 productId: poItem ? poItem.productId : '',
                                 warehouseId: poItem ? poItem.warehouseId : '',
                                 batchNumber: poItem ? poItem.batchNumber : '',
-                                remainingQuantity: poItem ? (poItem.quantity || 0) : 0, 
+                                remainingQuantity: 0, 
                                 customerId: alloc.customerId,
                                 allocateQuantity: alloc.quantity,
-                                allocateUnitPrice: alloc.unitPrice,
-                                allocateTotal: alloc.quantity * alloc.unitPrice
+                                allocateUnitPrice: calcPrice,
+                                allocateTotal: alloc.quantity * calcPrice
                             };
                         });
                     }
@@ -658,16 +666,17 @@ const App = {
                     for (const item of poItems) {
                         const hasRow = previewData.some(x => x.poItemId === item.id);
                         if (!hasRow) {
+                            const calcPrice = (item.afterTaxAmount || 0) / (item.quantity > 0 ? item.quantity : 1);
                             previewData.push({
                                 id: `alloc_def_${item.id}_${Date.now()}`,
                                 poItemId: item.id,
                                 productId: item.productId,
                                 warehouseId: item.warehouseId,
                                 batchNumber: item.batchNumber,
-                                remainingQuantity: item.quantity || 0,
+                                remainingQuantity: 0,
                                 customerId: null,
                                 allocateQuantity: 0,
-                                allocateUnitPrice: item.unitPrice ?? 0,
+                                allocateUnitPrice: calcPrice,
                                 allocateTotal: 0
                             });
                         }
@@ -682,7 +691,8 @@ const App = {
                     
                     previewData.forEach(row => {
                         const poItem = state.secondaryData.find(x => x.id === row.poItemId);
-                        row.remainingQuantity = (poItem?.quantity || 0) - (totalAllocByItem[row.poItemId] || 0);
+                        const baseStock = (poItem?.stockQuantity || 0) + (backendAllocByItem[row.poItemId] || 0);
+                        row.remainingQuantity = baseStock - (totalAllocByItem[row.poItemId] || 0);
                     });
 
                     // Reset state
@@ -1503,7 +1513,7 @@ const App = {
                             format: 'N0',
                             textAlign: 'Right',
                             valueAccessor: (field, data, column) => {
-                                return (data.quantity || 0) - (data.allocatedQuantity || 0);
+                                return data.stockQuantity || 0;
                             }
                         },
                     ],

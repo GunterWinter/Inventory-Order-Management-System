@@ -19,6 +19,8 @@ public class UpdateMaterialExportRequest : IRequest<UpdateMaterialExportResult>
 {
     public string? Id { get; init; }
     public DateTime? MaterialExportDate { get; init; }
+    public string? PurchaseOrderId { get; init; }
+    public string? CustomerId { get; init; }
     public string? Status { get; init; }
     public string? Description { get; init; }
     public string? UpdatedById { get; init; }
@@ -31,6 +33,8 @@ public class UpdateMaterialExportValidator : AbstractValidator<UpdateMaterialExp
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.MaterialExportDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
+        RuleFor(x => x.PurchaseOrderId).NotEmpty();
+        RuleFor(x => x.CustomerId).NotEmpty();
     }
 }
 
@@ -65,6 +69,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
 
         entity.UpdatedById = request.UpdatedById;
         entity.ExportDate = request.MaterialExportDate;
+        entity.PurchaseOrderId = request.PurchaseOrderId;
+        entity.CustomerId = request.CustomerId;
         entity.Status = (MaterialExportStatus)int.Parse(request.Status!);
         entity.Description = request.Description;
 
@@ -74,9 +80,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         // Custom logic: If confirmed, we need to update the PO allocations!
         if (entity.Status == MaterialExportStatus.Confirmed)
         {
-            // Fetch items
-            var items = await _queryContext.Set<MaterialExportItem>()
-                .Where(x => x.MaterialExportId == entity.Id)
+            // Fetch items (Frontend uses InventoryTransaction directly for Material Export)
+            var items = await _queryContext.Set<InventoryTransaction>()
+                .Where(x => x.ModuleId == entity.Id && x.ModuleName == "MaterialExport" && !x.IsDeleted)
                 .ToListAsync(cancellationToken);
 
             // Fetch existing allocations
@@ -106,22 +112,25 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     }).ToList()
             };
 
-            // Fetch PO items for unit price
-            var poItems = await _queryContext.Set<PurchaseOrderItem>()
-                .Where(x => x.PurchaseOrderId == entity.PurchaseOrderId && !x.IsDeleted)
-                .ToDictionaryAsync(x => x.Id!, x => x.UnitPrice ?? 0, cancellationToken);
-
             foreach (var item in items)
             {
-                allocateRequest.Items.Add(new AllocatePurchaseOrderCostsItem
+                var poItem = await _queryContext.Set<PurchaseOrderItem>()
+                    .Where(x => x.PurchaseOrderId == entity.PurchaseOrderId && x.ProductId == item.ProductId && !x.IsDeleted)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (poItem != null)
                 {
-                    PurchaseOrderItemId = item.PurchaseOrderItemId,
-                    CustomerId = entity.CustomerId,
-                    Quantity = item.Quantity ?? 0,
-                    UnitPrice = poItems.GetValueOrDefault(item.PurchaseOrderItemId ?? string.Empty, 0)
-                });
+                    allocateRequest.Items.Add(new AllocatePurchaseOrderCostsItem
+                    {
+                        PurchaseOrderItemId = poItem.Id,
+                        CustomerId = entity.CustomerId,
+                        Quantity = item.Movement ?? 0,
+                        UnitPrice = (poItem.AfterTaxAmount ?? 0) / (poItem.Quantity > 0 ? poItem.Quantity.Value : 1)
+                    });
+                }
             }
 
+            // Execute the Cost Allocation, which will deduct stock and automatically pick serials!
             await _sender.Send(allocateRequest, cancellationToken);
         }
 

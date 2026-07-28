@@ -16,6 +16,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public int? SerialTrackingMode { get; init; }
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
     public string? BatchNumber { get; init; }
@@ -29,6 +30,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
     public double? AllocatedQuantity { get; init; }
+    public double? StockQuantity { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -52,6 +54,10 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListProfile : Profile
             .ForMember(
                 dest => dest.ProductReferenceCode,
                 opt => opt.MapFrom(src => src.Product != null ? src.Product.ReferenceCode : string.Empty)
+            )
+            .ForMember(
+                dest => dest.SerialTrackingMode,
+                opt => opt.MapFrom(src => src.Product != null ? (int?)src.Product.SerialTrackingMode : null)
             )
             .ForMember(
                 dest => dest.WarehouseName,
@@ -105,6 +111,44 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListHandler : IRequestHandler<
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetPurchaseOrderItemByPurchaseOrderIdListDto>>(entities);
+
+        // Get stock quantity for each product+warehouse from InventoryTransaction
+        var productWarehousePairs = entities
+            .GroupBy(x => new { x.ProductId, x.WarehouseId })
+            .Select(g => new { g.Key.ProductId, g.Key.WarehouseId })
+            .ToList();
+
+        var productIds = productWarehousePairs.Select(p => p.ProductId).Where(id => id != null).Distinct().ToList();
+        var warehouseIds = productWarehousePairs.Select(p => p.WarehouseId).Where(id => id != null).Distinct().ToList();
+
+        if (productIds.Any() && warehouseIds.Any())
+        {
+            var stockByProductWarehouse = await _context
+                .Set<InventoryTransaction>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x =>
+                    productIds.Contains(x.ProductId) &&
+                    warehouseIds.Contains(x.WarehouseId) &&
+                    x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed)
+                .GroupBy(x => new { x.ProductId, x.WarehouseId })
+                .Select(g => new
+                {
+                    g.Key.ProductId,
+                    g.Key.WarehouseId,
+                    Stock = g.Sum(x => x.Stock ?? 0)
+                })
+                .ToListAsync(cancellationToken);
+
+            var stockMap = stockByProductWarehouse
+                .ToDictionary(x => $"{x.ProductId}|{x.WarehouseId}", x => x.Stock);
+
+            foreach (var dto in dtos)
+            {
+                var stockKey = $"{dto.ProductId}|{dto.WarehouseId}";
+                dto.StockQuantity = stockMap.GetValueOrDefault(stockKey, 0);
+            }
+        }
 
         return new GetPurchaseOrderItemByPurchaseOrderIdListResult
         {

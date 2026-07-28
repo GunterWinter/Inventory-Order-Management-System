@@ -46,7 +46,7 @@ namespace Infrastructure.SeedManager.Demos
             var groupNoiThatGD = groups.FirstOrDefault(x => x.Name == "Nội thất gia đình")?.Id;
             var groupThietBiTM = groups.FirstOrDefault(x => x.Name == "Thiết bị nhà thông minh")?.Id;
             var groupCamera = groups.FirstOrDefault(x => x.Name == "Camera an ninh")?.Id;
-
+            // Mọi hàng hóa đều có devices serial, SerialTrackingMode.InternalAuto.
             var productsToSeed = new List<(string Name, string Ref, string Desc, double Price, double Cost, int Warranty, string UnitId, string GroupId, SerialTrackingMode TrackingMode, string FixedCode)>
             {
                 ("Tủ lạnh Samsung Inverter 236L", "ELEC-REF-001", "Tủ lạnh tiết kiệm điện thế hệ mới", 6500000, 5200000, 24, unitChiec ?? unitCai ?? "", groupDienMay ?? "", SerialTrackingMode.InternalAuto, "REF"),
@@ -55,14 +55,14 @@ namespace Infrastructure.SeedManager.Demos
                 ("Điều hòa Daikin Inverter 1 HP", "ELEC-AC-001", "Điều hòa tiết kiệm điện, làm lạnh nhanh", 9500000, 8000000, 12, unitBo ?? unitCai ?? "", groupThietBiDien ?? "", SerialTrackingMode.InternalAuto, "AC"),
                 ("Quạt đứng Mitsubishi Electric", "ELEC-FAN-001", "Quạt đứng êm ái, độ bền cao", 1850000, 1400000, 12, unitChiec ?? unitCai ?? "", groupThietBiDien ?? "", SerialTrackingMode.InternalAuto, "FAN"),
 
-                ("Bàn làm việc chữ L gỗ công nghiệp", "FURN-DSK-001", "Bàn làm việc góc chữ L cao cấp", 2500000, 1800000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.None, ""),
-                ("Ghế xoay văn phòng lưới Ergonomic", "FURN-CHR-001", "Ghế công thái học bảo vệ cột sống", 1200000, 850000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.None, ""),
-                ("Tủ hồ sơ sắt 2 cánh kính", "FURN-CAB-001", "Tủ sắt đựng tài liệu văn phòng", 1950000, 1500000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.None, ""),
-                ("Sofa phòng khách nỉ Hàn Quốc", "FURN-SOF-001", "Sofa góc nỉ cao cấp hiện đại", 8500000, 6000000, 24, unitBo ?? unitCai ?? "", groupNoiThatGD ?? "", SerialTrackingMode.None, ""),
-                ("Bàn ăn gỗ sồi 6 ghế", "FURN-TBL-001", "Bộ bàn ăn gia đình gỗ sồi Nga", 6500000, 4800000, 12, unitBo ?? unitCai ?? "", groupNoiThatGD ?? "", SerialTrackingMode.None, ""),
+                ("Bàn làm việc chữ L gỗ công nghiệp", "FURN-DSK-001", "Bàn làm việc góc chữ L cao cấp", 2500000, 1800000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.InternalAuto, "BL"),
+                ("Ghế xoay văn phòng lưới Ergonomic", "FURN-CHR-001", "Ghế công thái học bảo vệ cột sống", 1200000, 850000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.InternalAuto, "GC"),
+                ("Tủ hồ sơ sắt 2 cánh kính", "FURN-CAB-001", "Tủ sắt đựng tài liệu văn phòng", 1950000, 1500000, 12, unitCai ?? "", groupNoiThatVP ?? "", SerialTrackingMode.InternalAuto, "TD"),
+                ("Sofa phòng khách nỉ Hàn Quốc", "FURN-SOF-001", "Sofa góc nỉ cao cấp hiện đại", 8500000, 6000000, 24, unitBo ?? unitCai ?? "", groupNoiThatGD ?? "", SerialTrackingMode.InternalAuto, "SF"),
+                ("Bàn ăn gỗ sồi 6 ghế", "FURN-TBL-001", "Bộ bàn ăn gia đình gỗ sồi Nga", 6500000, 4800000, 12, unitBo ?? unitCai ?? "", groupNoiThatGD ?? "", SerialTrackingMode.InternalAuto, "BB"),
 
-                ("Camera WiFi EZVIZ C6N 1080p", "SM-CAM-001", "Camera xoay 360 độ trong nhà", 650000, 450000, 24, unitCai ?? "", groupCamera ?? "", SerialTrackingMode.ManufacturerSerial, ""),
-                ("Camera ngoài trời IMOU Bullet 2C", "SM-CAM-002", "Camera chống nước IP67", 850000, 600000, 24, unitCai ?? "", groupCamera ?? "", SerialTrackingMode.ManufacturerSerial, ""),
+                ("Camera WiFi EZVIZ C6N 1080p", "SM-CAM-001", "Camera xoay 360 độ trong nhà", 650000, 450000, 24, unitCai ?? "", groupCamera ?? "", SerialTrackingMode.InternalAuto, "CAM"),
+                ("Camera ngoài trời IMOU Bullet 2C", "SM-CAM-002", "Camera chống nước IP67", 850000, 600000, 24, unitCai ?? "", groupCamera ?? "", SerialTrackingMode.InternalAuto, "IP"),
                 ("Công tắc thông minh Tuya WiFi 1 nút", "SM-SW-001", "Công tắc mặt kính cảm ứng", 350000, 220000, 12, unitCai ?? "", groupThietBiTM ?? "", SerialTrackingMode.InternalAuto, "SW"),
                 ("Công tắc thông minh Tuya WiFi 3 nút", "SM-SW-003", "Công tắc mặt kính cảm ứng 3 viền", 450000, 280000, 12, unitCai ?? "", groupThietBiTM ?? "", SerialTrackingMode.InternalAuto, "SW"),
                 ("Ổ cắm thông minh Xiaomi Mi Smart", "SM-PLG-001", "Ổ cắm WiFi đo điện năng", 290000, 190000, 12, unitCai ?? "", groupThietBiTM ?? "", SerialTrackingMode.InternalAuto, "PLG"),

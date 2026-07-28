@@ -11,6 +11,7 @@ public record GetAvailablePurchaseOrdersDto
 {
     public string? Id { get; init; }
     public string? Number { get; init; }
+    public string? Name { get; init; }
 }
 
 public class GetAvailablePurchaseOrdersResult
@@ -37,6 +38,7 @@ public class GetAvailablePurchaseOrdersHandler : IRequestHandler<GetAvailablePur
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.OrderStatus == PurchaseOrderStatus.Confirmed)
             .Include(x => x.PurchaseOrderItemList)
+            .Include(x => x.Vendor)
             .ToListAsync(cancellationToken);
 
         var costAllocations = await _context.Set<PurchaseOrderCostAllocation>()
@@ -53,10 +55,16 @@ public class GetAvailablePurchaseOrdersHandler : IRequestHandler<GetAvailablePur
 
             if (totalItems > allocated)
             {
+                var vendorName = po.Vendor?.Name;
+                var displayName = !string.IsNullOrWhiteSpace(vendorName)
+                    ? $"{po.Number} - {vendorName}"
+                    : po.Number;
+
                 availablePos.Add(new GetAvailablePurchaseOrdersDto
                 {
                     Id = po.Id,
-                    Number = po.Number
+                    Number = po.Number,
+                    Name = displayName
                 });
             }
         }

@@ -15,7 +15,7 @@ public record GetMaterialExportListDto
     public string? PurchaseOrderId { get; init; }
     public string? CustomerId { get; init; }
     public string? CustomerName { get; init; }
-    public DateTime? ExportDate { get; init; }
+    public DateTime? MaterialExportDate { get; init; }
     public MaterialExportStatus? Status { get; init; }
     public string? StatusName { get; init; }
     public string? Description { get; init; }
@@ -28,6 +28,10 @@ public class GetMaterialExportListProfile : Profile
     public GetMaterialExportListProfile()
     {
         CreateMap<MaterialExport, GetMaterialExportListDto>()
+            .ForMember(
+                dest => dest.MaterialExportDate,
+                opt => opt.MapFrom(src => src.ExportDate)
+            )
             .ForMember(
                 dest => dest.PurchaseOrderName,
                 opt => opt.MapFrom(src => src.PurchaseOrder != null ? src.PurchaseOrder.Number : string.Empty)

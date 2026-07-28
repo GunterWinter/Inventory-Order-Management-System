@@ -14,7 +14,7 @@ public class CreateMaterialExportResult
 
 public class CreateMaterialExportRequest : IRequest<CreateMaterialExportResult>
 {
-    public DateTime? ExportDate { get; init; }
+    public DateTime? MaterialExportDate { get; init; }
     public string? PurchaseOrderId { get; init; }
     public string? CustomerId { get; init; }
     public string? Status { get; init; }
@@ -26,7 +26,7 @@ public class CreateMaterialExportValidator : AbstractValidator<CreateMaterialExp
 {
     public CreateMaterialExportValidator()
     {
-        RuleFor(x => x.ExportDate).NotEmpty();
+        RuleFor(x => x.MaterialExportDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
@@ -56,7 +56,7 @@ public class CreateMaterialExportHandler : IRequestHandler<CreateMaterialExportR
         entity.CreatedById = request.CreatedById;
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(MaterialExport), "", "MTEX");
-        entity.ExportDate = request.ExportDate;
+        entity.ExportDate = request.MaterialExportDate;
         entity.PurchaseOrderId = request.PurchaseOrderId;
         entity.CustomerId = request.CustomerId;
         entity.Status = (MaterialExportStatus)int.Parse(request.Status!);

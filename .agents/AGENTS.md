@@ -41,8 +41,8 @@
 - After modifying frontend JS files (especially grid column configurations), open the affected page in the browser and verify that inline Add/Edit works without console errors before declaring done.
 
 ## Product Serial Picker Invariants
-- **Grid Configuration Closure Safety**: When configuring ProductSerialPicker.createGridColumn({ ... }) inside a Syncfusion grid column array, you MUST use the provided owData parameter inside the arrow functions. Do NOT reference rgs.rowData which is undefined during configuration. (e.g. use warehouseIdGetter: (rowData) => rowData.warehouseId).
-- **Transfer In**: Ensure equireWarehouse: false is passed if the warehouse is not predetermined before serial selection.
+- **Grid Configuration Closure Safety**: When configuring ProductSerialPicker.createGridColumn({ ... }) inside a Syncfusion grid column array, you MUST use the provided `rowData` parameter inside the arrow functions. Do NOT reference `args.rowData` which is undefined during configuration. (e.g. use `warehouseIdGetter: (rowData) => rowData.warehouseId`).
+- **Transfer In**: Ensure `requireWarehouse: false` is passed if the warehouse is not predetermined before serial selection.
 
 ## Returns Reference Invariants
 - SalesReturn domain entity, DTOs, APIs, and UI must exclusively reference SalesOrder / SalesOrderId. Do NOT reference DeliveryOrder.
@@ -134,10 +134,8 @@
 
 ## Seeder Entity Tracking Invariants
 - When fetching an entity within a Seeder for the purpose of updating it (Update() via a Repository), **ALWAYS** use the repository's GetQuery() method instead of _queryContext.Set<T>().
-- **Correct**: ar warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)
-- **Incorrect**: ar warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)
-- **Correct**:  ar warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)
-- **Incorrect**:  ar warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)
+- **Correct**: `var warehouse = await _warehouseRepository.GetQuery().FirstOrDefaultAsync(...)`
+- **Incorrect**: `var warehouse = await _queryContext.Set<Warehouse>().FirstOrDefaultAsync(...)`
 - **Reason**: Multiple seeders run sequentially on the same scoped DataContext. Fetching via _queryContext (if it's a separate context or untracked) and then attaching to _warehouseRepository (which wraps DataContext) causes an identity tracking conflict if the entity was already cached by a previous seeder. Fetching via the repository guarantees you get the already-tracked instance.
 
 ## Cost Allocation Implicit 'Kho' (Warehouse) Rule
@@ -148,3 +146,21 @@
 - **Frontend Submit Filter**: When submitting cost allocations, the frontend MUST `.filter(row => row.customerId && row.allocateQuantity > 0)` before sending to the backend. Rows without a customer or with zero quantity are placeholder/Kho rows and must NOT be sent.
 - **Customer Required Validation**: If a grid row has `allocateQuantity > 0`, the frontend MUST validate that `customerId` is not null/empty before submission. Show a warning if missing.
 - **"Còn lại" Column Name**: The remaining quantity column in the cost allocation preview grid MUST use header text `'Còn lại'` (not `'Tổng SL'` or other variants). This was explicitly confirmed by the user.
+
+## Material Export & Cost Allocation Pipeline Invariants
+
+- **Material Export Data Structure**:
+  - `MaterialExport` does NOT populate `MaterialExportItem` records. The UI directly saves added items as dummy `InventoryTransaction` records with `ModuleName == "MaterialExport"`.
+  - When confirming a Material Export (`UpdateMaterialExport.cs`), the backend MUST query `InventoryTransaction` (not `MaterialExportItem`) to find the items to process.
+
+- **Inventory Reduction & Serial Picking**:
+  - `MaterialExport` does NOT deduct stock directly. It strictly delegates stock deduction to the `CostAllocation` module.
+  - `UpdateMaterialExport` must map the dummy transactions to `AllocatePurchaseOrderCostsRequest` items, finding the original `PurchaseOrderItemId` via the `ProductId` and `PurchaseOrderId`.
+  - `AllocatePurchaseOrderCostsHandler` is solely responsible for creating the real `InventoryTransaction` (with `ModuleName == "CostAllocation"`) and executing the **automatic random Serial picking** (`ApplyInventoryTransactionSerialsAsync`). You do NOT need to build a manual serial picker UI for Material Export or Cost Allocation.
+
+- **Cost Allocation Aggregation Rule (Anti-Duplicate)**:
+  - In `AllocatePurchaseOrderCostsHandler`, to prevent duplicate allocation records and double serial-picking for the same customer, `request.Items` **MUST** be aggregated by `{ PurchaseOrderItemId, CustomerId }` before creating `PurchaseOrderCostAllocation` records.
+  - Failure to aggregate will cause the serial picker to reuse the same cached serials for duplicate rows, resulting in ghost stock discrepancies (e.g., deducting 10 from numeric stock but only allocating 5 unique serials).
+
+- **CashTransaction Description Override**:
+  - When `AllocatePurchaseOrderCosts` creates a `CashTransaction`, it auto-generates the `Description` field using the format: `[AccountName] [VendorName/PONumber] - [CustomerName]`. Any `Description` submitted from the `MaterialExport` UI is intentionally ignored in the transaction history.

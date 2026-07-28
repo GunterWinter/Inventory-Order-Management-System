@@ -17,8 +17,14 @@ public class MaterialExportController : BaseApiController
 
     [Authorize]
     [HttpPost("CreateMaterialExport")]
-    public async Task<ActionResult<ApiSuccessResult<CreateMaterialExportResult>>> CreateMaterialExportAsync(CreateMaterialExportRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<CreateMaterialExportResult>>> CreateMaterialExportAsync([FromBody] CreateMaterialExportRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<CreateMaterialExportResult>
@@ -31,8 +37,14 @@ public class MaterialExportController : BaseApiController
 
     [Authorize]
     [HttpPost("UpdateMaterialExport")]
-    public async Task<ActionResult<ApiSuccessResult<UpdateMaterialExportResult>>> UpdateMaterialExportAsync(UpdateMaterialExportRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<UpdateMaterialExportResult>>> UpdateMaterialExportAsync([FromBody] UpdateMaterialExportRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<UpdateMaterialExportResult>
@@ -45,8 +57,14 @@ public class MaterialExportController : BaseApiController
 
     [Authorize]
     [HttpPost("DeleteMaterialExport")]
-    public async Task<ActionResult<ApiSuccessResult<DeleteMaterialExportResult>>> DeleteMaterialExportAsync(DeleteMaterialExportRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiSuccessResult<DeleteMaterialExportResult>>> DeleteMaterialExportAsync([FromBody] DeleteMaterialExportRequest request, CancellationToken cancellationToken)
     {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<DeleteMaterialExportResult>
@@ -126,6 +144,27 @@ public class MaterialExportController : BaseApiController
         {
             Code = StatusCodes.Status200OK,
             Message = $"Success executing {nameof(GetAvailablePurchaseOrdersAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpGet("GetMaterialExportPOItems")]
+    public async Task<ActionResult<ApiSuccessResult<GetMaterialExportPOItemsResult>>> GetMaterialExportPOItemsAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string purchaseOrderId
+    )
+    {
+        var request = new GetMaterialExportPOItemsRequest
+        {
+            PurchaseOrderId = purchaseOrderId
+        };
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetMaterialExportPOItemsResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetMaterialExportPOItemsAsync)}",
             Content = response
         });
     }

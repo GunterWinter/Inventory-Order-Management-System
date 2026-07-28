@@ -75,6 +75,25 @@ public class PurchaseOrderController : BaseApiController
         });
     }
 
+    [Authorize]
+    [HttpGet("GetPurchaseOrderWithStockList")]
+    public async Task<ActionResult<ApiSuccessResult<GetPurchaseOrderWithStockListResult>>> GetPurchaseOrderWithStockListAsync(
+        CancellationToken cancellationToken
+        )
+    {
+        var request = new GetPurchaseOrderWithStockListRequest();
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetPurchaseOrderWithStockListResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetPurchaseOrderWithStockListAsync)}",
+            Content = response
+        });
+    }
+
+
+
 
     [Authorize]
     [HttpGet("GetPurchaseOrderStatusList")]
