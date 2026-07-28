@@ -892,24 +892,7 @@ const App = {
                     newVal
                 );
             
-                // --- INJECTED CODE: Lock form if not Draft ---
-                const isReadOnly = newVal > 0;
-                if (typeof customerListLookup !== 'undefined' && customerListLookup.obj) customerListLookup.obj.enabled = !isReadOnly;
-                if (typeof salesTypeListLookup !== 'undefined' && salesTypeListLookup.obj) salesTypeListLookup.obj.enabled = !isReadOnly;
-                if (typeof orderDatePicker !== 'undefined' && orderDatePicker.obj) orderDatePicker.obj.enabled = !isReadOnly;
-                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
-                
-                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
-                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
-                    
-                    // Toggle grid toolbar buttons if the toolbar module exists
-                    try {
-                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
-                    } catch(e) { }
-                }
-                // --- END INJECTED CODE ---
+            
             }
         );
 
@@ -2126,7 +2109,6 @@ const App = {
             existingDescription = null,
             existingCashCategoryId = null,
             existingTransactionDate = null) => {
-            const isReadOnly = existingStatus === 2;
             const totalAmountValue = typeof totalAmount === 'number' ? totalAmount : (NumberFormatManager.parseLocaleNumber(totalAmount) ?? 0);
             const displayAmount = existingAmount !== null && existingAmount !== undefined
                 ? NumberFormatManager.formatToLocale(existingAmount)
@@ -2136,14 +2118,12 @@ const App = {
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
             const defaultCashCategoryId = existingCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
-            const statusHtml = isReadOnly
-                ? `<div class="mb-3"><label class="form-label fw-bold">Status</label><select class="form-select" disabled><option selected>Paid</option></select></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Draft</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Paid</option></select></div>`;
+            const statusHtml = `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Draft</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Paid</option></select></div>`;
             const result = await Swal.fire({
                 title: `Payment ${orderNumber}`,
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Account</label><select id="swal-account" class="form-select" ${isReadOnly ? 'disabled' : ''}>${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Amount</label><input id="swal-amount" class="form-control" value="${displayAmount}" ${isReadOnly ? 'disabled' : ''}></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Account</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Amount</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     <div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
                     ${statusHtml}
                 `,
@@ -2156,7 +2136,7 @@ const App = {
                     const categoryId = defaultCashCategoryId;
                     const rawAmountValue = document.getElementById('swal-amount').value ?? '0';
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(rawAmountValue) ?? 0;
-                    const status = isReadOnly ? existingStatus : parseInt(document.getElementById('swal-payment-status').value);
+                    const status = parseInt(document.getElementById('swal-payment-status').value);
                     if (status === 2 && !accountId) {
                         Swal.showValidationMessage('Please select a payment account.');
                         return false;
@@ -2165,7 +2145,7 @@ const App = {
                         cashAccountId: accountId || null,
                         cashCategoryId: categoryId || null,
                         // Category auto-set to 'Bán hàng'
-                        amount: isReadOnly && existingAmount !== null && existingAmount !== undefined ? existingAmount : parsedAmount,
+                        amount: parsedAmount,
                         description: document.getElementById('swal-desc').value,
                         status
                     };

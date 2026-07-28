@@ -823,26 +823,13 @@ const App = {
                     newVal
                 );
 
-                // --- INJECTED CODE: Lock form if not Draft ---
-                const isReadOnly = newVal > 0;
-                if (typeof vendorListLookup !== 'undefined' && vendorListLookup.obj) vendorListLookup.obj.enabled = !isReadOnly;
-                if (typeof orderDatePicker !== 'undefined' && orderDatePicker.obj) orderDatePicker.obj.enabled = !isReadOnly;
-                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
-
+                // Enable QuickExport only when Confirmed (status=2)
                 if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
-                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
-
-                    // Toggle grid toolbar buttons if the toolbar module exists
                     try {
-                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
-                        // QuickExport only enabled when Confirmed (status=2)
                         const isConfirmed = String(newVal) === '2';
                         secondaryGrid.obj.toolbarModule.enableItems(['QuickExportCustom'], isConfirmed);
                     } catch (e) { }
                 }
-                // --- END INJECTED CODE ---
             }
         );
 
@@ -2049,7 +2036,6 @@ const App = {
             existingAmount = null,
             existingDescription = null,
             existingTransactionDate = null) => {
-            const isReadOnly = existingStatus === 2;
             const resolveMoneyAmount = (value) => {
                 if (typeof value === 'number' && Number.isFinite(value)) {
                     return value;
@@ -2061,7 +2047,7 @@ const App = {
             const totalAmountValue = resolveMoneyAmount(totalAmount);
             const existingAmountValue = resolveMoneyAmount(existingAmount);
             const displayAmount = NumberFormatManager.formatToLocale(
-                isReadOnly && existingAmount !== null && existingAmount !== undefined
+                existingAmount !== null && existingAmount !== undefined
                     ? existingAmountValue
                     : totalAmountValue,
                 0,
@@ -2071,14 +2057,12 @@ const App = {
             const accountOptions = state.cashAccountListData
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
-            const statusHtml = isReadOnly
-                ? `<div class="mb-3"><label class="form-label fw-bold">Status</label><select class="form-select" disabled><option selected>Paid</option></select></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Draft</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Paid</option></select></div>`;
+            const statusHtml = `<div class="mb-3"><label class="form-label fw-bold">Status</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Draft</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Paid</option></select></div>`;
             const result = await Swal.fire({
                 title: `Payment ${orderNumber}`,
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Account</label><select id="swal-account" class="form-select" ${isReadOnly ? 'disabled' : ''}>${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Amount</label><input id="swal-amount" class="form-control" value="${displayAmount}" ${isReadOnly ? 'disabled' : ''}></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Account</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Amount</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     <div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
                     ${statusHtml}
                 `,
@@ -2095,9 +2079,9 @@ const App = {
                     }
                     return {
                         cashAccountId: accountId,
-                        amount: isReadOnly && existingAmount !== null && existingAmount !== undefined ? existingAmountValue : parsedAmount,
+                        amount: parsedAmount,
                         description: document.getElementById('swal-desc').value,
-                        status: isReadOnly ? existingStatus : parseInt(document.getElementById('swal-payment-status').value)
+                        status: parseInt(document.getElementById('swal-payment-status').value)
                     };
                 }
             });

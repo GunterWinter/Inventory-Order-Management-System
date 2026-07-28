@@ -60,15 +60,16 @@ const App = {
                         { field: 'vendorName', headerText: 'Vendor Name', width: 250 },
                         { field: 'totalPurchase', headerText: 'Total Purchase', width: 180, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'totalPaid', headerText: 'Total Paid', width: 180, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'remainingDebt', headerText: 'Remaining Debt', width: 180, type: 'number', format: 'N0', textAlign: 'Right',
-                            template: function(data) {
-                                const val = data.remainingDebt ?? 0;
-                                const color = val > 0 ? '#dc3545' : val < 0 ? '#28a745' : '#6c757d';
-                                const formatted = NumberFormatManager.format(val);
-                                return `<span style="color: ${color}; font-weight: bold;">${formatted}</span>`;
-                            }
-                        }
+                        { field: 'remainingDebt', headerText: 'Remaining Debt', width: 180, type: 'number', format: 'N0', textAlign: 'Right' }
                     ],
+                    queryCellInfo: (args) => {
+                        if (args.column.field === 'remainingDebt') {
+                            const val = args.data.remainingDebt ?? 0;
+                            const color = val > 0 ? '#dc3545' : val < 0 ? '#28a745' : '#6c757d';
+                            args.cell.style.color = color;
+                            args.cell.style.fontWeight = 'bold';
+                        }
+                    },
                     aggregates: [
                         {
                             columns: [

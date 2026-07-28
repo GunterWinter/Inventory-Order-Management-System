@@ -184,23 +184,7 @@ const App = {
                     newVal
                 );
             
-                // --- INJECTED CODE: Lock form if not Draft ---
-                const isReadOnly = newVal > 0;
-                if (typeof scrappingDatePicker !== 'undefined' && scrappingDatePicker.obj) scrappingDatePicker.obj.enabled = !isReadOnly;
-                if (typeof numberText !== 'undefined' && numberText.obj) numberText.obj.enabled = !isReadOnly;
-                if (typeof warehouseListLookup !== 'undefined' && warehouseListLookup.obj) warehouseListLookup.obj.enabled = !isReadOnly;
-                
-                if (typeof secondaryGrid !== 'undefined' && secondaryGrid.obj) {
-                    secondaryGrid.obj.editSettings.allowEditing = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowAdding = !isReadOnly;
-                    secondaryGrid.obj.editSettings.allowDeleting = !isReadOnly;
-                    
-                    // Toggle grid toolbar buttons if the toolbar module exists
-                    try {
-                        secondaryGrid.obj.toolbarModule.enableItems(['Add', 'Edit', 'Delete', 'Update', 'Cancel'], !isReadOnly);
-                    } catch(e) { }
-                }
-                // --- END INJECTED CODE ---
+            
             }
         );
 

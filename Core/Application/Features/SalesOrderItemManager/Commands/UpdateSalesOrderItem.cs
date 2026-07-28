@@ -83,8 +83,6 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
             throw new Exception($"Entity not found: {request.Id}");
         }
 
-        await ValidateConfirmedSalesOrderItemUpdateAsync(entity, request, cancellationToken);
-
         await ValidateProductNotDuplicatedAsync(request.SalesOrderId, request.ProductId, entity.Id, cancellationToken);
 
         var quantity = request.Quantity;
@@ -141,39 +139,6 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         );
 
         return new UpdateSalesOrderItemResult { Data = entity };
-    }
-
-    private async Task ValidateConfirmedSalesOrderItemUpdateAsync(
-        SalesOrderItem entity,
-        UpdateSalesOrderItemRequest request,
-        CancellationToken cancellationToken)
-    {
-        var isConfirmedSalesOrder = await _queryContext
-            .Set<SalesOrder>()
-            .AsNoTracking()
-            .AnyAsync(x =>
-                !x.IsDeleted &&
-                x.Id == entity.SalesOrderId &&
-                x.OrderStatus == SalesOrderStatus.Confirmed,
-                cancellationToken);
-
-        if (!isConfirmedSalesOrder)
-        {
-            return;
-        }
-
-        var immutableFieldsChanged =
-            entity.SalesOrderId != request.SalesOrderId ||
-            entity.ProductId != request.ProductId ||
-            entity.WarehouseId != request.WarehouseId ||
-            entity.TaxId != request.TaxId ||
-            !string.Equals(entity.Summary ?? string.Empty, request.Summary ?? string.Empty, StringComparison.Ordinal) ||
-            (entity.UnitPrice ?? 0d) != (request.UnitPrice ?? 0d);
-
-        if (immutableFieldsChanged)
-        {
-            throw new Exception("Confirmed sales order items can only update quantity, batch number, and warranty months.");
-        }
     }
 
     private async Task ValidateAvailableStockAsync(
