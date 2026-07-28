@@ -163,4 +163,7 @@
   - Failure to aggregate will cause the serial picker to reuse the same cached serials for duplicate rows, resulting in ghost stock discrepancies (e.g., deducting 10 from numeric stock but only allocating 5 unique serials).
 
 - **CashTransaction Description Override**:
-  - When `AllocatePurchaseOrderCosts` creates a `CashTransaction`, it auto-generates the `Description` field using the format: `[AccountName] [VendorName/PONumber] - [CustomerName]`. Any `Description` submitted from the `MaterialExport` UI is intentionally ignored in the transaction history.
+  - When `AllocatePurchaseOrderCosts` creates a `CashTransaction`, it auto-generates the `Description` field. Specifically for Purchase Orders or Material Exports, it MUST use the format: `[VendorName] - [CustomerName]`. Any `Description` submitted from the UI is intentionally ignored in the transaction history.
+
+- **Serial Tracking Mode**:
+  - The system actively uses only 2 levels: `InternalAuto` (System auto-generates) and `ManufacturerSerial` (Input from manufacturer - currently in development). Avoid referencing other unsupported modes for core logic.
