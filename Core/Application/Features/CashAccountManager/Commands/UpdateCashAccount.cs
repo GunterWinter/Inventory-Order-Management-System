@@ -69,7 +69,7 @@ public class UpdateCashAccountHandler : IRequestHandler<UpdateCashAccountRequest
         var balances = await _queryContext
             .CashTransaction
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == entity.Id && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == entity.Id)
             .GroupBy(x => 1)
             .Select(g => new
             {

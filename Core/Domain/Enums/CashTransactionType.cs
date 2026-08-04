@@ -4,8 +4,8 @@ namespace Domain.Enums;
 
 public enum CashTransactionType
 {
-    [Description("Debit")]
+    [Description("Thu")]
     Debit = 0,
-    [Description("Credit")]
+    [Description("Chi")]
     Credit = 1
 }

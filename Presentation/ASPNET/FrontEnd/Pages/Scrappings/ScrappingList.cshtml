@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Scrapping List";
 }
@@ -107,6 +107,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button"
+                            v-if="!state.isViewMode"
                             id="MainSaveButton"
                             class="btn"
                             v-bind:class="state.deleteMode ? 'btn-danger' : 'btn-primary'"

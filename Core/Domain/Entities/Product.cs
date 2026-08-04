@@ -19,8 +19,7 @@ public class Product : BaseEntity
     public string? DefaultWarehouseId { get; set; }
     public Warehouse? DefaultWarehouse { get; set; }
     public int? DefaultWarrantyMonths { get; set; }
-    public string? UnitMeasureId { get; set; }
-    public UnitMeasure? UnitMeasure { get; set; }
+    public string? UnitMeasureName { get; set; }
     public string? ProductGroupId { get; set; }
     public ProductGroup? ProductGroup { get; set; }
 }

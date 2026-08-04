@@ -21,7 +21,7 @@ public interface IEntityDbSet
     public DbSet<Warehouse> Warehouse { get; set; }
     public DbSet<Customer> Customer { get; set; }
     public DbSet<Vendor> Vendor { get; set; }
-    public DbSet<UnitMeasure> UnitMeasure { get; set; }
+
     public DbSet<ProductGroup> ProductGroup { get; set; }
     public DbSet<Product> Product { get; set; }
     public DbSet<ProductSerial> ProductSerial { get; set; }

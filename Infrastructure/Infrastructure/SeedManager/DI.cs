@@ -67,7 +67,7 @@ public static class DI
         services.AddScoped<VendorGroupSeeder>();
         services.AddScoped<VendorSeeder>();
         services.AddScoped<VendorContactSeeder>();
-        services.AddScoped<UnitMeasureSeeder>();
+
         services.AddScoped<ProductGroupSeeder>();
         services.AddScoped<ProductSeeder>();
         services.AddScoped<WarehouseSeeder>();
@@ -113,8 +113,7 @@ public static class DI
             var vendorGroupSeeder = serviceProvider.GetRequiredService<VendorGroupSeeder>();
             vendorGroupSeeder.GenerateDataAsync().Wait();
 
-            var unitMeasureSeeder = serviceProvider.GetRequiredService<UnitMeasureSeeder>();
-            unitMeasureSeeder.GenerateDataAsync().Wait();
+
 
             var productGroupSeeder = serviceProvider.GetRequiredService<ProductGroupSeeder>();
             productGroupSeeder.GenerateDataAsync().Wait();

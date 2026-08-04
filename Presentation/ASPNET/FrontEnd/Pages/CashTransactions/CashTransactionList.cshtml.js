@@ -13,21 +13,23 @@ const App = {
             description: '',
             cashAccountId: null,
             cashCategoryId: null,
-            customerId: null,
+            partnerId: null,
+            paidAmount: null,
             sourceModule: null,
             sourceModuleId: null,
             sourceModuleNumber: null,
             cashAccountList: [],
             cashCategoryList: [],
-            customerList: [],
+            partnerList: [],
             errors: {
                 transactionDate: '',
                 transactionType: '',
                 cashAccountId: '',
                 amount: '',
-                status: ''
+                paidAmount: ''
             },
             isSubmitting: false,
+            viewMode: false,
             transfer: {
                 transferDate: null,
                 fromCashAccountId: null,
@@ -58,9 +60,9 @@ const App = {
         const transactionTypeRef = Vue.ref(null);
         const cashAccountRef = Vue.ref(null);
         const cashCategoryRef = Vue.ref(null);
-        const customerRef = Vue.ref(null);
+        const partnerRef = Vue.ref(null);
         const amountRef = Vue.ref(null);
-        const statusRef = Vue.ref(null);
+        const paidAmountRef = Vue.ref(null);
         const transferModalRef = Vue.ref(null);
         const transferDateRef = Vue.ref(null);
         const fromAccountRef = Vue.ref(null);
@@ -73,10 +75,9 @@ const App = {
         ];
 
         const statusOptions = [
-            { value: 0, text: 'Draft' },
-            { value: 2, text: 'Confirmed' },
-            { value: 1, text: 'Cancelled' },
-            { value: 3, text: 'Archived' }
+            { value: 0, text: 'Chưa thanh toán' },
+            { value: 1, text: 'Còn nợ' },
+            { value: 2, text: 'Đã thanh toán' }
         ];
 
         const validateForm = function () {
@@ -84,14 +85,17 @@ const App = {
             state.errors.transactionType = '';
             state.errors.cashAccountId = '';
             state.errors.amount = '';
-            state.errors.status = '';
+            state.errors.paidAmount = '';
             let isValid = true;
 
             if (!state.transactionDate) { state.errors.transactionDate = 'Transaction Date is required.'; isValid = false; }
             if (state.transactionType === null || state.transactionType === undefined) { state.errors.transactionType = 'Transaction Type is required.'; isValid = false; }
             if (!state.cashAccountId) { state.errors.cashAccountId = 'Cash Account is required.'; isValid = false; }
             if (!state.amount || state.amount <= 0) { state.errors.amount = 'Amount must be greater than 0.'; isValid = false; }
-            if (state.status === null || state.status === undefined) { state.errors.status = 'Status is required.'; isValid = false; }
+            if (state.paidAmount !== null && state.paidAmount !== undefined && Number(state.paidAmount) > Number(state.amount)) {
+                state.errors.paidAmount = 'Số tiền thanh toán không được lớn hơn số tiền gốc.';
+                isValid = false;
+            }
 
             return isValid;
         };
@@ -101,16 +105,17 @@ const App = {
             state.number = '';
             state.transactionDate = null;
             state.transactionType = null;
-            state.status = null;
             state.amount = null;
+            state.paidAmount = null;
             state.description = '';
             state.cashAccountId = null;
             state.cashCategoryId = null;
-            state.customerId = null;
+            state.partnerId = null;
             state.sourceModule = null;
             state.sourceModuleId = null;
             state.sourceModuleNumber = null;
-            state.errors = { transactionDate: '', transactionType: '', cashAccountId: '', amount: '', status: '' };
+            state.viewMode = false;
+            state.errors = { transactionDate: '', transactionType: '', cashAccountId: '', amount: '', paidAmount: '' };
         };
 
         const validateTransferForm = function () {
@@ -154,6 +159,9 @@ const App = {
             getCustomerList: async () => {
                 return await AxiosManager.get('/Customer/GetCustomerList', {});
             },
+            getVendorList: async () => {
+                return await AxiosManager.get('/Vendor/GetVendorList', {});
+            },
             createMainData: async (data) => {
                 return await AxiosManager.post('/CashTransaction/CreateCashTransaction', data);
             },
@@ -171,13 +179,22 @@ const App = {
         const methods = {
             populateMainData: async () => {
                 const response = await services.getMainData();
-                state.mainData = response?.data?.content?.data.map(item => ({
-                    ...item,
-                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                    transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
-                    transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
-                    statusName: item.status === 0 ? 'Draft' : item.status === 1 ? 'Cancelled' : item.status === 2 ? 'Confirmed' : item.status === 3 ? 'Archived' : ''
-                }));
+                const rawData = response?.data?.content?.data ?? [];
+                state.mainData = rawData.map(item => {
+                    let partnerName = '';
+                    if (item.customerName && item.vendorName) partnerName = item.customerName;
+                    else if (item.customerName) partnerName = item.customerName;
+                    else if (item.vendorName) partnerName = item.vendorName;
+
+                    return {
+                        ...item,
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                        transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
+                        transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
+                        statusName: (item.paidAmount >= item.amount && item.amount > 0) ? 'Đã thanh toán' : (item.paidAmount > 0 ? 'Còn nợ' : 'Chưa thanh toán'),
+                        partnerName: partnerName
+                    };
+                });
             },
             populateCashAccountList: async () => {
                 const response = await services.getCashAccountList();
@@ -187,9 +204,21 @@ const App = {
                 const response = await services.getCashCategoryList();
                 state.cashCategoryList = response?.data?.content?.data ?? [];
             },
-            populateCustomerList: async () => {
-                const response = await services.getCustomerList();
-                state.customerList = response?.data?.content?.data ?? [];
+            populatePartnerList: async () => {
+                const [custResp, vendResp] = await Promise.all([services.getCustomerList(), services.getVendorList()]);
+                const customers = (custResp?.data?.content?.data ?? []).map(c => ({ id: c.id, name: c.name, customerId: c.id, vendorId: null }));
+                const vendors = (vendResp?.data?.content?.data ?? []).map(v => ({ id: v.id, name: v.name, customerId: null, vendorId: v.id }));
+                const merged = new Map();
+                customers.forEach(c => merged.set(c.name.toLowerCase(), { ...c }));
+                vendors.forEach(v => {
+                    const key = v.name.toLowerCase();
+                    if (merged.has(key)) {
+                        merged.get(key).vendorId = v.vendorId;
+                    } else {
+                        merged.set(key, { ...v });
+                    }
+                });
+                state.partnerList = Array.from(merged.values());
             },
             refreshSummary: () => {
                 state.summary.totalDebit = state.cashAccountList.reduce((sum, item) => sum + (item.totalDebit ?? 0), 0);
@@ -263,28 +292,26 @@ const App = {
             refresh: () => { if (cashCategoryDropDown.obj) cashCategoryDropDown.obj.value = state.cashCategoryId; }
         };
 
-        const customerDropDown = {
+        const partnerDropDown = {
             obj: null,
             create: () => {
-                customerDropDown.obj = new ej.dropdowns.DropDownList({
-                    dataSource: state.customerList,
+                partnerDropDown.obj = new ej.dropdowns.DropDownList({
+                    dataSource: state.partnerList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Select a Customer',
+                    placeholder: 'Chọn đối tác',
+                    filterBarPlaceholder: 'Tìm kiếm...',
                     allowFiltering: true,
                     showClearButton: true,
                     filtering: (e) => {
-                        e.preventDefaultAction = true;
                         let query = new ej.data.Query();
-                        if (e.text !== '') {
-                            query = query.where('name', 'startswith', e.text, true);
-                        }
-                        e.updateData(state.customerList, query);
+                        query = (e.text !== '') ? query.where('name', 'startswith', e.text, true) : query;
+                        e.updateData(state.partnerList, query);
                     },
-                    change: (args) => { state.customerId = args.value; }
+                    change: (args) => { state.partnerId = args.value; }
                 });
-                customerDropDown.obj.appendTo(customerRef.value);
+                partnerDropDown.obj.appendTo(partnerRef.value);
             },
-            refresh: () => { if (customerDropDown.obj) customerDropDown.obj.value = state.customerId; }
+            refresh: () => { if (partnerDropDown.obj) partnerDropDown.obj.value = state.partnerId; }
         };
 
         const amountInput = {
@@ -361,27 +388,27 @@ const App = {
             refresh: () => { if (transferAmountInput.obj) transferAmountInput.obj.value = state.transfer.amount; }
         };
 
-        const statusDropDown = {
+        const paidAmountInput = {
             obj: null,
             create: () => {
-                statusDropDown.obj = new ej.dropdowns.DropDownList({
-                    dataSource: statusOptions,
-                    fields: { value: 'value', text: 'text' },
-                    placeholder: 'Select Status',
-                    change: (args) => { state.status = args.value; }
+                paidAmountInput.obj = new ej.inputs.NumericTextBox({
+                    placeholder: 'Số tiền thanh toán',
+                    format: 'N0',
+                    min: 0,
+                    change: (args) => { state.paidAmount = args.value; }
                 });
-                statusDropDown.obj.appendTo(statusRef.value);
+                paidAmountInput.obj.appendTo(paidAmountRef.value);
             },
-            refresh: () => { if (statusDropDown.obj) statusDropDown.obj.value = state.status; }
+            refresh: () => { if (paidAmountInput.obj) paidAmountInput.obj.value = state.paidAmount; }
         };
 
         Vue.watch(() => state.transactionDate, () => { state.errors.transactionDate = ''; transactionDatePicker.refresh(); });
         Vue.watch(() => state.transactionType, () => { state.errors.transactionType = ''; transactionTypeDropDown.refresh(); });
         Vue.watch(() => state.cashAccountId, () => { state.errors.cashAccountId = ''; cashAccountDropDown.refresh(); });
         Vue.watch(() => state.cashCategoryId, () => { cashCategoryDropDown.refresh(); });
-        Vue.watch(() => state.customerId, () => { customerDropDown.refresh(); });
+        Vue.watch(() => state.partnerId, () => { partnerDropDown.refresh(); });
         Vue.watch(() => state.amount, () => { state.errors.amount = ''; amountInput.refresh(); });
-        Vue.watch(() => state.status, () => { state.errors.status = ''; statusDropDown.refresh(); });
+        Vue.watch(() => state.paidAmount, () => { state.errors.paidAmount = ''; paidAmountInput.refresh(); });
         Vue.watch(() => state.transfer.transferDate, () => { state.transfer.errors.transferDate = ''; transferDatePicker.refresh(); });
         Vue.watch(() => state.transfer.fromCashAccountId, () => { state.transfer.errors.fromCashAccountId = ''; fromAccountDropDown.refresh(); });
         Vue.watch(() => state.transfer.toCashAccountId, () => { state.transfer.errors.toCashAccountId = ''; toAccountDropDown.refresh(); });
@@ -395,20 +422,17 @@ const App = {
 
                     if (!validateForm()) return;
 
-                    if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.status))) {
-                        return;
-                    }
+
 
                     const payload = {
                         id: state.id || undefined,
                         transactionDate: DateFormatManager.formatForApiDate(state.transactionDate),
                         transactionType: state.transactionType,
-                        status: state.status,
                         amount: state.amount,
+                        paidAmount: state.paidAmount,
                         description: state.description,
                         cashAccountId: state.cashAccountId,
                         cashCategoryId: state.cashCategoryId,
-                        customerId: state.customerId,
                         sourceModule: state.sourceModule,
                         sourceModuleId: state.sourceModuleId,
                         sourceModuleNumber: state.sourceModuleNumber,
@@ -438,12 +462,12 @@ const App = {
                             state.number = data.number ?? '';
                             state.transactionDate = DateFormatManager.parseBusinessDate(data.transactionDate);
                             state.transactionType = data.transactionType;
-                            state.status = data.status;
                             state.amount = data.amount;
+                            state.paidAmount = data.paidAmount;
                             state.description = data.description ?? '';
                             state.cashAccountId = data.cashAccountId;
                             state.cashCategoryId = data.cashCategoryId;
-                            state.customerId = data.customerId;
+                            state.partnerId = data.customerId || data.vendorId;
                         }
 
                         Swal.fire({
@@ -484,10 +508,6 @@ const App = {
                     await new Promise(resolve => setTimeout(resolve, 300));
 
                     if (!validateTransferForm()) return;
-
-                    if (!(await DocumentStatusGuard.confirmIfFinalStatus(2))) {
-                        return;
-                    }
 
                     const response = await services.createTransfer({
                         transferDate: DateFormatManager.formatForApiDate(state.transfer.transferDate),
@@ -544,7 +564,7 @@ const App = {
 
                 await methods.populateCashAccountList();
                 await methods.populateCashCategoryList();
-                await methods.populateCustomerList();
+                await methods.populatePartnerList();
                 await methods.populateMainData();
                 methods.refreshSummary();
                 await mainGrid.create(state.mainData);
@@ -553,9 +573,9 @@ const App = {
                 transactionTypeDropDown.create();
                 cashAccountDropDown.create();
                 cashCategoryDropDown.create();
-                customerDropDown.create();
+                partnerDropDown.create();
                 amountInput.create();
-                statusDropDown.create();
+                paidAmountInput.create();
                 transferDatePicker.create();
                 fromAccountDropDown.create();
                 toAccountDropDown.create();
@@ -586,17 +606,36 @@ const App = {
                     columns: [
                         { type: 'checkbox', width: 60 },
                         { field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false },
-                        { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
-                        { field: 'transactionDate', headerText: 'Date', width: 130, format: 'yyyy-MM-dd' },
-                        { field: 'transactionTypeName', headerText: 'Type', width: 100, minWidth: 100 },
-                        { field: 'cashAccountName', headerText: 'Account', width: 180, minWidth: 180 },
-                        { field: 'cashCategoryName', headerText: 'Category', width: 150, minWidth: 150 },
-                        { field: 'customerName', headerText: 'Customer', width: 180, minWidth: 180 },
-                        { field: 'amount', headerText: 'Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
-                        { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 },
-                        { field: 'statusName', headerText: 'Status', width: 120, minWidth: 120 },
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'number', headerText: 'Số chứng từ', width: 180, minWidth: 180 },
+                        { field: 'transactionDate', headerText: 'Ngày', width: 130, format: 'yyyy-MM-dd' },
+                        { field: 'transactionTypeName', headerText: 'Loại', width: 100, minWidth: 100 },
+                        { field: 'cashAccountName', headerText: 'Tài khoản', width: 180, minWidth: 180 },
+                        { field: 'cashCategoryName', headerText: 'Danh mục', width: 150, minWidth: 150 },
+                        { field: 'partnerName', headerText: 'Đối tác', width: 180, minWidth: 180 },
+                        { field: 'amount', headerText: 'Số tiền gốc', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'paidAmount', headerText: 'Đã thanh toán', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'description', headerText: 'Mô tả', width: 250, minWidth: 250 },
+                        { field: 'sourceModuleNumber', headerText: 'Nguồn', width: 130, minWidth: 130 },
+                        { field: 'statusName', headerText: 'Trạng thái', width: 120, minWidth: 120 },
+                        { field: 'createdAtUtc', headerText: 'Thời điểm tạo', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                    ],
+                    aggregates: [
+                        {
+                            columns: [
+                                {
+                                    type: 'Sum',
+                                    field: 'amount',
+                                    format: 'N0',
+                                    groupFooterTemplate: 'Tổng: ${Sum}'
+                                },
+                                {
+                                    type: 'Sum',
+                                    field: 'paidAmount',
+                                    format: 'N0',
+                                    groupFooterTemplate: 'Tổng: ${Sum}'
+                                }
+                            ]
+                        }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -644,17 +683,17 @@ const App = {
                                     });
                                     return;
                                 }
-                                state.mainTitle = 'Edit Cash Transaction';
+                                state.mainTitle = 'Sửa giao dịch';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
                                 state.transactionType = r.transactionType;
-                                state.status = r.status;
                                 state.amount = r.amount;
+                                state.paidAmount = r.paidAmount;
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
-                                state.customerId = r.customerId;
+                                state.partnerId = r.customerId || r.vendorId;
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
@@ -666,17 +705,17 @@ const App = {
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'Delete Cash Transfer?' : 'Delete Cash Transaction?';
+                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'Xóa chuyển khoản?' : 'Xóa giao dịch?';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
                                 state.transactionType = r.transactionType;
-                                state.status = r.status;
                                 state.amount = r.amount;
+                                state.paidAmount = r.paidAmount;
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
-                                state.customerId = r.customerId;
+                                state.partnerId = r.customerId || r.vendorId;
                                 mainModal.obj.show();
                             }
                         }
@@ -703,7 +742,7 @@ const App = {
 
         return {
             mainGridRef, mainModalRef,
-            transactionDateRef, transactionTypeRef, cashAccountRef, cashCategoryRef, customerRef, amountRef, statusRef,
+            transactionDateRef, transactionTypeRef, cashAccountRef, cashCategoryRef, partnerRef, amountRef, paidAmountRef,
             transferModalRef, transferDateRef, fromAccountRef, toAccountRef, transferAmountRef,
             state, handler
         };

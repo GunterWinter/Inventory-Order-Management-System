@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Customer Contact List";
 }
@@ -60,7 +60,13 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="CustomerId">Customer</label>
-                                                <div ref="customerIdRef"></div>
+                                                <div class="quick-add-wrapper">
+                                                    <div ref="customerIdRef"></div>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                            v-on:click="handler.quickAddCustomer" title="Thêm nhanh KH">
+                                                        <i class="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
                                                 <label class="text-danger" v-text="state.errors.customerId"></label>
                                             </div>
                                         </div>

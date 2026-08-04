@@ -18,12 +18,13 @@ public class CreateCashTransactionRequest : IRequest<CreateCashTransactionResult
 {
     public DateTime? TransactionDate { get; init; }
     public int? TransactionType { get; init; }
-    public int? Status { get; init; }
     public double? Amount { get; init; }
+    public double? PaidAmount { get; init; }
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
     public string? CustomerId { get; init; }
+    public string? VendorId { get; init; }
     public string? SourceModule { get; init; }
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
@@ -34,12 +35,9 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
 {
     public CreateCashTransactionValidator()
     {
-        RuleFor(x => x.CashAccountId)
-            .NotEmpty()
-            .When(x => x.Status == (int)CashTransactionStatus.Confirmed);
-        RuleFor(x => x.Amount)
-            .GreaterThan(0)
-            .When(x => x.Status == (int)CashTransactionStatus.Confirmed);
+        RuleFor(x => x.CashAccountId).NotEmpty();
+        RuleFor(x => x.Amount).GreaterThan(0);
+        RuleFor(x => x.PaidAmount).LessThanOrEqualTo(x => x.Amount).When(x => x.PaidAmount.HasValue);
     }
 }
 
@@ -74,12 +72,14 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
         entity.Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT");
         entity.TransactionDate = request.TransactionDate;
         entity.TransactionType = (CashTransactionType?)request.TransactionType;
-        entity.Status = (CashTransactionStatus?)request.Status;
         entity.Amount = request.Amount;
+        entity.PaidAmount = request.PaidAmount ?? 0;
+        entity.Status = ComputePaymentStatus(entity.PaidAmount ?? 0, entity.Amount ?? 0);
         entity.Description = request.Description;
         entity.CashAccountId = request.CashAccountId;
         entity.CashCategoryId = request.CashCategoryId;
         entity.CustomerId = request.CustomerId;
+        entity.VendorId = request.VendorId;
         entity.SourceModule = request.SourceModule;
         entity.SourceModuleId = request.SourceModuleId;
         entity.SourceModuleNumber = request.SourceModuleNumber;
@@ -106,7 +106,7 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
         var balances = await _queryContext
             .CashTransaction
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
             .GroupBy(x => 1)
             .Select(g => new
             {
@@ -122,5 +122,13 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
 
         _accountRepository.Update(account);
         await _unitOfWork.SaveAsync(cancellationToken);
+    }
+
+    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    {
+        if (amount <= 0) return CashTransactionStatus.Paid;
+        if (paidAmount >= amount) return CashTransactionStatus.Paid;
+        if (paidAmount > 0) return CashTransactionStatus.PartiallyPaid;
+        return CashTransactionStatus.Unpaid;
     }
 }

@@ -35,7 +35,7 @@
 <div id="app" v-cloak>
     <div class="row">
         <div class="col-12">
-            <div class="grid-container" v-show="!state.isViewMode">
+            <div class="grid-container">
                 <div id="MainGrid" ref="mainGridRef"></div>
             </div>
         </div>
@@ -61,7 +61,7 @@
                                     <div class="card-body">
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="OrderDate">Order Date</label>
+                                                <label for="OrderDate">Ngày đặt hàng</label>
                                                 <input ref="orderDateRef" />
                                                 <label class="text-danger">{{ state.errors.orderDate }}</label>
                                             </div>
@@ -72,8 +72,14 @@
                                         </div>
                                          <div class="row mb-2">
                                              <div class="col-md-6">
-                                                 <label for="CustomerId">Customer</label>
-                                                 <div ref="customerIdRef"></div>
+                                                 <label for="CustomerId">Khách hàng</label>
+                                                 <div class="quick-add-wrapper">
+                                                     <div ref="customerIdRef"></div>
+                                                     <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                             v-on:click="handler.quickAddCustomer" title="Thêm nhanh KH">
+                                                         <i class="fas fa-plus"></i>
+                                                     </button>
+                                                 </div>
                                                  <label class="text-danger">{{ state.errors.customerId }}</label>
                                              </div>
                                              <div class="col-md-6">
@@ -84,14 +90,14 @@
                                          </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="OrderStatus">Order Status</label>
+                                                <label for="OrderStatus">Trạng thái</label>
                                                 <div ref="orderStatusRef"></div>
                                                 <label class="text-danger">{{ state.errors.orderStatus }}</label>
                                             </div>
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-12">
-                                                <label for="Description">Description</label>
+                                                <label for="Description">Mô tả</label>
                                                 <textarea class="form-control" rows="3" v-model="state.description"></textarea>
                                                 <label class="text-danger">{{ state.errors.description }}</label>
                                             </div>
@@ -153,7 +159,7 @@
                     </fieldset>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                     <button type="button"
                             v-if="!state.isViewMode"
                             id="MainSaveButton"
@@ -162,8 +168,8 @@
                             v-on:click="handler.handleSubmit"
                             v-bind:disabled="state.isSubmitting">
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Delete' : 'Save' }}</span>
-                        <span v-else>{{ state.deleteMode ? 'Deleting...' : 'Saving...' }}</span>
+                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Xóa' : 'Lưu' }}</span>
+                        <span v-else>{{ state.deleteMode ? 'Đang xóa...' : 'Đang lưu...' }}</span>
                     </button>
                 </div>
             </div>

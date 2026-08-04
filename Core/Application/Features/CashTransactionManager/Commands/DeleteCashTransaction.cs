@@ -114,7 +114,7 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         var balances = await _queryContext
             .CashTransaction
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
             .GroupBy(x => 1)
             .Select(g => new
             {

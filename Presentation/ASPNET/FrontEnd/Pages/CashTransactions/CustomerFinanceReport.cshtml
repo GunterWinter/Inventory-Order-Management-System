@@ -1,9 +1,14 @@
 @page
 @{
-    ViewData["Title"] = "Customer Finance Report";
+    ViewData["Title"] = "Finance Report";
 }
 
 <div id="app" v-cloak>
+    <div class="row mb-3">
+        <div class="col-12">
+            <h3 class="mb-0">Finance Report</h3>
+        </div>
+    </div>
     <div class="row mb-3">
         <div class="col-md-4 mb-2">
             <div class="card">
@@ -37,8 +42,8 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4 mb-2">
-                            <label for="Customer">Customer</label>
-                            <div id="CustomerDropDown" ref="customerRef"></div>
+                            <label for="Partner">Partner</label>
+                            <div id="PartnerDropDown" ref="partnerRef"></div>
                         </div>
                         <div class="col-md-3 mb-2">
                             <label for="FromDate">From Date</label>
@@ -52,7 +57,7 @@
                             <button type="button" class="btn btn-secondary w-100" v-on:click="handler.handleClearFilters">Clear Filters</button>
                         </div>
                     </div>
-                    <div class="text-muted small">Only confirmed transactions linked to a customer are included.</div>
+                    <div class="text-muted small">Only confirmed transactions linked to a partner are included.</div>
                 </div>
             </div>
         </div>

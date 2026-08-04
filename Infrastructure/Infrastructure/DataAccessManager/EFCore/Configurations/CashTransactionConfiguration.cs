@@ -16,6 +16,7 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
         builder.Property(x => x.TransactionType).IsRequired(false);
         builder.Property(x => x.Status).IsRequired(false);
         builder.Property(x => x.Amount).IsRequired(false);
+        builder.Property(x => x.PaidAmount).IsRequired(false);
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CashAccountId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.CashCategoryId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);

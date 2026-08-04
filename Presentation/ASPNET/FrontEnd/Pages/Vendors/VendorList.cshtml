@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Vendor List";
 }
@@ -41,12 +41,24 @@
                                 <div class="row mb-2">
                                     <div class="col-md-6">
                                         <label for="VendorGroupId">Vendor Group</label>
-                                        <div ref="vendorGroupIdRef"></div>
+                                        <div class="quick-add-wrapper">
+                                            <div ref="vendorGroupIdRef"></div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                    v-on:click="handler.quickAddVendorGroup" title="Thêm nhanh">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
                                         <label class="text-danger" v-text="state.errors.vendorGroupId"></label>
                                     </div>
                                     <div class="col-md-6">
                                         <label for="VendorCategoryId">Vendor Category</label>
-                                        <div ref="vendorCategoryIdRef"></div>
+                                        <div class="quick-add-wrapper">
+                                            <div ref="vendorCategoryIdRef"></div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                    v-on:click="handler.quickAddVendorCategory" title="Thêm nhanh">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
                                         <label class="text-danger" v-text="state.errors.vendorCategoryId"></label>
                                     </div>
                                 </div>

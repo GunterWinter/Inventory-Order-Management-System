@@ -14,7 +14,6 @@
 
     const lookupSources = {
         productGroups: { endpoint: '/ProductGroup/GetProductGroupList', sheetName: 'ProductGroups' },
-        unitMeasures: { endpoint: '/UnitMeasure/GetUnitMeasureList', sheetName: 'UnitMeasures' },
         vendorGroups: { endpoint: '/VendorGroup/GetVendorGroupList', sheetName: 'VendorGroups' },
         vendorCategories: { endpoint: '/VendorCategory/GetVendorCategoryList', sheetName: 'VendorCategories' },
         customerGroups: { endpoint: '/CustomerGroup/GetCustomerGroupList', sheetName: 'CustomerGroups' },
@@ -117,12 +116,6 @@
             fileName: 'customer-categories-template.xlsx',
             columns: simpleColumns
         },
-        unitmeasures: {
-            title: 'Unit Measure',
-            endpoint: '/UnitMeasure/CreateUnitMeasure',
-            fileName: 'unit-measures-template.xlsx',
-            columns: simpleColumns
-        },
         warehouses: {
             title: 'Warehouse',
             endpoint: '/Warehouse/CreateWarehouse',
@@ -174,7 +167,7 @@
                 { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
                 { header: 'Physical Product', key: 'physical', required: true, type: 'boolean', example: 'TRUE', defaultValue: true },
                 { header: 'Product Group', key: 'productGroupId', required: true, lookup: 'productGroups', example: 'General' },
-                { header: 'Unit Measure', key: 'unitMeasureId', required: true, lookup: 'unitMeasures', example: 'PCS' },
+                { header: 'Unit Measure', key: 'unitMeasureName', required: false, example: 'Cái, Hộp, PCS' },
                 { header: 'Description', key: 'description', example: '' }
             ]
         },

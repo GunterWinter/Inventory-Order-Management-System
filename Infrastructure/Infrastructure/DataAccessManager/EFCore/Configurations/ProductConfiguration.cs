@@ -23,7 +23,7 @@ public class ProductConfiguration : BaseEntityConfiguration<Product>
         builder.Property(x => x.InternalSerialFixedCode).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.DefaultWarehouseId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.DefaultWarrantyMonths).IsRequired(false);
-        builder.Property(x => x.UnitMeasureId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.UnitMeasureName).HasMaxLength(NameConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.ProductGroupId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
 
         builder.HasIndex(e => e.Name);

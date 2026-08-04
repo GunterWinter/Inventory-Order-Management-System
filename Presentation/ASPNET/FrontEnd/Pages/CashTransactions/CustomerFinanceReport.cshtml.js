@@ -3,9 +3,9 @@ const App = {
         const state = Vue.reactive({
             allData: [],
             mainData: [],
-            customerList: [],
+            partnerList: [],
             filter: {
-                customerId: null,
+                partnerId: null,
                 fromDate: null,
                 toDate: null
             },
@@ -20,7 +20,7 @@ const App = {
         });
 
         const mainGridRef = Vue.ref(null);
-        const customerRef = Vue.ref(null);
+        const partnerRef = Vue.ref(null);
         const fromDateRef = Vue.ref(null);
         const toDateRef = Vue.ref(null);
 
@@ -28,8 +28,10 @@ const App = {
             getMainData: async () => {
                 return await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
             },
-            getCustomerList: async () => {
-                return await AxiosManager.get('/Customer/GetCustomerList', {});
+            getPartnerList: async () => {
+                const custResp = await AxiosManager.get('/Customer/GetCustomerList', {});
+                const vendResp = await AxiosManager.get('/Vendor/GetVendorList', {});
+                return { customers: custResp?.data?.content?.data ?? [], vendors: vendResp?.data?.content?.data ?? [] };
             },
         };
 
@@ -38,12 +40,14 @@ const App = {
                 const response = await services.getMainData();
                 const rows = response?.data?.content?.data ?? [];
                 state.allData = rows
-                    .filter(item => item.status === 2 && item.customerId)
+                    .filter(item => item.status === 2 && (item.customerId || item.vendorId))
                     .map(item => {
                         const debitAmount = item.transactionType === 0 ? (item.amount ?? 0) : 0;
                         const creditAmount = item.transactionType === 1 ? (item.amount ?? 0) : 0;
                         return {
-                            ...item,
+                            partnerName: item.customerName || item.vendorName || '',
+                            customerId: item.customerId,
+                            vendorId: item.vendorId,
                             transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
                             transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
                             debitAmount,
@@ -52,9 +56,29 @@ const App = {
                         };
                     });
             },
-            populateCustomerList: async () => {
-                const response = await services.getCustomerList();
-                state.customerList = response?.data?.content?.data ?? [];
+            populatePartnerList: async () => {
+                const data = await services.getPartnerList();
+                const partnerMap = new Map();
+                data.customers.forEach(c => {
+                    if (!c.name) return;
+                    partnerMap.set(c.name.toLowerCase().trim(), { name: c.name, customerIds: [c.id], vendorIds: [] });
+                });
+                data.vendors.forEach(v => {
+                    if (!v.name) return;
+                    const key = v.name.toLowerCase().trim();
+                    if (partnerMap.has(key)) {
+                        partnerMap.get(key).vendorIds.push(v.id);
+                    } else {
+                        partnerMap.set(key, { name: v.name, customerIds: [], vendorIds: [v.id] });
+                    }
+                });
+                let idCounter = 1;
+                state.partnerList = Array.from(partnerMap.values()).map(p => ({
+                    id: String(idCounter++),
+                    name: p.name,
+                    customerIds: p.customerIds,
+                    vendorIds: p.vendorIds
+                }));
             },
             applyFilters: () => {
                 const startOfDay = (value) => {
@@ -64,7 +88,13 @@ const App = {
                 };
 
                 state.mainData = state.allData.filter(item => {
-                    if (state.filter.customerId && item.customerId !== state.filter.customerId) return false;
+                    if (state.filter.partnerId) {
+                        const partner = state.partnerList.find(p => p.id === state.filter.partnerId);
+                        if (!partner) return false;
+                        const matchCustomer = item.customerId && partner.customerIds.includes(item.customerId);
+                        const matchVendor = item.vendorId && partner.vendorIds.includes(item.vendorId);
+                        if (!matchCustomer && !matchVendor) return false;
+                    }
                     if (state.filter.fromDate || state.filter.toDate) {
                         if (!item.transactionDate) return false;
                         const t = startOfDay(item.transactionDate);
@@ -87,13 +117,13 @@ const App = {
             }
         };
 
-        const customerDropDown = {
+        const partnerDropDown = {
             obj: null,
             create: () => {
-                customerDropDown.obj = new ej.dropdowns.DropDownList({
-                    dataSource: state.customerList,
+                partnerDropDown.obj = new ej.dropdowns.DropDownList({
+                    dataSource: state.partnerList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Select a Customer',
+                    placeholder: 'Select Partner',
                     allowFiltering: true,
                     showClearButton: true,
                     filtering: (e) => {
@@ -102,16 +132,16 @@ const App = {
                         if (e.text !== '') {
                             query = query.where('name', 'startswith', e.text, true);
                         }
-                        e.updateData(state.customerList, query);
+                        e.updateData(state.partnerList, query);
                     },
                     change: (args) => {
-                        state.filter.customerId = args.value;
+                        state.filter.partnerId = args.value;
                         methods.applyFilters();
                     }
                 });
-                customerDropDown.obj.appendTo(customerRef.value);
+                partnerDropDown.obj.appendTo(partnerRef.value);
             },
-            refresh: () => { if (customerDropDown.obj) customerDropDown.obj.value = state.filter.customerId; }
+            refresh: () => { if (partnerDropDown.obj) partnerDropDown.obj.value = state.filter.partnerId; }
         };
 
         const fromDatePicker = {
@@ -156,10 +186,10 @@ const App = {
 
         const handler = {
             handleClearFilters: () => {
-                state.filter.customerId = null;
+                state.filter.partnerId = null;
                 state.filter.fromDate = null;
                 state.filter.toDate = null;
-                customerDropDown.refresh();
+                partnerDropDown.refresh();
                 fromDatePicker.refresh();
                 toDatePicker.refresh();
                 methods.applyFilters();
@@ -177,7 +207,7 @@ const App = {
                     allowSelection: true,
                     allowGrouping: true,
                     groupSettings: {
-                        columns: ['customerName']
+                        columns: ['partnerName']
                     },
                     allowTextWrap: true,
                     allowResizing: true,
@@ -193,7 +223,7 @@ const App = {
                     columns: [
                         { type: 'checkbox', width: 60 },
                         { field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false },
-                        { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
+                        { field: 'partnerName', headerText: 'Partner', width: 200, minWidth: 200 },
                         { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
                         { field: 'transactionDate', headerText: 'Date', width: 130, format: 'yyyy-MM-dd' },
                         { field: 'transactionTypeName', headerText: 'Type', width: 100, minWidth: 100 },
@@ -257,12 +287,12 @@ const App = {
                 await SecurityManager.authorizePage(['CashTransactions']);
                 await SecurityManager.validateToken();
 
-                await methods.populateCustomerList();
+                await methods.populatePartnerList();
                 await methods.populateMainData();
                 methods.applyFilters();
                 await mainGrid.create(state.mainData);
 
-                customerDropDown.create();
+                partnerDropDown.create();
                 fromDatePicker.create();
                 toDatePicker.create();
             } catch (e) {
@@ -272,7 +302,7 @@ const App = {
 
         return {
             mainGridRef,
-            customerRef,
+            partnerRef,
             fromDateRef,
             toDateRef,
             state,

@@ -4,12 +4,10 @@ namespace Domain.Enums;
 
 public enum CashTransactionStatus
 {
-    [Description("Draft")]
-    Draft = 0,
-    [Description("Cancelled")]
-    Cancelled = 1,
-    [Description("Confirmed")]
-    Confirmed = 2,
-    [Description("Archived")]
-    Archived = 3
+    [Description("Chưa thanh toán")]
+    Unpaid = 0,
+    [Description("Còn nợ")]
+    PartiallyPaid = 1,
+    [Description("Đã thanh toán")]
+    Paid = 2
 }

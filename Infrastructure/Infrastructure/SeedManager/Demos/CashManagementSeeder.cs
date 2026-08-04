@@ -94,7 +94,7 @@ public class CashManagementSeeder
             await CreateTransactionAsync(
                 date: new DateTime(2026, 4, 6),
                 type: CashTransactionType.Debit,
-                status: CashTransactionStatus.Confirmed,
+                status: CashTransactionStatus.Paid,
                 amount: demoSalesOrder.AfterTaxAmount ?? demoSalesOrder.BeforeTaxAmount ?? 0d,
                 description: $"{DemoPrefix}Thu tiền đơn {demoSalesOrder.Number}",
                 cashAccountId: personalAccount.Id,
@@ -109,7 +109,7 @@ public class CashManagementSeeder
             await CreateTransactionAsync(
                 date: new DateTime(2026, 4, 3),
                 type: CashTransactionType.Credit,
-                status: CashTransactionStatus.Draft,
+                status: CashTransactionStatus.Unpaid,
                 amount: demoPurchaseOrder.AfterTaxAmount ?? demoPurchaseOrder.BeforeTaxAmount ?? 0d,
                 description: $"{DemoPrefix}Nháp chi tiền đơn {demoPurchaseOrder.Number}",
                 cashAccountId: companyAccount.Id,
@@ -122,7 +122,7 @@ public class CashManagementSeeder
         await CreateTransactionAsync(
             date: new DateTime(2026, 4, 7),
             type: CashTransactionType.Credit,
-            status: CashTransactionStatus.Confirmed,
+            status: CashTransactionStatus.Paid,
             amount: 50_000d,
             description: $"{DemoPrefix}chi tiền xăng xe giao hàng",
             cashAccountId: personalAccount.Id,
@@ -131,7 +131,7 @@ public class CashManagementSeeder
         await CreateTransactionAsync(
             date: new DateTime(2026, 4, 8),
             type: CashTransactionType.Credit,
-            status: CashTransactionStatus.Confirmed,
+            status: CashTransactionStatus.Paid,
             amount: 2_500_000d,
             description: $"{DemoPrefix}chi phí gia công tủ điện mẫu",
             cashAccountId: companyAccount.Id,
@@ -140,7 +140,7 @@ public class CashManagementSeeder
         await CreateTransactionAsync(
             date: new DateTime(2026, 4, 9),
             type: CashTransactionType.Credit,
-            status: CashTransactionStatus.Draft,
+            status: CashTransactionStatus.Unpaid,
             amount: 8_000_000d,
             description: $"{DemoPrefix}nháp chi lương nhân viên tháng 4",
             cashAccountId: personalAccount.Id,
@@ -149,7 +149,7 @@ public class CashManagementSeeder
         await CreateTransactionAsync(
             date: new DateTime(2026, 4, 10),
             type: CashTransactionType.Debit,
-            status: CashTransactionStatus.Confirmed,
+            status: CashTransactionStatus.Paid,
             amount: 5_000_000d,
             description: $"{DemoPrefix}thu tiền cho thuê mặt bằng",
             cashAccountId: companyAccount.Id,
@@ -241,6 +241,7 @@ public class CashManagementSeeder
             TransactionType = type,
             Status = status,
             Amount = amount,
+            PaidAmount = status == CashTransactionStatus.Paid ? amount : 0,
             Description = description,
             CashAccountId = cashAccountId,
             CashCategoryId = cashCategoryId,
@@ -261,7 +262,7 @@ public class CashManagementSeeder
         var balances = await _queryContext
             .Set<CashTransaction>()
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
             .GroupBy(x => 1)
             .Select(g => new
             {

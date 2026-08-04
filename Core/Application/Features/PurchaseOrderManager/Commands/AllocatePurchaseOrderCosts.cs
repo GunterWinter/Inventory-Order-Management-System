@@ -369,8 +369,9 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
                 Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
                 TransactionDate = DateTime.Today,
                 TransactionType = CashTransactionType.Credit,
-                Status = CashTransactionStatus.Draft,
+                Status = CashTransactionStatus.Unpaid,
                 Amount = totalAmount,
+                PaidAmount = 0,
                 Description = description,
                 CashAccountId = request.CashAccountId,
                 CashCategoryId = request.CashCategoryId,
@@ -390,7 +391,7 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
         // Draft transactions do not affect account balance - no recalculation needed
         // Old confirmed transactions that were deleted still need balance recalculation
         var oldAccountIds = oldCashTransactions
-            .Where(x => x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => x.Status != CashTransactionStatus.Unpaid)
             .Select(x => x.CashAccountId)
             .Where(x => x != null)
             .Distinct()
@@ -414,7 +415,7 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
         var balances = await _queryContext
             .Set<CashTransaction>()
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
             .GroupBy(x => 1)
             .Select(g => new
             {

@@ -15,6 +15,7 @@ public record GetCashTransactionListDto
     public CashTransactionType? TransactionType { get; init; }
     public CashTransactionStatus? Status { get; init; }
     public double? Amount { get; init; }
+    public double? PaidAmount { get; init; }
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashAccountName { get; init; }
@@ -22,6 +23,8 @@ public record GetCashTransactionListDto
     public string? CashCategoryName { get; init; }
     public string? CustomerId { get; init; }
     public string? CustomerName { get; init; }
+    public string? VendorId { get; init; }
+    public string? VendorName { get; init; }
     public string? SourceModule { get; init; }
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
@@ -56,6 +59,7 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
             .Include(x => x.CashAccount)
             .Include(x => x.CashCategory)
             .Include(x => x.Customer)
+            .Include(x => x.Vendor)
             .AsQueryable();
 
         var entities = await query
@@ -67,6 +71,7 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
                 TransactionType = x.TransactionType,
                 Status = x.Status,
                 Amount = x.Amount,
+                PaidAmount = x.PaidAmount,
                 Description = x.Description,
                 CashAccountId = x.CashAccountId,
                 CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
@@ -74,6 +79,8 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
                 CashCategoryName = x.CashCategory != null ? x.CashCategory.Name : null,
                 CustomerId = x.CustomerId,
                 CustomerName = x.Customer != null ? x.Customer.Name : null,
+                VendorId = x.VendorId,
+                VendorName = x.Vendor != null ? x.Vendor.Name : null,
                 SourceModule = x.SourceModule,
                 SourceModuleId = x.SourceModuleId,
                 SourceModuleNumber = x.SourceModuleNumber,

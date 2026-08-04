@@ -48,7 +48,13 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="CustomerId">Khách hàng</label>
-                                                <div ref="customerIdRef"></div>
+                                                <div class="quick-add-wrapper">
+                                                    <div ref="customerIdRef"></div>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                            v-on:click="handler.quickAddCustomer" title="Thêm nhanh KH">
+                                                        <i class="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
                                                 <label class="text-danger">{{ state.errors.customerId }}</label>
                                             </div>
                                         </div>
@@ -111,6 +117,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                     <button type="button"
+                            v-if="!state.isViewMode"
                             id="MainSaveButton"
                             class="btn"
                             v-bind:class="state.deleteMode ? 'btn-danger' : 'btn-primary'"

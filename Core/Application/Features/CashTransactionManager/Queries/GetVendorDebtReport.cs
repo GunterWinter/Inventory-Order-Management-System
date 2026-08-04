@@ -54,20 +54,19 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
         // This includes both:
         //   a) CashTransactions directly linked via VendorId
         //   b) CashTransactions linked via SourceModule=PurchaseOrder (join to PO.VendorId)
-        
+
         // Direct vendor link
         var directPayments = await _queryContext
             .Set<CashTransaction>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.Status == CashTransactionStatus.Confirmed
-                     && x.TransactionType == CashTransactionType.Credit
+            .Where(x => x.TransactionType == CashTransactionType.Credit
                      && x.VendorId != null)
             .GroupBy(x => x.VendorId)
             .Select(g => new
             {
                 VendorId = g.Key,
-                TotalPaid = g.Sum(x => x.Amount ?? 0d)
+                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
             })
             .ToListAsync(cancellationToken);
 
@@ -76,8 +75,7 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
             .Set<CashTransaction>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.Status == CashTransactionStatus.Confirmed
-                     && x.TransactionType == CashTransactionType.Credit
+            .Where(x => x.TransactionType == CashTransactionType.Credit
                      && x.SourceModule == nameof(PurchaseOrder)
                      && x.SourceModuleId != null
                      && x.VendorId == null)
@@ -85,14 +83,14 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
                 _queryContext.Set<PurchaseOrder>().AsNoTracking().ApplyIsDeletedFilter(false),
                 ct => ct.SourceModuleId,
                 po => po.Id,
-                (ct, po) => new { ct.Amount, po.VendorId }
+                (ct, po) => new { ct.Amount, ct.PaidAmount, po.VendorId }
             )
             .Where(x => x.VendorId != null)
             .GroupBy(x => x.VendorId)
             .Select(g => new
             {
                 VendorId = g.Key,
-                TotalPaid = g.Sum(x => x.Amount ?? 0d)
+                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
             })
             .ToListAsync(cancellationToken);
 

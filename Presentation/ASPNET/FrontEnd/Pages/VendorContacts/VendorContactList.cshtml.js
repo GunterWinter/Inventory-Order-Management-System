@@ -361,6 +361,15 @@ const App = {
                 } finally {
                     state.isSubmitting = false;
                 }
+            },
+            quickAddVendor: async function () {
+                await QuickAddHelper.complexQuickAddVendor({
+                    dropdownObj: vendorListLookup.obj,
+                    refreshLookup: methods.populateVendorListLookupData,
+                    state: state,
+                    stateKey: 'vendorId',
+                    lookupKey: 'vendorListLookupData'
+                });
             }
         };
 

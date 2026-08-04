@@ -17,6 +17,7 @@ public record GetPaymentStatusLookupDto
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
     public double? Amount { get; init; }
+    public double? PaidAmount { get; init; }
     public string? Description { get; init; }
 }
 
@@ -61,26 +62,29 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
                 CashAccountId = x.CashAccountId,
                 CashCategoryId = x.CashCategoryId,
                 Amount = x.Amount,
+                PaidAmount = x.PaidAmount,
                 Description = x.Description
             })
             .ToListAsync(cancellationToken);
 
-        // EF Core can fail translating GroupBy + OrderBy + First for this query shape.
-        // Keep the SQL simple, then pick the latest transaction per source in memory.
+        // Keep the SQL simple, then pick the latest transaction per source in memory for most fields,
+        // but aggregate the Amount and PaidAmount to reflect the total payment status across all split transactions.
         var entities = transactions
             .GroupBy(x => x.SourceModuleId)
-            .Select(g => g.First())
-            .Select(x => new GetPaymentStatusLookupDto
+            .Select(g => new GetPaymentStatusLookupDto
             {
-                SourceModuleId = x.SourceModuleId,
-                SourceModule = x.SourceModule,
-                Status = x.Status,
-                CashTransactionId = x.CashTransactionId,
-                TransactionDate = x.TransactionDate,
-                CashAccountId = x.CashAccountId,
-                CashCategoryId = x.CashCategoryId,
-                Amount = x.Amount,
-                Description = x.Description
+                SourceModuleId = g.Key,
+                SourceModule = g.First().SourceModule,
+                Status = g.All(x => x.Status == CashTransactionStatus.Paid) ? CashTransactionStatus.Paid 
+                       : g.All(x => x.Status == CashTransactionStatus.Unpaid) ? CashTransactionStatus.Unpaid 
+                       : CashTransactionStatus.PartiallyPaid,
+                CashTransactionId = g.First().CashTransactionId,
+                TransactionDate = g.First().TransactionDate,
+                CashAccountId = g.First().CashAccountId,
+                CashCategoryId = g.First().CashCategoryId,
+                Amount = g.Sum(x => x.Amount),
+                PaidAmount = g.Sum(x => x.PaidAmount),
+                Description = g.First().Description
             })
             .ToList();
 

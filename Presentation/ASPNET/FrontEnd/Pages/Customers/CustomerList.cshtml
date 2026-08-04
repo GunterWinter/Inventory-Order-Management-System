@@ -1,4 +1,4 @@
-﻿@page
+@page
 @{
     ViewData["Title"] = "Customer List";
 }
@@ -41,12 +41,24 @@
                                 <div class="row mb-2">
                                     <div class="col-md-6">
                                         <label for="CustomerGroupId">Customer Group</label>
-                                        <div ref="customerGroupIdRef"></div>
+                                        <div class="quick-add-wrapper">
+                                            <div ref="customerGroupIdRef"></div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                    v-on:click="handler.quickAddCustomerGroup" title="Thêm nhanh">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
                                         <label class="text-danger" v-text="state.errors.customerGroupId"></label>
                                     </div>
                                     <div class="col-md-6">
                                         <label for="CustomerCategoryId">Customer Category</label>
-                                        <div ref="customerCategoryIdRef"></div>
+                                        <div class="quick-add-wrapper">
+                                            <div ref="customerCategoryIdRef"></div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
+                                                    v-on:click="handler.quickAddCustomerCategory" title="Thêm nhanh">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
                                         <label class="text-danger" v-text="state.errors.customerCategoryId"></label>
                                     </div>
                                 </div>

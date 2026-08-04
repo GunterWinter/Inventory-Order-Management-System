@@ -172,6 +172,29 @@ public class PurchaseOrderController : BaseApiController
         });
     }
 
+    [Authorize]
+    [HttpPost("PayPurchaseOrder")]
+    public async Task<ActionResult<ApiSuccessResult<PayPurchaseOrderResult>>> PayPurchaseOrderAsync(
+        [FromBody] PayPurchaseOrderRequest request,
+        CancellationToken cancellationToken
+        )
+    {
+        if (request == null)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(msg => !string.IsNullOrWhiteSpace(msg)).ToList();
+            return BadRequest(errors.Any() ? string.Join("; ", errors) : "Request body cannot be null.");
+        }
+
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<PayPurchaseOrderResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(PayPurchaseOrderAsync)}",
+            Content = response
+        });
+    }
+
 }
 
 

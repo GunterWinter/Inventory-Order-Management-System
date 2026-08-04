@@ -26,7 +26,7 @@ public class CreateProductRequest : IRequest<CreateProductResult>
     public string? InternalSerialFixedCode { get; init; }
     public string? DefaultWarehouseId { get; init; }
     public int? DefaultWarrantyMonths { get; init; }
-    public string? UnitMeasureId { get; init; }
+    public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
     public string? CreatedById { get; init; }
 }
@@ -45,7 +45,7 @@ public class CreateProductValidator : AbstractValidator<CreateProductRequest>
             .Matches("^[A-Za-z0-9]+$")
             .When(x => x.Physical == true && x.SerialTrackingMode == SerialTrackingMode.InternalAuto);
         RuleFor(x => x.DefaultWarrantyMonths).GreaterThanOrEqualTo(0).When(x => x.DefaultWarrantyMonths.HasValue);
-        RuleFor(x => x.UnitMeasureId).NotEmpty();
+
         RuleFor(x => x.ProductGroupId).NotEmpty();
     }
 }
@@ -88,7 +88,7 @@ public class CreateProductHandler : IRequestHandler<CreateProductRequest, Create
         entity.DefaultWarrantyMonths = request.DefaultWarrantyMonths;
         entity.ReferenceCode = request.ReferenceCode;
         entity.Description = request.Description;
-        entity.UnitMeasureId = request.UnitMeasureId;
+        entity.UnitMeasureName = request.UnitMeasureName;
         entity.ProductGroupId = request.ProductGroupId;
 
         await _repository.CreateAsync(entity, cancellationToken);

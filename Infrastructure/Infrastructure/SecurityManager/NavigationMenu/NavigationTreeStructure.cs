@@ -126,16 +126,6 @@ public static class NavigationTreeStructure
             "IsModule": true,
             "Children": [
                 {
-                    "URL": "/UnitMeasures/UnitMeasureList",
-                    "Name": "Unit Measure",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/ProductGroups/ProductGroupList",
-                    "Name": "Product Group",
-                    "IsModule": false
-                },
-                {
                     "URL": "/Products/ProductList",
                     "Name": "Product",
                     "IsModule": false
@@ -143,11 +133,6 @@ public static class NavigationTreeStructure
                 {
                     "URL": "/WarrantyLookups/WarrantyLookup",
                     "Name": "Warranty Lookup",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/Warehouses/WarehouseList",
-                    "Name": "Warehouse",
                     "IsModule": false
                 },
                 {
@@ -225,7 +210,7 @@ public static class NavigationTreeStructure
                 },
                 {
                     "URL": "/CashTransactions/CustomerFinanceReport",
-                    "Name": "Customer Finance Report",
+                    "Name": "Finance Report",
                     "IsModule": false
                 },
                 {

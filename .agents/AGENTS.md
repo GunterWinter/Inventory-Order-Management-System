@@ -167,3 +167,13 @@
 
 - **Serial Tracking Mode**:
   - The system actively uses only 2 levels: `InternalAuto` (System auto-generates) and `ManufacturerSerial` (Input from manufacturer - currently in development). Avoid referencing other unsupported modes for core logic.
+
+## SweetAlert2 & Bootstrap Modal Compatibility Invariants
+When using SweetAlert2 v11 (`Swal.fire`) alongside Bootstrap 5 modals (e.g. from `QuickAddHelper` or custom popups):
+- **Z-Index Conflict**: Bootstrap modals use `z-index: 1050`. Always ensure the SweetAlert2 container has a higher z-index (e.g. `z-index: 2000 !important;`) if injected dynamically, or use `.swal2-container` overrides.
+- **HTML Container Visibility**: The project loads `sweetalert2v11.js` but uses a bootstrap-4 legacy theme which targets `.swal2-content`. To ensure custom HTML renders correctly in v11, explicitly add CSS for `.swal2-html-container` (e.g. `overflow: auto !important; margin: 0.5em 1em !important; text-align: left !important;`).
+- **Scroll Lock Conflict**: Always include `heightAuto: false` in the `Swal.fire({ ... })` configuration to prevent SweetAlert2 from forcefully injecting `height: auto !important` on the `<body>` and `<html>` tags, which breaks Bootstrap's modal scroll management and can cause the popup to fail rendering visually.
+
+Tôi luôn luôn drop database mỗi khi chạy lại
+
+Nẽ lỗi UI UX khi đọc file tiếng việt

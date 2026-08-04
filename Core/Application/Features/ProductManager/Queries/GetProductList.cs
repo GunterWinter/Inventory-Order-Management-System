@@ -24,7 +24,6 @@ public record GetProductListDto
     public string? DefaultWarehouseId { get; init; }
     public string? DefaultWarehouseName { get; init; }
     public int? DefaultWarrantyMonths { get; init; }
-    public string? UnitMeasureId { get; init; }
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
     public string? ProductGroupName { get; init; }
@@ -36,10 +35,6 @@ public class GetProductListProfile : Profile
     public GetProductListProfile()
     {
         CreateMap<Product, GetProductListDto>()
-            .ForMember(
-                dest => dest.UnitMeasureName,
-                opt => opt.MapFrom(src => src.UnitMeasure != null ? src.UnitMeasure.Name : string.Empty)
-            )
             .ForMember(
                 dest => dest.ProductGroupName,
                 opt => opt.MapFrom(src => src.ProductGroup != null ? src.ProductGroup.Name : string.Empty)
@@ -80,7 +75,6 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
             .Product
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
-            .Include(x => x.UnitMeasure)
             .Include(x => x.ProductGroup)
             .Include(x => x.DefaultWarehouse)
             .AsQueryable();

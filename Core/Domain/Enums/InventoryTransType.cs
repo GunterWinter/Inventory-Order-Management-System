@@ -1,11 +1,11 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 
 namespace Domain.Enums;
 
 public enum InventoryTransType
 {
-    [Description("In")]
+    [Description("Nhập")]
     In = 1,
-    [Description("Out")]
+    [Description("Xuất")]
     Out = -1,
 }

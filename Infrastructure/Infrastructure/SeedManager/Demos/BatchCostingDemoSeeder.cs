@@ -675,12 +675,6 @@ public class BatchCostingDemoSeeder
             .Select(x => x.Id)
             .FirstAsync();
 
-        var unitMeasureId = await _queryContext
-            .Set<UnitMeasure>()
-            .Where(x => !x.IsDeleted && x.Name == "Cái")
-            .Select(x => x.Id)
-            .FirstAsync();
-
         var defaultWarehouseId = await _queryContext
             .Set<Warehouse>()
             .Where(x => !x.IsDeleted && x.SystemWarehouse == false)
@@ -703,7 +697,7 @@ public class BatchCostingDemoSeeder
         product.InternalSerialFixedCode = "SM";
         product.DefaultWarehouseId = defaultWarehouseId;
         product.DefaultWarrantyMonths = 3;
-        product.UnitMeasureId = unitMeasureId;
+        product.UnitMeasureName = "Cái";
         product.ProductGroupId = productGroupId;
 
         if (isNewProduct)

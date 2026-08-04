@@ -65,7 +65,7 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
             .CashTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.Status == CashTransactionStatus.Confirmed && x.CashAccountId != null)
+            .Where(x => x.CashAccountId != null)
             .GroupBy(x => x.CashAccountId)
             .Select(g => new
             {

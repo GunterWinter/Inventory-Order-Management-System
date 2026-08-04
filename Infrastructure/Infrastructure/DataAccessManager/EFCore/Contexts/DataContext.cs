@@ -30,7 +30,7 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<Warehouse> Warehouse { get; set; }
     public DbSet<Customer> Customer { get; set; }
     public DbSet<Vendor> Vendor { get; set; }
-    public DbSet<UnitMeasure> UnitMeasure { get; set; }
+
     public DbSet<ProductGroup> ProductGroup { get; set; }
     public DbSet<Product> Product { get; set; }
     public DbSet<ProductSerial> ProductSerial { get; set; }
@@ -81,7 +81,7 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new WarehouseConfiguration());
         modelBuilder.ApplyConfiguration(new CustomerConfiguration());
         modelBuilder.ApplyConfiguration(new VendorConfiguration());
-        modelBuilder.ApplyConfiguration(new UnitMeasureConfiguration());
+
         modelBuilder.ApplyConfiguration(new ProductGroupConfiguration());
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
         modelBuilder.ApplyConfiguration(new ProductSerialConfiguration());

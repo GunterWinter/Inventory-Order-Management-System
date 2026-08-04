@@ -361,6 +361,15 @@ const App = {
                 } finally {
                     state.isSubmitting = false;
                 }
+            },
+            quickAddCustomer: async function () {
+                await QuickAddHelper.complexQuickAddCustomer({
+                    dropdownObj: customerListLookup.obj,
+                    refreshLookup: methods.populateCustomerListLookupData,
+                    state: state,
+                    stateKey: 'customerId',
+                    lookupKey: 'customerListLookupData'
+                });
             }
         };
 

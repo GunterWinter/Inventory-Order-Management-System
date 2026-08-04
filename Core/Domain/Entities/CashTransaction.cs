@@ -10,6 +10,7 @@ public class CashTransaction : BaseEntity
     public CashTransactionType? TransactionType { get; set; }
     public CashTransactionStatus? Status { get; set; }
     public double? Amount { get; set; }
+    public double? PaidAmount { get; set; }
     public string? Description { get; set; }
     public string? CashAccountId { get; set; }
     public CashAccount? CashAccount { get; set; }

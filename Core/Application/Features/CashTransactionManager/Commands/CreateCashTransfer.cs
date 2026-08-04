@@ -90,8 +90,9 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
             Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
             TransactionDate = request.TransferDate,
             TransactionType = CashTransactionType.Credit,
-            Status = CashTransactionStatus.Confirmed,
+            Status = CashTransactionStatus.Paid,
             Amount = request.Amount,
+            PaidAmount = request.Amount,
             Description = description,
             CashAccountId = request.FromCashAccountId,
             CashCategoryId = request.CashCategoryId,
@@ -106,8 +107,9 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
             Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
             TransactionDate = request.TransferDate,
             TransactionType = CashTransactionType.Debit,
-            Status = CashTransactionStatus.Confirmed,
+            Status = CashTransactionStatus.Paid,
             Amount = request.Amount,
+            PaidAmount = request.Amount,
             Description = description,
             CashAccountId = request.ToCashAccountId,
             CashCategoryId = request.CashCategoryId,
@@ -138,7 +140,7 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
         var balances = await _queryContext
             .CashTransaction
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId && x.Status == CashTransactionStatus.Confirmed)
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
             .GroupBy(x => 1)
             .Select(g => new
             {

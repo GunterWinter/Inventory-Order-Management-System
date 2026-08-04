@@ -81,8 +81,8 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="Customer">Customer</label>
-                                                <div id="CustomerDropDown" ref="customerRef"></div>
+                                                <label for="Partner">Partner</label>
+                                                <div id="PartnerDropDown" ref="partnerRef"></div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="Amount">Amount</label>
@@ -92,9 +92,17 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="Status">Status</label>
-                                                <div id="StatusDropDown" ref="statusRef"></div>
-                                                <label class="text-danger">{{ state.errors.status }}</label>
+                                                <label for="PaidAmount">Số tiền thanh toán</label>
+                                                <input ref="paidAmountRef" v-model="state.paidAmount">
+                                                <label class="text-danger">{{ state.errors.paidAmount }}</label>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label>Trạng thái</label>
+                                                <div class="form-control-plaintext">
+                                                    <span v-if="state.paidAmount >= state.amount && state.amount > 0" class="badge bg-success">Đã thanh toán</span>
+                                                    <span v-else-if="state.paidAmount > 0" class="badge bg-warning text-dark">Còn nợ</span>
+                                                    <span v-else class="badge bg-secondary">Chưa thanh toán</span>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="row mb-2">
@@ -110,16 +118,16 @@
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button"
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button v-if="!state.viewMode" type="button"
                             id="MainSaveButton"
                             class="btn"
                             v-bind:class="state.deleteMode ? 'btn-danger' : 'btn-primary'"
                             v-on:click="handler.handleSubmit"
                             v-bind:disabled="state.isSubmitting">
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Delete' : 'Save' }}</span>
-                        <span v-else>{{ state.deleteMode ? 'Deleting...' : 'Saving...' }}</span>
+                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Xóa' : 'Lưu' }}</span>
+                        <span v-else>{{ state.deleteMode ? 'Đang xóa...' : 'Đang lưu...' }}</span>
                     </button>
                 </div>
             </div>
