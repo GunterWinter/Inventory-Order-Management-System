@@ -915,8 +915,8 @@ const App = {
                     state.salesOrderStatusListLookupData,
                     newVal
                 );
-            
-            
+
+
             }
         );
 
@@ -2132,7 +2132,7 @@ const App = {
             },
             refresh: () => {
                 const allowEdit = !state.isViewMode;
-                secondaryGrid.obj.setProperties({ 
+                secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
@@ -2183,8 +2183,8 @@ const App = {
                 title: `Thanh toán ${orderNumber}`,
                 html: `
                     <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán (Amount)</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán (Paid amount)</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     ${descHtml}
                     ${statusHtml}
                 `,

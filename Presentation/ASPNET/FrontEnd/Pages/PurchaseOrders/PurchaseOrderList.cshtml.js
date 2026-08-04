@@ -568,13 +568,13 @@ const App = {
                         Swal.fire({ icon: 'warning', title: 'Số lượng không hợp lệ', text: 'Số lượng phân bổ không được âm.' });
                         return;
                     }
-                    
+
                     if (!byPoItem[row.poItemId]) {
                         const poItem = state.secondaryData.find(x => x.id === row.poItemId);
-                        byPoItem[row.poItemId] = { 
-                            total: 0, 
-                            maxQty: poItem ? poItem.quantity : 0, 
-                            name: '' 
+                        byPoItem[row.poItemId] = {
+                            total: 0,
+                            maxQty: poItem ? poItem.quantity : 0,
+                            name: ''
                         };
                     }
                     byPoItem[row.poItemId].total += (row.allocateQuantity || 0);
@@ -662,7 +662,7 @@ const App = {
                     const response = await services.getCostAllocationsByPurchaseOrderId(state.id);
                     const allAllocations = response?.data?.content?.data || [];
                     const customerAllocations = allAllocations.filter(x => x.customerId !== null);
-                    
+
                     const prefillCashAccountId = response?.data?.content?.cashAccountId || null;
                     const prefillCashCategoryId = response?.data?.content?.cashCategoryId || null;
 
@@ -684,7 +684,7 @@ const App = {
                                 productId: poItem ? poItem.productId : '',
                                 warehouseId: poItem ? poItem.warehouseId : '',
                                 batchNumber: poItem ? poItem.batchNumber : '',
-                                remainingQuantity: 0, 
+                                remainingQuantity: 0,
                                 customerId: alloc.customerId,
                                 allocateQuantity: alloc.quantity,
                                 allocateUnitPrice: calcPrice,
@@ -720,7 +720,7 @@ const App = {
                         if (!totalAllocByItem[row.poItemId]) totalAllocByItem[row.poItemId] = 0;
                         totalAllocByItem[row.poItemId] += (row.allocateQuantity || 0);
                     });
-                    
+
                     previewData.forEach(row => {
                         const poItem = state.secondaryData.find(x => x.id === row.poItemId);
                         const baseStock = (poItem?.stockQuantity || 0) + (backendAllocByItem[row.poItemId] || 0);
@@ -895,7 +895,7 @@ const App = {
                                 { field: 'quantity', headerText: 'Số lượng', width: 100, format: 'N0' }
                             ]
                         });
-                        
+
                         let destElement = e.detailElement.querySelector('.allocation-detail-grid');
                         if (destElement) {
                             detailGrid.appendTo(destElement);
@@ -1737,7 +1737,7 @@ const App = {
 
                                     Swal.fire({
                                         icon: 'error',
-                                    title: 'Xóa thất bại',
+                                        title: 'Xóa thất bại',
                                         text: response?.data?.message ?? 'Unable to delete this item.',
                                         confirmButtonText: 'OK'
                                     });
@@ -1764,7 +1764,7 @@ const App = {
             },
             refresh: () => {
                 const allowEdit = !state.isViewMode;
-                secondaryGrid.obj.setProperties({ 
+                secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
@@ -2024,11 +2024,11 @@ const App = {
                                                 const oldQty = args.rowData.allocateQuantity || 0;
                                                 const newQty = e.value || 0;
                                                 const diff = newQty - oldQty;
-                                                
+
                                                 args.rowData.allocateQuantity = newQty;
                                                 const newTotal = newQty * (args.rowData.allocateUnitPrice || 0);
                                                 args.rowData.allocateTotal = newTotal;
-                                                
+
                                                 if (costAllocationPreviewGrid.obj) {
                                                     const rows = costAllocationPreviewGrid.obj.dataSource.filter(x => x.poItemId === args.rowData.poItemId);
                                                     rows.forEach(r => {
@@ -2038,12 +2038,12 @@ const App = {
                                                             r.allocateTotal = newTotal;
                                                         }
                                                     });
-                                                    
+
                                                     // Update UI for remainingQuantity and allocateTotal cells
                                                     const allTrs = costAllocationPreviewGrid.obj.getContentTable().querySelectorAll('.e-row');
                                                     const remainingCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('remainingQuantity');
                                                     const totalCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
-                                                    
+
                                                     allTrs.forEach(tr => {
                                                         const rowData = costAllocationPreviewGrid.obj.getRowInfo(tr).rowData;
                                                         if (rowData && rowData.poItemId === args.rowData.poItemId) {
@@ -2053,7 +2053,7 @@ const App = {
                                                         }
                                                     });
                                                 }
-                                                
+
                                                 const tr = args.element.closest('tr');
                                                 if (tr && costAllocationPreviewGrid.obj) {
                                                     const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
@@ -2096,7 +2096,7 @@ const App = {
                                                 args.rowData.allocateUnitPrice = e.value;
                                                 const newTotal = (args.rowData.allocateQuantity || 0) * (e.value || 0);
                                                 args.rowData.allocateTotal = newTotal;
-                                                
+
                                                 if (costAllocationPreviewGrid.obj) {
                                                     const actualRow = costAllocationPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
                                                     if (actualRow) {
@@ -2104,7 +2104,7 @@ const App = {
                                                         actualRow.allocateTotal = newTotal;
                                                     }
                                                 }
-                                                
+
                                                 const tr = args.element.closest('tr');
                                                 if (tr && costAllocationPreviewGrid.obj) {
                                                     const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
@@ -2173,8 +2173,8 @@ const App = {
                 title: `Thanh toán ${orderNumber}`,
                 html: `
                     <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán (Amount)</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán (Paid amount)</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     ${descHtml}
                 `,
                 showCancelButton: true,
@@ -2209,7 +2209,7 @@ const App = {
                         description: result.value.description,
                         updatedById: StorageManager.getUserId()
                     };
-                    
+
                     await services.payPurchaseOrder(payload);
 
                     await methods.populateMainData();
