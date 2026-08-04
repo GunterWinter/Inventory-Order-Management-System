@@ -424,6 +424,16 @@ const App = {
 
 
 
+                    let customerId = null;
+                    let vendorId = null;
+                    if (state.partnerId) {
+                        const partner = state.partnerList.find(p => p.id === state.partnerId);
+                        if (partner) {
+                            customerId = partner.customerId || null;
+                            vendorId = partner.vendorId || null;
+                        }
+                    }
+
                     const payload = {
                         id: state.id || undefined,
                         transactionDate: DateFormatManager.formatForApiDate(state.transactionDate),
@@ -433,6 +443,8 @@ const App = {
                         description: state.description,
                         cashAccountId: state.cashAccountId,
                         cashCategoryId: state.cashCategoryId,
+                        customerId: customerId,
+                        vendorId: vendorId,
                         sourceModule: state.sourceModule,
                         sourceModuleId: state.sourceModuleId,
                         sourceModuleNumber: state.sourceModuleNumber,

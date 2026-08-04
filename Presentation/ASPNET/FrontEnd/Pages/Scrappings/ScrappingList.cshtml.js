@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -558,13 +558,14 @@
                                 state.showComplexDiv = true;
                                 mainModal.obj.show();
                             }
+                        }
 
                         if (args.item.id === 'ViewCustom') {
                             state.deleteMode = false;
                                 state.isViewMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Edit Scrapping';
+                                state.mainTitle = 'Xem phiếu Scrapping';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.scrappingDate = selectedRecord.scrappingDate ? DateFormatManager.parseBusinessDate(selectedRecord.scrappingDate) : null;

@@ -499,7 +499,8 @@ const App = {
                         cashTransactionCashCategoryId: payment?.cashCategoryId ?? null,
                         cashTransactionAmount: payment?.amount ?? null,
                         cashTransactionPaidAmount: payment?.paidAmount ?? null,
-                        cashTransactionDescription: payment?.description ?? null
+                        cashTransactionDescription: payment?.description ?? null,
+                        cashTransactionIsSplit: payment?.isSplit ?? false
                     };
                 });
             },
@@ -1001,7 +1002,8 @@ const App = {
                                     rowData.cashTransactionAmount,
                                     rowData.cashTransactionDescription,
                                     rowData.cashTransactionCashCategoryId,
-                                    rowData.cashTransactionDate
+                                    rowData.cashTransactionDate,
+                                    rowData.cashTransactionIsSplit
                                 );
                             });
                         });
@@ -2162,7 +2164,8 @@ const App = {
             existingAmount = null,
             existingDescription = null,
             existingCashCategoryId = null,
-            existingTransactionDate = null) => {
+            existingTransactionDate = null,
+            isSplit = false) => {
             const totalAmountValue = typeof totalAmount === 'number' ? totalAmount : (NumberFormatManager.parseLocaleNumber(totalAmount) ?? 0);
             const displayAmount = existingAmount !== null && existingAmount !== undefined
                 ? NumberFormatManager.formatToLocale(existingAmount)
@@ -2173,12 +2176,16 @@ const App = {
                 .join('');
             const defaultCashCategoryId = existingCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
             const statusHtml = `<div class="mb-3"><label class="form-label fw-bold">Trạng thái</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Nháp</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Đã thanh toán</option></select></div>`;
+            const descHtml = isSplit
+                ? `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
+                : `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
             const result = await Swal.fire({
                 title: `Thanh toán ${orderNumber}`,
                 html: `
                     <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Số tiền thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán (Amount)</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán (Paid amount)</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    ${descHtml}
                     ${statusHtml}
                 `,
                 showCancelButton: true,

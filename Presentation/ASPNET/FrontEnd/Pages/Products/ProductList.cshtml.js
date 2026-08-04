@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -694,8 +694,8 @@
                         { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
-                        { field: 'costPrice', headerText: 'GiÃ¡ vá»‘n', width: 160, minWidth: 160, format: 'N0' },
-                        { field: 'unitPrice', headerText: 'GiÃ¡ bÃ¡n', width: 170, minWidth: 170, format: 'N0' },
+                        { field: 'costPrice', headerText: 'Giá vốn', width: 160, minWidth: 160, format: 'N0' },
+                        { field: 'unitPrice', headerText: 'Giá bán', width: 170, minWidth: 170, format: 'N0' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },

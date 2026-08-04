@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -578,13 +578,14 @@
                                 state.showComplexDiv = true;
                                 mainModal.obj.show();
                             }
+                        }
 
                         if (args.item.id === 'ViewCustom') {
                             state.deleteMode = false;
                                 state.isViewMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Edit Purchase Return';
+                                state.mainTitle = 'Xem phiếu Purchase Return';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;

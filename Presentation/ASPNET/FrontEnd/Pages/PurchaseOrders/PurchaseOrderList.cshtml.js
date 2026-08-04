@@ -400,7 +400,8 @@ const App = {
                         cashTransactionCashAccountId: payment?.cashAccountId ?? null,
                         cashTransactionAmount: payment?.amount ?? null,
                         cashTransactionPaidAmount: payment?.paidAmount ?? null,
-                        cashTransactionDescription: payment?.description ?? null
+                        cashTransactionDescription: payment?.description ?? null,
+                        cashTransactionIsSplit: payment?.isSplit ?? false
                     };
                 });
             },
@@ -988,7 +989,8 @@ const App = {
                                     rowData.cashTransactionCashAccountId,
                                     rowData.cashTransactionAmount,
                                     rowData.cashTransactionDescription,
-                                    rowData.cashTransactionDate
+                                    rowData.cashTransactionDate,
+                                    rowData.cashTransactionIsSplit
                                 );
                             });
                         });
@@ -2140,7 +2142,8 @@ const App = {
             existingCashAccountId = null,
             existingAmount = null,
             existingDescription = null,
-            existingTransactionDate = null) => {
+            existingTransactionDate = null,
+            isSplit = false) => {
             const resolveMoneyAmount = (value) => {
                 if (typeof value === 'number' && Number.isFinite(value)) {
                     return value;
@@ -2163,12 +2166,16 @@ const App = {
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
             const statusHtml = ``; // Status is auto-calculated by backend now
+            const descHtml = isSplit
+                ? `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
+                : `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
             const result = await Swal.fire({
                 title: `Thanh toán ${orderNumber}`,
                 html: `
                     <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tổng tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán (Amount)</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán (Paid amount)</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    ${descHtml}
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Lưu',

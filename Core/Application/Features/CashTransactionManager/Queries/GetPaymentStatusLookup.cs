@@ -19,6 +19,7 @@ public record GetPaymentStatusLookupDto
     public double? Amount { get; init; }
     public double? PaidAmount { get; init; }
     public string? Description { get; init; }
+    public bool IsSplit { get; init; }
 }
 
 public class GetPaymentStatusLookupResult
@@ -84,7 +85,8 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
                 CashCategoryId = g.First().CashCategoryId,
                 Amount = g.Sum(x => x.Amount),
                 PaidAmount = g.Sum(x => x.PaidAmount),
-                Description = g.First().Description
+                Description = g.First().Description,
+                IsSplit = g.Count() > 1
             })
             .ToList();
 
