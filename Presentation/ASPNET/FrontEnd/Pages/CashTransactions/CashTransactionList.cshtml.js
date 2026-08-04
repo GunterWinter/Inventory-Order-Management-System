@@ -626,12 +626,14 @@ const App = {
                                     type: 'Sum',
                                     field: 'amount',
                                     format: 'N0',
+                                    footerTemplate: 'Tổng: ${Sum}',
                                     groupFooterTemplate: 'Tổng: ${Sum}'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'paidAmount',
                                     format: 'N0',
+                                    footerTemplate: 'Tổng: ${Sum}',
                                     groupFooterTemplate: 'Tổng: ${Sum}'
                                 }
                             ]

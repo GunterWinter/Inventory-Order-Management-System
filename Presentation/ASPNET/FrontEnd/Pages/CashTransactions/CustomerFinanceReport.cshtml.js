@@ -112,7 +112,7 @@ const App = {
                 state.summary.profitText = NumberFormatManager.formatToLocale(state.summary.profit);
 
                 if (mainGrid.obj) {
-                    mainGrid.obj.setProperties({ dataSource: state.mainData });
+                    mainGrid.refresh();
                 }
             }
         };

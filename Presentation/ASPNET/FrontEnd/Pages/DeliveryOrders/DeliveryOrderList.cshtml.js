@@ -3,6 +3,7 @@ const App = {
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
+            isViewMode: false,
             salesOrderListLookupData: [],
             statusListLookupData: [],
             secondaryData: [],
@@ -357,6 +358,7 @@ const App = {
                 state.errors.deliveryDate = '';
                 state.errors.salesOrderId = '';
                 state.errors.status = '';
+                state.isViewMode = false;
             }
         };
 
@@ -505,28 +507,29 @@ const App = {
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
+                        { text: 'View', tooltipText: 'View', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'deliveryDate', 'salesOrderNumber', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowSelecting: () => {
@@ -552,6 +555,25 @@ const App = {
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Edit Delivery Order';
+                                state.id = selectedRecord.id ?? '';
+                                state.number = selectedRecord.number ?? '';
+                                state.deliveryDate = selectedRecord.deliveryDate ? DateFormatManager.parseBusinessDate(selectedRecord.deliveryDate) : null;
+                                state.description = selectedRecord.description ?? '';
+                                state.salesOrderId = selectedRecord.salesOrderId ?? '';
+                                state.status = String(selectedRecord.status ?? '');
+                                await methods.populateSecondaryData(selectedRecord.id);
+                                secondaryGrid.refresh();
+                                state.showComplexDiv = true;
+                                mainModal.obj.show();
+                            }
+                        }
+
+                        if (args.item.id === 'ViewCustom') {
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                state.isViewMode = true;
+                                state.deleteMode = false;
+                                state.mainTitle = 'View Delivery Order';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.deliveryDate = selectedRecord.deliveryDate ? DateFormatManager.parseBusinessDate(selectedRecord.deliveryDate) : null;
@@ -697,7 +719,16 @@ const App = {
 
             },
             refresh: () => {
-                secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
+                const allowEdit = !state.isViewMode;
+                secondaryGrid.obj.setProperties({ 
+                    dataSource: state.secondaryData,
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                        'ExcelExport',
+                        { type: 'Separator' },
+                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                    ]
+                });
             }
         };
 

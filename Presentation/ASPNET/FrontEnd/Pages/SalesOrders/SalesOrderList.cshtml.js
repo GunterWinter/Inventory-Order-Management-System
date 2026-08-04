@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -2129,7 +2129,16 @@
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
             },
             refresh: () => {
-                secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
+                const allowEdit = !state.isViewMode;
+                secondaryGrid.obj.setProperties({ 
+                    dataSource: state.secondaryData,
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                        'ExcelExport',
+                        { type: 'Separator' },
+                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                    ]
+                });
             }
         };
 

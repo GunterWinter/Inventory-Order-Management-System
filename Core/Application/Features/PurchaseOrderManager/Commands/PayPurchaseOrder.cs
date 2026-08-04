@@ -35,15 +35,18 @@ public class PayPurchaseOrderValidator : AbstractValidator<PayPurchaseOrderReque
 public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, PayPurchaseOrderResult>
 {
     private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
+    private readonly ICommandRepository<CashAccount> _cashAccountRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public PayPurchaseOrderHandler(
         ICommandRepository<CashTransaction> cashTransactionRepository,
+        ICommandRepository<CashAccount> cashAccountRepository,
         IQueryContext queryContext,
         IUnitOfWork unitOfWork)
     {
         _cashTransactionRepository = cashTransactionRepository;
+        _cashAccountRepository = cashAccountRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
     }
@@ -66,15 +69,25 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
             .ToList();
 
         double remainingPayment = request.PaymentAmount ?? 0;
+        var previousAccountIds = new HashSet<string>();
 
         foreach (var tx in sortedTransactions)
         {
+            if (tx.CashAccountId != null && tx.CashAccountId != request.CashAccountId)
+            {
+                previousAccountIds.Add(tx.CashAccountId);
+            }
+
             double txAmount = tx.Amount ?? 0;
             double payForTx = Math.Min(remainingPayment, txAmount);
 
             tx.PaidAmount = payForTx;
             tx.Status = (payForTx == txAmount && txAmount > 0) ? CashTransactionStatus.Paid : (payForTx > 0 ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid);
-            tx.CashAccountId = request.CashAccountId;
+            
+            if (payForTx > 0 && !string.IsNullOrWhiteSpace(request.CashAccountId))
+            {
+                tx.CashAccountId = request.CashAccountId;
+            }
             
             if (!string.IsNullOrWhiteSpace(request.Description))
             {
@@ -89,6 +102,44 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
 
         await _unitOfWork.SaveAsync(cancellationToken);
 
+        var accountsToRecalculate = previousAccountIds.ToList();
+        if (!string.IsNullOrWhiteSpace(request.CashAccountId) && !accountsToRecalculate.Contains(request.CashAccountId))
+        {
+            accountsToRecalculate.Add(request.CashAccountId);
+        }
+
+        foreach (var accId in accountsToRecalculate)
+        {
+            await RecalculateAccountBalance(accId, cancellationToken);
+        }
+
         return new PayPurchaseOrderResult { Success = true };
+    }
+
+    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
+    {
+        var account = await _queryContext.Set<CashAccount>().FirstOrDefaultAsync(x => x.Id == cashAccountId, cancellationToken);
+        if (account == null) return;
+
+        var balances = await _queryContext
+            .Set<CashTransaction>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var initialBalance = account.InitialBalance ?? 0d;
+        var totalDebit = balances?.TotalDebit ?? 0d;
+        var totalCredit = balances?.TotalCredit ?? 0d;
+
+        account.CurrentBalance = initialBalance + totalCredit - totalDebit;
+        
+        _cashAccountRepository.Update(account);
+        await _unitOfWork.SaveAsync(cancellationToken);
     }
 }

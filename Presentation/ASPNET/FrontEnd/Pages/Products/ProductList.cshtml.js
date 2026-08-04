@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -18,7 +18,6 @@ const App = {
             defaultWarrantyMonths: '',
             description: '',
             productGroupId: null,
-            unitMeasureId: null,
             physical: true,
             serialTrackingMode: 1,
             internalSerialFixedCode: 'CAM',
@@ -30,7 +29,7 @@ const App = {
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
                 productGroupId: '',
-                unitMeasureId: ''
+                unitMeasureName: ''
             },
             isSubmitting: false
         });
@@ -38,7 +37,6 @@ const App = {
         const mainGridRef = Vue.ref(null);
         const mainModalRef = Vue.ref(null);
         const productGroupIdRef = Vue.ref(null);
-        const unitMeasureIdRef = Vue.ref(null);
         const defaultWarehouseIdRef = Vue.ref(null);
         const nameRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
@@ -93,7 +91,6 @@ const App = {
             state.errors.defaultWarrantyMonths = '';
             state.errors.internalSerialFixedCode = '';
             state.errors.productGroupId = '';
-            state.errors.unitMeasureId = '';
 
             let isValid = true;
 
@@ -127,8 +124,8 @@ const App = {
                 state.errors.productGroupId = 'ProductGroup is required.';
                 isValid = false;
             }
-            if (!state.unitMeasureId) {
-                state.errors.unitMeasureId = 'UnitMeasure is required.';
+            if (!state.unitMeasureName) {
+                state.errors.unitMeasureName = 'UnitMeasure is required.';
                 isValid = false;
             }
 
@@ -147,7 +144,7 @@ const App = {
             state.defaultWarrantyMonths = '';
             state.description = '';
             state.productGroupId = null;
-            state.unitMeasureId = null;
+            state.unitMeasureName = '';
             state.physical = true;
             state.serialTrackingMode = 1;
             state.internalSerialFixedCode = 'CAM';
@@ -159,7 +156,7 @@ const App = {
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
                 productGroupId: '',
-                unitMeasureId: ''
+                unitMeasureName: ''
             };
             if (imageFileRef.value) {
                 imageFileRef.value.value = '';
@@ -175,20 +172,20 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById) => {
+            createMainData: async (name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, createdById) => {
                 try {
                     const response = await AxiosManager.post('/Product/CreateProduct', {
-                        name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, createdById
+                        name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById) => {
+            updateMainData: async (id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/Product/UpdateProduct', {
-                        id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureId, updatedById
+                        id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -227,14 +224,6 @@ const App = {
                     throw error;
                 }
             },
-            getUnitMeasureListLookupData: async () => {
-                try {
-                    const response = await AxiosManager.get('/UnitMeasure/GetUnitMeasureList', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
             getWarehouseListLookupData: async () => {
                 try {
                     const response = await AxiosManager.get('/Warehouse/GetWarehouseList', {});
@@ -249,10 +238,6 @@ const App = {
             populateProductGroupListLookupData: async () => {
                 const response = await services.getProductGroupListLookupData();
                 state.productGroupListLookupData = response?.data?.content?.data;
-            },
-            populateUnitMeasureListLookupData: async () => {
-                const response = await services.getUnitMeasureListLookupData();
-                state.unitMeasureListLookupData = response?.data?.content?.data;
             },
             populateWarehouseListLookupData: async () => {
                 const response = await services.getWarehouseListLookupData();
@@ -288,31 +273,6 @@ const App = {
             refresh: () => {
                 if (productGroupListLookup.obj) {
                     productGroupListLookup.obj.value = state.productGroupId;
-                }
-            },
-        };
-
-        const unitMeasureListLookup = {
-            obj: null,
-            create: () => {
-                if (state.unitMeasureListLookupData && Array.isArray(state.unitMeasureListLookupData)) {
-                    unitMeasureListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.unitMeasureListLookupData,
-                        fields: { value: 'id', text: 'name' },
-                        placeholder: 'Select a Unit Measure',
-                        popupHeight: '200px',
-                        change: (e) => {
-                            state.unitMeasureId = e.value;
-                        }
-                    });
-                    unitMeasureListLookup.obj.appendTo(unitMeasureIdRef.value);
-                } else {
-                    console.error('UnitMeasure list lookup data is not available or invalid.');
-                }
-            },
-            refresh: () => {
-                if (unitMeasureListLookup.obj) {
-                    unitMeasureListLookup.obj.value = state.unitMeasureId;
                 }
             },
         };
@@ -539,10 +499,9 @@ const App = {
         );
 
         Vue.watch(
-            () => state.unitMeasureId,
+            () => state.unitMeasureName,
             (newVal, oldVal) => {
-                state.errors.unitMeasureId = '';
-                unitMeasureListLookup.refresh();
+                state.errors.unitMeasureName = '';
             }
         );
 
@@ -579,10 +538,10 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -601,7 +560,7 @@ const App = {
                             state.defaultWarrantyMonths = response?.data?.content?.data.defaultWarrantyMonths ?? '';
                             state.description = response?.data?.content?.data.description ?? '';
                             state.productGroupId = response?.data?.content?.data.productGroupId ?? '';
-                            state.unitMeasureId = response?.data?.content?.data.unitMeasureId ?? '';
+                            state.unitMeasureName = response?.data?.content?.data.unitMeasureName ?? '';
                             state.physical = response?.data?.content?.data.physical ?? true;
                             state.serialTrackingMode = response?.data?.content?.data.serialTrackingMode ?? (state.physical ? 1 : 0);
                             state.internalSerialFixedCode = response?.data?.content?.data.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
@@ -662,8 +621,6 @@ const App = {
                 await mainGrid.create(state.mainData);
                 await methods.populateProductGroupListLookupData();
                 productGroupListLookup.create();
-                await methods.populateUnitMeasureListLookupData();
-                unitMeasureListLookup.create();
                 await methods.populateWarehouseListLookupData();
                 defaultWarehouseListLookup.create();
 
@@ -737,8 +694,8 @@ const App = {
                         { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
-                        { field: 'costPrice', headerText: 'Giá vốn', width: 160, minWidth: 160, format: 'N0' },
-                        { field: 'unitPrice', headerText: 'Giá bán', width: 170, minWidth: 170, format: 'N0' },
+                        { field: 'costPrice', headerText: 'GiÃ¡ vá»‘n', width: 160, minWidth: 160, format: 'N0' },
+                        { field: 'unitPrice', headerText: 'GiÃ¡ bÃ¡n', width: 170, minWidth: 170, format: 'N0' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
@@ -807,7 +764,7 @@ const App = {
                                 state.defaultWarrantyMonths = selectedRecord.defaultWarrantyMonths ?? '';
                                 state.description = selectedRecord.description ?? '';
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
-                                state.unitMeasureId = selectedRecord.unitMeasureId ?? '';
+                                state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
                                 state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
@@ -831,7 +788,7 @@ const App = {
                                 state.defaultWarrantyMonths = selectedRecord.defaultWarrantyMonths ?? '';
                                 state.description = selectedRecord.description ?? '';
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
-                                state.unitMeasureId = selectedRecord.unitMeasureId ?? '';
+                                state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
                                 state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
@@ -861,7 +818,6 @@ const App = {
             mainGridRef,
             mainModalRef,
             productGroupIdRef,
-            unitMeasureIdRef,
             defaultWarehouseIdRef,
             nameRef,
             numberRef,
@@ -879,4 +835,5 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
 

@@ -577,28 +577,29 @@ const App = {
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
+                        { text: 'View', tooltipText: 'View', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'MaterialExportDate', 'purchaseOrderName', 'customerName', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowSelecting: () => {
@@ -625,6 +626,27 @@ const App = {
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Sửa phiếu Xuất vật tư';
+                                state.id = selectedRecord.id ?? '';
+                                state.number = selectedRecord.number ?? '';
+                                state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
+                                state.description = selectedRecord.description ?? '';
+                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
+                                state.customerId = selectedRecord.customerId ?? '';
+                                state.status = String(selectedRecord.status ?? '');
+                                await methods.populateProductListLookupData();
+                                await methods.populateSecondaryData(selectedRecord.id);
+                                secondaryGrid.refresh();
+                                state.showComplexDiv = true;
+                                mainModal.obj.show();
+                            }
+                        }
+
+                        if (args.item.id === 'ViewCustom') {
+                            state.deleteMode = false;
+                            state.isViewMode = true;
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                state.mainTitle = 'Xem phiếu Xuất vật tư';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;

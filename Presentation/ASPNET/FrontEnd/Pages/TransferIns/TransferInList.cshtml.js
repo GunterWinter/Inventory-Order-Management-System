@@ -1,8 +1,9 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
+            isViewMode: false,
             transferOutListLookupData: [],
             transferInStatusListLookupData: [],
             secondaryData: [],
@@ -394,7 +395,8 @@ const App = {
                             setTimeout(() => {
                                 mainModal.obj.hide();
                                 resetFormState();
-                            }, 2000);
+                                state.isViewMode = false;
+            }, 2000);
                         }
 
                     } else {
@@ -482,33 +484,34 @@ const App = {
                         { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
-                    toolbar: [
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
+                        { text: 'Xem', tooltipText: 'Xem chi tiết', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'transferReceiveDate', 'transferOutNumber', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowSelecting: () => {
@@ -531,6 +534,24 @@ const App = {
 
                         if (args.item.id === 'EditCustom') {
                             state.deleteMode = false;
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                state.mainTitle = 'Edit Transfer In';
+                                state.id = selectedRecord.id ?? '';
+                                state.number = selectedRecord.number ?? '';
+                                state.transferReceiveDate = selectedRecord.transferReceiveDate ? DateFormatManager.parseBusinessDate(selectedRecord.transferReceiveDate) : null;
+                                state.description = selectedRecord.description ?? '';
+                                state.transferOutId = selectedRecord.transferOutId ?? '';
+                                state.status = String(selectedRecord.status ?? '');
+                                await methods.populateSecondaryData(selectedRecord.id);
+                                secondaryGrid.refresh();
+                                state.showComplexDiv = true;
+                                mainModal.obj.show();
+                            }
+
+                        if (args.item.id === 'ViewCustom') {
+                            state.deleteMode = false;
+                                state.isViewMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Edit Transfer In';
@@ -592,7 +613,7 @@ const App = {
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: true },
+                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: !state.isViewMode },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -715,7 +736,7 @@ const App = {
                             }
                         },
                     ],
-                    toolbar: [
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
@@ -849,7 +870,16 @@ const App = {
 
             },
             refresh: () => {
-                secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
+                const allowEdit = !state.isViewMode;
+                secondaryGrid.obj.setProperties({ 
+                    dataSource: state.secondaryData,
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                        'ExcelExport',
+                        { type: 'Separator' },
+                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                    ]
+                });
             }
         };
 
@@ -878,6 +908,7 @@ const App = {
 };
 
 Vue.createApp(App).mount('#app');
+
 
 
 

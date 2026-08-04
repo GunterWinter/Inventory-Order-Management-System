@@ -66,7 +66,7 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
             .Select(g => new
             {
                 VendorId = g.Key,
-                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
+                TotalPaid = g.Sum(x => (x.PaidAmount != null && x.PaidAmount > 0) ? x.PaidAmount.Value : (x.Amount ?? 0d))
             })
             .ToListAsync(cancellationToken);
 
@@ -90,7 +90,7 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
             .Select(g => new
             {
                 VendorId = g.Key,
-                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
+                TotalPaid = g.Sum(x => (x.PaidAmount != null && x.PaidAmount > 0) ? x.PaidAmount.Value : (x.Amount ?? 0d))
             })
             .ToListAsync(cancellationToken);
 

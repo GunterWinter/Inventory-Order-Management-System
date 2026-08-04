@@ -336,6 +336,14 @@ const App = {
                 } catch (error) {
                     throw error;
                 }
+            },
+            payPurchaseOrder: async (data) => {
+                try {
+                    const response = await AxiosManager.post('/PurchaseOrder/PayPurchaseOrder', data);
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
             }
         };
 
@@ -786,7 +794,7 @@ const App = {
                             state.orderStatus = e.value;
                         }
                     });
-                    purchaseOrderStatusListLookup.obj.appendTo(orderStatusRef.value);
+                    // purchaseOrderStatusListLookup.obj.appendTo(orderStatusRef.value);
                 }
             },
             refresh: () => {
@@ -1247,6 +1255,22 @@ const App = {
                                         allowFiltering: true,
                                         showClearButton: true,
                                         placeholder: 'Chọn kho',
+                                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddWarehouseBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Kho Hàng</button></div>',
+                                        open: (e) => {
+                                            const btn = e.popup.element.querySelector('#quickAddWarehouseBtn');
+                                            if (btn) {
+                                                btn.onclick = async () => {
+                                                    warehouseObj.hidePopup();
+                                                    await QuickAddHelper.complexQuickAddWarehouse({
+                                                        onSuccess: async (newWarehouse) => {
+                                                            await methods.populateWarehouseListLookupData();
+                                                            warehouseObj.dataSource = state.warehouseListLookupData;
+                                                            warehouseObj.value = newWarehouse.id;
+                                                        }
+                                                    });
+                                                };
+                                            }
+                                        },
                                         change: (e) => {
                                             const selectedWarehouse = state.warehouseListLookupData.find(item => item.id === e.value);
                                             args.rowData.warehouseId = e.value || null;
@@ -1737,7 +1761,18 @@ const App = {
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
             },
             refresh: () => {
-                secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
+                const allowEdit = !state.isViewMode;
+                secondaryGrid.obj.setProperties({ 
+                    dataSource: state.secondaryData,
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                        'ExcelExport',
+                        { type: 'Separator' },
+                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        { type: 'Separator' },
+                        { text: 'Chia đơn', tooltipText: 'Chia chi phí các mặt hàng đã chọn cho khách hàng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                    ]
+                });
             }
         };
 
@@ -1922,6 +1957,22 @@ const App = {
                                                 query = query.where('name', 'contains', e.text, true);
                                             }
                                             e.updateData(state.customerListLookupData, query);
+                                        },
+                                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddCustomerBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Khách Hàng</button></div>',
+                                        open: (e) => {
+                                            const btn = e.popup.element.querySelector('#quickAddCustomerBtn');
+                                            if (btn) {
+                                                btn.onclick = async () => {
+                                                    customerDropObj.hidePopup();
+                                                    await QuickAddHelper.complexQuickAddCustomer({
+                                                        onSuccess: async (newCustomer) => {
+                                                            await methods.populateCustomerListLookupData();
+                                                            customerDropObj.dataSource = state.customerListLookupData;
+                                                            customerDropObj.value = newCustomer.id;
+                                                        }
+                                                    });
+                                                };
+                                            }
                                         },
                                         change: (e) => {
                                             if (args.rowData) {
@@ -2111,14 +2162,13 @@ const App = {
             const accountOptions = state.cashAccountListData
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
-            const statusHtml = `<div class="mb-3"><label class="form-label fw-bold">Trạng thái</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Nháp</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Đã thanh toán</option></select></div>`;
+            const statusHtml = ``; // Status is auto-calculated by backend now
             const result = await Swal.fire({
                 title: `Thanh toán ${orderNumber}`,
                 html: `
                     <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Số tiền thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Tổng tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     <div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>
-                    ${statusHtml}
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Lưu',
@@ -2131,11 +2181,14 @@ const App = {
                         Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
                         return false;
                     }
+                    if (parsedAmount < 0) {
+                        Swal.showValidationMessage('Số tiền thanh toán không được âm.');
+                        return false;
+                    }
                     return {
                         cashAccountId: accountId,
-                        amount: parsedAmount,
-                        description: document.getElementById('swal-desc').value,
-                        status: parseInt(document.getElementById('swal-payment-status').value)
+                        paymentAmount: parsedAmount,
+                        description: document.getElementById('swal-desc').value
                     };
                 }
             });
@@ -2143,26 +2196,15 @@ const App = {
             if (result.isConfirmed && result.value) {
                 try {
                     const payload = {
-                        transactionDate: existingTransactionDate ?? new Date().toISOString(),
-                        transactionType: 1,
-                        status: result.value.status,
-                        amount: result.value.amount,
-                        description: result.value.description,
+                        purchaseOrderId: orderId,
+                        paymentAmount: result.value.paymentAmount,
                         cashAccountId: result.value.cashAccountId,
-                        cashCategoryId: methods.resolveCashCategoryId('Mua hàng') ?? null,
-                        sourceModule: 'PurchaseOrder',
-                        sourceModuleId: orderId,
-                        sourceModuleNumber: orderNumber,
-                        createdById: StorageManager.getUserId()
+                        description: result.value.description,
+                        updatedById: StorageManager.getUserId()
                     };
-                    if (existingTransactionId) {
-                        payload.id = existingTransactionId;
-                        payload.updatedById = StorageManager.getUserId();
-                        delete payload.createdById;
-                        await services.updateCashTransaction(payload);
-                    } else {
-                        await services.createCashTransaction(payload);
-                    }
+                    
+                    await services.payPurchaseOrder(payload);
+
                     await methods.populateMainData();
                     mainGrid.refresh();
                     Swal.fire({ icon: 'success', title: 'Thanh toán thành công', timer: 1000, showConfirmButton: false });
