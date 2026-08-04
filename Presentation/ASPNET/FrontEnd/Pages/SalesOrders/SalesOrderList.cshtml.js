@@ -251,7 +251,7 @@ const App = {
             state.description = '';
             state.customerId = null;
             state.salesType = 1;
-            state.orderStatus = null;
+            state.orderStatus = '2';
             state.errors = {
                 orderDate: '',
                 customerId: '',
@@ -452,7 +452,8 @@ const App = {
             },
             populateSalesOrderStatusListLookupData: async () => {
                 const response = await services.getSalesOrderStatusListLookupData();
-                state.salesOrderStatusListLookupData = response?.data?.content?.data;
+                const allData = response?.data?.content?.data || [];
+                state.salesOrderStatusListLookupData = allData.filter(x => x.id !== '0');
             },
             populateSalesTypeListLookupData: async () => {
                 const response = await services.getSalesTypeListLookupData();
@@ -1035,6 +1036,7 @@ const App = {
 
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             state.mainTitle = 'Thêm đơn bán hàng';
                             resetFormState();
                             state.secondaryData = [];
@@ -1045,6 +1047,7 @@ const App = {
 
                         if (args.item.id === 'EditCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 await methods.refreshInventoryAvailability();
@@ -2175,7 +2178,6 @@ const App = {
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
             const defaultCashCategoryId = existingCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
-            const statusHtml = `<div class="mb-3"><label class="form-label fw-bold">Trạng thái</label><select id="swal-payment-status" class="form-select"><option value="0" ${existingStatus === 0 ? 'selected' : ''}>Nháp</option><option value="2" ${existingStatus === 2 ? 'selected' : ''}>Đã thanh toán</option></select></div>`;
             const descHtml = isSplit
                 ? `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
                 : `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
@@ -2186,7 +2188,6 @@ const App = {
                     <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
                     <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
                     ${descHtml}
-                    ${statusHtml}
                 `,
                 showCancelButton: true,
                 confirmButtonText: 'Lưu',
@@ -2197,17 +2198,23 @@ const App = {
                     const categoryId = defaultCashCategoryId;
                     const rawAmountValue = document.getElementById('swal-amount').value ?? '0';
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(rawAmountValue) ?? 0;
-                    const status = parseInt(document.getElementById('swal-payment-status').value);
-                    if (status === 2 && !accountId) {
+                    if (!accountId) {
                         Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
+                        return false;
+                    }
+                    if (parsedAmount < 0) {
+                        Swal.showValidationMessage('Số tiền thanh toán không được âm.');
+                        return false;
+                    }
+                    if (parsedAmount > totalAmountValue) {
+                        Swal.showValidationMessage('Số tiền thanh toán không được vượt quá số tiền cần thanh toán.');
                         return false;
                     }
                     return {
                         cashAccountId: accountId || null,
                         cashCategoryId: categoryId || null,
                         amount: parsedAmount,
-                        description: document.getElementById('swal-desc').value,
-                        status
+                        description: document.getElementById('swal-desc').value
                     };
                 }
             });
@@ -2217,7 +2224,6 @@ const App = {
                     const payload = {
                         transactionDate: existingTransactionDate ?? new Date().toISOString(),
                         transactionType: 0,
-                        status: result.value.status,
                         amount: result.value.amount,
                         description: result.value.description,
                         cashAccountId: result.value.cashAccountId,

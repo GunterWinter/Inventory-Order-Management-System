@@ -132,7 +132,7 @@ const App = {
             state.orderDate = '';
             state.description = '';
             state.vendorId = null;
-            state.orderStatus = '0';
+            state.orderStatus = '2';
             state.errors = {
                 orderDate: '',
                 vendorId: '',
@@ -358,7 +358,8 @@ const App = {
             },
             populatePurchaseOrderStatusListLookupData: async () => {
                 const response = await services.getPurchaseOrderStatusListLookupData();
-                state.purchaseOrderStatusListLookupData = response?.data?.content?.data;
+                const allData = response?.data?.content?.data || [];
+                state.purchaseOrderStatusListLookupData = allData.filter(x => x.id !== '0');
             },
             populateMainData: async () => {
                 const response = await services.getMainData();
@@ -502,6 +503,7 @@ const App = {
                             state.showComplexDiv = true;
 
                             await methods.refreshPaymentSummary(state.id);
+                            await methods.populateSecondaryData(state.id);
 
                             Swal.fire({ icon: 'success', title: 'Lưu thành công', timer: 1000, showConfirmButton: false });
                         } else {
@@ -1022,6 +1024,7 @@ const App = {
 
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             state.mainTitle = 'Thêm đơn mua hàng';
                             resetFormState();
                             state.secondaryData = [];
@@ -1032,6 +1035,7 @@ const App = {
 
                         if (args.item.id === 'EditCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Sửa đơn mua hàng';
@@ -1263,12 +1267,14 @@ const App = {
                                             if (btn) {
                                                 btn.onclick = async () => {
                                                     warehouseObj.hidePopup();
-                                                    await QuickAddHelper.complexQuickAddWarehouse({
-                                                        onSuccess: async (newWarehouse) => {
-                                                            await methods.populateWarehouseListLookupData();
-                                                            warehouseObj.dataSource = state.warehouseListLookupData;
-                                                            warehouseObj.value = newWarehouse.id;
-                                                        }
+                                                    await QuickAddHelper.simpleQuickAdd({
+                                                        title: 'Thêm nhanh kho hàng',
+                                                        apiUrl: '/Warehouse/CreateWarehouse',
+                                                        dropdownObj: warehouseObj,
+                                                        refreshLookup: methods.populateWarehouseListLookupData,
+                                                        state: state,
+                                                        stateKey: null,
+                                                        lookupKey: 'warehouseListLookupData'
                                                     });
                                                 };
                                             }
@@ -2190,6 +2196,10 @@ const App = {
                     }
                     if (parsedAmount < 0) {
                         Swal.showValidationMessage('Số tiền thanh toán không được âm.');
+                        return false;
+                    }
+                    if (parsedAmount > totalAmountValue) {
+                        Swal.showValidationMessage('Số tiền thanh toán không được vượt quá số tiền cần thanh toán.');
                         return false;
                     }
                     return {

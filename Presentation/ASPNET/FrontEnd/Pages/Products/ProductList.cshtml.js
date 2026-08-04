@@ -288,6 +288,24 @@ const App = {
                         popupHeight: '200px',
                         allowFiltering: true,
                         showClearButton: true,
+                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddWarehouseProductBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Kho Hàng</button></div>',
+                        open: (e) => {
+                            const btn = e.popup.element.querySelector('#quickAddWarehouseProductBtn');
+                            if (btn) {
+                                btn.onclick = async () => {
+                                    defaultWarehouseListLookup.obj.hidePopup();
+                                    await QuickAddHelper.simpleQuickAdd({
+                                        title: 'Thêm nhanh kho hàng',
+                                        apiUrl: '/Warehouse/CreateWarehouse',
+                                        dropdownObj: defaultWarehouseListLookup.obj,
+                                        refreshLookup: methods.populateWarehouseListLookupData,
+                                        state: state,
+                                        stateKey: 'defaultWarehouseId',
+                                        lookupKey: 'warehouseListLookupData'
+                                    });
+                                };
+                            }
+                        },
                         change: (e) => {
                             state.defaultWarehouseId = e.value || null;
                         }
