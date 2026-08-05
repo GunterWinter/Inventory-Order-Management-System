@@ -1,4 +1,4 @@
-const App = {
+﻿const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
@@ -548,6 +548,24 @@ const App = {
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {
                             mainGrid.obj.clearSelection();
+                        }
+                    },
+                                        recordDoubleClick: async (args) => {
+                        if (args.rowData) {
+                            const selectedRecord = args.rowData;
+                            state.isViewMode = true;
+                            state.deleteMode = false;
+                            state.mainTitle = 'Xem tr\u1ea3 h\u00e0ng b\u00e1n';
+                            state.id = selectedRecord.id ?? '';
+                            state.number = selectedRecord.number ?? '';
+                            state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
+                            state.description = selectedRecord.description ?? '';
+                            state.salesOrderId = selectedRecord.salesOrderId ?? '';
+                            state.status = String(selectedRecord.status ?? '');
+                            await methods.populateSecondaryData(selectedRecord.id);
+                            secondaryGrid.refresh();
+                            state.showComplexDiv = true;
+                            mainModal.obj.show();
                         }
                     },
                     toolbarClick: async (args) => {

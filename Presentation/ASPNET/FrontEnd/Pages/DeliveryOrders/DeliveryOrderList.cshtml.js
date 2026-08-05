@@ -537,6 +537,24 @@ const App = {
                             mainGrid.obj.clearSelection();
                         }
                     },
+                    recordDoubleClick: async (args) => {
+                        if (args.rowData) {
+                            const selectedRecord = args.rowData;
+                            state.isViewMode = true;
+                            state.deleteMode = false;
+                            state.mainTitle = 'Xem phi\u1ebfu giao h\u00e0ng';
+                            state.id = selectedRecord.id ?? '';
+                            state.number = selectedRecord.number ?? '';
+                            state.deliveryDate = selectedRecord.deliveryDate ? DateFormatManager.parseBusinessDate(selectedRecord.deliveryDate) : null;
+                            state.description = selectedRecord.description ?? '';
+                            state.salesOrderId = selectedRecord.salesOrderId ?? '';
+                            state.status = String(selectedRecord.status ?? '');
+                            await methods.populateSecondaryData(selectedRecord.id);
+                            secondaryGrid.refresh();
+                            state.showComplexDiv = true;
+                            mainModal.obj.show();
+                        }
+                    },
                     toolbarClick: async (args) => {
                         if (args.item.id === 'MainGrid_excelexport') {
                             mainGrid.obj.excelExport();

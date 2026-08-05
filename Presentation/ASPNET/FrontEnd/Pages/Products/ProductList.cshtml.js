@@ -530,6 +530,28 @@ const App = {
                     state.internalSerialFixedCode = normalized;
                 }
             },
+            quickAddProductGroup: async function () {
+                await QuickAddHelper.simpleQuickAdd({
+                    title: 'Th\u00eam nhanh Nh\u00f3m h\u00e0ng h\u00f3a',
+                    apiUrl: '/ProductGroup/CreateProductGroup',
+                    dropdownObj: productGroupListLookup.obj,
+                    refreshLookup: methods.populateProductGroupListLookupData,
+                    state: state,
+                    stateKey: 'productGroupId',
+                    lookupKey: 'productGroupListLookupData'
+                });
+            },
+            quickAddWarehouse: async function () {
+                await QuickAddHelper.simpleQuickAdd({
+                    title: 'Th\u00eam nhanh Kho h\u00e0ng',
+                    apiUrl: '/Warehouse/CreateWarehouse',
+                    dropdownObj: defaultWarehouseListLookup.obj,
+                    refreshLookup: methods.populateWarehouseListLookupData,
+                    state: state,
+                    stateKey: 'defaultWarehouseId',
+                    lookupKey: 'warehouseListLookupData'
+                });
+            },
             handleImageUpload: async function (e) {
                 const file = e.target.files[0];
                 if (!file) return;

@@ -504,8 +504,9 @@ const App = {
 
                             await methods.refreshPaymentSummary(state.id);
                             await methods.populateSecondaryData(state.id);
+                            secondaryGrid.refresh();
 
-                            Swal.fire({ icon: 'success', title: 'Lưu thành công', timer: 1000, showConfirmButton: false });
+                            Swal.fire({ icon: 'success', title: 'L\u01b0u th\u00e0nh c\u00f4ng', timer: 1000, showConfirmButton: false });
                         } else {
                             Swal.fire({
                                 icon: 'success',
@@ -1015,6 +1016,25 @@ const App = {
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {
                             mainGrid.obj.clearSelection();
+                        }
+                    },
+                    recordDoubleClick: async (args) => {
+                        if (args.rowData) {
+                            const selectedRecord = args.rowData;
+                            state.isViewMode = true;
+                            state.deleteMode = false;
+                            state.mainTitle = 'Xem \u0111\u01a1n mua h\u00e0ng';
+                            state.id = selectedRecord.id ?? '';
+                            state.number = selectedRecord.number ?? '';
+                            state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
+                            state.description = selectedRecord.description ?? '';
+                            state.vendorId = selectedRecord.vendorId ?? '';
+                            state.orderStatus = String(selectedRecord.orderStatus ?? '');
+                            state.showComplexDiv = true;
+
+                            await methods.populateSecondaryData(selectedRecord.id);
+                            secondaryGrid.refresh();
+                            mainModal.obj.show();
                         }
                     },
                     toolbarClick: async (args) => {
@@ -1598,7 +1618,9 @@ const App = {
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
-                        { text: 'Chia đơn', tooltipText: 'Chia chi phí các mặt hàng đã chọn cho khách hàng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                        { text: 'Chia \u0111\u01a1n', tooltipText: 'Chia chi ph\u00ed c\u00e1c m\u1eb7t h\u00e0ng \u0111\u00e3 ch\u1ecdn cho kh\u00e1ch h\u00e0ng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                        { type: 'Separator' },
+                        { text: 'Th\u00eam Kho', tooltipText: 'Th\u00eam nhanh kho h\u00e0ng m\u1edbi', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
@@ -1624,17 +1646,29 @@ const App = {
                             secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
-                    toolbarClick: (args) => {
+                    toolbarClick: async (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
                         }
 
                         if (args.item.id === 'CostAllocateCustom') {
                             if (String(state.orderStatus) !== '2') {
-                                Swal.fire({ icon: 'warning', title: 'Không thể chia đơn', text: 'Chỉ cho phép chia đơn khi đơn hàng đã được xác nhận (Confirmed).' });
+                                Swal.fire({ icon: 'warning', title: 'Kh\u00f4ng th\u1ec3 chia \u0111\u01a1n', text: 'Ch\u1ec9 cho ph\u00e9p chia \u0111\u01a1n khi \u0111\u01a1n h\u00e0ng \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn (Confirmed).' });
                                 return;
                             }
                             methods.openCostAllocationModal();
+                        }
+
+                        if (args.item.id === 'QuickAddWarehouseBtn') {
+                            await QuickAddHelper.simpleQuickAdd({
+                                title: 'Th\u00eam nhanh Kho h\u00e0ng',
+                                apiUrl: '/Warehouse/CreateWarehouse',
+                                dropdownObj: null,
+                                refreshLookup: methods.populateWarehouseListLookupData,
+                                state: state,
+                                stateKey: null,
+                                lookupKey: 'warehouseListLookupData'
+                            });
                         }
                     },
                     actionBegin: (args) => {

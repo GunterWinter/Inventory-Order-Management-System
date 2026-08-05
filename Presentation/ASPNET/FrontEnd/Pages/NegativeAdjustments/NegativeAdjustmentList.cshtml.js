@@ -20,6 +20,7 @@ const App = {
             },
             showComplexDiv: false,
             isSubmitting: false,
+            isViewMode: false,
             totalMovementFormatted: '0'
         });
 
@@ -432,6 +433,7 @@ const App = {
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
+                        { text: 'Xem', tooltipText: 'Xem chi ti\u1ebft', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
@@ -439,27 +441,44 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         mainGrid.obj.autoFitColumns(['number', 'adjustmentDate', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
                         } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
                         }
                     },
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {
                             mainGrid.obj.clearSelection();
+                        }
+                    },
+                    recordDoubleClick: async (args) => {
+                        if (args.rowData) {
+                            const selectedRecord = args.rowData;
+                            state.isViewMode = true;
+                            state.deleteMode = false;
+                            state.mainTitle = 'Xem \u0111i\u1ec1u ch\u1ec9nh gi\u1ea3m';
+                            state.id = selectedRecord.id ?? '';
+                            state.number = selectedRecord.number ?? '';
+                            state.adjustmentDate = selectedRecord.adjustmentDate ? DateFormatManager.parseBusinessDate(selectedRecord.adjustmentDate) : null;
+                            state.description = selectedRecord.description ?? '';
+                            state.status = String(selectedRecord.status ?? '');
+                            await methods.populateSecondaryData(selectedRecord.id);
+                            secondaryGrid.refresh();
+                            state.showComplexDiv = true;
+                            mainModal.obj.show();
                         }
                     },
                     toolbarClick: async (args) => {
@@ -469,6 +488,7 @@ const App = {
 
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             state.mainTitle = 'Add Negative Adjustment';
                             resetFormState();
                             state.showComplexDiv = false;
@@ -477,9 +497,28 @@ const App = {
 
                         if (args.item.id === 'EditCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Edit Negative Adjustment';
+                                state.id = selectedRecord.id ?? '';
+                                state.number = selectedRecord.number ?? '';
+                                state.adjustmentDate = selectedRecord.adjustmentDate ? DateFormatManager.parseBusinessDate(selectedRecord.adjustmentDate) : null;
+                                state.description = selectedRecord.description ?? '';
+                                state.status = String(selectedRecord.status ?? '');
+                                await methods.populateSecondaryData(selectedRecord.id);
+                                secondaryGrid.refresh();
+                                state.showComplexDiv = true;
+                                mainModal.obj.show();
+                            }
+                        }
+
+                        if (args.item.id === 'ViewCustom') {
+                            state.deleteMode = false;
+                            state.isViewMode = true;
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                                state.mainTitle = 'Xem \u0111i\u1ec1u ch\u1ec9nh gi\u1ea3m';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.adjustmentDate = selectedRecord.adjustmentDate ? DateFormatManager.parseBusinessDate(selectedRecord.adjustmentDate) : null;

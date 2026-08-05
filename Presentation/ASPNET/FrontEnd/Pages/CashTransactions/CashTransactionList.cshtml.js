@@ -206,19 +206,9 @@ const App = {
             },
             populatePartnerList: async () => {
                 const [custResp, vendResp] = await Promise.all([services.getCustomerList(), services.getVendorList()]);
-                const customers = (custResp?.data?.content?.data ?? []).map(c => ({ id: c.id, name: c.name, customerId: c.id, vendorId: null }));
-                const vendors = (vendResp?.data?.content?.data ?? []).map(v => ({ id: v.id, name: v.name, customerId: null, vendorId: v.id }));
-                const merged = new Map();
-                customers.forEach(c => merged.set(c.name.toLowerCase(), { ...c }));
-                vendors.forEach(v => {
-                    const key = v.name.toLowerCase();
-                    if (merged.has(key)) {
-                        merged.get(key).vendorId = v.vendorId;
-                    } else {
-                        merged.set(key, { ...v });
-                    }
-                });
-                state.partnerList = Array.from(merged.values());
+                const customers = (custResp?.data?.content?.data ?? []).map(c => ({ id: 'cust_' + c.id, name: '[KH] ' + c.name, customerId: c.id, vendorId: null }));
+                const vendors = (vendResp?.data?.content?.data ?? []).map(v => ({ id: 'vend_' + v.id, name: '[NCC] ' + v.name, customerId: null, vendorId: v.id }));
+                state.partnerList = [...customers, ...vendors];
             },
             refreshSummary: () => {
                 state.summary.totalDebit = state.cashAccountList.reduce((sum, item) => sum + (item.totalDebit ?? 0), 0);
@@ -479,7 +469,7 @@ const App = {
                             state.description = data.description ?? '';
                             state.cashAccountId = data.cashAccountId;
                             state.cashCategoryId = data.cashCategoryId;
-                            state.partnerId = data.customerId || data.vendorId;
+                            state.partnerId = data.customerId ? ('cust_' + data.customerId) : (data.vendorId ? ('vend_' + data.vendorId) : null);
                         }
 
                         Swal.fire({
@@ -638,15 +628,17 @@ const App = {
                                     type: 'Sum',
                                     field: 'amount',
                                     format: 'N0',
-                                    footerTemplate: 'Tổng: ${Sum}',
-                                    groupFooterTemplate: 'Tổng: ${Sum}'
+                                    footerTemplate: 'T\u1ed5ng: ${Sum}',
+                                    groupFooterTemplate: 'T\u1ed5ng: ${Sum}',
+                                    groupCaptionTemplate: 'T\u1ed5ng: ${Sum}'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'paidAmount',
                                     format: 'N0',
-                                    footerTemplate: 'Tổng: ${Sum}',
-                                    groupFooterTemplate: 'Tổng: ${Sum}'
+                                    footerTemplate: 'T\u1ed5ng: ${Sum}',
+                                    groupFooterTemplate: 'T\u1ed5ng: ${Sum}',
+                                    groupCaptionTemplate: '\u0110\u00e3 TT: ${Sum}'
                                 }
                             ]
                         }
@@ -655,20 +647,44 @@ const App = {
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
+                        { text: 'Xem', tooltipText: 'Xem chi ti\u1ebft', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'Transfer', tooltipText: 'Fund Transfer', prefixIcon: 'e-repeat', id: 'TransferCustom' },
                         { type: 'Separator' },
                     ],
-                    dataBound: function () { mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], false); },
+                    dataBound: function () { mainGrid.obj.toolbarModule.enableItems(['ViewCustom', 'EditCustom', 'DeleteCustom'], false); },
                     rowSelected: () => {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], mainGrid.obj.getSelectedRecords().length == 1);
+                        const hasSelection = mainGrid.obj.getSelectedRecords().length == 1;
+                        mainGrid.obj.toolbarModule.enableItems(['ViewCustom', 'EditCustom', 'DeleteCustom'], hasSelection);
                     },
                     rowDeselected: () => {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], mainGrid.obj.getSelectedRecords().length == 1);
+                        const hasSelection = mainGrid.obj.getSelectedRecords().length == 1;
+                        mainGrid.obj.toolbarModule.enableItems(['ViewCustom', 'EditCustom', 'DeleteCustom'], hasSelection);
                     },
                     rowSelecting: () => { if (mainGrid.obj.getSelectedRecords().length) mainGrid.obj.clearSelection(); },
+                    recordDoubleClick: (args) => {
+                        if (args.rowData) {
+                            state.viewMode = true;
+                            state.deleteMode = false;
+                            state.mainTitle = 'Xem giao d\u1ecbch';
+                            state.id = args.rowData.id ?? '';
+                            state.number = args.rowData.number ?? '';
+                            state.transactionDate = DateFormatManager.parseBusinessDate(args.rowData.transactionDate);
+                            state.transactionType = args.rowData.transactionType;
+                            state.amount = args.rowData.amount;
+                            state.paidAmount = args.rowData.paidAmount;
+                            state.description = args.rowData.description ?? '';
+                            state.cashAccountId = args.rowData.cashAccountId;
+                            state.cashCategoryId = args.rowData.cashCategoryId;
+                            state.partnerId = args.rowData.customerId ? ('cust_' + args.rowData.customerId) : (args.rowData.vendorId ? ('vend_' + args.rowData.vendorId) : null);
+                            state.sourceModule = args.rowData.sourceModule;
+                            state.sourceModuleId = args.rowData.sourceModuleId;
+                            state.sourceModuleNumber = args.rowData.sourceModuleNumber;
+                            mainModal.obj.show();
+                        }
+                    },
                     toolbarClick: async (args) => {
                         if (args.item.id === 'MainGrid_excelexport') mainGrid.obj.excelExport();
 
@@ -686,7 +702,31 @@ const App = {
                             transferModal.obj.show();
                         }
 
+                        if (args.item.id === 'ViewCustom') {
+                            state.viewMode = true;
+                            state.deleteMode = false;
+                            if (mainGrid.obj.getSelectedRecords().length) {
+                                const r = mainGrid.obj.getSelectedRecords()[0];
+                                state.mainTitle = 'Xem giao d\u1ecbch';
+                                state.id = r.id ?? '';
+                                state.number = r.number ?? '';
+                                state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
+                                state.transactionType = r.transactionType;
+                                state.amount = r.amount;
+                                state.paidAmount = r.paidAmount;
+                                state.description = r.description ?? '';
+                                state.cashAccountId = r.cashAccountId;
+                                state.cashCategoryId = r.cashCategoryId;
+                                state.partnerId = r.customerId ? ('cust_' + r.customerId) : (r.vendorId ? ('vend_' + r.vendorId) : null);
+                                state.sourceModule = r.sourceModule;
+                                state.sourceModuleId = r.sourceModuleId;
+                                state.sourceModuleNumber = r.sourceModuleNumber;
+                                mainModal.obj.show();
+                            }
+                        }
+
                         if (args.item.id === 'EditCustom') {
+                            state.viewMode = false;
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
@@ -697,7 +737,7 @@ const App = {
                                     });
                                     return;
                                 }
-                                state.mainTitle = 'Sửa giao dịch';
+                                state.mainTitle = 'S\u1eeda giao d\u1ecbch';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
@@ -707,7 +747,7 @@ const App = {
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
-                                state.partnerId = r.customerId || r.vendorId;
+                                state.partnerId = r.customerId ? ('cust_' + r.customerId) : (r.vendorId ? ('vend_' + r.vendorId) : null);
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
@@ -716,10 +756,11 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
+                            state.viewMode = false;
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'Xóa chuyển khoản?' : 'Xóa giao dịch?';
+                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'X\u00f3a chuy\u1ec3n kho\u1ea3n?' : 'X\u00f3a giao d\u1ecbch?';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
@@ -729,7 +770,7 @@ const App = {
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
-                                state.partnerId = r.customerId || r.vendorId;
+                                state.partnerId = r.customerId ? ('cust_' + r.customerId) : (r.vendorId ? ('vend_' + r.vendorId) : null);
                                 mainModal.obj.show();
                             }
                         }
