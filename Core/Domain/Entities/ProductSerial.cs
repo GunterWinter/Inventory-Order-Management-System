@@ -19,6 +19,7 @@ public class ProductSerial : BaseEntity
     public SalesOrderItem? SalesOrderItem { get; set; }
     public DateTime? SupplierWarrantyEndDate { get; set; }
     public DateTime? CustomerWarrantyEndDate { get; set; }
+    public double? UnitCost { get; set; }
     public string? CostAllocationId { get; set; }
     public PurchaseOrderCostAllocation? CostAllocation { get; set; }
     public ICollection<ProductSerialMovement> ProductSerialMovementList { get; set; } = new List<ProductSerialMovement>();

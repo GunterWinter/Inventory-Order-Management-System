@@ -123,4 +123,22 @@ public class CashTransactionController : BaseApiController
             Content = response
         });
     }
+
+    [Authorize]
+    [HttpGet("GetCashTransactionCostAllocations")]
+    public async Task<ActionResult<ApiSuccessResult<GetCashTransactionCostAllocationsResult>>> GetCashTransactionCostAllocationsAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string purchaseOrderId
+    )
+    {
+        var request = new GetCashTransactionCostAllocationsRequest { PurchaseOrderId = purchaseOrderId };
+        var response = await _sender.Send(request, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetCashTransactionCostAllocationsResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetCashTransactionCostAllocationsAsync)}",
+            Content = response
+        });
+    }
 }

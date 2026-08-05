@@ -42,9 +42,9 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="PurchaseOrderId">Đơn mua hàng (Dư)</label>
-                                                <div ref="purchaseOrderIdRef"></div>
-                                                <label class="text-danger">{{ state.errors.purchaseOrderId }}</label>
+                                                <label for="WarehouseId">Kho</label>
+                                                <div ref="warehouseIdRef"></div>
+                                                <label class="text-danger">{{ state.errors.warehouseId }}</label>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="CustomerId">Khách hàng</label>
@@ -100,11 +100,11 @@
                                         <h5 class="mb-0">Tổng cộng</h5>
                                     </div>
                                     <div class="card-body">
-                                        <div class="row justify-content-end">
+                                        <div class="row">
                                             <div class="col-md-6">
-                                                <div class="d-flex justify-content-between py-2">
-                                                    <span class="fw-bold">Tổng số lượng xuất</span>
-                                                    <span id="TotalMovement" class="fw-bold text-success">{{ state.totalMovementFormatted }}</span>
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted">Tổng số lượng xuất</label>
+                                                    <div class="h4 text-primary fw-bold">{{ state.totalMovementFormatted }}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -116,16 +116,10 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="button"
-                            v-if="!state.isViewMode"
-                            id="MainSaveButton"
-                            class="btn"
-                            v-bind:class="state.deleteMode ? 'btn-danger' : 'btn-primary'"
-                            v-on:click="handler.handleSubmit"
-                            v-bind:disabled="state.isSubmitting">
-                        <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Xóa' : 'Lưu' }}</span>
-                        <span v-else>{{ state.deleteMode ? 'Đang xóa...' : 'Đang lưu...' }}</span>
+                    <button v-if="!state.isViewMode" type="button" class="btn btn-primary" v-on:click="handler.handleSubmit"
+                            :disabled="state.isSubmitting">
+                        <span v-if="state.isSubmitting" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        {{ state.isSubmitting ? 'Đang xử lý...' : (state.deleteMode ? 'Xóa' : 'Lưu') }}
                     </button>
                 </div>
             </div>
@@ -133,6 +127,6 @@
     </div>
 </div>
 
-@section scripts {
-    <script src="~/FrontEnd/Pages/MaterialExports/MaterialExportList.cshtml.js"></script>
+@section Scripts {
+    <script src="~/Pages/MaterialExports/MaterialExportList.cshtml.js"></script>
 }

@@ -50,54 +50,27 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
             })
             .ToListAsync(cancellationToken);
 
-        // 2. Get total paid amount per vendor from Confirmed Credit CashTransactions
-        // This includes both:
-        //   a) CashTransactions directly linked via VendorId
-        //   b) CashTransactions linked via SourceModule=PurchaseOrder (join to PO.VendorId)
-
-        // Direct vendor link
-        var directPayments = await _queryContext
+        // 2. Get total PAID amount per vendor from CashTransactions with VendorId
+        // Only count PaidAmount (actual payment), NOT Amount (total obligation)
+        // This includes:
+        //   a) PO-linked phiếu (SourceModule=PurchaseOrder, VendorId set)
+        //   b) Manual CashTransactions created by accountant (công thợ, etc.) with VendorId
+        var paidByVendor = await _queryContext
             .Set<CashTransaction>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.TransactionType == CashTransactionType.Credit
-                     && x.VendorId != null)
-            .GroupBy(x => x.VendorId)
-            .Select(g => new
-            {
-                VendorId = g.Key,
-                TotalPaid = g.Sum(x => (x.PaidAmount != null && x.PaidAmount > 0) ? x.PaidAmount.Value : (x.Amount ?? 0d))
-            })
-            .ToListAsync(cancellationToken);
-
-        // PO-linked payments (without VendorId set directly)
-        var poLinkedPayments = await _queryContext
-            .Set<CashTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.TransactionType == CashTransactionType.Credit
-                     && x.SourceModule == nameof(PurchaseOrder)
-                     && x.SourceModuleId != null
-                     && x.VendorId == null)
-            .Join(
-                _queryContext.Set<PurchaseOrder>().AsNoTracking().ApplyIsDeletedFilter(false),
-                ct => ct.SourceModuleId,
-                po => po.Id,
-                (ct, po) => new { ct.Amount, ct.PaidAmount, po.VendorId }
-            )
             .Where(x => x.VendorId != null)
             .GroupBy(x => x.VendorId)
             .Select(g => new
             {
                 VendorId = g.Key,
-                TotalPaid = g.Sum(x => (x.PaidAmount != null && x.PaidAmount > 0) ? x.PaidAmount.Value : (x.Amount ?? 0d))
+                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
             })
             .ToListAsync(cancellationToken);
 
         // 3. Get vendor names
         var allVendorIds = purchaseByVendor.Select(x => x.VendorId)
-            .Union(directPayments.Select(x => x.VendorId))
-            .Union(poLinkedPayments.Select(x => x.VendorId))
+            .Union(paidByVendor.Select(x => x.VendorId))
             .Where(x => x != null)
             .Distinct()
             .ToList();
@@ -118,10 +91,7 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
                 .Where(x => x.VendorId == vendorId)
                 .Sum(x => x.TotalPurchase);
 
-            var totalPaid = directPayments
-                .Where(x => x.VendorId == vendorId)
-                .Sum(x => x.TotalPaid)
-                + poLinkedPayments
+            var totalPaid = paidByVendor
                 .Where(x => x.VendorId == vendorId)
                 .Sum(x => x.TotalPaid);
 

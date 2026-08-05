@@ -1,5 +1,5 @@
-using Application.Common.Services.SecurityManager;
 using System.Text.Json;
+using Application.Common.Services.SecurityManager;
 
 namespace Infrastructure.SecurityManager.NavigationMenu;
 
@@ -52,26 +52,6 @@ public static class NavigationTreeStructure
             "IsModule": true,
             "Children": [
                 {
-                    "URL": "/CustomerGroups/CustomerGroupList",
-                    "Name": "Customer Group",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/CustomerCategories/CustomerCategoryList",
-                    "Name": "Customer Category",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/Customers/CustomerList",
-                    "Name": "Customer",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/CustomerContacts/CustomerContactList",
-                    "Name": "Customer Contact",
-                    "IsModule": false
-                },
-                {
                     "URL": "/SalesOrders/SalesOrderList",
                     "Name": "Sales Order",
                     "IsModule": false
@@ -88,26 +68,6 @@ public static class NavigationTreeStructure
             "Name": "Purchase",
             "IsModule": true,
             "Children": [
-                {
-                    "URL": "/VendorGroups/VendorGroupList",
-                    "Name": "Vendor Group",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/VendorCategories/VendorCategoryList",
-                    "Name": "Vendor Category",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/Vendors/VendorList",
-                    "Name": "Vendor",
-                    "IsModule": false
-                },
-                {
-                    "URL": "/VendorContacts/VendorContactList",
-                    "Name": "Vendor Contact",
-                    "IsModule": false
-                },
                 {
                     "URL": "/PurchaseOrders/PurchaseOrderList",
                     "Name": "Purchase Order",
@@ -272,6 +232,28 @@ public static class NavigationTreeStructure
             "IsModule": true,
             "Children": [
                 {
+                    "URL": "#",
+                    "Name": "Customer",
+                    "IsModule": true,
+                    "Children": [
+                        { "URL": "/CustomerGroups/CustomerGroupList", "Name": "Customer Group", "IsModule": false },
+                        { "URL": "/CustomerCategories/CustomerCategoryList", "Name": "Customer Category", "IsModule": false },
+                        { "URL": "/Customers/CustomerList", "Name": "Customer", "IsModule": false },
+                        { "URL": "/CustomerContacts/CustomerContactList", "Name": "Customer Contact", "IsModule": false }
+                    ]
+                },
+                {
+                    "URL": "#",
+                    "Name": "Vendor",
+                    "IsModule": true,
+                    "Children": [
+                        { "URL": "/VendorGroups/VendorGroupList", "Name": "Vendor Group", "IsModule": false },
+                        { "URL": "/VendorCategories/VendorCategoryList", "Name": "Vendor Category", "IsModule": false },
+                        { "URL": "/Vendors/VendorList", "Name": "Vendor", "IsModule": false },
+                        { "URL": "/VendorContacts/VendorContactList", "Name": "Vendor Contact", "IsModule": false }
+                    ]
+                },
+                {
                     "URL": "/Companies/MyCompany",
                     "Name": "My Company",
                     "IsModule": false
@@ -311,7 +293,7 @@ public static class NavigationTreeStructure
                 var nodeId = index.ToString();
                 if (item.IsModule)
                 {
-                    nodes.Add(new MenuNavigationTreeNodeDto(nodeId, item.Name ?? "", param_hasChild: true, param_expanded: false));
+                    nodes.Add(new MenuNavigationTreeNodeDto(nodeId, item.Name ?? "", param_pid: parentId, param_hasChild: true, param_expanded: false));
                 }
                 else
                 {

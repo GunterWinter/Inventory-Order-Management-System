@@ -9,8 +9,8 @@ public class MaterialExport : BaseEntity
     public DateTime? ExportDate { get; set; }
     public MaterialExportStatus? Status { get; set; }
     public string? Description { get; set; }
-    public string? PurchaseOrderId { get; set; }
-    public PurchaseOrder? PurchaseOrder { get; set; }
+    public string? WarehouseId { get; set; }
+    public Warehouse? Warehouse { get; set; }
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }
 

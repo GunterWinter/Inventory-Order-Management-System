@@ -385,6 +385,7 @@ const App = {
                     placeholder: 'Số tiền thanh toán',
                     format: 'N0',
                     min: 0,
+                    max: state.amount || 0,
                     change: (args) => { state.paidAmount = args.value; }
                 });
                 paidAmountInput.obj.appendTo(paidAmountRef.value);
@@ -397,7 +398,13 @@ const App = {
         Vue.watch(() => state.cashAccountId, () => { state.errors.cashAccountId = ''; cashAccountDropDown.refresh(); });
         Vue.watch(() => state.cashCategoryId, () => { cashCategoryDropDown.refresh(); });
         Vue.watch(() => state.partnerId, () => { partnerDropDown.refresh(); });
-        Vue.watch(() => state.amount, () => { state.errors.amount = ''; amountInput.refresh(); });
+        Vue.watch(() => state.amount, () => {
+            state.errors.amount = '';
+            amountInput.refresh();
+            if (paidAmountInput.obj) {
+                paidAmountInput.obj.max = state.amount || 0;
+            }
+        });
         Vue.watch(() => state.paidAmount, () => { state.errors.paidAmount = ''; paidAmountInput.refresh(); });
         Vue.watch(() => state.transfer.transferDate, () => { state.transfer.errors.transferDate = ''; transferDatePicker.refresh(); });
         Vue.watch(() => state.transfer.fromCashAccountId, () => { state.transfer.errors.fromCashAccountId = ''; fromAccountDropDown.refresh(); });

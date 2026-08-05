@@ -1,9 +1,9 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
-            purchaseOrderListLookupData: [],
+            warehouseListLookupData: [],
             customerListLookupData: [],
             MaterialExportStatusListLookupData: [],
             secondaryData: [],
@@ -13,15 +13,18 @@
             number: '',
             MaterialExportDate: '',
             description: '',
-            purchaseOrderId: null,
+            warehouseId: null,
+            customerId: null,
             status: null,
             errors: {
                 MaterialExportDate: '',
-                purchaseOrderId: '',
+                warehouseId: '',
+                customerId: '',
                 status: ''
             },
             showComplexDiv: false,
             isSubmitting: false,
+            isViewMode: false,
             totalMovementFormatted: '0'
         });
 
@@ -29,14 +32,14 @@
         const mainModalRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
         const MaterialExportDateRef = Vue.ref(null);
-        const purchaseOrderIdRef = Vue.ref(null);
+        const warehouseIdRef = Vue.ref(null);
         const statusRef = Vue.ref(null);
         const customerIdRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
 
         const validateForm = function () {
             state.errors.MaterialExportDate = '';
-            state.errors.purchaseOrderId = '';
+            state.errors.warehouseId = '';
             state.errors.customerId = '';
             state.errors.status = '';
 
@@ -46,8 +49,8 @@
                 state.errors.MaterialExportDate = 'Ngày xuất là bắt buộc.';
                 isValid = false;
             }
-            if (!state.purchaseOrderId) {
-                state.errors.purchaseOrderId = 'Đơn mua hàng là bắt buộc.';
+            if (!state.warehouseId) {
+                state.errors.warehouseId = 'Kho là bắt buộc.';
                 isValid = false;
             }
             if (!state.customerId) {
@@ -67,12 +70,13 @@
             state.number = '';
             state.MaterialExportDate = '';
             state.description = '';
-            state.purchaseOrderId = null;
+            state.warehouseId = null;
             state.customerId = null;
             state.status = null;
+            state.isViewMode = false;
             state.errors = {
                 MaterialExportDate: '',
-                purchaseOrderId: '',
+                warehouseId: '',
                 customerId: '',
                 status: ''
             };
@@ -118,14 +122,14 @@
             }
         };
 
-        const PurchaseOrderListLookup = {
+        const WarehouseListLookup = {
             obj: null,
             create: () => {
-                if (state.purchaseOrderListLookupData && Array.isArray(state.purchaseOrderListLookupData)) {
-                    PurchaseOrderListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.purchaseOrderListLookupData,
+                if (state.warehouseListLookupData && Array.isArray(state.warehouseListLookupData)) {
+                    WarehouseListLookup.obj = new ej.dropdowns.DropDownList({
+                        dataSource: state.warehouseListLookupData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn đơn mua hàng',
+                        placeholder: 'Chọn Kho',
                         allowFiltering: true,
                         filtering: (e) => {
                             e.preventDefaultAction = true;
@@ -133,27 +137,27 @@
                             if (e.text !== '') {
                                 query = query.where('name', 'contains', e.text, true);
                             }
-                            e.updateData(state.purchaseOrderListLookupData, query);
+                            e.updateData(state.warehouseListLookupData, query);
                         },
                         change: (e) => {
-                            state.purchaseOrderId = e.value;
+                            state.warehouseId = e.value;
                         }
                     });
-                    PurchaseOrderListLookup.obj.appendTo(purchaseOrderIdRef.value);
+                    WarehouseListLookup.obj.appendTo(warehouseIdRef.value);
                 }
             },
             refresh: () => {
-                if (PurchaseOrderListLookup.obj) {
-                    PurchaseOrderListLookup.obj.value = state.purchaseOrderId;
+                if (WarehouseListLookup.obj) {
+                    WarehouseListLookup.obj.value = state.warehouseId;
                 }
             }
         };
 
         Vue.watch(
-            () => state.purchaseOrderId,
+            () => state.warehouseId,
             async (newVal, oldVal) => {
-                PurchaseOrderListLookup.refresh();
-                state.errors.purchaseOrderId = '';
+                WarehouseListLookup.refresh();
+                state.errors.warehouseId = '';
                 if (newVal !== oldVal) {
                     await methods.populateProductListLookupData();
                 }
@@ -228,14 +232,11 @@
                 statusListLookup.refresh();
                 state.errors.status = '';
 
-                // Filter Draft out of dropdown when status > 0
                 StatusDropdownHelper.applyToDropdown(
                     statusListLookup.obj,
                     state.MaterialExportStatusListLookupData,
                     newVal
                 );
-            
-            
             }
         );
 
@@ -248,20 +249,20 @@
                     throw error;
                 }
             },
-            createMainData: async (MaterialExportDate, description, status, purchaseOrderId, customerId, createdById) => {
+            createMainData: async (MaterialExportDate, description, status, warehouseId, customerId, createdById) => {
                 try {
                     const response = await AxiosManager.post('/MaterialExport/CreateMaterialExport', {
-                        MaterialExportDate, description, status, purchaseOrderId, customerId, createdById
+                        MaterialExportDate, description, status, warehouseId, customerId, createdById
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, MaterialExportDate, description, status, purchaseOrderId, customerId, updatedById) => {
+            updateMainData: async (id, MaterialExportDate, description, status, warehouseId, customerId, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/MaterialExport/UpdateMaterialExport', {
-                        id, MaterialExportDate, description, status, purchaseOrderId, customerId, updatedById
+                        id, MaterialExportDate, description, status, warehouseId, customerId, updatedById
                     });
                     return response;
                 } catch (error) {
@@ -278,9 +279,9 @@
                     throw error;
                 }
             },
-            getpurchaseOrderListLookupData: async () => {
+            getWarehouseListLookupData: async () => {
                 try {
-                    const response = await AxiosManager.get('/MaterialExport/GetAvailablePurchaseOrders', {});
+                    const response = await AxiosManager.get('/Warehouse/GetWarehouseList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -340,14 +341,6 @@
                     throw error;
                 }
             },
-            getProductListLookupData: async () => {
-                try {
-                    const response = await AxiosManager.get('/Product/GetProductList', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
         };
 
         const methods = {
@@ -359,11 +352,11 @@
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
             },
-            populatepurchaseOrderListLookupData: async () => {
-                const response = await services.getpurchaseOrderListLookupData();
-                state.purchaseOrderListLookupData = response?.data?.content?.data || [];
+            populateWarehouseListLookupData: async () => {
+                const response = await services.getWarehouseListLookupData();
+                state.warehouseListLookupData = response?.data?.content?.data || [];
             },
-            populatecustomerListLookupData: async () => {
+            populateCustomerListLookupData: async () => {
                 const response = await services.getCustomerListLookupData();
                 state.customerListLookupData = response?.data?.content?.data;
             },
@@ -384,19 +377,16 @@
                 }
             },
             populateProductListLookupData: async () => {
-                if (state.purchaseOrderId) {
+                if (state.warehouseId) {
                     try {
-                        const response = await AxiosManager.get('/MaterialExport/GetMaterialExportPOItems?purchaseOrderId=' + state.purchaseOrderId, {});
+                        const response = await AxiosManager.get('/MaterialExport/GetWarehouseProductStock?warehouseId=' + state.warehouseId, {});
                         state.productListLookupData = (response?.data?.content?.data ?? []).map(item => ({
                             id: item.productId,
                             name: item.productName,
-                            referenceCode: item.productReferenceCode,
+                            referenceCode: item.referenceCode,
                             physical: true,
                             serialTrackingMode: item.serialTrackingMode ?? 0,
-                            warehouseId: item.warehouseId,
-                            totalQuantity: item.totalQuantity ?? 0,
                             stockQuantity: item.stockQuantity ?? 0,
-                            remainingQuantity: item.remainingQuantity ?? 0
                         }));
                     } catch (error) {
                         state.productListLookupData = [];
@@ -412,8 +402,8 @@
 
             onMainModalHidden: () => {
                 state.errors.MaterialExportDate = '';
-                state.errors.purchaseOrderId = '';
-            state.errors.customerId = '';
+                state.errors.warehouseId = '';
+                state.errors.customerId = '';
                 state.errors.status = '';
             },
 
@@ -429,10 +419,10 @@
 
                 try {
                     const response = state.id === ''
-                        ? await services.createMainData(state.MaterialExportDate, state.description, state.status, state.purchaseOrderId, state.customerId, StorageManager.getUserId())
+                        ? await services.createMainData(state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.MaterialExportDate, state.description, state.status, state.purchaseOrderId, state.customerId, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId());
 
                     return { isValid, response };
                 } catch (error) {
@@ -503,6 +493,16 @@
                     state.isSubmitting = false;
                 }
             },
+            quickAddCustomer: async () => {
+                if (typeof QuickAddHelper !== 'undefined') {
+                    await QuickAddHelper.showQuickAddCustomer(async () => {
+                        await methods.populateCustomerListLookupData();
+                        if (CustomerListLookup.obj) {
+                            CustomerListLookup.obj.dataSource = state.customerListLookupData;
+                        }
+                    });
+                }
+            }
         };
 
         Vue.onMounted(async () => {
@@ -516,9 +516,9 @@
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden());
 
-                await methods.populatepurchaseOrderListLookupData();
-                PurchaseOrderListLookup.create();
-                await methods.populatecustomerListLookupData();
+                await methods.populateWarehouseListLookupData();
+                WarehouseListLookup.create();
+                await methods.populateCustomerListLookupData();
                 CustomerListLookup.create();
                 await methods.populateMaterialExportStatusListLookupData();
                 statusListLookup.create();
@@ -567,7 +567,7 @@
                         },
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
                         { field: 'MaterialExportDate', headerText: 'Ngày xuất', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'purchaseOrderName', headerText: 'Đơn mua hàng', width: 150, minWidth: 150 },
+                        { field: 'warehouseName', headerText: 'Kho', width: 150, minWidth: 150 },
                         { field: 'customerName', headerText: 'Khách hàng', width: 150, minWidth: 150 },
                         { field: 'statusName', headerText: 'Trạng thái', width: 150, minWidth: 150 },
                         { field: 'createdAtUtc', headerText: 'Ngày tạo', width: 150, format: 'yyyy-MM-dd HH:mm' }
@@ -585,7 +585,7 @@
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'MaterialExportDate', 'purchaseOrderName', 'customerName', 'statusName', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'MaterialExportDate', 'warehouseName', 'customerName', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -607,7 +607,7 @@
                             mainGrid.obj.clearSelection();
                         }
                     },
-                                        recordDoubleClick: async (args) => {
+                    recordDoubleClick: async (args) => {
                         if (args.rowData) {
                             const selectedRecord = args.rowData;
                             state.isViewMode = true;
@@ -617,7 +617,7 @@
                             state.number = selectedRecord.number ?? '';
                             state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
                             state.description = selectedRecord.description ?? '';
-                            state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
+                            state.warehouseId = selectedRecord.warehouseId ?? '';
                             state.customerId = selectedRecord.customerId ?? '';
                             state.status = String(selectedRecord.status ?? '');
                             await methods.populateProductListLookupData();
@@ -650,7 +650,7 @@
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
+                                state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateProductListLookupData();
@@ -671,7 +671,7 @@
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
+                                state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateProductListLookupData();
@@ -691,7 +691,7 @@
                                 state.number = selectedRecord.number ?? '';
                                 state.MaterialExportDate = selectedRecord.MaterialExportDate ? DateFormatManager.parseBusinessDate(selectedRecord.MaterialExportDate) : null;
                                 state.description = selectedRecord.description ?? '';
-                                state.purchaseOrderId = selectedRecord.purchaseOrderId ?? '';
+                                state.warehouseId = selectedRecord.warehouseId ?? '';
                                 state.customerId = selectedRecord.customerId ?? '';
                                 state.status = String(selectedRecord.status ?? '');
                                 await methods.populateSecondaryData(selectedRecord.id);
@@ -717,10 +717,10 @@
             }
         };
 
-                let PurchaseOrderObj = null;
+        let productElem = null;
         let productObj = null;
+        let movementElem = null;
         let movementObj = null;
-        let qtySCCountObj = null;
 
         const secondaryGrid = {
             obj: null,
@@ -793,7 +793,6 @@
                                             args.rowData.productSerialNumbers = '';
                                             const p = state.productListLookupData.find(x => x.id === e.value);
                                             args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
-                                            args.rowData.warehouseId = p ? p.warehouseId : null;
                                             const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
                                             if (refCell) {
                                                 refCell.value = args.rowData.productReferenceCode;
@@ -845,7 +844,7 @@
                         },
                         {
                             field: 'remainingDisplay',
-                            headerText: 'Còn lại',
+                            headerText: 'Tồn kho',
                             width: 120,
                             allowEditing: false,
                             type: 'number', format: 'N0', textAlign: 'Right',
@@ -1024,7 +1023,7 @@
             mainModalRef,
             secondaryGridRef,
             MaterialExportDateRef,
-            purchaseOrderIdRef,
+            warehouseIdRef,
             statusRef,
             customerIdRef,
             numberRef,
@@ -1035,10 +1034,3 @@
 };
 
 Vue.createApp(App).mount('#app');
-
-
-
-
-
-
-

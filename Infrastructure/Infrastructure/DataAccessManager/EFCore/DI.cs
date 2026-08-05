@@ -109,7 +109,9 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'ImageUrl') IS NULL ALTER TABLE [dbo].[Product] ADD [ImageUrl] nvarchar(500) NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrder]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrder', N'SalesType') IS NULL ALTER TABLE [dbo].[SalesOrder] ADD [SalesType] int NOT NULL DEFAULT 1;",
             "IF OBJECT_ID(N'[dbo].[SalesReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesReturn', N'SalesOrderId') IS NULL ALTER TABLE [dbo].[SalesReturn] ADD [SalesOrderId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[PurchaseReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseReturn', N'PurchaseOrderId') IS NULL ALTER TABLE [dbo].[PurchaseReturn] ADD [PurchaseOrderId] nvarchar(50) NULL;"
+            "IF OBJECT_ID(N'[dbo].[PurchaseReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseReturn', N'PurchaseOrderId') IS NULL ALTER TABLE [dbo].[PurchaseReturn] ADD [PurchaseOrderId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExport', N'WarehouseId') IS NULL ALTER TABLE [dbo].[MaterialExport] ADD [WarehouseId] nvarchar(50) NULL;"
         };
 
         foreach (var command in commands)

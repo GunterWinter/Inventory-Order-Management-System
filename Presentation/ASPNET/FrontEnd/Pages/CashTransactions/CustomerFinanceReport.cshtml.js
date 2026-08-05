@@ -40,19 +40,36 @@ const App = {
                 const response = await services.getMainData();
                 const rows = response?.data?.content?.data ?? [];
                 state.allData = rows
-                    .filter(item => item.status === 2 && (item.customerId || item.vendorId))
+                    .filter(item => (item.customerId || item.vendorId))
                     .map(item => {
                         const debitAmount = item.transactionType === 0 ? (item.amount ?? 0) : 0;
                         const creditAmount = item.transactionType === 1 ? (item.amount ?? 0) : 0;
+                        const debtAmount = (item.amount ?? 0) - (item.paidAmount ?? 0);
+                        let paymentStatusStr = 'Chưa thanh toán';
+                        if (item.paidAmount >= item.amount && item.amount > 0) {
+                            paymentStatusStr = 'Đã thanh toán';
+                        } else if (item.paidAmount > 0) {
+                            paymentStatusStr = 'Còn nợ';
+                        } else if (item.amount === 0) {
+                            paymentStatusStr = 'Hoàn tất';
+                        }
+                        
                         return {
                             partnerName: item.customerName || item.vendorName || '',
                             customerId: item.customerId,
                             vendorId: item.vendorId,
+                            number: item.number,
                             transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
                             transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
+                            cashAccountName: item.cashAccountName || '',
+                            cashCategoryName: item.cashCategoryName || '',
+                            description: item.description,
+                            sourceModuleNumber: item.sourceModuleNumber,
                             debitAmount,
                             creditAmount,
-                            netAmount: debitAmount - creditAmount
+                            netAmount: debitAmount - creditAmount,
+                            debtAmount: debtAmount > 0 ? debtAmount : 0,
+                            paymentStatus: paymentStatusStr
                         };
                     });
             },
@@ -232,6 +249,8 @@ const App = {
                         { field: 'debitAmount', headerText: 'Received', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'creditAmount', headerText: 'Spent', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'netAmount', headerText: 'Net', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'paymentStatus', headerText: 'Payment Status', width: 150, minWidth: 150 },
+                        { field: 'debtAmount', headerText: 'Debt', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
                         { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 }
                     ],

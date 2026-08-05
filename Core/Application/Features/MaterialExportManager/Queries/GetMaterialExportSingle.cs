@@ -51,11 +51,8 @@ public class GetMaterialExportSingleHandler : IRequestHandler<GetMaterialExportS
         var queryData = _context
             .MaterialExport
             .AsNoTracking()
-            .Include(x => x.PurchaseOrder)
+            .Include(x => x.Warehouse)
             .Include(x => x.Customer)
-            .Include(x => x.MaterialExportItemList)
-                .ThenInclude(x => x.PurchaseOrderItem)
-                    .ThenInclude(x => x.Product)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

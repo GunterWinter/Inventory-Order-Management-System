@@ -251,7 +251,7 @@ const App = {
             state.description = '';
             state.customerId = null;
             state.salesType = 1;
-            state.orderStatus = '2';
+            state.orderStatus = '0';
             state.errors = {
                 orderDate: '',
                 customerId: '',
@@ -452,8 +452,8 @@ const App = {
             },
             populateSalesOrderStatusListLookupData: async () => {
                 const response = await services.getSalesOrderStatusListLookupData();
-                const allData = response?.data?.content?.data || [];
-                state.salesOrderStatusListLookupData = allData.filter(x => x.id !== '0');
+                const allData = response?.data?.content?.data ?? [];
+                state.salesOrderStatusListLookupData = allData;
             },
             populateSalesTypeListLookupData: async () => {
                 const response = await services.getSalesTypeListLookupData();
@@ -490,7 +490,7 @@ const App = {
                         ...item,
                         orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                        orderStatusName: item.orderStatus === 0 ? 'Nháp' : item.orderStatus === 2 ? 'Đã xác nhận' : '',
+                        orderStatusName: item.orderStatusName,
                         paymentStatusText: paymentStatusText,
                         paymentStatusClass: paymentStatusClass,
                         cashTransactionId: payment?.cashTransactionId ?? null,
@@ -1894,6 +1894,8 @@ const App = {
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        { type: 'Separator' },
+                        { text: 'Thêm Kho', tooltipText: 'Thêm nhanh kho hàng mới', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () { },
@@ -1917,9 +1919,21 @@ const App = {
                             secondaryGrid.obj.clearSelection();
                         }
                     },
-                    toolbarClick: (args) => {
+                    toolbarClick: async (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
+                        }
+
+                        if (args.item.id === 'QuickAddWarehouseBtn') {
+                            await QuickAddHelper.simpleQuickAdd({
+                                title: 'Thêm nhanh Kho hàng',
+                                apiUrl: '/Warehouse/CreateWarehouse',
+                                dropdownObj: null,
+                                refreshLookup: methods.populateWarehouseListLookupData,
+                                state: state,
+                                stateKey: null,
+                                lookupKey: 'warehouseListLookupData'
+                            });
                         }
                     },
                     actionBegin: (args) => {

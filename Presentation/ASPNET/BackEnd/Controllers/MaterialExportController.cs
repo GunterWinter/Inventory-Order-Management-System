@@ -93,9 +93,6 @@ public class MaterialExportController : BaseApiController
         });
     }
 
-
-
-
     [Authorize]
     [HttpGet("GetMaterialExportStatusList")]
     public async Task<ActionResult<ApiSuccessResult<GetMaterialExportStatusListResult>>> GetMaterialExportStatusListAsync(
@@ -131,43 +128,22 @@ public class MaterialExportController : BaseApiController
             Content = response
         });
     }
-    [Authorize]
-    [HttpGet("GetAvailablePurchaseOrders")]
-    public async Task<ActionResult<ApiSuccessResult<GetAvailablePurchaseOrdersResult>>> GetAvailablePurchaseOrdersAsync(
-    CancellationToken cancellationToken
-    )
-    {
-        var request = new GetAvailablePurchaseOrdersRequest { };
-        var response = await _sender.Send(request, cancellationToken);
-
-        return Ok(new ApiSuccessResult<GetAvailablePurchaseOrdersResult>
-        {
-            Code = StatusCodes.Status200OK,
-            Message = $"Success executing {nameof(GetAvailablePurchaseOrdersAsync)}",
-            Content = response
-        });
-    }
 
     [Authorize]
-    [HttpGet("GetMaterialExportPOItems")]
-    public async Task<ActionResult<ApiSuccessResult<GetMaterialExportPOItemsResult>>> GetMaterialExportPOItemsAsync(
+    [HttpGet("GetWarehouseProductStock")]
+    public async Task<ActionResult<ApiSuccessResult<GetWarehouseProductStockResult>>> GetWarehouseProductStockAsync(
         CancellationToken cancellationToken,
-        [FromQuery] string purchaseOrderId
+        [FromQuery] string warehouseId
     )
     {
-        var request = new GetMaterialExportPOItemsRequest
-        {
-            PurchaseOrderId = purchaseOrderId
-        };
+        var request = new GetWarehouseProductStockRequest { WarehouseId = warehouseId };
         var response = await _sender.Send(request, cancellationToken);
 
-        return Ok(new ApiSuccessResult<GetMaterialExportPOItemsResult>
+        return Ok(new ApiSuccessResult<GetWarehouseProductStockResult>
         {
             Code = StatusCodes.Status200OK,
-            Message = $"Success executing {nameof(GetMaterialExportPOItemsAsync)}",
+            Message = $"Success executing {nameof(GetWarehouseProductStockAsync)}",
             Content = response
         });
     }
 }
-
-

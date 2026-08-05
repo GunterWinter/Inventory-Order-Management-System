@@ -11,7 +11,7 @@
         });
 
         const validateForm = () => {
-            state.errors.email = '';    
+            state.errors.email = '';
             state.errors.password = '';
             let isValid = true;
 

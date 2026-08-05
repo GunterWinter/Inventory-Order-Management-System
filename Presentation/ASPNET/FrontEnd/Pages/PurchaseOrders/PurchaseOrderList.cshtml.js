@@ -132,7 +132,7 @@ const App = {
             state.orderDate = '';
             state.description = '';
             state.vendorId = null;
-            state.orderStatus = '2';
+            state.orderStatus = '0';
             state.errors = {
                 orderDate: '',
                 vendorId: '',
@@ -358,8 +358,8 @@ const App = {
             },
             populatePurchaseOrderStatusListLookupData: async () => {
                 const response = await services.getPurchaseOrderStatusListLookupData();
-                const allData = response?.data?.content?.data || [];
-                state.purchaseOrderStatusListLookupData = allData.filter(x => x.id !== '0');
+                const allData = response?.data?.content?.data ?? [];
+                state.purchaseOrderStatusListLookupData = allData;
             },
             populateMainData: async () => {
                 const response = await services.getMainData();
@@ -392,7 +392,7 @@ const App = {
                         ...item,
                         orderDate: DateFormatManager.parseBusinessDate(item.orderDate),
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                        orderStatusName: item.orderStatus === 0 ? 'Nháp' : item.orderStatus === 2 ? 'Đã xác nhận' : '',
+                        orderStatusName: item.orderStatusName,
                         paymentStatusText: paymentStatusText,
                         paymentStatusClass: paymentStatusClass,
                         cashTransactionId: payment?.cashTransactionId ?? null,
@@ -798,7 +798,7 @@ const App = {
                             state.orderStatus = e.value;
                         }
                     });
-                    // purchaseOrderStatusListLookup.obj.appendTo(orderStatusRef.value);
+                    purchaseOrderStatusListLookup.obj.appendTo(orderStatusRef.value);
                 }
             },
             refresh: () => {

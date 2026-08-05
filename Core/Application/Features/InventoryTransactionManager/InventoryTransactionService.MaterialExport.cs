@@ -11,8 +11,10 @@ public partial class InventoryTransactionService
         string? moduleId,
         string? productId,
         double? movement,
+        string? warehouseId,
         string? createdById,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? productSerialIds = null
         )
     {
         var parent = await _queryContext
@@ -34,7 +36,8 @@ public partial class InventoryTransactionService
         child.ModuleCode = "MTEX-";
         child.ModuleNumber = parent.Number;
         child.MovementDate = parent.ExportDate;
-        child.Status = (InventoryTransactionStatus?)parent.Status;
+        child.Status = InventoryTransactionStatus.Confirmed; // Always confirmed — direct stock deduction
+        child.WarehouseId = warehouseId;
 
         child.ProductId = productId;
         child.Movement = movement;
@@ -43,6 +46,12 @@ public partial class InventoryTransactionService
 
         await _inventoryTransactionRepository.CreateAsync(child, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
+
+        // Apply serial movements if serial-tracked
+        if (productSerialIds != null && productSerialIds.Count > 0)
+        {
+            await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, createdById, cancellationToken);
+        }
 
         return child;
     }

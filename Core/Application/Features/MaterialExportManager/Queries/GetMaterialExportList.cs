@@ -12,14 +12,14 @@ public record GetMaterialExportListDto
 {
     public string? Id { get; init; }
     public string? Number { get; init; }
-    public string? PurchaseOrderId { get; init; }
+    public string? WarehouseId { get; init; }
+    public string? WarehouseName { get; init; }
     public string? CustomerId { get; init; }
     public string? CustomerName { get; init; }
     public DateTime? MaterialExportDate { get; init; }
     public MaterialExportStatus? Status { get; init; }
     public string? StatusName { get; init; }
     public string? Description { get; init; }
-    public string? PurchaseOrderName { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -33,8 +33,8 @@ public class GetMaterialExportListProfile : Profile
                 opt => opt.MapFrom(src => src.ExportDate)
             )
             .ForMember(
-                dest => dest.PurchaseOrderName,
-                opt => opt.MapFrom(src => src.PurchaseOrder != null ? src.PurchaseOrder.Number : string.Empty)
+                dest => dest.WarehouseName,
+                opt => opt.MapFrom(src => src.Warehouse != null ? src.Warehouse.Name : string.Empty)
             )
             .ForMember(
                 dest => dest.CustomerName,
@@ -76,7 +76,7 @@ public class GetMaterialExportListHandler : IRequestHandler<GetMaterialExportLis
             .MaterialExport
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
-            .Include(x => x.PurchaseOrder)
+            .Include(x => x.Warehouse)
             .Include(x => x.Customer)
             .AsQueryable();
 

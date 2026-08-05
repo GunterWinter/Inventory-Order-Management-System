@@ -163,7 +163,8 @@ public class ProductSerialService
                     CurrentWarehouseId = transaction?.Status == InventoryTransactionStatus.Confirmed ? item.WarehouseId : null,
                     BatchNumber = item.BatchNumber,
                     PurchaseOrderItemId = item.Id,
-                    SupplierWarrantyEndDate = supplierWarrantyEndDate
+                    SupplierWarrantyEndDate = supplierWarrantyEndDate,
+                    UnitCost = (item.AfterTaxAmount ?? 0) / (item.Quantity > 0 ? item.Quantity.Value : 1)
                 }, cancellationToken);
             }
             await _unitOfWork.SaveAsync(cancellationToken);

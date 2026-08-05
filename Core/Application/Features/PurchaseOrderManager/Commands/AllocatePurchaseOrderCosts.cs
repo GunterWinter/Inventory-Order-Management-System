@@ -97,7 +97,7 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
             throw new Exception("Chỉ có thể chia đơn cho đơn mua hàng đã được xác nhận (Confirmed).");
         }
 
-        // Load the CashAccount for description (optional - may be null for Draft)
+        // Load the CashAccount for description
         CashAccount? cashAccount = null;
         if (!string.IsNullOrWhiteSpace(request.CashAccountId))
         {
@@ -342,54 +342,39 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
             }
         }
 
-        // 5. Group by Customer to create new CashTransactions
-        var groupedByCustomer = finalItems
-            .GroupBy(x => x.CustomerId ?? "__KHO__", StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
+        // 5. Create a SINGLE CashTransaction for the entire PO
         var vendorDescription =
             !string.IsNullOrWhiteSpace(purchaseOrder.Vendor?.Name)
                 ? purchaseOrder.Vendor.Name
                 : !string.IsNullOrWhiteSpace(purchaseOrder.Number)
                     ? purchaseOrder.Number
                     : "";
-        var createdTransactions = new List<CashTransaction>();
 
-        foreach (var customerGroup in groupedByCustomer)
+        var totalPoAmount = poItems.Sum(x => x.AfterTaxAmount ?? 0);
+
+        var cashTransaction = new CashTransaction
         {
-            var isKho = customerGroup.Key == "__KHO__";
-            var customerName = isKho ? "Kho" : (customers.GetValueOrDefault(customerGroup.Key) ?? "N/A");
-            var totalAmount = customerGroup.Sum(x => x.Quantity * x.UnitPrice);
+            CreatedById = request.CreatedById,
+            Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
+            TransactionDate = DateTime.Today,
+            TransactionType = CashTransactionType.Credit,
+            Status = CashTransactionStatus.Unpaid,
+            Amount = totalPoAmount,
+            PaidAmount = 0,
+            Description = $"{vendorDescription} - {purchaseOrder.Number}".Trim(),
+            CashAccountId = null, // No real money deduction
+            CashCategoryId = request.CashCategoryId,
+            CustomerId = null, // Whole PO, not per-customer
+            VendorId = purchaseOrder.VendorId, // Keep for vendor debt tracking
+            SourceModule = nameof(PurchaseOrder),
+            SourceModuleId = purchaseOrder.Id,
+            SourceModuleNumber = purchaseOrder.Number
+        };
 
-            var description = $"{vendorDescription} - {customerName}".Trim();
-
-            var cashTransaction = new CashTransaction
-            {
-                CreatedById = request.CreatedById,
-                Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
-                TransactionDate = DateTime.Today,
-                TransactionType = CashTransactionType.Credit,
-                Status = CashTransactionStatus.Unpaid,
-                Amount = totalAmount,
-                PaidAmount = 0,
-                Description = description,
-                CashAccountId = request.CashAccountId,
-                CashCategoryId = request.CashCategoryId,
-                CustomerId = isKho ? null : customerGroup.Key,
-                VendorId = purchaseOrder.VendorId,
-                SourceModule = nameof(PurchaseOrder),
-                SourceModuleId = purchaseOrder.Id,
-                SourceModuleNumber = purchaseOrder.Number
-            };
-
-            await _cashTransactionRepository.CreateAsync(cashTransaction, cancellationToken);
-            createdTransactions.Add(cashTransaction);
-        }
-
+        await _cashTransactionRepository.CreateAsync(cashTransaction, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        // Draft transactions do not affect account balance - no recalculation needed
-        // Old confirmed transactions that were deleted still need balance recalculation
+        // Recalculate old account balances for previously deleted transactions
         var oldAccountIds = oldCashTransactions
             .Where(x => x.Status != CashTransactionStatus.Unpaid)
             .Select(x => x.CashAccountId)
@@ -403,7 +388,7 @@ public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchas
 
         return new AllocatePurchaseOrderCostsResult
         {
-            CreatedTransactions = createdTransactions
+            CreatedTransactions = new List<CashTransaction> { cashTransaction }
         };
     }
 

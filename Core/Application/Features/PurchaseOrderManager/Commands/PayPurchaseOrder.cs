@@ -53,59 +53,54 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
 
     public async Task<PayPurchaseOrderResult> Handle(PayPurchaseOrderRequest request, CancellationToken cancellationToken)
     {
-        var transactions = await _queryContext.Set<CashTransaction>()
-            .Where(x => !x.IsDeleted && x.SourceModule == nameof(PurchaseOrder) && x.SourceModuleId == request.PurchaseOrderId)
-            .ToListAsync(cancellationToken);
+        // Find the SINGLE CashTransaction for this PO
+        var transaction = await _queryContext.Set<CashTransaction>()
+            .Where(x => !x.IsDeleted
+                      && x.SourceModule == nameof(PurchaseOrder)
+                      && x.SourceModuleId == request.PurchaseOrderId
+                      && x.TransactionType == CashTransactionType.Credit)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (!transactions.Any())
+        if (transaction == null)
         {
             return new PayPurchaseOrderResult { Success = true };
         }
 
-        // Sort: Customer first (CustomerId != null), then Kho (CustomerId == null)
-        var sortedTransactions = transactions
-            .OrderBy(x => x.CustomerId == null ? 1 : 0)
-            .ThenBy(x => x.CreatedAtUtc)
-            .ToList();
+        var previousAccountId = transaction.CashAccountId;
 
-        double remainingPayment = request.PaymentAmount ?? 0;
-        var previousAccountIds = new HashSet<string>();
+        // Update payment
+        double paymentAmount = request.PaymentAmount ?? 0;
+        double txAmount = transaction.Amount ?? 0;
+        double currentPaid = transaction.PaidAmount ?? 0;
+        double newPaid = currentPaid + paymentAmount;
 
-        foreach (var tx in sortedTransactions)
+        transaction.PaidAmount = newPaid;
+        transaction.Status = ComputePaymentStatus(newPaid, txAmount);
+
+        if (paymentAmount > 0 && !string.IsNullOrWhiteSpace(request.CashAccountId))
         {
-            if (tx.CashAccountId != null && tx.CashAccountId != request.CashAccountId)
-            {
-                previousAccountIds.Add(tx.CashAccountId);
-            }
-
-            double txAmount = tx.Amount ?? 0;
-            double payForTx = Math.Min(remainingPayment, txAmount);
-
-            tx.PaidAmount = payForTx;
-            tx.Status = (payForTx == txAmount && txAmount > 0) ? CashTransactionStatus.Paid : (payForTx > 0 ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid);
-            
-            if (payForTx > 0 && !string.IsNullOrWhiteSpace(request.CashAccountId))
-            {
-                tx.CashAccountId = request.CashAccountId;
-            }
-            
-            if (!string.IsNullOrWhiteSpace(request.Description))
-            {
-                tx.Description = request.Description;
-            }
-
-            tx.UpdatedById = request.UpdatedById;
-            _cashTransactionRepository.Update(tx);
-
-            remainingPayment -= payForTx;
+            transaction.CashAccountId = request.CashAccountId;
         }
+
+        if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            transaction.Description = request.Description;
+        }
+
+        transaction.UpdatedById = request.UpdatedById;
+        _cashTransactionRepository.Update(transaction);
 
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var accountsToRecalculate = previousAccountIds.ToList();
-        if (!string.IsNullOrWhiteSpace(request.CashAccountId) && !accountsToRecalculate.Contains(request.CashAccountId))
+        // Recalculate balance for the payment account
+        var accountsToRecalculate = new HashSet<string>();
+        if (!string.IsNullOrWhiteSpace(request.CashAccountId))
         {
             accountsToRecalculate.Add(request.CashAccountId);
+        }
+        if (!string.IsNullOrEmpty(previousAccountId) && previousAccountId != request.CashAccountId)
+        {
+            accountsToRecalculate.Add(previousAccountId);
         }
 
         foreach (var accId in accountsToRecalculate)
@@ -114,6 +109,14 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
         }
 
         return new PayPurchaseOrderResult { Success = true };
+    }
+
+    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    {
+        if (amount <= 0) return CashTransactionStatus.Paid;
+        if (paidAmount >= amount) return CashTransactionStatus.Paid;
+        if (paidAmount > 0) return CashTransactionStatus.PartiallyPaid;
+        return CashTransactionStatus.Unpaid;
     }
 
     private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
@@ -138,7 +141,7 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
         var totalCredit = balances?.TotalCredit ?? 0d;
 
         account.CurrentBalance = initialBalance + totalCredit - totalDebit;
-        
+
         _cashAccountRepository.Update(account);
         await _unitOfWork.SaveAsync(cancellationToken);
     }

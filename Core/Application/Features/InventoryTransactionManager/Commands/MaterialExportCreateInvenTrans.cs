@@ -45,6 +45,7 @@ public class MaterialExportCreateInvenTransHandler : IRequestHandler<MaterialExp
             request.ModuleId,
             request.ProductId,
             request.Movement,
+            null, // warehouseId — set by UpdateMaterialExport when confirmed
             request.CreatedById,
             cancellationToken);
 

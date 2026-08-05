@@ -243,6 +243,26 @@
             return result;
         };
 
+        const originalFocusIn = numericTextBox.prototype.focusHandler;
+        if (originalFocusIn) {
+            numericTextBox.prototype.focusHandler = function (e) {
+                originalFocusIn.call(this, e);
+                if (this.element && this.element.dataset.liveFormatted === 'true') {
+                    setTimeout(() => syncNumericDisplay(this), 0);
+                }
+            };
+        }
+
+        const originalFocusOut = numericTextBox.prototype.focusOutHandler;
+        if (originalFocusOut) {
+            numericTextBox.prototype.focusOutHandler = function (e) {
+                originalFocusOut.call(this, e);
+                if (this.element && this.element.dataset.liveFormatted === 'true') {
+                    setTimeout(() => syncNumericDisplay(this), 0);
+                }
+            };
+        }
+
         numericTextBox.prototype.__vietnamCurrencyPatched = true;
     }
 

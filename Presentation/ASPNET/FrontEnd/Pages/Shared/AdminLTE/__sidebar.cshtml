@@ -1,4 +1,4 @@
-﻿@{
+@{
     var userEmail = "Loading...";
     var avatarUrl = "/noimage.png";
     var appName = "WMS";
@@ -56,9 +56,26 @@
                     return false;
                 });
 
-                const validChildIds = new Set(childMenus.map(menu => menu.id));
-                const parentIds = new Set(childMenus.map(menu => menu.pid));
-                return menuData.filter(menu => validChildIds.has(menu.id) || parentIds.has(menu.id));
+                const parentMap = {};
+                menuData.forEach(item => {
+                    parentMap[item.id] = item;
+                });
+
+                const validIds = new Set(childMenus.map(menu => menu.id));
+                childMenus.forEach(menu => {
+                    let parentId = menu.pid;
+                    while (parentId) {
+                        validIds.add(parentId);
+                        const parent = parentMap[parentId];
+                        if (parent) {
+                            parentId = parent.pid;
+                        } else {
+                            break;
+                        }
+                    }
+                });
+
+                return menuData.filter(menu => validIds.has(menu.id));
             }
 
             function updateMenuSelection(menuData, segment) {
@@ -70,7 +87,7 @@
                 menuData.forEach(item => {
                     item.isSelected = false;
                     item.expanded = false;
-                    if (item.navURL && item.navURL.includes(`/${segment}`)) {
+                    if (item.navURL && item.navURL === currentUrl) {
                         item.isSelected = true;
                         let parentId = item.pid;
                         while (parentId) {

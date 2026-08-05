@@ -16,9 +16,9 @@ public class MaterialExportConfiguration : BaseEntityConfiguration<MaterialExpor
             .HasForeignKey(x => x.MaterialExportId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(x => x.PurchaseOrder)
+        builder.HasOne(x => x.Warehouse)
             .WithMany()
-            .HasForeignKey(x => x.PurchaseOrderId)
+            .HasForeignKey(x => x.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Customer)
