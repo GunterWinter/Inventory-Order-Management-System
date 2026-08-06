@@ -57,6 +57,7 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<CashAccount> CashAccount { get; set; }
     public DbSet<CashCategory> CashCategory { get; set; }
     public DbSet<CashTransaction> CashTransaction { get; set; }
+    public DbSet<CashTransactionPayment> CashTransactionPayment { get; set; }
     public DbSet<MaterialExport> MaterialExport { get; set; }
     public DbSet<MaterialExportItem> MaterialExportItem { get; set; }
 
@@ -108,6 +109,7 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new CashAccountConfiguration());
         modelBuilder.ApplyConfiguration(new CashCategoryConfiguration());
         modelBuilder.ApplyConfiguration(new CashTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new CashTransactionPaymentConfiguration());
         modelBuilder.ApplyConfiguration(new MaterialExportConfiguration());
         modelBuilder.ApplyConfiguration(new MaterialExportItemConfiguration());
 

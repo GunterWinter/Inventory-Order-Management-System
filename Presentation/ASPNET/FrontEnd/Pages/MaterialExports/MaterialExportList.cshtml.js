@@ -156,6 +156,16 @@ const App = {
         Vue.watch(
             () => state.warehouseId,
             async (newVal, oldVal) => {
+                if (oldVal && newVal !== oldVal && state.secondaryData.length > 0) {
+                    state.warehouseId = oldVal;
+                    WarehouseListLookup.obj.value = oldVal;
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Warehouse cannot be changed',
+                        text: 'Remove all material export lines before changing the warehouse.'
+                    });
+                    return;
+                }
                 WarehouseListLookup.refresh();
                 state.errors.warehouseId = '';
                 if (newVal !== oldVal) {
@@ -311,20 +321,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, productId, movement, createdById) => {
+            createSecondaryData: async (moduleId, productId, movement, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/MaterialExportCreateInvenTrans', {
-                        moduleId, productId, movement, createdById
+                        moduleId, productId, movement, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, productId, movement, updatedById) => {
+            updateSecondaryData: async (id, productId, movement, updatedById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/MaterialExportUpdateInvenTrans', {
-                        id, productId, movement, updatedById
+                        id, productId, movement, updatedById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -379,7 +389,10 @@ const App = {
             populateProductListLookupData: async () => {
                 if (state.warehouseId) {
                     try {
-                        const response = await AxiosManager.get('/MaterialExport/GetWarehouseProductStock?warehouseId=' + state.warehouseId, {});
+                        const currentDocument = state.id ? `&materialExportId=${encodeURIComponent(state.id)}` : '';
+                        const response = await AxiosManager.get(
+                            `/MaterialExport/GetWarehouseProductStock?warehouseId=${encodeURIComponent(state.warehouseId)}${currentDocument}`,
+                            {});
                         state.productListLookupData = (response?.data?.content?.data ?? []).map(item => ({
                             id: item.productId,
                             name: item.productName,
@@ -435,6 +448,10 @@ const App = {
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;
+                    if (secondaryGrid.obj?.isEdit) {
+                        secondaryGrid.obj.endEdit();
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                    }
                     await new Promise(resolve => setTimeout(resolve, 300));
 
                     const { isValid, response } = await methods.submitMainData();
@@ -451,6 +468,7 @@ const App = {
                             state.mainTitle = 'Sửa phiếu Xuất vật tư';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
+                            state.status = String(response?.data?.content?.data.status ?? state.status);
                             await methods.populateSecondaryData(state.id);
                             secondaryGrid.refresh();
                             state.showComplexDiv = true;
@@ -494,14 +512,17 @@ const App = {
                 }
             },
             quickAddCustomer: async () => {
-                if (typeof QuickAddHelper !== 'undefined') {
-                    await QuickAddHelper.showQuickAddCustomer(async () => {
-                        await methods.populateCustomerListLookupData();
-                        if (CustomerListLookup.obj) {
-                            CustomerListLookup.obj.dataSource = state.customerListLookupData;
-                        }
-                    });
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
                 }
+                return await QuickAddHelper.complexQuickAddCustomer({
+                    dropdownObj: CustomerListLookup.obj,
+                    refreshLookup: methods.populateCustomerListLookupData,
+                    state,
+                    stateKey: 'customerId',
+                    lookupKey: 'customerListLookupData'
+                });
             }
         };
 
@@ -514,7 +535,7 @@ const App = {
                 await mainGrid.create(state.mainData);
 
                 mainModal.create();
-                mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden());
+                mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
 
                 await methods.populateWarehouseListLookupData();
                 WarehouseListLookup.create();
@@ -530,13 +551,18 @@ const App = {
 
             } catch (e) {
                 console.error('page init error:', e);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Page initialization failed',
+                    text: e?.response?.data?.message ?? e?.message ?? 'Material Export could not be loaded.'
+                });
             } finally {
                 
             }
         });
 
         Vue.onUnmounted(() => {
-            mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden());
+            mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
         });
 
         const mainGrid = {
@@ -809,9 +835,20 @@ const App = {
                                 }
                             }
                         },
+                        ProductSerialPicker.createGridColumn({
+                            headerText: 'Serial Numbers',
+                            productListGetter: () => state.productListLookupData,
+                            warehouseIdGetter: () => state.warehouseId,
+                            moduleName: 'MaterialExport',
+                            moduleIdGetter: () => state.id,
+                            quantityField: 'movement',
+                            quantityObjGetter: () => movementObj,
+                            requireWarehouse: true,
+                            allowEmptySelection: true
+                        }),
                         {
                             field: 'movement',
-                            headerText: 'Số lượng',
+                            headerText: 'Quantity',
                             width: 150,
                             validationRules: {
                                 required: true,
@@ -889,6 +926,13 @@ const App = {
                     },
                     actionBegin: (args) => {
                         if (args.requestType === 'save') {
+                            if (!ProductSerialPicker.validateGridSave(args, {
+                                productListGetter: () => state.productListLookupData,
+                                quantityField: 'movement',
+                                allowEmptySelection: true
+                            })) {
+                                return;
+                            }
                             if (!args.data.productId) {
                                 args.cancel = true;
                                 Swal.fire({ icon: 'warning', title: 'Vui lòng chọn sản phẩm trước khi lưu.' });
@@ -902,9 +946,17 @@ const App = {
                             // Check against actual inventory stock
                             const product = state.productListLookupData.find(p => p.id === args.data.productId);
                             if (product) {
-                                if (args.data.movement > product.stockQuantity) {
+                                const otherQuantity = (secondaryGrid.obj.dataSource ?? [])
+                                    .filter(row => row.id !== args.data.id && row.productId === args.data.productId)
+                                    .reduce((sum, row) => sum + Number(row.movement ?? 0), 0);
+                                const requestedQuantity = otherQuantity + Number(args.data.movement ?? 0);
+                                if (requestedQuantity > product.stockQuantity) {
                                     args.cancel = true;
-                                    Swal.fire({ icon: 'warning', title: `Số lượng vượt quá tồn kho (${product.stockQuantity}). Không thể xuất ${args.data.movement}.` });
+                                    Swal.fire({
+                                        icon: 'warning',
+                                        title: 'Quantity exceeds stock',
+                                        text: `Total requested quantity ${requestedQuantity} exceeds available stock ${product.stockQuantity}.`
+                                    });
                                     return;
                                 }
                             }
@@ -913,7 +965,12 @@ const App = {
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
                             try {
-                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.movement, StorageManager.getUserId());
+                                const response = await services.createSecondaryData(
+                                    state.id,
+                                    args.data.productId,
+                                    args.data.movement,
+                                    StorageManager.getUserId(),
+                                    args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -942,7 +999,12 @@ const App = {
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.movement, StorageManager.getUserId());
+                                const response = await services.updateSecondaryData(
+                                    args.data.id,
+                                    args.data.productId,
+                                    args.data.movement,
+                                    StorageManager.getUserId(),
+                                    args.data.productSerialIds ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -1017,6 +1079,10 @@ const App = {
                 });
             }
         };
+
+        Vue.onUnmounted(() => {
+            mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
+        });
 
         return {
             mainGridRef,

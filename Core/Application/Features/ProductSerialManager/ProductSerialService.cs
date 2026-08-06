@@ -533,7 +533,7 @@ public class ProductSerialService
                 serial.CurrentWarehouseId = ResolveInStockWarehouse(transaction) ?? transaction.WarehouseId;
                 serial.BatchNumber = transaction.BatchNumber ?? serial.BatchNumber;
             }
-            else if (targetStatus is ProductSerialStatus.Sold or ProductSerialStatus.ReturnedToSupplier or ProductSerialStatus.Missing or ProductSerialStatus.Scrapped)
+            else if (targetStatus is ProductSerialStatus.Sold or ProductSerialStatus.Exported or ProductSerialStatus.ReturnedToSupplier or ProductSerialStatus.Missing or ProductSerialStatus.Scrapped)
             {
                 serial.CurrentWarehouseId = null;
             }
@@ -662,6 +662,7 @@ public class ProductSerialService
             nameof(NegativeAdjustment) => ProductSerialStatus.Missing,
             nameof(Scrapping) => ProductSerialStatus.Scrapped,
             nameof(StockCount) => ProductSerialStatus.InStock,
+            nameof(MaterialExport) => ProductSerialStatus.Exported,
             _ => ProductSerialStatus.Reserved
         };
     }
@@ -678,6 +679,10 @@ public class ProductSerialService
 
     private static string? ResolveInStockWarehouse(InventoryTransaction transaction)
     {
+        if (transaction.ModuleName == nameof(MaterialExport))
+        {
+            return null;
+        }
         return transaction.ModuleName == nameof(StockCount)
             ? (transaction.WarehouseId ?? ResolveToWarehouse(transaction))
             : ResolveToWarehouse(transaction);

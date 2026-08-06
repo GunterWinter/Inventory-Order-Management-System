@@ -62,8 +62,11 @@ const App = {
                 state.mainData = (response?.data?.content?.data ?? []).map(item => ({
                     ...item,
                     salesOrderDate: item.salesOrderDate ? DateFormatManager.parseServerDate(item.salesOrderDate) : null,
+                    salesOrderDateText: methods.formatDate(item.salesOrderDate),
                     customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseServerDate(item.customerWarrantyEndDate) : null,
+                    customerWarrantyEndDateText: methods.formatDate(item.customerWarrantyEndDate),
                     supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseServerDate(item.supplierWarrantyEndDate) : null,
+                    supplierWarrantyEndDateText: methods.formatDate(item.supplierWarrantyEndDate),
                     warrantyStatus: item.customerWarrantyEndDate
                         ? (window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.isCustomerWarrantyValid ? 'Valid' : 'Expired') : (item.isCustomerWarrantyValid ? 'Valid' : 'Expired'))
                         : (window.UiLocalization?.translateText ? window.UiLocalization.translateText('N/A') : 'N/A'),
@@ -89,6 +92,7 @@ const App = {
                 state.movementData = (rowData.movements ?? []).map(m => ({
                     ...m,
                     movementDate: m.movementDate ? DateFormatManager.parseServerDate(m.movementDate) : null,
+                    movementDateText: methods.formatDateTime(m.movementDate),
                     moduleName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.moduleName) : m.moduleName,
                     fromWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.fromWarehouseName) : m.fromWarehouseName,
                     toWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.toWarehouseName) : m.toWarehouseName,
@@ -98,7 +102,22 @@ const App = {
             },
             formatDate: (dateString) => {
                 if (!dateString) return '';
-                return DateFormatManager.formatToLocale(DateFormatManager.parseServerDate(dateString));
+                const date = dateString instanceof Date ? dateString : DateFormatManager.parseServerDate(dateString);
+                if (!date) return '';
+                return new Intl.DateTimeFormat('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    day: '2-digit', month: '2-digit', year: 'numeric'
+                }).format(date);
+            },
+            formatDateTime: (dateString) => {
+                if (!dateString) return '';
+                const date = dateString instanceof Date ? dateString : DateFormatManager.parseServerDate(dateString);
+                if (!date) return '';
+                return new Intl.DateTimeFormat('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', hour12: false
+                }).format(date);
             },
             formatNumber: (value) => {
                 if (!value && value !== 0) return '';
@@ -175,6 +194,29 @@ const App = {
                     state.docLoading = false;
                 }
             },
+            openDocumentView: (moduleName, moduleId) => {
+                const routes = {
+                    PurchaseOrder: '/PurchaseOrders/PurchaseOrderList',
+                    GoodsReceive: '/GoodsReceives/GoodsReceiveList',
+                    SalesOrder: '/SalesOrders/SalesOrderList',
+                    DeliveryOrder: '/DeliveryOrders/DeliveryOrderList',
+                    MaterialExport: '/MaterialExports/MaterialExportList',
+                    PurchaseReturn: '/PurchaseReturns/PurchaseReturnList',
+                    SalesReturn: '/SalesReturns/SalesReturnList',
+                    TransferIn: '/TransferIns/TransferInList',
+                    TransferOut: '/TransferOuts/TransferOutList',
+                    PositiveAdjustment: '/PositiveAdjustments/PositiveAdjustmentList',
+                    NegativeAdjustment: '/NegativeAdjustments/NegativeAdjustmentList',
+                    StockCount: '/StockCounts/StockCountList',
+                    Scrapping: '/Scrappings/ScrappingList'
+                };
+                const route = routes[moduleName];
+                if (!route || !moduleId) {
+                    Swal.fire({ icon: 'info', title: 'Document View Unavailable' });
+                    return;
+                }
+                window.open(`${route}?viewId=${encodeURIComponent(moduleId)}`, '_blank', 'noopener');
+            },
             closeDocumentModal: () => {
                 state.documentIframeSrc = null;
                 state.docData = null;
@@ -227,9 +269,9 @@ const App = {
                         { field: 'salesOrderNumber', headerText: 'SO Number', width: 160 },
                         { field: 'customerName', headerText: 'Customer', width: 190 },
                         { field: 'customerPhoneNumber', headerText: 'Phone', width: 150 },
-                        { field: 'salesOrderDate', headerText: 'Sold Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'customerWarrantyEndDate', headerText: 'Warranty End', width: 160, format: 'yyyy-MM-dd' },
-                        { field: 'supplierWarrantyEndDate', headerText: 'Supplier Warranty End', width: 220, format: 'yyyy-MM-dd' },
+                        { field: 'salesOrderDateText', headerText: 'Sold Date', width: 150 },
+                        { field: 'customerWarrantyEndDateText', headerText: 'Warranty End', width: 160 },
+                        { field: 'supplierWarrantyEndDateText', headerText: 'Supplier Warranty End', width: 220 },
                         { field: 'warrantyStatus', headerText: 'Warranty Status', width: 160 }
                     ],
                     toolbar: ['ExcelExport', 'Search'],
@@ -269,14 +311,17 @@ const App = {
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
                     columns: [
-                        { field: 'movementDate', headerText: 'Movement Date', width: 170, format: 'yyyy-MM-dd' },
+                        { field: 'movementDateText', headerText: 'Movement Date', width: 190 },
                         { field: 'moduleName', headerText: 'Module', width: 170 },
                         { field: 'fromWarehouseName', headerText: 'From Warehouse', width: 180 },
                         { field: 'toWarehouseName', headerText: 'To Warehouse', width: 180 },
                         { field: 'statusName', headerText: 'Status', width: 130 }
                     ],
+                    sortSettings: { columns: [{ field: 'movementDate', direction: 'Descending' }] },
                     recordClick: (args) => {
-                        methods.openDocumentModal(args.rowData.moduleName, args.rowData.moduleId);
+                        methods.openDocumentView(
+                            args.rowData.viewModuleName ?? args.rowData.moduleName,
+                            args.rowData.viewModuleId ?? args.rowData.moduleId);
                     }
                 });
 

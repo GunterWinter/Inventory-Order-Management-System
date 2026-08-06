@@ -180,10 +180,16 @@ window.ProductSerialPicker = (() => {
                         selectedIds: args.rowData.productSerialIds ?? []
                     });
 
+                    if (selectedSerials === null) {
+                        return;
+                    }
+
                     applySelectionToRow(args.rowData, selectedSerials, quantityField);
                     if (quantityObj) {
-                        quantityObj.value = args.rowData[quantityField] ?? 0;
-                        quantityObj.readonly = true;
+                        if (selectedSerials.length > 0) {
+                            quantityObj.value = args.rowData[quantityField] ?? 0;
+                        }
+                        quantityObj.readonly = selectedSerials.length > 0;
                         quantityObj.dataBind();
                     }
                     refreshLabel();
@@ -216,7 +222,9 @@ window.ProductSerialPicker = (() => {
             return false;
         }
 
-        data[quantityField] = selectedCount;
+        if (selectedCount > 0) {
+            data[quantityField] = selectedCount;
+        }
         return true;
     };
 

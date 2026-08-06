@@ -4,12 +4,12 @@ namespace Domain.Enums;
 
 public enum DeliveryOrderStatus
 {
-    [Description("Nháp")]
+    [Description("Draft")]
     Draft = 0,
-    [Description("Đã hủy")]
+    [Description("Cancelled")]
     Cancelled = 1,
-    [Description("Đã xác nhận")]
+    [Description("Confirmed")]
     Confirmed = 2,
-    [Description("Lưu trữ")]
+    [Description("Archived")]
     Archived = 3
 }

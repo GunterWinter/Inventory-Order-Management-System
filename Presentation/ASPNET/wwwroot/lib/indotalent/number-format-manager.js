@@ -6,6 +6,7 @@
     const MAX_FRACTION_DIGITS = 0;
     const MONEY_FORMAT = 'N0';
     const MONEY_FIELD_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|sales)/i;
+    const numericInputHandlers = new WeakMap();
 
     function toFiniteNumber(value) {
         if (typeof value === 'number' && Number.isFinite(value)) {
@@ -177,15 +178,62 @@
             return;
         }
 
-        const parsedValue = parseLocaleNumber(element.value);
-        if (parsedValue == null) {
-            element.value = '';
-            numericTextBox.value = null;
-            return;
+        const value = numericTextBox.value ?? parseLocaleNumber(element.value);
+        element.value = value == null ? '' : formatNumber(value);
+    }
+
+    function countDigitsBeforeCaret(value, caretPosition) {
+        return `${value ?? ''}`.slice(0, Math.max(0, caretPosition ?? 0)).replace(/\D/g, '').length;
+    }
+
+    function resolveCaretPosition(formattedValue, digitOffset) {
+        if (digitOffset <= 0) {
+            return formattedValue.startsWith('-') ? 1 : 0;
         }
 
-        numericTextBox.value = parsedValue;
-        element.value = formatEditableValue(element.value);
+        let digitsSeen = 0;
+        for (let index = 0; index < formattedValue.length; index += 1) {
+            if (/\d/.test(formattedValue[index])) {
+                digitsSeen += 1;
+            }
+
+            if (digitsSeen >= digitOffset) {
+                return index + 1;
+            }
+        }
+
+        return formattedValue.length;
+    }
+
+    function restoreCaret(element, digitOffset) {
+        const caretPosition = resolveCaretPosition(element.value, digitOffset);
+        try {
+            element.setSelectionRange(caretPosition, caretPosition);
+        } catch (error) {
+        }
+    }
+
+    function normalizeElementForComponent(element) {
+        const editableValue = element.value;
+        const selectionStart = element.selectionStart ?? editableValue.length;
+        const selectionEnd = element.selectionEnd ?? selectionStart;
+        const startDigitOffset = countDigitsBeforeCaret(editableValue, selectionStart);
+        const endDigitOffset = countDigitsBeforeCaret(editableValue, selectionEnd);
+        const normalizedValue = normalizeNumberString(editableValue);
+        const signOffset = normalizedValue.startsWith('-') ? 1 : 0;
+        element.value = normalizedValue;
+
+        try {
+            element.setSelectionRange(
+                Math.min(normalizedValue.length, startDigitOffset + signOffset),
+                Math.min(normalizedValue.length, endDigitOffset + signOffset));
+        } catch (error) {
+        }
+
+        return {
+            editableValue,
+            digitOffset: endDigitOffset
+        };
     }
 
     function attachLiveFormatting(numericTextBox) {
@@ -195,20 +243,42 @@
 
         const element = numericTextBox.element;
         let isComposing = false;
+        let inputRevision = 0;
 
-        const handleInput = () => {
+        const prepareInputForComponent = () => {
             if (isComposing || numericTextBox.readonly || numericTextBox.enabled === false) {
                 return;
             }
 
-            syncNumericDisplay(numericTextBox);
-            const caretPosition = element.value.length;
-            requestAnimationFrame(() => {
-                try {
-                    element.setSelectionRange(caretPosition, caretPosition);
-                } catch (error) {
+            const editableValue = element.value;
+            const digitOffset = countDigitsBeforeCaret(editableValue, element.selectionStart ?? editableValue.length);
+            const normalizedValue = normalizeNumberString(editableValue);
+            const parsedValue = parseLocaleNumber(editableValue);
+            const revision = ++inputRevision;
+
+            // Syncfusion must parse an ungrouped value. Reapply the grouped
+            // presentation only after all component input handlers have run.
+            element.value = normalizedValue;
+            const applyFormattedDisplay = () => {
+                if (revision !== inputRevision || document.activeElement !== element) {
+                    return;
                 }
-            });
+
+                if (typeof numericTextBox.setProperties === 'function') {
+                    numericTextBox.setProperties({ value: parsedValue }, true);
+                }
+                element.value = formatEditableValue(editableValue);
+                restoreCaret(element, digitOffset);
+            };
+
+            queueMicrotask(applyFormattedDisplay);
+            requestAnimationFrame(applyFormattedDisplay);
+        };
+
+        const prepareBlurForComponent = () => {
+            const parsedValue = parseLocaleNumber(element.value);
+            element.value = parsedValue == null ? '' : `${parsedValue}`;
+            setTimeout(() => syncNumericDisplay(numericTextBox), 0);
         };
 
         element.addEventListener('compositionstart', () => {
@@ -217,11 +287,13 @@
 
         element.addEventListener('compositionend', () => {
             isComposing = false;
-            handleInput();
+            prepareInputForComponent();
         });
 
-        element.addEventListener('input', handleInput);
-        element.addEventListener('blur', () => syncNumericDisplay(numericTextBox));
+        numericInputHandlers.set(element, {
+            prepareInputForComponent,
+            prepareBlurForComponent
+        });
         element.dataset.liveFormatted = 'true';
 
         if (numericTextBox.value != null && numericTextBox.value !== '') {
@@ -234,6 +306,38 @@
         if (!numericTextBox || numericTextBox.prototype.__vietnamCurrencyPatched) {
             return;
         }
+
+        const normalizeBeforeComponentHandler = handlerName => {
+            const originalHandler = numericTextBox.prototype[handlerName];
+            if (typeof originalHandler !== 'function') {
+                return;
+            }
+
+            numericTextBox.prototype[handlerName] = function (event) {
+                if (!this.element || this.element.dataset.liveFormatted !== 'true') {
+                    return originalHandler.call(this, event);
+                }
+
+                const { digitOffset } = normalizeElementForComponent(this.element);
+                const result = originalHandler.call(this, event);
+
+                if (handlerName === 'inputHandler' || handlerName === 'keyUpHandler') {
+                    queueMicrotask(() => {
+                        if (document.activeElement !== this.element) {
+                            return;
+                        }
+
+                        syncNumericDisplay(this);
+                        restoreCaret(this.element, digitOffset);
+                    });
+                }
+
+                return result;
+            };
+        };
+
+        ['keyDownHandler', 'keyPressHandler', 'inputHandler', 'keyUpHandler', 'changeHandler']
+            .forEach(normalizeBeforeComponentHandler);
 
         const originalAppendTo = numericTextBox.prototype.appendTo;
         numericTextBox.prototype.appendTo = function (selector) {
@@ -248,7 +352,7 @@
             numericTextBox.prototype.focusHandler = function (e) {
                 originalFocusIn.call(this, e);
                 if (this.element && this.element.dataset.liveFormatted === 'true') {
-                    setTimeout(() => syncNumericDisplay(this), 0);
+                    syncNumericDisplay(this);
                 }
             };
         }
@@ -265,6 +369,83 @@
 
         numericTextBox.prototype.__vietnamCurrencyPatched = true;
     }
+
+    function formatPlainNumericInput(element) {
+        if (!element || element.disabled || element.readOnly) {
+            return;
+        }
+
+        const editableValue = element.value;
+        const digitOffset = countDigitsBeforeCaret(editableValue, element.selectionStart ?? editableValue.length);
+        element.value = formatEditableValue(editableValue);
+        restoreCaret(element, digitOffset);
+    }
+
+    function bindNumericInput(element) {
+        if (!element) {
+            return null;
+        }
+
+        element.dataset.numberFormat = 'true';
+        element.setAttribute('inputmode', 'numeric');
+        formatPlainNumericInput(element);
+        return element;
+    }
+
+    document.addEventListener('input', event => {
+        const element = event.target;
+        const numericHandlers = element instanceof HTMLInputElement
+            ? numericInputHandlers.get(element)
+            : null;
+        if (numericHandlers) {
+            numericHandlers.prepareInputForComponent();
+            return;
+        }
+
+        if (element instanceof HTMLInputElement && element.dataset.numberFormat === 'true') {
+            formatPlainNumericInput(element);
+        }
+    }, true);
+
+    document.addEventListener('keydown', event => {
+        const element = event.target;
+        if (!(element instanceof HTMLInputElement) || !numericInputHandlers.has(element)) {
+            return;
+        }
+
+        normalizeElementForComponent(element);
+    }, true);
+
+    document.addEventListener('keyup', event => {
+        const element = event.target;
+        const numericHandlers = element instanceof HTMLInputElement
+            ? numericInputHandlers.get(element)
+            : null;
+        if (!numericHandlers || document.activeElement !== element) {
+            return;
+        }
+
+        const { digitOffset } = normalizeElementForComponent(element);
+        queueMicrotask(() => {
+            syncNumericDisplay(element.ej2_instances?.[0]);
+            restoreCaret(element, digitOffset);
+        });
+    }, true);
+
+    document.addEventListener('blur', event => {
+        const element = event.target;
+        const numericHandlers = element instanceof HTMLInputElement
+            ? numericInputHandlers.get(element)
+            : null;
+        if (numericHandlers) {
+            numericHandlers.prepareBlurForComponent();
+            return;
+        }
+
+        if (element instanceof HTMLInputElement && element.dataset.numberFormat === 'true') {
+            formatPlainNumericInput(element);
+        }
+    }, true);
 
     function patchGrid() {
         const grid = window.ej?.grids?.Grid;
@@ -299,6 +480,8 @@
         formatCurrencyToLocale: formatCurrency,
         formatEditableValue,
         normalizeNumberString,
-        parseLocaleNumber
+        parseLocaleNumber,
+        bindNumericInput,
+        refreshNumericTextBox: syncNumericDisplay
     };
 })(window, document);

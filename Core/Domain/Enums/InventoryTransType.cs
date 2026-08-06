@@ -4,8 +4,8 @@ namespace Domain.Enums;
 
 public enum InventoryTransType
 {
-    [Description("Nhập")]
+    [Description("In")]
     In = 1,
-    [Description("Xuất")]
+    [Description("Out")]
     Out = -1,
 }

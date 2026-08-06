@@ -79,6 +79,58 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .Where(x => x.ModuleName == nameof(TransferIn) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
             .SumAsync(x => (double?)x.Movement, cancellationToken);
 
+        var confirmedSalesAmount = await _context.Set<SalesOrder>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
+            .SumAsync(x => x.AfterTaxAmount ?? 0d, cancellationToken);
+
+        var confirmedPurchaseAmount = await _context.Set<PurchaseOrder>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
+            .SumAsync(x => x.AfterTaxAmount ?? 0d, cancellationToken);
+
+        var salesPaidAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(SalesOrder)
+                && x.TransactionType == CashTransactionType.Debit
+                && _context.Set<SalesOrder>().Any(order =>
+                    order.Id == x.SourceModuleId
+                    && !order.IsDeleted
+                    && order.OrderStatus == SalesOrderStatus.Confirmed))
+            .SumAsync(x => x.PaidAmount ?? 0d, cancellationToken);
+
+        var purchasePaidAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(PurchaseOrder)
+                && x.TransactionType == CashTransactionType.Credit
+                && _context.Set<PurchaseOrder>().Any(order =>
+                    order.Id == x.SourceModuleId
+                    && !order.IsDeleted
+                    && order.OrderStatus == PurchaseOrderStatus.Confirmed))
+            .SumAsync(x => x.PaidAmount ?? 0d, cancellationToken);
+
+        var cashBalance = await _context.Set<CashAccount>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .SumAsync(x => x.CurrentBalance ?? 0d, cancellationToken);
+
+        var inventoryQuantity = await _context.InventoryTransaction
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.Status == InventoryTransactionStatus.Confirmed
+                && x.Product!.Physical == true
+                && x.Warehouse!.SystemWarehouse == false)
+            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+
+        var materialExportCount = await _context.Set<MaterialExport>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .CountAsync(x => x.Status == MaterialExportStatus.Confirmed, cancellationToken);
+
         var cardsDashboardData = new CardsItem
         {
             SalesTotal = salesTotal,
@@ -88,7 +140,14 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             DeliveryOrderTotal = deliveryOrderTotal,
             GoodsReceiveTotal = goodsReceiveTotal,
             TransferOutTotal = transferOutTotal,
-            TransferInTotal = transferInTotal
+            TransferInTotal = transferInTotal,
+            ConfirmedSalesAmount = confirmedSalesAmount,
+            ConfirmedPurchaseAmount = confirmedPurchaseAmount,
+            CashBalance = cashBalance,
+            CustomerReceivable = Math.Max(0d, confirmedSalesAmount - salesPaidAmount),
+            VendorDebt = Math.Max(0d, confirmedPurchaseAmount - purchasePaidAmount),
+            InventoryQuantity = inventoryQuantity,
+            MaterialExportCount = materialExportCount
         };
 
 

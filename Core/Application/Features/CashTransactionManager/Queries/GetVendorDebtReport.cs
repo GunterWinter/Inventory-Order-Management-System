@@ -34,86 +34,72 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
         _queryContext = queryContext;
     }
 
-    public async Task<GetVendorDebtReportResult> Handle(GetVendorDebtReportRequest request, CancellationToken cancellationToken = default)
+    public async Task<GetVendorDebtReportResult> Handle(
+        GetVendorDebtReportRequest request,
+        CancellationToken cancellationToken = default)
     {
-        // 1. Get total purchase amount per vendor from Confirmed POs
-        var purchaseByVendor = await _queryContext
-            .Set<PurchaseOrder>()
+        var purchaseObligations = await _queryContext.Set<PurchaseOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed && x.VendorId != null)
+            .Where(x => x.VendorId != null && x.OrderStatus == PurchaseOrderStatus.Confirmed)
             .GroupBy(x => x.VendorId)
             .Select(g => new
             {
-                VendorId = g.Key,
-                TotalPurchase = g.Sum(x => x.AfterTaxAmount ?? 0d)
+                VendorId = g.Key!,
+                Amount = g.Sum(x => x.AfterTaxAmount ?? 0d)
             })
             .ToListAsync(cancellationToken);
 
-        // 2. Get total PAID amount per vendor from CashTransactions with VendorId
-        // Only count PaidAmount (actual payment), NOT Amount (total obligation)
-        // This includes:
-        //   a) PO-linked phiếu (SourceModule=PurchaseOrder, VendorId set)
-        //   b) Manual CashTransactions created by accountant (công thợ, etc.) with VendorId
-        var paidByVendor = await _queryContext
-            .Set<CashTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.VendorId != null)
-            .GroupBy(x => x.VendorId)
-            .Select(g => new
-            {
-                VendorId = g.Key,
-                TotalPaid = g.Sum(x => x.PaidAmount ?? 0d)
-            })
+        var purchasePayments = await (
+                from transaction in _queryContext.Set<CashTransaction>().AsNoTracking()
+                join purchaseOrder in _queryContext.Set<PurchaseOrder>().AsNoTracking()
+                    on transaction.SourceModuleId equals purchaseOrder.Id
+                where !transaction.IsDeleted
+                    && !purchaseOrder.IsDeleted
+                    && purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed
+                    && purchaseOrder.VendorId != null
+                    && transaction.SourceModule == nameof(PurchaseOrder)
+                    && transaction.TransactionType == CashTransactionType.Credit
+                group transaction by purchaseOrder.VendorId into vendorTransactions
+                select new
+                {
+                    VendorId = vendorTransactions.Key!,
+                    Amount = vendorTransactions.Sum(x => x.PaidAmount ?? 0d)
+                })
             .ToListAsync(cancellationToken);
 
-        // 3. Get vendor names
-        var allVendorIds = purchaseByVendor.Select(x => x.VendorId)
-            .Union(paidByVendor.Select(x => x.VendorId))
-            .Where(x => x != null)
+        var vendorIds = purchaseObligations.Select(x => x.VendorId)
             .Distinct()
             .ToList();
-
-        var vendors = await _queryContext
-            .Set<Vendor>()
+        var vendors = await _queryContext.Set<Vendor>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => allVendorIds.Contains(x.Id))
+            .Where(x => vendorIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
-
-        // 4. Merge data
-        var result = new List<VendorDebtReportDto>();
-
-        foreach (var vendorId in allVendorIds)
-        {
-            var totalPurchase = purchaseByVendor
-                .Where(x => x.VendorId == vendorId)
-                .Sum(x => x.TotalPurchase);
-
-            var totalPaid = paidByVendor
-                .Where(x => x.VendorId == vendorId)
-                .Sum(x => x.TotalPaid);
-
-            result.Add(new VendorDebtReportDto
-            {
-                VendorId = vendorId,
-                VendorName = vendors.GetValueOrDefault(vendorId!) ?? "N/A",
-                TotalPurchase = totalPurchase,
-                TotalPaid = totalPaid,
-                RemainingDebt = totalPurchase - totalPaid
-            });
-        }
-
-        // Only return vendors with non-zero purchase or debt
-        result = result
-            .Where(x => x.TotalPurchase != 0 || x.RemainingDebt != 0)
-            .OrderByDescending(x => x.RemainingDebt)
-            .ToList();
 
         return new GetVendorDebtReportResult
         {
-            Data = result
+            Data = vendorIds
+                .Select(vendorId =>
+                {
+                    var purchaseAmount = purchaseObligations
+                        .Where(x => x.VendorId == vendorId)
+                        .Sum(x => x.Amount);
+                    var purchasePaid = purchasePayments
+                        .Where(x => x.VendorId == vendorId)
+                        .Sum(x => x.Amount);
+                    return new VendorDebtReportDto
+                    {
+                        VendorId = vendorId,
+                        VendorName = vendors.GetValueOrDefault(vendorId) ?? "N/A",
+                        TotalPurchase = purchaseAmount,
+                        TotalPaid = purchasePaid,
+                        RemainingDebt = Math.Max(0d, purchaseAmount - purchasePaid)
+                    };
+                })
+                .Where(x => x.TotalPurchase != 0d || x.RemainingDebt != 0d)
+                .OrderByDescending(x => x.RemainingDebt)
+                .ToList()
         };
     }
 }

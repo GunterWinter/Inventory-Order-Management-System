@@ -352,6 +352,19 @@ const App = {
                 const response = await services.getVendorListLookupData();
                 state.vendorListLookupData = response?.data?.content?.data;
             },
+            quickAddVendor: async () => {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.complexQuickAddVendor({
+                    dropdownObj: vendorListLookup.obj,
+                    refreshLookup: methods.populateVendorListLookupData,
+                    state,
+                    stateKey: 'vendorId',
+                    lookupKey: 'vendorListLookupData'
+                });
+            },
             populateTaxListLookupData: async () => {
                 const response = await services.getTaxListLookupData();
                 state.taxListLookupData = response?.data?.content?.data;
@@ -374,17 +387,17 @@ const App = {
                     if (isConfirmed) {
                         if (payment) {
                             if (payment.paidAmount >= payment.amount && payment.amount > 0) {
-                                paymentStatusText = 'Đã thanh toán';
+                                paymentStatusText = 'Paid';
                                 paymentStatusClass = 'paid';
                             } else if (payment.paidAmount > 0) {
-                                paymentStatusText = 'Còn nợ';
+                                paymentStatusText = 'Partially Paid';
                                 paymentStatusClass = 'unpaid';
                             } else {
-                                paymentStatusText = 'Chưa thanh toán';
+                                paymentStatusText = 'Unpaid';
                                 paymentStatusClass = 'unpaid';
                             }
                         } else {
-                            paymentStatusText = 'Chưa thanh toán';
+                            paymentStatusText = 'Unpaid';
                             paymentStatusClass = 'unpaid';
                         }
                     }
@@ -463,9 +476,9 @@ const App = {
                         state.isSubmitting = false;
                         Swal.fire({
                             icon: 'warning',
-                            title: 'Dòng sản phẩm chưa hoàn tất',
-                            text: 'Vui lòng điền đầy đủ các trường bắt buộc (Hàng hóa, Kho hàng, Thuế, Số lượng) trên dòng đang chỉnh sửa trước khi lưu đơn hàng.',
-                            confirmButtonText: 'Đồng ý'
+                            title: 'Incomplete product row',
+                            text: 'Complete all required fields (Product, Warehouse, Tax and Quantity) on the edited row before saving the purchase order.',
+                            confirmButtonText: 'OK'
                         });
                         return;
                     }
@@ -493,7 +506,7 @@ const App = {
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
-                            state.mainTitle = 'Sửa đơn mua hàng';
+                            state.mainTitle = 'Edit Purchase Order';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
                             state.orderDate = response?.data?.content?.data.orderDate ? DateFormatManager.parseBusinessDate(response.data.content.data.orderDate) : null;
@@ -506,12 +519,12 @@ const App = {
                             await methods.populateSecondaryData(state.id);
                             secondaryGrid.refresh();
 
-                            Swal.fire({ icon: 'success', title: 'L\u01b0u th\u00e0nh c\u00f4ng', timer: 1000, showConfirmButton: false });
+                            Swal.fire({ icon: 'success', title: 'Save Successful', timer: 1000, showConfirmButton: false });
                         } else {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Xóa thành công',
-                                text: 'Đơn hàng đã được xóa...',
+                                title: 'Delete Successful',
+                                text: 'The purchase order has been deleted.',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -524,16 +537,16 @@ const App = {
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Xóa thất bại' : 'Lưu thất bại',
-                            text: response.data.message ?? 'Vui lòng kiểm tra dữ liệu.',
-                            confirmButtonText: 'Thử lại'
+                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
+                            text: response.data.message ?? 'Please check your data.',
+                            confirmButtonText: 'Try Again'
                         });
                     }
                 } catch (error) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Có lỗi xảy ra',
-                        text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                        title: 'An error occurred',
+                        text: error.response?.data?.message ?? 'Please try again.',
                         confirmButtonText: 'OK'
                     });
                 } finally {
@@ -560,7 +573,7 @@ const App = {
 
                 const gridData = costAllocationPreviewGrid.obj ? costAllocationPreviewGrid.obj.dataSource : [];
                 if (!gridData || gridData.length === 0) {
-                    Swal.fire({ icon: 'warning', title: 'Chưa chọn sản phẩm', text: 'Vui lòng chọn ít nhất 1 sản phẩm để phân bổ công trình.' });
+                    Swal.fire({ icon: 'warning', title: 'No products selected', text: 'Select at least one product to allocate.' });
                     return;
                 }
 
@@ -568,7 +581,7 @@ const App = {
                 const byPoItem = {};
                 for (const row of gridData) {
                     if (row.allocateQuantity < 0) {
-                        Swal.fire({ icon: 'warning', title: 'Số lượng không hợp lệ', text: 'Số lượng phân bổ không được âm.' });
+                        Swal.fire({ icon: 'warning', title: 'Invalid quantity', text: 'Allocation quantity cannot be negative.' });
                         return;
                     }
 
@@ -587,7 +600,8 @@ const App = {
 
                 for (const [poItemId, info] of Object.entries(byPoItem)) {
                     if (info.total > info.maxQty) {
-                        Swal.fire({ icon: 'warning', title: 'Tổng phân bổ vượt quá', text: `Sản phẩm "${info.name}" tổng phân bổ (${info.total}) vượt quá số lượng mua (${info.maxQty}).` });
+                        const translate = window.UiLocalization?.translateText ?? (value => value);
+                        Swal.fire({ icon: 'warning', title: 'Allocation exceeds purchase quantity', text: `${translate('Product')} "${info.name}" ${translate('has total allocation')} ${info.total}, ${translate('exceeding purchased quantity')} ${info.maxQty}.` });
                         return;
                     }
                 }
@@ -596,7 +610,8 @@ const App = {
                 for (const row of gridData) {
                     if ((row.allocateQuantity || 0) > 0 && !row.customerId) {
                         const product = state.productListLookupData.find(p => p.id === row.productId);
-                        Swal.fire({ icon: 'warning', title: 'Thiếu khách hàng', text: `Sản phẩm "${product?.name || ''}" có số lượng chia > 0 nhưng chưa chọn khách hàng.` });
+                        const translate = window.UiLocalization?.translateText ?? (value => value);
+                        Swal.fire({ icon: 'warning', title: 'Customer is required', text: `${translate('Product')} "${product?.name || ''}" ${translate('has a positive allocation but no customer')}.` });
                         return;
                     }
                 }
@@ -615,26 +630,24 @@ const App = {
                     const response = await services.allocatePurchaseOrderCosts(
                         state.id,
                         null,
-                        null,
+                        state.costAllocationCashCategoryId ?? methods.resolveCashCategoryId('Mua hàng'),
                         items,
                         StorageManager.getUserId()
                     );
 
                     if (response.data.code === 200) {
-                        const result = response.data.content;
                         costAllocationModal.obj.hide();
 
                         await methods.populateSecondaryData(state.id);
                         secondaryGrid.refresh();
 
-                        const txCount = result?.createdTransactions?.length ?? 0;
                         Swal.fire({
                             icon: 'success',
-                            title: 'Phân bổ công trình thành công',
-                            html: `Đã tạo <b>${txCount}</b> giao dịch chi (Nháp).<br/>Bạn có muốn xem trang Tài chính không?`,
+                            title: 'Allocation saved',
+                            html: 'One unpaid vendor obligation was created or updated.<br/>Open Cash Transactions?',
                             showCancelButton: true,
-                            confirmButtonText: 'Đến trang Tài chính',
-                            cancelButtonText: 'Đóng'
+                            confirmButtonText: 'Open Cash Transactions',
+                            cancelButtonText: 'Close'
                         }).then((result) => {
                             if (result.isConfirmed) {
                                 window.location.href = '/CashTransactions/CashTransactionList';
@@ -643,15 +656,15 @@ const App = {
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: 'Phân bổ thất bại',
-                            text: response.data.message ?? 'Vui lòng kiểm tra lại.'
+                            title: 'Allocation failed',
+                            text: response.data.message ?? 'Check the allocation data and try again.'
                         });
                     }
                 } catch (error) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Có lỗi xảy ra',
-                        text: error.response?.data?.message ?? 'Không thể phân bổ công trình.'
+                        title: 'An error occurred',
+                        text: error.response?.data?.message ?? 'The cost allocation could not be saved.'
                     });
                 } finally {
                     state.isCostAllocationSubmitting = false;
@@ -659,6 +672,15 @@ const App = {
             },
             openCostAllocationModal: async () => {
                 try {
+                    const purchaseOrder = state.mainData.find(x => x.id === state.id);
+                    if ((purchaseOrder?.cashTransactionPaidAmount ?? 0) > 0) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Allocation is locked',
+                            text: 'A partially or fully paid purchase order cannot be reallocated.'
+                        });
+                        return;
+                    }
                     Swal.fire({ title: 'Loading...', allowOutsideClick: false });
                     Swal.showLoading();
 
@@ -667,7 +689,8 @@ const App = {
                     const customerAllocations = allAllocations.filter(x => x.customerId !== null);
 
                     const prefillCashAccountId = response?.data?.content?.cashAccountId || null;
-                    const prefillCashCategoryId = response?.data?.content?.cashCategoryId || null;
+                    const prefillCashCategoryId = response?.data?.content?.cashCategoryId
+                        || methods.resolveCashCategoryId('Mua hàng');
 
                     // Calculate total allocated IN BACKEND for each PO item
                     const backendAllocByItem = {};
@@ -747,7 +770,7 @@ const App = {
                     Swal.close();
                     costAllocationModal.obj.show();
                 } catch (error) {
-                    Swal.fire({ icon: 'error', title: 'Lỗi', text: 'Không thể tải dữ liệu chia đơn.' });
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Allocation data could not be loaded.' });
                 }
             }
         };
@@ -759,7 +782,7 @@ const App = {
                     vendorListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.vendorListLookupData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn nhà cung cấp',
+                        placeholder: 'Select Vendor',
                         filterBarPlaceholder: 'Search',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
@@ -792,7 +815,7 @@ const App = {
                     purchaseOrderStatusListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.purchaseOrderStatusListLookupData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn trạng thái',
+                        placeholder: 'Select Status',
                         value: state.orderStatus,
                         change: (e) => {
                             state.orderStatus = e.value;
@@ -892,10 +915,10 @@ const App = {
                         let detailGrid = new ej.grids.Grid({
                             dataSource: [],
                             columns: [
-                                { field: 'purchaseOrderItem.product.name', headerText: 'Sản phẩm', width: 150 },
+                                { field: 'purchaseOrderItem.product.name', headerText: 'Product', width: 150 },
                                 { field: 'purchaseOrderItem.warehouse.name', headerText: 'Kho', width: 120 },
-                                { field: 'customer.name', headerText: 'Khách hàng', width: 150 },
-                                { field: 'quantity', headerText: 'Số lượng', width: 100, format: 'N0' }
+                                { field: 'customer.name', headerText: 'Customer', width: 150 },
+                                { field: 'quantity', headerText: 'Quantity', width: 100, format: 'N0' }
                             ]
                         });
 
@@ -939,15 +962,15 @@ const App = {
                         {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
-                        { field: 'number', headerText: 'Số đơn', width: 150, minWidth: 150 },
-                        { field: 'orderDate', headerText: 'Ngày đặt', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'vendorName', headerText: 'Nhà cung cấp', width: 200, minWidth: 200 },
-                        { field: 'orderStatusName', headerText: 'Trạng thái', width: 150, minWidth: 150 },
-                        { field: 'afterTaxAmount', headerText: 'Tổng tiền', width: 150, minWidth: 150, format: 'N0' },
-                        { field: 'createdAtUtc', headerText: 'Thời điểm tạo', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
+                        { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
+                        { field: 'orderDate', headerText: 'Order Date', width: 150, format: 'yyyy-MM-dd' },
+                        { field: 'vendorName', headerText: 'Vendor', width: 200, minWidth: 200 },
+                        { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
+                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N0' },
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
                         {
                             field: 'paymentStatusText',
-                            headerText: 'Thanh toán',
+                            headerText: 'Payment',
                             width: 150,
                             minWidth: 150,
                             textAlign: 'Center',
@@ -961,10 +984,10 @@ const App = {
                     toolbar: [
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
-                        { text: 'Thêm', tooltipText: 'Thêm', prefixIcon: 'e-add', id: 'AddCustom' },
-                        { text: 'Sửa', tooltipText: 'Sửa', prefixIcon: 'e-edit', id: 'EditCustom' },
-                        { text: 'Xem', tooltipText: 'Xem chi tiết', prefixIcon: 'e-eye', id: 'ViewCustom' },
-                        { text: 'Xóa', tooltipText: 'Xóa', prefixIcon: 'e-delete', id: 'DeleteCustom' },
+                        { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
+                        { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
+                        { text: 'View', tooltipText: 'View details', prefixIcon: 'e-eye', id: 'ViewCustom' },
+                        { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'In PDF', tooltipText: 'In PDF', id: 'PrintPDFCustom' },
                     ],
@@ -983,6 +1006,14 @@ const App = {
                                 if (!row) return;
                                 const rowData = mainGrid.obj.getRowInfo(row).rowData;
                                 if (!rowData) return;
+                                if (!rowData.cashTransactionId) {
+                                    Swal.fire({
+                                        icon: 'warning',
+                                        title: 'Payment is unavailable',
+                                        text: 'Allocate this purchase order first to create its vendor obligation.'
+                                    });
+                                    return;
+                                }
                                 await showPaymentPopup(
                                     rowData.id,
                                     rowData.number,
@@ -990,7 +1021,7 @@ const App = {
                                     rowData.cashTransactionId,
                                     rowData.cashTransactionStatus,
                                     rowData.cashTransactionCashAccountId,
-                                    rowData.cashTransactionAmount,
+                                    rowData.cashTransactionPaidAmount,
                                     rowData.cashTransactionDescription,
                                     rowData.cashTransactionDate,
                                     rowData.cashTransactionIsSplit
@@ -1023,7 +1054,7 @@ const App = {
                             const selectedRecord = args.rowData;
                             state.isViewMode = true;
                             state.deleteMode = false;
-                            state.mainTitle = 'Xem \u0111\u01a1n mua h\u00e0ng';
+                            state.mainTitle = 'View Purchase Order';
                             state.id = selectedRecord.id ?? '';
                             state.number = selectedRecord.number ?? '';
                             state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
@@ -1045,7 +1076,7 @@ const App = {
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
                             state.isViewMode = false;
-                            state.mainTitle = 'Thêm đơn mua hàng';
+                            state.mainTitle = 'Add Purchase Order';
                             resetFormState();
                             state.secondaryData = [];
                             secondaryGrid.refresh();
@@ -1058,7 +1089,7 @@ const App = {
                             state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Sửa đơn mua hàng';
+                                state.mainTitle = 'Edit Purchase Order';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
@@ -1082,7 +1113,7 @@ const App = {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.isViewMode = true;
                                 state.deleteMode = false;
-                                state.mainTitle = 'Xem đơn mua hàng';
+                                state.mainTitle = 'View Purchase Order';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
@@ -1101,7 +1132,7 @@ const App = {
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Xóa đơn mua hàng?';
+                                state.mainTitle = 'Delete Purchase Order?';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
                                 state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
@@ -1176,7 +1207,7 @@ const App = {
                         },
                         {
                             field: 'productId',
-                            headerText: 'Sản phẩm',
+                            headerText: 'Product',
                             width: 250,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
@@ -1243,7 +1274,7 @@ const App = {
                                                 }
                                             }
                                         },
-                                        placeholder: 'Chọn sản phẩm',
+                                        placeholder: 'Select Product',
                                         floatLabelType: 'Never'
                                     });
                                     productObj.appendTo(args.element);
@@ -1271,6 +1302,7 @@ const App = {
                                 destroy: () => {
                                     if (warehouseObj) {
                                         warehouseObj.destroy();
+                                        warehouseObj = null;
                                     }
                                 },
                                 write: (args) => {
@@ -1280,25 +1312,7 @@ const App = {
                                         value: args.rowData.warehouseId ?? null,
                                         allowFiltering: true,
                                         showClearButton: true,
-                                        placeholder: 'Chọn kho',
-                                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddWarehouseBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Kho Hàng</button></div>',
-                                        open: (e) => {
-                                            const btn = e.popup.element.querySelector('#quickAddWarehouseBtn');
-                                            if (btn) {
-                                                btn.onclick = async () => {
-                                                    warehouseObj.hidePopup();
-                                                    await QuickAddHelper.simpleQuickAdd({
-                                                        title: 'Thêm nhanh kho hàng',
-                                                        apiUrl: '/Warehouse/CreateWarehouse',
-                                                        dropdownObj: warehouseObj,
-                                                        refreshLookup: methods.populateWarehouseListLookupData,
-                                                        state: state,
-                                                        stateKey: null,
-                                                        lookupKey: 'warehouseListLookupData'
-                                                    });
-                                                };
-                                            }
-                                        },
+                                        placeholder: 'Select Warehouse',
                                         change: (e) => {
                                             const selectedWarehouse = state.warehouseListLookupData.find(item => item.id === e.value);
                                             args.rowData.warehouseId = e.value || null;
@@ -1312,7 +1326,7 @@ const App = {
                         },
                         {
                             field: 'batchNumber',
-                            headerText: 'Số lô',
+                            headerText: 'Batch Number',
                             width: 150,
                             validationRules: { required: true },
                             edit: {
@@ -1336,7 +1350,7 @@ const App = {
                                         allowCustom: true,
                                         allowFiltering: true,
                                         autofill: true,
-                                        placeholder: 'Chọn hoặc nhập số lô',
+                                        placeholder: 'Select or enter Batch Number',
                                         change: (e) => {
                                             args.rowData.batchNumber = normalizeBatchNumber(e.value);
                                         }
@@ -1347,7 +1361,7 @@ const App = {
                         },
                         {
                             field: 'supplierWarrantyMonths',
-                            headerText: 'Bảo hành NCC (Tháng)',
+                            headerText: 'Supplier Warranty (Months)',
                             width: 200,
                             type: 'number',
                             format: 'N0',
@@ -1373,7 +1387,7 @@ const App = {
                                         decimals: 0,
                                         min: 0,
                                         step: 1,
-                                        placeholder: 'Số tháng bảo hành'
+                                        placeholder: 'Warranty Months'
                                     });
                                     supplierWarrantyObj.appendTo(args.element);
                                 }
@@ -1381,7 +1395,7 @@ const App = {
                         },
                         {
                             field: 'unitPrice',
-                            headerText: 'Đơn giá',
+                            headerText: 'Unit Price',
                             width: 200, validationRules: { required: true }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1414,13 +1428,13 @@ const App = {
                         },
                         {
                             field: 'quantity',
-                            headerText: 'Số lượng',
+                            headerText: 'Quantity',
                             width: 200,
                             validationRules: {
                                 required: true,
                                 custom: [(args) => {
                                     return args['value'] > 0;
-                                }, 'Phải là số dương và khác 0']
+                                }, 'Value must be greater than zero.']
                             },
                             type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
@@ -1454,7 +1468,7 @@ const App = {
                         },
                         {
                             field: 'total',
-                            headerText: 'Thành tiền',
+                            headerText: 'Total',
                             width: 200, validationRules: { required: false }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1480,7 +1494,7 @@ const App = {
                         },
                         {
                             field: 'taxId',
-                            headerText: 'Thuế',
+                            headerText: 'Tax',
                             width: 180,
                             validationRules: { required: true },
                             valueAccessor: (field, data, column) => {
@@ -1507,7 +1521,7 @@ const App = {
                                         dataSource: state.taxListLookupData,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.taxId ?? null,
-                                        placeholder: 'Chọn thuế',
+                                        placeholder: 'Select Tax',
                                         floatLabelType: 'Never'
                                     });
                                     taxObj.appendTo(args.element);
@@ -1516,7 +1530,7 @@ const App = {
                         },
                         {
                             field: 'taxAmount',
-                            headerText: 'Tiền thuế',
+                            headerText: 'Tax Amount',
                             allowEditing: false,
                             width: 160,
                             type: 'number',
@@ -1525,7 +1539,7 @@ const App = {
                         },
                         {
                             field: 'afterTaxAmount',
-                            headerText: 'Tổng tiền',
+                            headerText: 'Total Amount',
                             allowEditing: false,
                             width: 170,
                             type: 'number',
@@ -1534,7 +1548,7 @@ const App = {
                         },
                         {
                             field: 'productNumber',
-                            headerText: 'Mã sản phẩm',
+                            headerText: 'Product Number',
                             allowEditing: false,
                             width: 180,
                             edit: {
@@ -1558,7 +1572,7 @@ const App = {
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Mã tham chiếu',
+                            headerText: 'Reference Code',
                             allowEditing: false,
                             width: 160,
                             valueAccessor: (field, data, column) => {
@@ -1568,7 +1582,7 @@ const App = {
                         },
                         {
                             field: 'summary',
-                            headerText: 'Ghi chú',
+                            headerText: 'Summary',
                             width: 200,
                             edit: {
                                 create: () => {
@@ -1590,7 +1604,7 @@ const App = {
                         },
                         {
                             field: 'allocatedQuantity',
-                            headerText: 'Đã chia',
+                            headerText: 'Allocated Quantity',
                             allowEditing: false,
                             width: 100,
                             type: 'number',
@@ -1602,7 +1616,7 @@ const App = {
                         },
                         {
                             field: 'remainingQuantity',
-                            headerText: 'Còn lại',
+                            headerText: 'Remaining Quantity',
                             allowEditing: false,
                             width: 100,
                             type: 'number',
@@ -1618,9 +1632,9 @@ const App = {
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
-                        { text: 'Chia \u0111\u01a1n', tooltipText: 'Chia chi ph\u00ed c\u00e1c m\u1eb7t h\u00e0ng \u0111\u00e3 ch\u1ecdn cho kh\u00e1ch h\u00e0ng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                        { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                         { type: 'Separator' },
-                        { text: 'Th\u00eam Kho', tooltipText: 'Th\u00eam nhanh kho h\u00e0ng m\u1edbi', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
+                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
@@ -1653,15 +1667,15 @@ const App = {
 
                         if (args.item.id === 'CostAllocateCustom') {
                             if (String(state.orderStatus) !== '2') {
-                                Swal.fire({ icon: 'warning', title: 'Kh\u00f4ng th\u1ec3 chia \u0111\u01a1n', text: 'Ch\u1ec9 cho ph\u00e9p chia \u0111\u01a1n khi \u0111\u01a1n h\u00e0ng \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn (Confirmed).' });
+                                Swal.fire({ icon: 'warning', title: 'Cost allocation is unavailable', text: 'A purchase order can only be allocated after it is confirmed.' });
                                 return;
                             }
                             methods.openCostAllocationModal();
                         }
 
                         if (args.item.id === 'QuickAddWarehouseBtn') {
-                            await QuickAddHelper.simpleQuickAdd({
-                                title: 'Th\u00eam nhanh Kho h\u00e0ng',
+                            const created = await QuickAddHelper.simpleQuickAdd({
+                                title: 'Quick Add Warehouse',
                                 apiUrl: '/Warehouse/CreateWarehouse',
                                 dropdownObj: null,
                                 refreshLookup: methods.populateWarehouseListLookupData,
@@ -1669,6 +1683,12 @@ const App = {
                                 stateKey: null,
                                 lookupKey: 'warehouseListLookupData'
                             });
+                            if (created && warehouseObj && warehouseObj.isDestroyed !== true) {
+                                warehouseObj.dataSource = state.warehouseListLookupData;
+                                warehouseObj.dataBind();
+                                warehouseObj.value = created.id;
+                                warehouseObj.dataBind();
+                            }
                         }
                     },
                     actionBegin: (args) => {
@@ -1681,9 +1701,9 @@ const App = {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Thiếu thông tin bắt buộc',
-                                text: 'Vui lòng chọn Hàng Hóa trước khi lưu.',
-                                confirmButtonText: 'Đồng ý'
+                                title: 'Missing Required Information',
+                                text: 'Select a product before saving.',
+                                confirmButtonText: 'OK'
                             });
                             return;
                         }
@@ -1692,9 +1712,9 @@ const App = {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Thiếu thông tin bắt buộc',
-                                text: 'Vui lòng chọn Kho Hàng trước khi lưu.',
-                                confirmButtonText: 'Đồng ý'
+                                title: 'Missing Required Information',
+                                text: 'Select a warehouse before saving.',
+                                confirmButtonText: 'OK'
                             });
                             return;
                         }
@@ -1703,9 +1723,9 @@ const App = {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Thiếu thông tin bắt buộc',
-                                text: 'Vui lòng chọn Thuế trước khi lưu.',
-                                confirmButtonText: 'Đồng ý'
+                                title: 'Missing Required Information',
+                                text: 'Select a tax before saving.',
+                                confirmButtonText: 'OK'
                             });
                             return;
                         }
@@ -1714,9 +1734,9 @@ const App = {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Thiếu thông tin bắt buộc',
-                                text: 'Số lượng phải lớn hơn 0.',
-                                confirmButtonText: 'Đồng ý'
+                                title: 'Missing Required Information',
+                                text: 'Quantity must be greater than zero.',
+                                confirmButtonText: 'OK'
                             });
                             return;
                         }
@@ -1733,7 +1753,7 @@ const App = {
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Lưu thành công',
+                                title: 'Save Successful',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -1749,7 +1769,7 @@ const App = {
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Lưu thành công',
+                                title: 'Save Successful',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -1767,7 +1787,7 @@ const App = {
 
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Xóa thành công',
+                                        title: 'Delete Successful',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
@@ -1777,7 +1797,7 @@ const App = {
 
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Xóa thất bại',
+                                        title: 'Delete Failed',
                                         text: response?.data?.message ?? 'Unable to delete this item.',
                                         confirmButtonText: 'OK'
                                     });
@@ -1812,7 +1832,9 @@ const App = {
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
-                        { text: 'Chia đơn', tooltipText: 'Chia chi phí các mặt hàng đã chọn cho khách hàng', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                        { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
+                        { type: 'Separator' },
+                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
                     ]
                 });
             }
@@ -1853,8 +1875,8 @@ const App = {
                     costAllocationCashAccountLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.cashAccountListData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn tài khoản tiền',
-                        filterBarPlaceholder: 'Tìm kiếm',
+                        placeholder: 'Select Cash Account',
+                        filterBarPlaceholder: 'Search...',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
                         filtering: (e) => {
@@ -1882,8 +1904,8 @@ const App = {
                     costAllocationCashCategoryLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.cashCategoryListData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Chọn danh mục (tùy chọn)',
-                        filterBarPlaceholder: 'Tìm kiếm',
+                        placeholder: 'Select Category (Optional)',
+                        filterBarPlaceholder: 'Search...',
                         sortOrder: 'Ascending',
                         allowFiltering: true,
                         filtering: (e) => {
@@ -1915,6 +1937,7 @@ const App = {
                 let allocQtyObj = null;
                 let allocPriceObj = null;
                 let customerDropObj = null;
+                let customerEditorRow = null;
 
                 costAllocationPreviewGrid.obj = new ej.grids.Grid({
                     height: 350,
@@ -1925,12 +1948,17 @@ const App = {
                     allowPaging: false,
                     gridLines: 'Horizontal',
                     editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, mode: 'Batch' },
-                    toolbar: [{ text: 'Thêm dòng chia', tooltipText: 'Chọn dòng để chia thêm', prefixIcon: 'e-add', id: 'splitRowBtn' }, 'Delete'],
-                    toolbarClick: (args) => {
+                    toolbar: [
+                        { text: 'Add Split Row', tooltipText: 'Select a row to split', prefixIcon: 'e-add', id: 'splitRowBtn' },
+                        'Delete',
+                        { type: 'Separator' },
+                        { text: 'Add Customer', tooltipText: 'Quick Add Customer', prefixIcon: 'e-plus', id: 'quickAddAllocationCustomerBtn' }
+                    ],
+                    toolbarClick: async (args) => {
                         if (args.item.id === 'splitRowBtn') {
                             const selectedRecords = costAllocationPreviewGrid.obj.getSelectedRecords();
                             if (selectedRecords.length === 0) {
-                                Swal.fire({ icon: 'info', title: 'Chưa chọn dòng', text: 'Vui lòng chọn 1 dòng sản phẩm để chia thêm.' });
+                                Swal.fire({ icon: 'info', title: 'No row selected', text: 'Select one product row before adding another allocation.' });
                                 return;
                             }
                             if (costAllocationPreviewGrid.obj.isEdit) {
@@ -1949,13 +1977,46 @@ const App = {
                             ds.splice(idx + 1, 0, newRecord);
                             costAllocationPreviewGrid.obj.refresh();
                         }
+
+                        if (args.item.id === 'quickAddAllocationCustomerBtn') {
+                            if (typeof QuickAddHelper === 'undefined') {
+                                Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                                return;
+                            }
+
+                            const selectedRecord = costAllocationPreviewGrid.obj.getSelectedRecords()[0] ?? customerEditorRow;
+                            const created = await QuickAddHelper.complexQuickAddCustomer({
+                                refreshLookup: methods.populateCustomerListLookupData,
+                                state,
+                                lookupKey: 'customerListLookupData'
+                            });
+                            if (!created) return;
+
+                            if (customerDropObj && customerDropObj.isDestroyed !== true) {
+                                customerDropObj.dataSource = state.customerListLookupData;
+                                customerDropObj.dataBind();
+                                customerDropObj.value = created.id;
+                                customerDropObj.dataBind();
+                            }
+
+                            const targetRecord = customerEditorRow ?? selectedRecord;
+                            const actualRow = targetRecord
+                                ? costAllocationPreviewGrid.obj.dataSource.find(x => x.id === targetRecord.id)
+                                : null;
+                            if (actualRow) {
+                                actualRow.customerId = created.id;
+                            }
+                            if (!costAllocationPreviewGrid.obj.isEdit) {
+                                costAllocationPreviewGrid.obj.refresh();
+                            }
+                        }
                     },
                     columns: [
                         { field: 'id', isPrimaryKey: true, visible: false },
                         { field: 'poItemId', visible: false },
                         {
                             field: 'productId',
-                            headerText: 'Sản phẩm',
+                            headerText: 'Product',
                             allowEditing: false,
                             width: 180,
                             valueAccessor: (field, data, column) => {
@@ -1963,10 +2024,11 @@ const App = {
                                 return product ? product.name : '';
                             }
                         },
-                        { field: 'remainingQuantity', headerText: 'Còn lại', width: 80, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        { field: 'remainingQuantity', headerText: 'Remaining', width: 80, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                         {
                             field: 'customerId',
-                            headerText: 'Khách hàng',
+                            headerText: 'Customer',
+                            editType: 'dropdownedit',
                             width: 180,
                             valueAccessor: (field, data, column) => {
                                 if (!data.customerId) return '';
@@ -1983,15 +2045,18 @@ const App = {
                                 },
                                 destroy: () => {
                                     if (customerDropObj) customerDropObj.destroy();
+                                    customerDropObj = null;
+                                    customerEditorRow = null;
                                 },
                                 write: (args) => {
+                                    customerEditorRow = args.rowData;
                                     customerDropObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.customerListLookupData,
                                         fields: { value: 'id', text: 'name' },
-                                        placeholder: 'Chọn khách hàng',
+                                        placeholder: 'Select Customer',
                                         value: args.rowData.customerId || '',
                                         allowFiltering: true,
-                                        filterBarPlaceholder: 'Tìm kiếm',
+                                        filterBarPlaceholder: 'Search',
                                         filtering: (e) => {
                                             e.preventDefaultAction = true;
                                             let query = new ej.data.Query();
@@ -1999,22 +2064,6 @@ const App = {
                                                 query = query.where('name', 'contains', e.text, true);
                                             }
                                             e.updateData(state.customerListLookupData, query);
-                                        },
-                                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddCustomerBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Khách Hàng</button></div>',
-                                        open: (e) => {
-                                            const btn = e.popup.element.querySelector('#quickAddCustomerBtn');
-                                            if (btn) {
-                                                btn.onclick = async () => {
-                                                    customerDropObj.hidePopup();
-                                                    await QuickAddHelper.complexQuickAddCustomer({
-                                                        onSuccess: async (newCustomer) => {
-                                                            await methods.populateCustomerListLookupData();
-                                                            customerDropObj.dataSource = state.customerListLookupData;
-                                                            customerDropObj.value = newCustomer.id;
-                                                        }
-                                                    });
-                                                };
-                                            }
                                         },
                                         change: (e) => {
                                             if (args.rowData) {
@@ -2034,7 +2083,7 @@ const App = {
                         },
                         {
                             field: 'allocateQuantity',
-                            headerText: 'SL chia',
+                            headerText: 'Allocation Quantity',
                             width: 100,
                             type: 'number',
                             format: 'N0',
@@ -2110,7 +2159,7 @@ const App = {
                         },
                         {
                             field: 'allocateUnitPrice',
-                            headerText: 'Đơn giá',
+                            headerText: 'Unit Price',
                             width: 130,
                             type: 'number',
                             format: 'N0',
@@ -2159,7 +2208,7 @@ const App = {
                                 }
                             }
                         },
-                        { field: 'allocateTotal', headerText: 'Thành tiền', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        { field: 'allocateTotal', headerText: 'Total', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                     ],
                     cellSave: (args) => {
                         // Recalculate total after cell save
@@ -2180,10 +2229,19 @@ const App = {
             existingTransactionId = null,
             existingStatus = null,
             existingCashAccountId = null,
-            existingAmount = null,
+            existingPaidAmount = null,
             existingDescription = null,
             existingTransactionDate = null,
             isSplit = false) => {
+            if (!existingTransactionId) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Payment is unavailable',
+                    text: 'Allocate this purchase order first to create its vendor obligation.'
+                });
+                return;
+            }
+
             const resolveMoneyAmount = (value) => {
                 if (typeof value === 'number' && Number.isFinite(value)) {
                     return value;
@@ -2193,52 +2251,66 @@ const App = {
                 return parsedValue ?? 0;
             };
             const totalAmountValue = resolveMoneyAmount(totalAmount);
-            const existingAmountValue = resolveMoneyAmount(existingAmount);
-            const displayAmount = NumberFormatManager.formatToLocale(
-                existingAmount !== null && existingAmount !== undefined
-                    ? existingAmountValue
-                    : totalAmountValue,
-                0,
-                0
-            );
-            const displayDescription = existingDescription ?? `Chi tiền đơn ${orderNumber}`;
+            const paidAmountValue = resolveMoneyAmount(existingPaidAmount);
+            const remainingAmountValue = Math.max(0, totalAmountValue - paidAmountValue);
+            const displayAmount = NumberFormatManager.formatToLocale(0, 0, 0);
+            const now = new Date();
+            const defaultPaymentDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+                .toISOString().slice(0, 10);
+            const displayDescription = existingDescription ?? `Payment for order ${orderNumber}`;
             const accountOptions = state.cashAccountListData
                 .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
                 .join('');
+            const accountIsLocked = Boolean(existingCashAccountId);
+            const accountHelpText = accountIsLocked
+                ? '<div class="form-text">All installments for this transaction use the account selected on its first payment.</div>'
+                : '';
             const statusHtml = ``; // Status is auto-calculated by backend now
             const descHtml = isSplit
-                ? `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
+                ? `<div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
+                : `<div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
             const result = await Swal.fire({
-                title: `Thanh toán ${orderNumber}`,
+                title: `Payment ${orderNumber}`,
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select" ${accountIsLocked ? 'disabled' : ''}>${accountOptions}</select>${accountHelpText}</div>
+                    <div class="mb-3"><label class="form-label fw-bold">Total Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Paid Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(paidAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Remaining Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(remainingAmountValue)}" disabled></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Payment Date</label><input id="swal-payment-date" type="date" class="form-control" value="${defaultPaymentDate}"></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Payment This Time</label><input id="swal-amount" class="form-control" data-number-format="true" inputmode="numeric" value="${displayAmount}"></div>
                     ${descHtml}
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Lưu',
-                cancelButtonText: 'Hủy',
+                confirmButtonText: 'Save',
+                cancelButtonText: 'Cancel',
                 focusConfirm: false,
+                didOpen: () => {
+                    NumberFormatManager.bindNumericInput(document.getElementById('swal-amount'));
+                },
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(document.getElementById('swal-amount').value) ?? 0;
                     if (!accountId) {
-                        Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
+                        Swal.showValidationMessage('Select a payment account.');
                         return false;
                     }
-                    if (parsedAmount < 0) {
-                        Swal.showValidationMessage('Số tiền thanh toán không được âm.');
+                    const paymentDate = document.getElementById('swal-payment-date').value;
+                    if (parsedAmount <= 0) {
+                        Swal.showValidationMessage('Payment amount must be greater than zero.');
                         return false;
                     }
-                    if (parsedAmount > totalAmountValue) {
-                        Swal.showValidationMessage('Số tiền thanh toán không được vượt quá số tiền cần thanh toán.');
+                    if (parsedAmount > remainingAmountValue) {
+                        Swal.showValidationMessage('Payment amount cannot exceed the remaining amount.');
+                        return false;
+                    }
+                    if (!paymentDate) {
+                        Swal.showValidationMessage('Payment date is required.');
                         return false;
                     }
                     return {
                         cashAccountId: accountId,
                         paymentAmount: parsedAmount,
+                        paymentDate,
                         description: document.getElementById('swal-desc').value
                     };
                 }
@@ -2250,17 +2322,30 @@ const App = {
                         purchaseOrderId: orderId,
                         paymentAmount: result.value.paymentAmount,
                         cashAccountId: result.value.cashAccountId,
+                        paymentDate: result.value.paymentDate,
                         description: result.value.description,
                         updatedById: StorageManager.getUserId()
                     };
 
-                    await services.payPurchaseOrder(payload);
+                    const response = await services.payPurchaseOrder(payload);
+                    const paymentSummary = response?.data?.content?.data ?? response?.data?.content;
+                    if (response?.data?.code !== 200 || paymentSummary?.success !== true) {
+                        throw new Error(response?.data?.message ?? 'The payment was not saved.');
+                    }
+
+                    const currentRecord = state.mainData.find(item => item.id === orderId);
+                    if (currentRecord) {
+                        currentRecord.cashTransactionAmount = paymentSummary.amount;
+                        currentRecord.cashTransactionPaidAmount = paymentSummary.paidAmount;
+                        currentRecord.cashTransactionStatus = paymentSummary.status;
+                        currentRecord.cashTransactionCashAccountId = paymentSummary.cashAccountId;
+                    }
 
                     await methods.populateMainData();
                     mainGrid.refresh();
-                    Swal.fire({ icon: 'success', title: 'Thanh toán thành công', timer: 1000, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: 'Payment successful', timer: 1000, showConfirmButton: false });
                 } catch (err) {
-                    Swal.fire({ icon: 'error', title: 'Lỗi', text: err.response?.data?.message ?? 'Vui lòng thử lại.' });
+                    Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message ?? err.message ?? 'Please try again.' });
                 }
             }
         };
@@ -2304,7 +2389,7 @@ const App = {
                     state.isViewMode = true;
                     const selectedRecord = state.mainData.find(x => x.id === viewId);
                     if (selectedRecord) {
-                        state.mainTitle = 'Xem đơn mua hàng';
+                        state.mainTitle = 'View Purchase Order';
                         state.id = selectedRecord.id ?? '';
                         state.number = selectedRecord.number ?? '';
                         state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
@@ -2341,7 +2426,8 @@ const App = {
             methods,
             handler: {
                 handleSubmit: methods.handleFormSubmit,
-                handleCostAllocationSubmit: methods.handleCostAllocationSubmit
+                handleCostAllocationSubmit: methods.handleCostAllocationSubmit,
+                quickAddVendor: methods.quickAddVendor
             }
         };
     }

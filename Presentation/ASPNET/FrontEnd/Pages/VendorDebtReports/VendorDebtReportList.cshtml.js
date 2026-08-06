@@ -58,7 +58,7 @@ const App = {
                     gridLines: 'Horizontal',
                     columns: [
                         { field: 'vendorName', headerText: 'Vendor Name', width: 250 },
-                        { field: 'totalPurchase', headerText: 'Total Purchase', width: 180, type: 'number', format: 'N0', textAlign: 'Right' },
+                        { field: 'totalPurchase', headerText: 'Purchase Obligation', width: 180, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'totalPaid', headerText: 'Total Paid', width: 180, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'remainingDebt', headerText: 'Remaining Debt', width: 180, type: 'number', format: 'N0', textAlign: 'Right' }
                     ],
@@ -76,19 +76,19 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'totalPurchase',
-                                    footerTemplate: 'Tổng: ${Sum}',
+                                    footerTemplate: 'Total: ${Sum}',
                                     format: 'N0'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'totalPaid',
-                                    footerTemplate: 'Tổng: ${Sum}',
+                                    footerTemplate: 'Total: ${Sum}',
                                     format: 'N0'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'remainingDebt',
-                                    footerTemplate: 'Tổng: ${Sum}',
+                                    footerTemplate: 'Total: ${Sum}',
                                     format: 'N0'
                                 }
                             ]

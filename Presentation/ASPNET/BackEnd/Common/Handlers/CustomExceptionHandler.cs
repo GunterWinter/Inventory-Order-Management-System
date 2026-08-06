@@ -1,5 +1,7 @@
 ﻿using ASPNET.BackEnd.Common.Models;
+using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 
 namespace ASPNET.BackEnd.Common.Handlers;
 
@@ -33,9 +35,14 @@ public class CustomExceptionHandler : IExceptionHandler
 
     private async Task HandleException(HttpContext httpContext, Exception ex)
     {
-        var statusCode = httpContext.Response.StatusCode != 200
-            ? httpContext.Response.StatusCode
-            : StatusCodes.Status500InternalServerError;
+        var statusCode = ex switch
+        {
+            ValidationException => StatusCodes.Status400BadRequest,
+            InvalidOperationException => StatusCodes.Status409Conflict,
+            DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
+            _ when httpContext.Response.StatusCode is >= 400 and < 600 => httpContext.Response.StatusCode,
+            _ => StatusCodes.Status500InternalServerError
+        };
 
         var errorMessage = ex.Message;
 
@@ -47,6 +54,7 @@ public class CustomExceptionHandler : IExceptionHandler
         };
 
         httpContext.Response.ContentType = "application/json";
+        httpContext.Response.StatusCode = statusCode;
         await httpContext.Response.WriteAsJsonAsync(result);
     }
 

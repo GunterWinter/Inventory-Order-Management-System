@@ -4,8 +4,8 @@ namespace Domain.Enums;
 
 public enum SalesType
 {
-    [Description("Bán lẻ")]
+    [Description("Retail")]
     Retail = 1,
-    [Description("Xuất nội bộ")]
+    [Description("Internal Export")]
     Internal = 2
 }

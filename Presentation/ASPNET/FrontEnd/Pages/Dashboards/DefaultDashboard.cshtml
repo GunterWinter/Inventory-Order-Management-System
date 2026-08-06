@@ -1,178 +1,112 @@
-﻿@page
+@page
 @{
-    ViewData["Title"] = "Default Dashboard";
+    ViewData["Title"] = "Operations Overview";
 }
+
+<style>
+    .dashboard-hero { background: linear-gradient(135deg, #0b5cab, #168aad); color: #fff; border-radius: 16px; padding: 24px; }
+    .dashboard-kpi { border: 0; border-radius: 14px; box-shadow: 0 5px 20px rgba(29, 53, 87, .08); height: 100%; }
+    .dashboard-kpi .icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; }
+    .dashboard-panel { border: 0; border-radius: 14px; box-shadow: 0 5px 20px rgba(29, 53, 87, .08); }
+    .dashboard-value { font-size: 1.35rem; font-weight: 700; color: #203040; overflow-wrap: anywhere; }
+</style>
 
 <div id="app" v-cloak>
     <div class="form-card" id="formcard">
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-chart-line fa-3x" style="color: #E94649;"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Sales</p>
-                            <h6 class="mb-0 text-end"><span ref="cardSalesQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
+        <div class="container-fluid py-4 px-4">
+            <section class="dashboard-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <div>
+                    <div class="text-white-50 small">Warehouse Management System</div>
+                    <h2 class="mb-1">Operations Overview</h2>
+                    <div class="text-white-50">Sales, purchasing, cash flow and inventory in one place.</div>
                 </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-undo-alt fa-3x" style="color: #F6B53F;"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Sales Rtrn.</p>
-                            <h6 class="mb-0 text-end"><span ref="cardSalesReturnQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
+                <div class="text-end">
+                    <button type="button" class="btn btn-light" v-on:click="methods.loadDashboard" v-bind:disabled="state.loading">
+                        <i class="fas fa-sync-alt me-2" v-bind:class="{ 'fa-spin': state.loading }"></i>Refresh
+                    </button>
+                    <div class="small text-white-50 mt-2" v-if="state.lastUpdated">Updated {{ state.lastUpdated }}</div>
                 </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-shopping-cart fa-3x text-primary"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Purchase</p>
-                            <h6 class="mb-0 text-end"><span ref="cardPurchaseQtyRef"></span> Qty.</h6>
+            </section>
+
+            <div v-if="state.pageError" class="alert alert-danger">{{ state.pageError }}</div>
+
+            <div v-if="state.errors.cards" class="alert alert-warning d-flex justify-content-between align-items-center">
+                <span>{{ state.errors.cards }}</span>
+                <button type="button" class="btn btn-sm btn-outline-dark" v-on:click="methods.loadCards">Retry</button>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6 col-xl-3" v-for="card in methods.kpiCards()" v-bind:key="card.label">
+                    <a v-bind:href="card.href" class="text-decoration-none">
+                        <div class="card dashboard-kpi">
+                            <div class="card-body d-flex align-items-center gap-3">
+                                <div class="icon" v-bind:class="card.iconClass"><i v-bind:class="card.icon"></i></div>
+                                <div class="min-w-0">
+                                    <div class="text-muted small">{{ card.label }}</div>
+                                    <div class="dashboard-value">{{ card.value }}</div>
+                                    <div class="text-muted small">{{ card.note }}</div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-undo fa-3x" style="color: #C4C24A;"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Purchase Rtrn.</p>
-                            <h6 class="mb-0 text-end"><span ref="cardPurchaseReturnQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
+                    </a>
                 </div>
             </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-truck fa-3x" style="color: #C4C24A;"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Delivery Order</p>
-                            <h6 class="mb-0 text-end"><span ref="cardDeliveryOrderQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-boxes fa-3x text-primary"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Goods Receive</p>
-                            <h6 class="mb-0 text-end"><span ref="cardGoodsReceiveQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-sign-out-alt fa-3x" style="color: #F6B53F;"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Transfer Out</p>
-                            <h6 class="mb-0 text-end"><span ref="cardTransferOutQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-xl-3">
-                    <div class="bg-white rounded d-flex align-items-center justify-content-between p-4">
-                        <i class="fas fa-sign-in-alt fa-3x" style="color: #E94649"></i>
-                        <div class="ms-3">
-                            <p class="mb-2">Transfer In</p>
-                            <h6 class="mb-0 text-end"><span ref="cardTransferInQtyRef"></span> Qty.</h6>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Customer Group</h6>
-                            <a href="/SalesReports/SalesReportList">Sales</a>
-                        </div>
-                        <div ref="customerGroupChartRef" align="center"></div>
-                    </div>
-                </div>
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Vendor Group</h6>
-                            <a href="/PurchaseReports/PurchaseReportList">Purchases</a>
-                        </div>
-                        <div ref="vendorGroupChartRef" align="center"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Customer Category</h6>
-                            <a href="/SalesReports/SalesReportList">Sales</a>
-                        </div>
-                        <div ref="customerCategoryChartRef" align="center"></div>
-                    </div>
-                </div>
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Vendor Category</h6>
-                            <a href="/PurchaseReports/PurchaseReportList">Purchases</a>
-                        </div>
-                        <div ref="vendorCategoryChartRef" align="center"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Latest Sales</h6>
-                            <a href="/SalesOrders/SalesOrderList">Sales</a>
-                        </div>
-                        <div ref="salesOrderGridRef" align="center"></div>
-                    </div>
-                </div>
-                <div class="col-sm-12 col-xl-6">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Latest Purchase</h6>
-                            <a href="/PurchaseOrders/PurchaseOrderList">Purchases</a>
-                        </div>
-                        <div ref="purchaseOrderGridRef" align="center"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
-            <div class="row g-4">
-                <div class="col-sm-12 col-xl-12">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Inventory Stock</h6>
-                            <a href="/StockReports/StockReportList">Stocks</a>
-                        </div>
-                        <div ref="stockChartRef" align="center"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="container-fluid pt-4 px-4">
+
             <div class="row g-4 mb-4">
-                <div class="col-sm-12 col-xl-12">
-                    <div class="bg-white text-center rounded p-4">
-                        <div class="d-flex align-items-center justify-content-between mb-4">
-                            <h6 class="mb-0">Inventory Transaction</h6>
-                            <a href="/TransactionReports/TransactionReportList">Transactions</a>
+                <div class="col-xl-6">
+                    <div class="card dashboard-panel h-100">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                            <h5 class="mb-0">Recent Sales Orders</h5><a href="/SalesOrders/SalesOrderList">View All</a>
                         </div>
-                        <div ref="inventoryTransactionGridRef" align="center"></div>
+                        <div class="card-body">
+                            <div v-if="state.errors.sales" class="alert alert-warning">
+                                {{ state.errors.sales }}
+                                <button type="button" class="btn btn-sm btn-outline-dark ms-2" v-on:click="methods.loadSales">Retry</button>
+                            </div>
+                            <div ref="salesOrderGridRef"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-6">
+                    <div class="card dashboard-panel h-100">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                            <h5 class="mb-0">Recent Purchase Orders</h5><a href="/PurchaseOrders/PurchaseOrderList">View All</a>
+                        </div>
+                        <div class="card-body">
+                            <div v-if="state.errors.purchase" class="alert alert-warning">
+                                {{ state.errors.purchase }}
+                                <button type="button" class="btn btn-sm btn-outline-dark ms-2" v-on:click="methods.loadPurchase">Retry</button>
+                            </div>
+                            <div ref="purchaseOrderGridRef"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-xl-7">
+                    <div class="card dashboard-panel h-100">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                            <h5 class="mb-0">Latest Inventory Movements</h5><a href="/TransactionReports/TransactionReportList">View All</a>
+                        </div>
+                        <div class="card-body">
+                            <div v-if="state.errors.inventory" class="alert alert-warning">
+                                {{ state.errors.inventory }}
+                                <button type="button" class="btn btn-sm btn-outline-dark ms-2" v-on:click="methods.loadInventory">Retry</button>
+                            </div>
+                            <div ref="inventoryTransactionGridRef"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="card dashboard-panel h-100">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                            <h5 class="mb-0">Stock by Warehouse</h5><a href="/StockReports/StockReportList">View Stock</a>
+                        </div>
+                        <div class="card-body">
+                            <div v-if="state.errors.inventory" class="alert alert-warning">{{ state.errors.inventory }}</div>
+                            <div ref="stockChartRef"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -180,6 +114,29 @@
     </div>
 </div>
 
+<div id="DashboardBootError" class="alert alert-danger m-4" style="display:none">
+    Dashboard could not be initialized. Reload the page and check the browser Console/Network details.
+</div>
+
 @section scripts {
-    <script src="~/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js"></script>
+    @{
+        var dashboardScriptPath = System.IO.Path.Combine(
+            System.IO.Directory.GetCurrentDirectory(),
+            "FrontEnd", "Pages", "Dashboards", "DefaultDashboard.cshtml.js");
+        var dashboardScriptVersion = System.IO.File.Exists(dashboardScriptPath)
+            ? System.IO.File.GetLastWriteTimeUtc(dashboardScriptPath).Ticks
+            : DateTime.UtcNow.Ticks;
+    }
+    <script>
+        window.showDashboardBootError = function () {
+            const errorPanel = document.getElementById('DashboardBootError');
+            if (errorPanel) errorPanel.style.display = 'block';
+        };
+        window.setTimeout(function () {
+            const dashboardApp = document.getElementById('app');
+            if (dashboardApp?.hasAttribute('v-cloak')) window.showDashboardBootError();
+        }, 5000);
+    </script>
+    <script src="~/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js?v=@dashboardScriptVersion"
+            onerror="window.showDashboardBootError()"></script>
 }

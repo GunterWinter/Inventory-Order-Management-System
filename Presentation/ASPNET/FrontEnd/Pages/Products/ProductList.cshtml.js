@@ -288,14 +288,14 @@ const App = {
                         popupHeight: '200px',
                         allowFiltering: true,
                         showClearButton: true,
-                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddWarehouseProductBtn"><i class="fas fa-plus me-1"></i>Thêm nhanh Kho Hàng</button></div>',
+                        footerTemplate: '<div class="p-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="quickAddWarehouseProductBtn"><i class="fas fa-plus me-1"></i>Quick Add Warehouse</button></div>',
                         open: (e) => {
                             const btn = e.popup.element.querySelector('#quickAddWarehouseProductBtn');
                             if (btn) {
                                 btn.onclick = async () => {
                                     defaultWarehouseListLookup.obj.hidePopup();
                                     await QuickAddHelper.simpleQuickAdd({
-                                        title: 'Thêm nhanh kho hàng',
+                                        title: 'Quick Add Warehouse',
                                         apiUrl: '/Warehouse/CreateWarehouse',
                                         dropdownObj: defaultWarehouseListLookup.obj,
                                         refreshLookup: methods.populateWarehouseListLookupData,
@@ -385,6 +385,8 @@ const App = {
             refresh: () => {
                 if (defaultWarrantyMonthsNumber.obj) {
                     defaultWarrantyMonthsNumber.obj.value = getDefaultWarrantyMonthsValue();
+                    defaultWarrantyMonthsNumber.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(defaultWarrantyMonthsNumber.obj);
                 }
             }
         };
@@ -407,6 +409,8 @@ const App = {
             refresh: () => {
                 if (costPriceNumber.obj) {
                     costPriceNumber.obj.value = getCostPriceValue();
+                    costPriceNumber.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(costPriceNumber.obj);
                 }
             }
         };
@@ -429,6 +433,8 @@ const App = {
             refresh: () => {
                 if (unitPriceNumber.obj) {
                     unitPriceNumber.obj.value = getUnitPriceValue();
+                    unitPriceNumber.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(unitPriceNumber.obj);
                 }
             }
         };
@@ -460,7 +466,9 @@ const App = {
             () => state.defaultWarrantyMonths,
             (newVal, oldVal) => {
                 state.errors.defaultWarrantyMonths = '';
-                defaultWarrantyMonthsNumber.refresh();
+                if (document.activeElement !== defaultWarrantyMonthsNumber.obj?.element) {
+                    defaultWarrantyMonthsNumber.refresh();
+                }
             }
         );
 
@@ -468,7 +476,9 @@ const App = {
             () => state.unitPrice,
             (newVal, oldVal) => {
                 state.errors.unitPrice = '';
-                unitPriceNumber.refresh();
+                if (document.activeElement !== unitPriceNumber.obj?.element) {
+                    unitPriceNumber.refresh();
+                }
             }
         );
 
@@ -476,7 +486,9 @@ const App = {
             () => state.costPrice,
             (newVal, oldVal) => {
                 state.errors.costPrice = '';
-                costPriceNumber.refresh();
+                if (document.activeElement !== costPriceNumber.obj?.element) {
+                    costPriceNumber.refresh();
+                }
             }
         );
 
@@ -532,7 +544,7 @@ const App = {
             },
             quickAddProductGroup: async function () {
                 await QuickAddHelper.simpleQuickAdd({
-                    title: 'Th\u00eam nhanh Nh\u00f3m h\u00e0ng h\u00f3a',
+                    title: 'Quick Add Product Group',
                     apiUrl: '/ProductGroup/CreateProductGroup',
                     dropdownObj: productGroupListLookup.obj,
                     refreshLookup: methods.populateProductGroupListLookupData,
@@ -543,7 +555,7 @@ const App = {
             },
             quickAddWarehouse: async function () {
                 await QuickAddHelper.simpleQuickAdd({
-                    title: 'Th\u00eam nhanh Kho h\u00e0ng',
+                    title: 'Quick Add Warehouse',
                     apiUrl: '/Warehouse/CreateWarehouse',
                     dropdownObj: defaultWarehouseListLookup.obj,
                     refreshLookup: methods.populateWarehouseListLookupData,

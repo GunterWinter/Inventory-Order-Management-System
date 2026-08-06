@@ -10,9 +10,19 @@ namespace Application.Features.DashboardManager.Queries;
 
 public class GetPurchaseDashboardDto
 {
-    public List<PurchaseOrderItem>? PurchaseOrderDashboard { get; init; }
+    public List<RecentPurchaseOrderDashboardDto>? PurchaseOrderDashboard { get; init; }
     public List<BarSeries>? PurchaseByVendorGroupDashboard { get; init; }
     public List<BarSeries>? PurchaseByVendorCategoryDashboard { get; init; }
+}
+
+public sealed record RecentPurchaseOrderDashboardDto
+{
+    public string? DocumentId { get; init; }
+    public DateTime? CreatedAtUtc { get; init; }
+    public DateTime? OrderDate { get; init; }
+    public string? Number { get; init; }
+    public string? ProductName { get; init; }
+    public double Total { get; init; }
 }
 
 public class GetPurchaseDashboardResult
@@ -39,26 +49,34 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
         var purchaseOrderItemData = await _context.PurchaseOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.PurchaseOrder)
-            .Include(x => x.Product)
-            .Where(x => x.PurchaseOrder!.OrderStatus == PurchaseOrderStatus.Confirmed)
-            .OrderByDescending(x => x.PurchaseOrder!.OrderDate)
+            .Where(x => x.PurchaseOrder != null
+                && !x.PurchaseOrder.IsDeleted
+                && x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
+            .OrderByDescending(x => x.PurchaseOrder!.CreatedAtUtc)
+            .ThenByDescending(x => x.CreatedAtUtc)
             .Take(30)
+            .Select(x => new RecentPurchaseOrderDashboardDto
+            {
+                DocumentId = x.PurchaseOrderId,
+                CreatedAtUtc = x.PurchaseOrder!.CreatedAtUtc,
+                OrderDate = x.PurchaseOrder.OrderDate,
+                Number = x.PurchaseOrder.Number,
+                ProductName = x.Product != null ? x.Product.Name : null,
+                Total = x.Total ?? 0d
+            })
             .ToListAsync(cancellationToken);
 
-        var purchaseByVendorGroupData = _context.PurchaseOrderItem
+        var purchaseByVendorGroupData = await _context.PurchaseOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-                .Include(x => x.PurchaseOrder)
-                    .ThenInclude(x => x!.Vendor)
-                        .ThenInclude(x => x!.VendorGroup)
-                .Include(x => x.Product)
-                .Where(x => x.Product!.Physical == true)
+            .Where(x => x.Product != null && x.Product.Physical == true)
             .Select(x => new
             {
                 Status = x.PurchaseOrder!.OrderStatus,
-                VendorGroupName = x.PurchaseOrder!.Vendor!.VendorGroup!.Name,
-                Quantity = x.Quantity
+                VendorGroupName = x.PurchaseOrder!.Vendor != null && x.PurchaseOrder.Vendor.VendorGroup != null
+                    ? x.PurchaseOrder.Vendor.VendorGroup.Name
+                    : null,
+                Quantity = x.Quantity ?? 0d
             })
             .GroupBy(x => new { x.Status, x.VendorGroupName })
             .Select(g => new
@@ -67,21 +85,19 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                 VendorGroupName = g.Key.VendorGroupName,
                 Quantity = g.Sum(x => x.Quantity)
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
-        var purchaseByVendorCategoryDate = _context.PurchaseOrderItem
+        var purchaseByVendorCategoryDate = await _context.PurchaseOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.PurchaseOrder)
-                .ThenInclude(x => x!.Vendor)
-                    .ThenInclude(x => x!.VendorCategory)
-            .Include(x => x.Product)
-            .Where(x => x.Product!.Physical == true)
+            .Where(x => x.Product != null && x.Product.Physical == true)
             .Select(x => new
             {
                 Status = x.PurchaseOrder!.OrderStatus,
-                VendorCategoryName = x.PurchaseOrder!.Vendor!.VendorCategory!.Name,
-                Quantity = x.Quantity
+                VendorCategoryName = x.PurchaseOrder!.Vendor != null && x.PurchaseOrder.Vendor.VendorCategory != null
+                    ? x.PurchaseOrder.Vendor.VendorCategory.Name
+                    : null,
+                Quantity = x.Quantity ?? 0d
             })
             .GroupBy(x => new { x.Status, x.VendorCategoryName })
             .Select(g => new
@@ -90,7 +106,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                 VendorCategoryName = g.Key.VendorCategoryName,
                 Quantity = g.Sum(x => x.Quantity)
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
 
         var result = new GetPurchaseDashboardResult
@@ -116,7 +132,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                             {
                                 X = x.VendorGroupName ?? "",
                                 TooltipMappingName = x.VendorGroupName ?? "",
-                                Y = (int)x.Quantity!.Value
+                                Y = Convert.ToInt32(x.Quantity)
                             }).ToList()
                     })
                     .ToList(),
@@ -138,7 +154,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                             {
                                 X = x.VendorCategoryName ?? "",
                                 TooltipMappingName = x.VendorCategoryName ?? "",
-                                Y = (int)x.Quantity!.Value
+                                Y = Convert.ToInt32(x.Quantity)
                             }).ToList()
                     })
                     .ToList(),

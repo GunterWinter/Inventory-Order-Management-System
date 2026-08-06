@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides; 
+using Microsoft.Extensions.FileProviders;
 using ASPNET.BackEnd;
 using ASPNET.BackEnd.Common.Middlewares;
 using ASPNET.FrontEnd;
@@ -28,6 +29,21 @@ app.UseForwardedHeaders();
 
 app.RegisterBackEndBuilder(app.Environment, app, builder.Configuration);
 
+// Serve wwwroot through the regular static-file middleware. The generated
+// ASP.NET 9 static-asset manifest can contain an unusable gzip variant when the
+// application is started from bin/Debug, which otherwise returns an empty body.
+app.UseStaticFiles();
+
+var frontEndAssetsPath = Path.Combine(app.Environment.ContentRootPath, "FrontEnd");
+if (Directory.Exists(frontEndAssetsPath))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(frontEndAssetsPath),
+        RequestPath = "/FrontEnd"
+    });
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -41,7 +57,6 @@ app.UseMiddleware<GlobalApiExceptionHandlerMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapStaticAssets();
 app.MapFrontEndRoutes();
 app.MapBackEndRoutes();
 

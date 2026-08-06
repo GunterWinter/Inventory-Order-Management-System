@@ -4,33 +4,6 @@
 }
 
 <div id="app" v-cloak>
-    <div class="row mb-3">
-        <div class="col-md-4 mb-2">
-            <div class="card">
-                <div class="card-body">
-                    <div class="text-muted">Total Debit</div>
-                    <h4 class="mb-0">{{ state.summary.totalDebitText }}</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card">
-                <div class="card-body">
-                    <div class="text-muted">Total Credit</div>
-                    <h4 class="mb-0">{{ state.summary.totalCreditText }}</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card">
-                <div class="card-body">
-                    <div class="text-muted">Total Balance</div>
-                    <h4 class="mb-0">{{ state.summary.totalBalanceText }}</h4>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="row">
         <div class="col-12">
             <div class="grid-container">
@@ -47,6 +20,12 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div v-if="state.sourceModule && methods.isEditableSource() && !state.viewMode && !state.deleteMode"
+                         class="alert alert-info py-2">
+                        {{ state.sourceModule === 'MaterialExport'
+                            ? 'Only Description and Cash Category can be edited for a material export transaction.'
+                            : 'Only Paid Amount, Description and Cash Category can be edited for a source-generated transaction.' }}
+                    </div>
                     <input type="hidden" v-model="state.id" id="Id" name="Id" />
                     <form id="MainForm">
                         <div class="row">
@@ -86,31 +65,65 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="Amount">Amount</label>
-                                                <input ref="amountRef" v-model="state.amount">
+                                                <input id="AmountInput" ref="amountRef">
                                                 <label class="text-danger">{{ state.errors.amount }}</label>
                                             </div>
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="PaidAmount">Số tiền thanh toán</label>
-                                                <input ref="paidAmountRef" v-model="state.paidAmount">
+                                                <label for="PaidAmount">Paid Amount</label>
+                                                <input id="PaidAmountInput" ref="paidAmountRef">
                                                 <label class="text-danger">{{ state.errors.paidAmount }}</label>
                                             </div>
                                             <div class="col-md-6">
-                                                <label>Trạng thái</label>
+                                                <label>Status</label>
                                                 <div class="form-control-plaintext">
-                                                    <span v-if="state.paidAmount >= state.amount && state.amount > 0" class="badge bg-success">Đã thanh toán</span>
-                                                    <span v-else-if="state.paidAmount > 0" class="badge bg-warning text-dark">Còn nợ</span>
-                                                    <span v-else class="badge bg-secondary">Chưa thanh toán</span>
+                                                    <span v-if="state.paidAmount >= state.amount && state.amount > 0" class="badge bg-success">Paid</span>
+                                                    <span v-else-if="state.paidAmount > 0" class="badge bg-warning text-dark">Partially Paid</span>
+                                                    <span v-else class="badge bg-secondary">Unpaid</span>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-12">
                                                 <label for="Description">Description</label>
-                                                <textarea v-model="state.description" id="Description" name="Description" class="form-control" rows="3"></textarea>
+                                                <textarea v-model="state.description" id="Description" name="Description" class="form-control" rows="3"
+                                                          v-bind:disabled="!methods.canEditRestrictedFields()"></textarea>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                                <div class="card mt-3" v-if="state.sourceModule === 'PurchaseOrder'">
+                                    <div class="card-header"><h5>Cost Allocation Details</h5></div>
+                                    <div class="card-body table-responsive">
+                                        <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Loading source details...</div>
+                                        <div v-else-if="state.sourceDetailsError" class="alert alert-danger mb-2">{{ state.sourceDetailsError }}</div>
+                                        <table class="table table-sm table-bordered">
+                                            <thead><tr><th>Product</th><th>Customer / Warehouse</th><th class="text-end">Quantity</th><th class="text-end">Unit Price</th><th class="text-end">Total</th></tr></thead>
+                                            <tbody>
+                                                <tr v-for="item in state.allocationDetails" v-bind:key="`${item.productName}-${item.customerName}`">
+                                                    <td>{{ item.productName }}</td><td>{{ item.customerName }}</td>
+                                                    <td class="text-end">{{ methods.formatNumber(item.quantity) }}</td><td class="text-end">{{ methods.formatMoney(item.unitPrice) }}</td><td class="text-end">{{ methods.formatMoney(item.total) }}</td>
+                                                </tr>
+                                                <tr v-if="!state.sourceDetailsLoading && state.allocationDetails.length === 0"><td colspan="5" class="text-center text-muted">No allocation details</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="card mt-3" v-if="state.sourceModule === 'PurchaseOrder'">
+                                    <div class="card-header"><h5>Payment History</h5></div>
+                                    <div class="card-body table-responsive">
+                                        <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Loading source details...</div>
+                                        <div v-else-if="state.sourceDetailsError" class="alert alert-danger mb-2">{{ state.sourceDetailsError }}</div>
+                                        <table class="table table-sm table-bordered">
+                                            <thead><tr><th>Payment Date</th><th>Cash Account</th><th class="text-end">Amount</th><th>Description</th></tr></thead>
+                                            <tbody>
+                                                <tr v-for="payment in state.paymentHistory" v-bind:key="payment.id">
+                                                    <td>{{ methods.formatDate(payment.paymentDate) }}</td><td>{{ payment.cashAccountName }}</td><td class="text-end">{{ methods.formatMoney(payment.amount) }}</td><td>{{ payment.description }}</td>
+                                                </tr>
+                                                <tr v-if="!state.sourceDetailsLoading && state.paymentHistory.length === 0"><td colspan="4" class="text-center text-muted">No payments</td></tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
@@ -118,7 +131,7 @@
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button v-if="!state.viewMode" type="button"
                             id="MainSaveButton"
                             class="btn"
@@ -126,8 +139,8 @@
                             v-on:click="handler.handleSubmit"
                             v-bind:disabled="state.isSubmitting">
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Xóa' : 'Lưu' }}</span>
-                        <span v-else>{{ state.deleteMode ? 'Đang xóa...' : 'Đang lưu...' }}</span>
+                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Delete' : 'Save' }}</span>
+                        <span v-else>{{ state.deleteMode ? 'Deleting...' : 'Saving...' }}</span>
                     </button>
                 </div>
             </div>
@@ -158,7 +171,7 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="TransferAmount">Amount</label>
-                                                <input ref="transferAmountRef" v-model="state.transfer.amount">
+                                                <input ref="transferAmountRef">
                                                 <label class="text-danger">{{ state.transfer.errors.amount }}</label>
                                             </div>
                                         </div>

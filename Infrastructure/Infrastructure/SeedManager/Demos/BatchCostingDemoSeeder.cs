@@ -130,7 +130,9 @@ public class BatchCostingDemoSeeder
             warehouse.Id,
             product,
             quantity: 50d,
-            unitCost: 720_000d
+            unitCost: 720_000d,
+            batchNumber: DemoBatchNumber,
+            orderDate: new DateTime(2026, 4, 1)
         );
 
         var outbound = await SeedSalesAndDeliveryAsync(
@@ -139,7 +141,9 @@ public class BatchCostingDemoSeeder
             warehouse.Id,
             product,
             quantity: 5d,
-            unitPrice: 1_352_000d
+            unitPrice: 1_352_000d,
+            batchNumber: DemoBatchNumber,
+            orderDate: new DateTime(2026, 4, 5)
         );
 
         await SeedSalesReturnAsync(outbound.SalesOrder.Id, outbound.SalesOrderItem.Id, warehouse.Id, product.Id, quantity: 1d);
@@ -150,6 +154,69 @@ public class BatchCostingDemoSeeder
         await SeedNegativeAdjustmentAsync(warehouse.Id, product.Id, quantity: 1d);
         await SeedScrappingAsync(warehouse.Id, product.Id, quantity: 1d);
         await SeedStockCountAsync(warehouse.Id, product.Id);
+
+        await SeedCatalogScenariosAsync(tax, product.Id);
+    }
+
+    private async Task SeedCatalogScenariosAsync(Tax tax, string? primaryProductId)
+    {
+        var products = await _queryContext.Set<Product>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Physical == true && x.Id != primaryProductId)
+            .OrderBy(x => x.ReferenceCode)
+            .ToListAsync();
+        var warehouses = await _queryContext.Set<Warehouse>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.SystemWarehouse == false)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+        var vendors = await _queryContext.Set<Vendor>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+        var customers = await _queryContext.Set<Customer>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        if (warehouses.Count == 0 || vendors.Count == 0 || customers.Count == 0) return;
+
+        for (var index = 0; index < products.Count; index++)
+        {
+            var product = products[index];
+            var warehouse = warehouses[index % warehouses.Count];
+            var vendor = vendors[index % vendors.Count];
+            var batchNumber = $"DEMO-{(product.ReferenceCode ?? $"ITEM-{index + 1}")}-01";
+            var purchaseQuantity = 12d + index % 9;
+            var purchaseDate = new DateTime(2026, 5, 2).AddDays(index * 3);
+
+            await SeedPurchaseAndGoodsReceiveAsync(
+                vendor.Id,
+                tax,
+                warehouse.Id,
+                product,
+                purchaseQuantity,
+                Math.Max(product.CostPrice ?? 1d, 1d),
+                batchNumber,
+                purchaseDate);
+
+            if (index < 12)
+            {
+                var customer = customers[index % customers.Count];
+                var salesQuantity = 2d + index % 4;
+                await SeedSalesAndDeliveryAsync(
+                    customer.Id,
+                    tax,
+                    warehouse.Id,
+                    product,
+                    salesQuantity,
+                    Math.Max(product.UnitPrice ?? product.CostPrice ?? 1d, 1d),
+                    batchNumber,
+                    purchaseDate.AddDays(10));
+            }
+        }
     }
 
     private async Task<(PurchaseOrder PurchaseOrder, PurchaseOrderItem PurchaseOrderItem, GoodsReceive GoodsReceive)> SeedPurchaseAndGoodsReceiveAsync(
@@ -158,12 +225,14 @@ public class BatchCostingDemoSeeder
         string? warehouseId,
         Product product,
         double quantity,
-        double unitCost)
+        double unitCost,
+        string batchNumber,
+        DateTime orderDate)
     {
         var purchaseOrder = new PurchaseOrder
         {
             Number = _numberSequenceService.GenerateNumber(nameof(PurchaseOrder), "", "PO"),
-            OrderDate = new DateTime(2026, 4, 1),
+            OrderDate = orderDate,
             OrderStatus = PurchaseOrderStatus.Confirmed,
             Description = $"{DemoPrefix}đơn mua nhập hàng demo",
             VendorId = vendorId
@@ -177,8 +246,8 @@ public class BatchCostingDemoSeeder
             PurchaseOrderId = purchaseOrder.Id,
             ProductId = product.Id,
             WarehouseId = warehouseId,
-            Summary = $"{product.Name} - {DemoBatchNumber}",
-            BatchNumber = DemoBatchNumber,
+            Summary = $"{product.Name} - {batchNumber}",
+            BatchNumber = batchNumber,
             SupplierWarrantyMonths = product.DefaultWarrantyMonths ?? 6,
             UnitPrice = unitCost,
             Quantity = quantity,
@@ -195,7 +264,7 @@ public class BatchCostingDemoSeeder
         var goodsReceive = new GoodsReceive
         {
             Number = _numberSequenceService.GenerateNumber(nameof(GoodsReceive), "", "GR"),
-            ReceiveDate = new DateTime(2026, 4, 2),
+            ReceiveDate = orderDate.AddDays(1),
             Status = GoodsReceiveStatus.Confirmed,
             Description = $"{DemoPrefix}phiếu nhập kho từ đơn mua",
             PurchaseOrderId = purchaseOrder.Id
@@ -210,7 +279,7 @@ public class BatchCostingDemoSeeder
             movement: quantity,
             createdById: null,
             moduleItemId: purchaseOrderItem.Id,
-            batchNumber: DemoBatchNumber
+            batchNumber: batchNumber
         );
 
         await _productSerialService.SyncPurchaseOrderItemSerialsAsync(
@@ -228,12 +297,14 @@ public class BatchCostingDemoSeeder
         string? warehouseId,
         Product product,
         double quantity,
-        double unitPrice)
+        double unitPrice,
+        string batchNumber,
+        DateTime orderDate)
     {
         var salesOrder = new SalesOrder
         {
             Number = _numberSequenceService.GenerateNumber(nameof(SalesOrder), "", "SO"),
-            OrderDate = new DateTime(2026, 4, 5),
+            OrderDate = orderDate,
             OrderStatus = SalesOrderStatus.Confirmed,
             Description = $"{DemoPrefix}đơn bán thiết bị demo",
             CustomerId = customerId
@@ -248,7 +319,7 @@ public class BatchCostingDemoSeeder
             ProductId = product.Id,
             WarehouseId = warehouseId,
             Summary = $"{product.Name} - bán cho khách demo",
-            BatchNumber = DemoBatchNumber,
+            BatchNumber = batchNumber,
             WarrantyMonths = product.DefaultWarrantyMonths ?? 3,
             UnitPrice = unitPrice,
             Quantity = quantity,
@@ -274,7 +345,7 @@ public class BatchCostingDemoSeeder
         var deliveryOrder = new DeliveryOrder
         {
             Number = _numberSequenceService.GenerateNumber(nameof(DeliveryOrder), "", "DO"),
-            DeliveryDate = new DateTime(2026, 4, 6),
+            DeliveryDate = orderDate.AddDays(1),
             Status = DeliveryOrderStatus.Confirmed,
             Description = $"{DemoPrefix}phiếu xuất kho từ đơn bán",
             SalesOrderId = salesOrder.Id
@@ -289,7 +360,7 @@ public class BatchCostingDemoSeeder
             movement: quantity,
             createdById: null,
             moduleItemId: salesOrderItem.Id,
-            batchNumber: DemoBatchNumber
+            batchNumber: batchNumber
         );
 
         await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(

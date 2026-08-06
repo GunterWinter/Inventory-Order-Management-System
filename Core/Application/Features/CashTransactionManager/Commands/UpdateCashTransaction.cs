@@ -1,5 +1,5 @@
 using Application.Common.Repositories;
-using Application.Common.CQS.Queries;
+using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -36,109 +36,140 @@ public class UpdateCashTransactionValidator : AbstractValidator<UpdateCashTransa
     public UpdateCashTransactionValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
-        RuleFor(x => x.CashAccountId).NotEmpty();
-        RuleFor(x => x.Amount).GreaterThan(0);
-        RuleFor(x => x.PaidAmount).LessThanOrEqualTo(x => x.Amount).When(x => x.PaidAmount.HasValue);
+        RuleFor(x => x.Amount).GreaterThan(0).When(x => x.Amount.HasValue);
+        RuleFor(x => x.PaidAmount)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(x => x.Amount)
+            .When(x => x.PaidAmount.HasValue);
     }
 }
 
 public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactionRequest, UpdateCashTransactionResult>
 {
     private readonly ICommandRepository<CashTransaction> _repository;
-    private readonly ICommandRepository<CashAccount> _accountRepository;
-    private readonly IQueryContext _queryContext;
+    private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly CashBalanceService _cashBalanceService;
 
     public UpdateCashTransactionHandler(
         ICommandRepository<CashTransaction> repository,
-        ICommandRepository<CashAccount> accountRepository,
-        IQueryContext queryContext,
-        IUnitOfWork unitOfWork
+        ICommandRepository<CashTransactionPayment> paymentRepository,
+        IUnitOfWork unitOfWork,
+        CashBalanceService cashBalanceService
         )
     {
         _repository = repository;
-        _accountRepository = accountRepository;
-        _queryContext = queryContext;
+        _paymentRepository = paymentRepository;
         _unitOfWork = unitOfWork;
+        _cashBalanceService = cashBalanceService;
     }
 
     public async Task<UpdateCashTransactionResult> Handle(UpdateCashTransactionRequest request, CancellationToken cancellationToken)
     {
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
+        CashTransaction? entity = null;
+        string? previousAccountId = null;
 
-        if (entity == null)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct);
 
-        if (entity.SourceModule == "CashTransfer")
-        {
-            throw new Exception("Cash transfer legs cannot be edited. Delete the transfer and create a new one.");
-        }
+            if (entity == null)
+            {
+                throw new InvalidOperationException($"Entity not found: {request.Id}");
+            }
 
-        var previousAccountId = entity.CashAccountId;
+            previousAccountId = entity.CashAccountId;
+            entity.UpdatedById = request.UpdatedById;
 
-        entity.UpdatedById = request.UpdatedById;
+            if (!string.IsNullOrWhiteSpace(entity.SourceModule))
+            {
+                if (entity.SourceModule == nameof(MaterialExport))
+                {
+                    // Material export offsets do not represent a cash-account movement. Their source,
+                    // amount and paid state remain immutable; only classification text can be corrected.
+                    entity.Description = request.Description;
+                    entity.CashCategoryId = request.CashCategoryId;
+                }
+                else if (entity.SourceModule == nameof(PurchaseOrder)
+                    || entity.SourceModule == nameof(SalesOrder))
+                {
+                    var amount = entity.Amount ?? 0d;
+                    var requestedPaidAmount = request.PaidAmount ?? entity.PaidAmount ?? 0d;
+                    if (requestedPaidAmount < 0d || requestedPaidAmount > amount)
+                    {
+                        throw new InvalidOperationException("Paid amount must be between zero and the original amount.");
+                    }
 
-        entity.TransactionDate = request.TransactionDate;
-        entity.TransactionType = (CashTransactionType?)request.TransactionType;
-        entity.Amount = request.Amount;
-        entity.PaidAmount = request.PaidAmount ?? 0;
-        entity.Status = ComputePaymentStatus(entity.PaidAmount ?? 0, entity.Amount ?? 0);
-        entity.Description = request.Description;
-        entity.CashAccountId = request.CashAccountId;
-        entity.CashCategoryId = request.CashCategoryId;
-        entity.CustomerId = request.CustomerId;
-        entity.VendorId = request.VendorId;
-        entity.SourceModule = request.SourceModule;
-        entity.SourceModuleId = request.SourceModuleId;
-        entity.SourceModuleNumber = request.SourceModuleNumber;
+                    var recordedPaidAmount = await _paymentRepository.GetQuery()
+                        .Where(x => !x.IsDeleted && x.CashTransactionId == entity.Id)
+                        .SumAsync(x => x.Amount, ct);
+                    var adjustmentAmount = requestedPaidAmount - recordedPaidAmount;
 
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
+                    if (Math.Abs(adjustmentAmount) > 0.000001d)
+                    {
+                        if (string.IsNullOrWhiteSpace(entity.CashAccountId))
+                        {
+                            throw new InvalidOperationException("Select a payment account before changing the paid amount.");
+                        }
 
-        // Recalculate balance for the current account
-        if (!string.IsNullOrEmpty(request.CashAccountId))
-        {
-            await RecalculateAccountBalance(request.CashAccountId, cancellationToken);
-        }
+                        await _paymentRepository.CreateAsync(new CashTransactionPayment
+                        {
+                            CashTransactionId = entity.Id,
+                            CashAccountId = entity.CashAccountId,
+                            PaymentDate = DateTime.Today,
+                            Amount = adjustmentAmount,
+                            Description = "Manual payment adjustment",
+                            CreatedById = request.UpdatedById
+                        }, ct);
+                    }
 
-        // If account changed, also recalculate the previous account
-        if (!string.IsNullOrEmpty(previousAccountId) && previousAccountId != request.CashAccountId)
-        {
-            await RecalculateAccountBalance(previousAccountId, cancellationToken);
-        }
+                    entity.PaidAmount = requestedPaidAmount;
+                    entity.Status = ComputePaymentStatus(requestedPaidAmount, amount);
+                    entity.Description = request.Description;
+                    entity.CashCategoryId = request.CashCategoryId;
+                }
+                else
+                {
+                    throw new InvalidOperationException("This source-generated cash transaction is read-only.");
+                }
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(request.CashAccountId))
+                {
+                    throw new InvalidOperationException("Cash account is required.");
+                }
+
+                entity.TransactionDate = request.TransactionDate;
+                entity.TransactionType = (CashTransactionType?)request.TransactionType;
+                entity.Amount = request.Amount;
+                entity.PaidAmount = request.PaidAmount ?? 0;
+                entity.Status = ComputePaymentStatus(entity.PaidAmount ?? 0, entity.Amount ?? 0);
+                entity.Description = request.Description;
+                entity.CashAccountId = request.CashAccountId;
+                entity.CashCategoryId = request.CashCategoryId;
+                entity.CustomerId = request.CustomerId;
+                entity.VendorId = request.VendorId;
+            }
+
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+
+            if (!string.IsNullOrEmpty(entity.CashAccountId))
+            {
+                await _cashBalanceService.RecalculateAsync(entity.CashAccountId, ct);
+            }
+
+            if (!string.IsNullOrEmpty(previousAccountId) && previousAccountId != entity.CashAccountId)
+            {
+                await _cashBalanceService.RecalculateAsync(previousAccountId, ct);
+            }
+        }, cancellationToken);
 
         return new UpdateCashTransactionResult
         {
-            Data = entity
+            Data = entity!
         };
-    }
-
-    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
-    {
-        var account = await _accountRepository.GetAsync(cashAccountId, cancellationToken);
-        if (account == null) return;
-
-        var balances = await _queryContext
-            .CashTransaction
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
-            .GroupBy(x => 1)
-            .Select(g => new
-            {
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var initialBalance = account.InitialBalance ?? 0d;
-        var totalDebit = balances?.TotalDebit ?? 0d;
-        var totalCredit = balances?.TotalCredit ?? 0d;
-        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
-
-        _accountRepository.Update(account);
-        await _unitOfWork.SaveAsync(cancellationToken);
     }
 
     private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)

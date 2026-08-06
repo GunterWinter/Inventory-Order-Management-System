@@ -1,4 +1,3 @@
-using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
@@ -38,383 +37,360 @@ public class AllocatePurchaseOrderCostsValidator : AbstractValidator<AllocatePur
     public AllocatePurchaseOrderCostsValidator()
     {
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
-        RuleFor(x => x.Items).NotEmpty();
+        RuleFor(x => x.Items).NotNull();
+        RuleForEach(x => x.Items).ChildRules(item =>
+        {
+            item.RuleFor(x => x.PurchaseOrderItemId).NotEmpty();
+            item.RuleFor(x => x.Quantity).GreaterThan(0);
+            item.RuleFor(x => x.CustomerId).NotEmpty();
+        });
     }
 }
 
-public class AllocatePurchaseOrderCostsHandler : IRequestHandler<AllocatePurchaseOrderCostsRequest, AllocatePurchaseOrderCostsResult>
+public class AllocatePurchaseOrderCostsHandler
+    : IRequestHandler<AllocatePurchaseOrderCostsRequest, AllocatePurchaseOrderCostsResult>
 {
-    private readonly IQueryContext _queryContext;
+    private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
     private readonly ICommandRepository<PurchaseOrderItem> _purchaseOrderItemRepository;
     private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
-    private readonly ICommandRepository<CashAccount> _cashAccountRepository;
-    private readonly ICommandRepository<PurchaseOrderCostAllocation> _purchaseOrderCostAllocationRepository;
+    private readonly ICommandRepository<PurchaseOrderCostAllocation> _allocationRepository;
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
+    private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
+    private readonly ICommandRepository<Customer> _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public AllocatePurchaseOrderCostsHandler(
-        IQueryContext queryContext,
+        ICommandRepository<PurchaseOrder> purchaseOrderRepository,
         ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
         ICommandRepository<CashTransaction> cashTransactionRepository,
-        ICommandRepository<CashAccount> cashAccountRepository,
-        ICommandRepository<PurchaseOrderCostAllocation> purchaseOrderCostAllocationRepository,
+        ICommandRepository<PurchaseOrderCostAllocation> allocationRepository,
         ICommandRepository<ProductSerial> productSerialRepository,
+        ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
+        ICommandRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
-    )
+        InventoryTransactionService inventoryTransactionService)
     {
-        _queryContext = queryContext;
+        _purchaseOrderRepository = purchaseOrderRepository;
         _purchaseOrderItemRepository = purchaseOrderItemRepository;
         _cashTransactionRepository = cashTransactionRepository;
-        _cashAccountRepository = cashAccountRepository;
-        _purchaseOrderCostAllocationRepository = purchaseOrderCostAllocationRepository;
+        _allocationRepository = allocationRepository;
         _productSerialRepository = productSerialRepository;
+        _inventoryTransactionRepository = inventoryTransactionRepository;
+        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
     }
 
-    public async Task<AllocatePurchaseOrderCostsResult> Handle(AllocatePurchaseOrderCostsRequest request, CancellationToken cancellationToken = default)
+    public async Task<AllocatePurchaseOrderCostsResult> Handle(
+        AllocatePurchaseOrderCostsRequest request,
+        CancellationToken cancellationToken = default)
     {
-        // Load the PurchaseOrder
-        var purchaseOrder = await _queryContext
-            .Set<PurchaseOrder>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.Vendor)
-            .FirstOrDefaultAsync(x => x.Id == request.PurchaseOrderId, cancellationToken);
+        CashTransaction? obligation = null;
 
-        if (purchaseOrder == null)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Không tìm thấy đơn mua hàng: {request.PurchaseOrderId}");
-        }
-
-        if (purchaseOrder.OrderStatus != PurchaseOrderStatus.Confirmed)
-        {
-            throw new Exception("Chỉ có thể chia đơn cho đơn mua hàng đã được xác nhận (Confirmed).");
-        }
-
-        // Load the CashAccount for description
-        CashAccount? cashAccount = null;
-        if (!string.IsNullOrWhiteSpace(request.CashAccountId))
-        {
-            cashAccount = await _queryContext
-                .Set<CashAccount>()
-                .AsNoTracking()
+            var purchaseOrder = await _purchaseOrderRepository.GetQuery()
                 .ApplyIsDeletedFilter(false)
-                .FirstOrDefaultAsync(x => x.Id == request.CashAccountId, cancellationToken);
-        }
+                .Include(x => x.Vendor)
+                .SingleOrDefaultAsync(x => x.Id == request.PurchaseOrderId, ct);
 
-        // 1. Load and process old allocations
-        var oldAllocations = await _purchaseOrderCostAllocationRepository.GetQuery()
-            .Where(x => !x.IsDeleted && x.PurchaseOrderId == request.PurchaseOrderId)
-            .ToListAsync(cancellationToken);
-
-        var existingSerialMap = new Dictionary<string, List<string>>();
-
-        foreach (var alloc in oldAllocations)
-        {
-            if (alloc.CustomerId != null)
+            if (purchaseOrder == null)
             {
-                // Save serials
-                var allocSerials = await _queryContext.Set<ProductSerial>()
-                    .AsNoTracking()
-                    .Where(x => x.CostAllocationId == alloc.Id)
-                    .Select(x => x.Id!)
-                    .ToListAsync(cancellationToken);
+                throw new InvalidOperationException($"Purchase order was not found: {request.PurchaseOrderId}");
+            }
 
-                var key = $"{alloc.PurchaseOrderItemId}_{alloc.CustomerId}";
-                if (!existingSerialMap.ContainsKey(key)) existingSerialMap[key] = new List<string>();
-                existingSerialMap[key].AddRange(allocSerials);
+            if (purchaseOrder.OrderStatus != PurchaseOrderStatus.Confirmed)
+            {
+                throw new InvalidOperationException("Only confirmed purchase orders can be allocated.");
+            }
 
-                // Delete inventory transaction if it exists
-                var invenTrans = await _queryContext.Set<InventoryTransaction>()
-                    .AsNoTracking()
-                    .Where(x => x.ModuleId == alloc.Id && x.ModuleName == "CostAllocation" && !x.IsDeleted)
-                    .FirstOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(purchaseOrder.VendorId))
+            {
+                throw new InvalidOperationException("The purchase order must have a vendor before allocation.");
+            }
 
-                if (invenTrans != null)
+            var existingObligations = await _cashTransactionRepository.GetQuery()
+                .Where(x => !x.IsDeleted
+                    && x.SourceModule == nameof(PurchaseOrder)
+                    && x.SourceModuleId == purchaseOrder.Id
+                    && x.TransactionType == CashTransactionType.Credit)
+                .ToListAsync(ct);
+
+            if (existingObligations.Count > 1)
+            {
+                throw new InvalidOperationException("More than one cash transaction exists for this purchase order.");
+            }
+
+            obligation = existingObligations.SingleOrDefault();
+            if ((obligation?.PaidAmount ?? 0d) > 0d)
+            {
+                throw new InvalidOperationException("A partially or fully paid purchase order cannot be reallocated.");
+            }
+
+            var purchaseOrderItems = await _purchaseOrderItemRepository.GetQuery()
+                .ApplyIsDeletedFilter(false)
+                .Include(x => x.Product)
+                .Where(x => x.PurchaseOrderId == purchaseOrder.Id)
+                .ToListAsync(ct);
+
+            var itemMap = purchaseOrderItems.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var requestedItems = (request.Items ?? new List<AllocatePurchaseOrderCostsItem>())
+                .Where(x => x.Quantity > 0d)
+                .GroupBy(x => new { x.PurchaseOrderItemId, x.CustomerId })
+                .Select(g => new AllocatePurchaseOrderCostsItem
                 {
-                    await _inventoryTransactionService.CostAllocationDeleteInvenTrans(invenTrans.Id, request.CreatedById, cancellationToken);
+                    PurchaseOrderItemId = g.Key.PurchaseOrderItemId,
+                    CustomerId = g.Key.CustomerId,
+                    Quantity = g.Sum(x => x.Quantity),
+                    UnitPrice = g.First().UnitPrice
+                })
+                .ToList();
+
+            if (requestedItems.Any(x => string.IsNullOrWhiteSpace(x.CustomerId)))
+            {
+                throw new InvalidOperationException("Every allocated quantity must have a customer.");
+            }
+
+            if (requestedItems.Any(x => string.IsNullOrWhiteSpace(x.PurchaseOrderItemId)
+                || !itemMap.ContainsKey(x.PurchaseOrderItemId)))
+            {
+                throw new InvalidOperationException("An allocation contains an item that does not belong to the purchase order.");
+            }
+
+            var customerIds = requestedItems.Select(x => x.CustomerId!).Distinct().ToList();
+            var validCustomerCount = await _customerRepository.GetQuery()
+                .ApplyIsDeletedFilter(false)
+                .CountAsync(x => customerIds.Contains(x.Id), ct);
+            if (validCustomerCount != customerIds.Count)
+            {
+                throw new InvalidOperationException("One or more allocation customers were not found.");
+            }
+
+            foreach (var purchaseOrderItem in purchaseOrderItems)
+            {
+                var requestedQuantity = requestedItems
+                    .Where(x => string.Equals(x.PurchaseOrderItemId, purchaseOrderItem.Id, StringComparison.OrdinalIgnoreCase))
+                    .Sum(x => x.Quantity);
+                if (requestedQuantity > (purchaseOrderItem.Quantity ?? 0d) + 0.000001d)
+                {
+                    throw new InvalidOperationException(
+                        $"Allocated quantity exceeds purchased quantity for {purchaseOrderItem.Product?.Name ?? purchaseOrderItem.ProductId}.");
+                }
+            }
+
+            var oldAllocations = await _allocationRepository.GetQuery()
+                .Where(x => !x.IsDeleted && x.PurchaseOrderId == purchaseOrder.Id)
+                .ToListAsync(ct);
+            var existingSerialMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var allocation in oldAllocations)
+            {
+                var allocatedSerials = await _productSerialRepository.GetQuery()
+                    .Where(x => !x.IsDeleted && x.CostAllocationId == allocation.Id)
+                    .ToListAsync(ct);
+
+                if (!string.IsNullOrWhiteSpace(allocation.CustomerId))
+                {
+                    var key = $"{allocation.PurchaseOrderItemId}_{allocation.CustomerId}";
+                    if (!existingSerialMap.TryGetValue(key, out var serialIds))
+                    {
+                        serialIds = new List<string>();
+                        existingSerialMap[key] = serialIds;
+                    }
+                    serialIds.AddRange(allocatedSerials.Select(x => x.Id));
                 }
 
-                // Clear CostAllocationId explicitly from serials before deleting allocation
-                foreach (var serialId in allocSerials)
+                var inventoryTransactions = await _inventoryTransactionRepository.GetQuery()
+                    .Where(x => !x.IsDeleted
+                        && x.ModuleName == "CostAllocation"
+                        && x.ModuleId == allocation.Id)
+                    .ToListAsync(ct);
+                foreach (var inventoryTransaction in inventoryTransactions)
                 {
-                    var serial = await _productSerialRepository.GetAsync(serialId, cancellationToken);
-                    if (serial != null)
+                    await _inventoryTransactionService.CostAllocationDeleteInvenTrans(
+                        inventoryTransaction.Id,
+                        request.CreatedById,
+                        ct);
+                }
+
+                foreach (var serial in allocatedSerials)
+                {
+                    serial.CostAllocationId = null;
+                    _productSerialRepository.Update(serial);
+                }
+
+                _allocationRepository.Delete(allocation);
+            }
+
+            foreach (var purchaseOrderItem in purchaseOrderItems)
+            {
+                purchaseOrderItem.AllocatedQuantity = 0d;
+                _purchaseOrderItemRepository.Update(purchaseOrderItem);
+            }
+            await _unitOfWork.SaveAsync(ct);
+
+            var finalItems = new List<AllocatePurchaseOrderCostsItem>(requestedItems);
+            foreach (var purchaseOrderItem in purchaseOrderItems)
+            {
+                var allocated = requestedItems
+                    .Where(x => string.Equals(x.PurchaseOrderItemId, purchaseOrderItem.Id, StringComparison.OrdinalIgnoreCase))
+                    .Sum(x => x.Quantity);
+                var remaining = (purchaseOrderItem.Quantity ?? 0d) - allocated;
+                if (remaining > 0.000001d)
+                {
+                    finalItems.Add(new AllocatePurchaseOrderCostsItem
                     {
-                        serial.CostAllocationId = null;
-                        _productSerialRepository.Update(serial);
-                    }
+                        PurchaseOrderItemId = purchaseOrderItem.Id,
+                        CustomerId = null,
+                        Quantity = remaining,
+                        UnitPrice = ResolveUnitPrice(purchaseOrderItem)
+                    });
                 }
             }
 
-            _purchaseOrderCostAllocationRepository.Delete(alloc);
-        }
-
-        // Save changes to commit serial releases and allocation deletions
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        // 2. Delete old Credit cash transactions for this PO
-        var oldCashTransactions = await _cashTransactionRepository.GetQuery()
-            .Where(x => !x.IsDeleted &&
-                        x.SourceModule == nameof(PurchaseOrder) &&
-                        x.SourceModuleId == request.PurchaseOrderId &&
-                        x.TransactionType == CashTransactionType.Credit)
-            .ToListAsync(cancellationToken);
-
-        foreach (var tx in oldCashTransactions)
-        {
-            _cashTransactionRepository.Delete(tx);
-        }
-
-        // 3. Reset AllocatedQuantity on all PO items
-        var poItems = await _purchaseOrderItemRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.Product)
-            .Where(x => x.PurchaseOrderId == request.PurchaseOrderId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in poItems)
-        {
-            item.AllocatedQuantity = 0;
-            _purchaseOrderItemRepository.Update(item);
-        }
-
-        // Finalize items list: Auto-append "Kho" for remaining quantities
-        var finalItems = new List<AllocatePurchaseOrderCostsItem>();
-
-        foreach (var reqItem in request.Items!)
-        {
-            if (reqItem.Quantity > 0)
+            foreach (var group in finalItems.GroupBy(x => x.PurchaseOrderItemId, StringComparer.OrdinalIgnoreCase))
             {
-                finalItems.Add(reqItem);
-            }
-        }
+                var purchaseOrderItem = itemMap[group.Key!];
+                purchaseOrderItem.AllocatedQuantity = group.Sum(x => x.Quantity);
+                _purchaseOrderItemRepository.Update(purchaseOrderItem);
 
-        // Aggregate to prevent duplicate customer rows and duplicate serial selection
-        finalItems = finalItems
-            .GroupBy(x => new { x.PurchaseOrderItemId, x.CustomerId })
-            .Select(g => new AllocatePurchaseOrderCostsItem
-            {
-                PurchaseOrderItemId = g.Key.PurchaseOrderItemId,
-                CustomerId = g.Key.CustomerId,
-                Quantity = g.Sum(x => x.Quantity),
-                UnitPrice = g.First().UnitPrice
-            })
-            .ToList();
-
-        foreach (var poItem in poItems)
-        {
-            var requestedForThisItem = finalItems
-                .Where(x => x.PurchaseOrderItemId == poItem.Id)
-                .Sum(x => x.Quantity);
-
-            var remaining = (poItem.Quantity ?? 0) - requestedForThisItem;
-
-            if (remaining > 0)
-            {
-                finalItems.Add(new AllocatePurchaseOrderCostsItem
+                foreach (var item in group)
                 {
-                    PurchaseOrderItemId = poItem.Id,
-                    CustomerId = null, // Kho
-                    Quantity = remaining,
-                    UnitPrice = (poItem.AfterTaxAmount ?? 0) / (poItem.Quantity > 0 ? poItem.Quantity.Value : 1)
-                });
-            }
-            else if (remaining < 0)
-            {
-                throw new Exception($"Tổng số lượng phân bổ ({requestedForThisItem}) vượt quá số lượng mua ({poItem.Quantity}) của sản phẩm {poItem.Product?.Name ?? poItem.ProductId}.");
-            }
-        }
-
-        var customerIds = finalItems
-            .Where(x => x.CustomerId != null)
-            .Select(x => x.CustomerId)
-            .Distinct()
-            .ToList();
-
-        var customers = await _queryContext
-            .Set<Customer>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => customerIds.Contains(x.Id))
-            .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
-
-        var groupedByPoItem = finalItems
-            .GroupBy(x => x.PurchaseOrderItemId, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        // 4. Create new allocations and update PO item AllocatedQuantity
-        foreach (var group in groupedByPoItem)
-        {
-            var poItem = poItems.FirstOrDefault(x => x.Id == group.Key);
-            if (poItem == null) continue;
-
-            var totalAllocated = group.Sum(x => x.Quantity);
-            poItem.AllocatedQuantity = totalAllocated;
-            _purchaseOrderItemRepository.Update(poItem);
-
-            foreach (var reqItem in group)
-            {
-                var alloc = new PurchaseOrderCostAllocation
-                {
-                    PurchaseOrderId = purchaseOrder.Id,
-                    PurchaseOrderItemId = poItem.Id,
-                    CustomerId = reqItem.CustomerId,
-                    Quantity = reqItem.Quantity,
-                    UnitPrice = reqItem.UnitPrice,
-                    Amount = reqItem.Quantity * reqItem.UnitPrice,
-                    CreatedById = request.CreatedById
-                };
-                await _purchaseOrderCostAllocationRepository.CreateAsync(alloc, cancellationToken);
-
-                // We must save immediately to get the alloc.Id for CostAllocationId and InventoryTransaction
-                await _unitOfWork.SaveAsync(cancellationToken);
-
-                if (alloc.CustomerId != null)
-                {
-                    List<string> selectedSerialIds = new List<string>();
-                    var isTracked = poItem.Product?.SerialTrackingMode != SerialTrackingMode.None;
-
-                    if (isTracked)
+                    var allocation = new PurchaseOrderCostAllocation
                     {
-                        int neededCount = (int)alloc.Quantity;
-                        var key = $"{poItem.Id}_{alloc.CustomerId}";
+                        PurchaseOrderId = purchaseOrder.Id,
+                        PurchaseOrderItemId = purchaseOrderItem.Id,
+                        CustomerId = item.CustomerId,
+                        Quantity = item.Quantity,
+                        UnitPrice = ResolveUnitPrice(purchaseOrderItem),
+                        Amount = item.Quantity * ResolveUnitPrice(purchaseOrderItem),
+                        CreatedById = request.CreatedById
+                    };
+                    await _allocationRepository.CreateAsync(allocation, ct);
+                    await _unitOfWork.SaveAsync(ct);
 
-                        var availableSerials = existingSerialMap.ContainsKey(key) ? existingSerialMap[key] : new List<string>();
-
-                        if (availableSerials.Count >= neededCount)
-                        {
-                            selectedSerialIds = availableSerials.Take(neededCount).ToList();
-                        }
-                        else
-                        {
-                            selectedSerialIds.AddRange(availableSerials);
-                            int missing = neededCount - availableSerials.Count;
-
-                            var extraSerials = await _queryContext.Set<ProductSerial>()
-                                .AsNoTracking()
-                                .Where(x => x.PurchaseOrderItemId == poItem.Id
-                                         && x.Status == ProductSerialStatus.InStock
-                                         && x.CostAllocationId == null
-                                         && !selectedSerialIds.Contains(x.Id))
-                                .Take(missing)
-                                .Select(x => x.Id!)
-                                .ToListAsync(cancellationToken);
-
-                            if (extraSerials.Count < missing)
-                            {
-                                throw new Exception($"Không đủ số serial InStock cho sản phẩm {poItem.Product?.Name}. Cần {missing} nhưng chỉ có {extraSerials.Count}.");
-                            }
-
-                            selectedSerialIds.AddRange(extraSerials);
-                        }
-
-                        // Set CostAllocationId on selected serials
-                        foreach (var serialId in selectedSerialIds)
-                        {
-                            var serial = await _productSerialRepository.GetAsync(serialId, cancellationToken);
-                            if (serial != null)
-                            {
-                                serial.CostAllocationId = alloc.Id;
-                                _productSerialRepository.Update(serial);
-                            }
-                        }
-                        await _unitOfWork.SaveAsync(cancellationToken);
+                    if (string.IsNullOrWhiteSpace(allocation.CustomerId))
+                    {
+                        continue;
                     }
 
-                    // Create inventory transaction for this allocation
-                    // Pass selectedSerialIds (null if not tracked)
+                    IReadOnlyCollection<string>? serialIds = null;
+                    if (purchaseOrderItem.Product?.SerialTrackingMode != SerialTrackingMode.None)
+                    {
+                        var allocationQuantity = allocation.Quantity ?? 0d;
+                        if (Math.Abs(allocationQuantity - Math.Round(allocationQuantity)) > 0.000001d)
+                        {
+                            throw new InvalidOperationException("Serial-tracked products require a whole-number quantity.");
+                        }
+
+                        var required = Convert.ToInt32(Math.Round(allocationQuantity));
+                        var key = $"{purchaseOrderItem.Id}_{allocation.CustomerId}";
+                        var preferredIds = existingSerialMap.GetValueOrDefault(key) ?? new List<string>();
+                        var selected = await _productSerialRepository.GetQuery()
+                            .Where(x => !x.IsDeleted
+                                && preferredIds.Contains(x.Id)
+                                && x.PurchaseOrderItemId == purchaseOrderItem.Id
+                                && x.Status == ProductSerialStatus.InStock
+                                && x.CostAllocationId == null)
+                            .OrderBy(x => x.CreatedAtUtc)
+                            .ThenBy(x => x.Id)
+                            .Take(required)
+                            .ToListAsync(ct);
+
+                        if (selected.Count < required)
+                        {
+                            var selectedIds = selected.Select(x => x.Id).ToList();
+                            var extra = await _productSerialRepository.GetQuery()
+                                .Where(x => !x.IsDeleted
+                                    && x.PurchaseOrderItemId == purchaseOrderItem.Id
+                                    && x.Status == ProductSerialStatus.InStock
+                                    && x.CostAllocationId == null
+                                    && !selectedIds.Contains(x.Id))
+                                .OrderBy(x => x.CreatedAtUtc)
+                                .ThenBy(x => x.Id)
+                                .Take(required - selected.Count)
+                                .ToListAsync(ct);
+                            selected.AddRange(extra);
+                        }
+
+                        if (selected.Count != required)
+                        {
+                            throw new InvalidOperationException(
+                                $"Not enough in-stock serials for {purchaseOrderItem.Product?.Name ?? purchaseOrderItem.ProductId}.");
+                        }
+
+                        foreach (var serial in selected)
+                        {
+                            serial.CostAllocationId = allocation.Id;
+                            _productSerialRepository.Update(serial);
+                        }
+                        await _unitOfWork.SaveAsync(ct);
+                        serialIds = selected.Select(x => x.Id).ToList();
+                    }
+
                     await _inventoryTransactionService.CostAllocationCreateInvenTrans(
-                        moduleId: alloc.Id,
-                        productId: poItem.ProductId,
-                        movement: alloc.Quantity,
-                        createdById: request.CreatedById,
-                        cancellationToken: cancellationToken,
-                        productSerialIds: isTracked ? selectedSerialIds : null
-                    );
+                        allocation.Id,
+                        purchaseOrderItem.ProductId,
+                        allocation.Quantity,
+                        purchaseOrderItem.WarehouseId,
+                        purchaseOrder.Number,
+                        request.CreatedById,
+                        ct,
+                        serialIds);
                 }
             }
-        }
 
-        // 5. Create a SINGLE CashTransaction for the entire PO
-        var vendorDescription =
-            !string.IsNullOrWhiteSpace(purchaseOrder.Vendor?.Name)
-                ? purchaseOrder.Vendor.Name
-                : !string.IsNullOrWhiteSpace(purchaseOrder.Number)
-                    ? purchaseOrder.Number
-                    : "";
+            var totalAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? 0d);
+            var isNewObligation = obligation == null;
+            if (isNewObligation)
+            {
+                obligation = new CashTransaction
+                {
+                    CreatedById = request.CreatedById,
+                    Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
+                    SourceModule = nameof(PurchaseOrder),
+                    SourceModuleId = purchaseOrder.Id
+                };
+            }
 
-        var totalPoAmount = poItems.Sum(x => x.AfterTaxAmount ?? 0);
+            obligation.TransactionDate = DateTime.Today;
+            obligation.TransactionType = CashTransactionType.Credit;
+            obligation.Status = CashTransactionStatus.Unpaid;
+            obligation.Amount = totalAmount;
+            obligation.PaidAmount = 0d;
+            obligation.Description = $"{purchaseOrder.Vendor?.Name} - {purchaseOrder.Number}".Trim(' ', '-');
+            obligation.CashAccountId = null;
+            obligation.CashCategoryId = request.CashCategoryId ?? obligation.CashCategoryId;
+            obligation.CustomerId = null;
+            obligation.VendorId = purchaseOrder.VendorId;
+            obligation.SourceModuleNumber = purchaseOrder.Number;
 
-        var cashTransaction = new CashTransaction
-        {
-            CreatedById = request.CreatedById,
-            Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
-            TransactionDate = DateTime.Today,
-            TransactionType = CashTransactionType.Credit,
-            Status = CashTransactionStatus.Unpaid,
-            Amount = totalPoAmount,
-            PaidAmount = 0,
-            Description = $"{vendorDescription} - {purchaseOrder.Number}".Trim(),
-            CashAccountId = null, // No real money deduction
-            CashCategoryId = request.CashCategoryId,
-            CustomerId = null, // Whole PO, not per-customer
-            VendorId = purchaseOrder.VendorId, // Keep for vendor debt tracking
-            SourceModule = nameof(PurchaseOrder),
-            SourceModuleId = purchaseOrder.Id,
-            SourceModuleNumber = purchaseOrder.Number
-        };
+            if (isNewObligation)
+            {
+                await _cashTransactionRepository.CreateAsync(obligation, ct);
+            }
+            else
+            {
+                obligation.UpdatedById = request.CreatedById;
+                _cashTransactionRepository.Update(obligation);
+            }
 
-        await _cashTransactionRepository.CreateAsync(cashTransaction, cancellationToken);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        // Recalculate old account balances for previously deleted transactions
-        var oldAccountIds = oldCashTransactions
-            .Where(x => x.Status != CashTransactionStatus.Unpaid)
-            .Select(x => x.CashAccountId)
-            .Where(x => x != null)
-            .Distinct()
-            .ToList();
-        foreach (var oldAccId in oldAccountIds)
-        {
-            await RecalculateAccountBalance(oldAccId!, cancellationToken);
-        }
+            await _unitOfWork.SaveAsync(ct);
+        }, cancellationToken);
 
         return new AllocatePurchaseOrderCostsResult
         {
-            CreatedTransactions = new List<CashTransaction> { cashTransaction }
+            CreatedTransactions = new List<CashTransaction> { obligation! }
         };
     }
 
-    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
+    private static double ResolveUnitPrice(PurchaseOrderItem item)
     {
-        var account = await _cashAccountRepository.GetAsync(cashAccountId, cancellationToken);
-        if (account == null) return;
-
-        var balances = await _queryContext
-            .Set<CashTransaction>()
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
-            .GroupBy(x => 1)
-            .Select(g => new
-            {
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var initialBalance = account.InitialBalance ?? 0d;
-        var totalDebit = balances?.TotalDebit ?? 0d;
-        var totalCredit = balances?.TotalCredit ?? 0d;
-
-        account.CurrentBalance = initialBalance + totalCredit - totalDebit;
-        _cashAccountRepository.Update(account);
-        await _unitOfWork.SaveAsync(cancellationToken);
+        var quantity = item.Quantity ?? 0d;
+        return quantity > 0d ? (item.AfterTaxAmount ?? 0d) / quantity : 0d;
     }
 }

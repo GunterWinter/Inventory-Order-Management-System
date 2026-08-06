@@ -1,5 +1,6 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
+using Application.Features.CashTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -17,6 +18,7 @@ public class CashManagementSeeder
     private readonly ICommandRepository<CashCategory> _cashCategoryRepository;
     private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
     private readonly NumberSequenceService _numberSequenceService;
+    private readonly CashBalanceService _cashBalanceService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CashManagementSeeder(
@@ -25,6 +27,7 @@ public class CashManagementSeeder
         ICommandRepository<CashCategory> cashCategoryRepository,
         ICommandRepository<CashTransaction> cashTransactionRepository,
         NumberSequenceService numberSequenceService,
+        CashBalanceService cashBalanceService,
         IUnitOfWork unitOfWork)
     {
         _queryContext = queryContext;
@@ -32,6 +35,7 @@ public class CashManagementSeeder
         _cashCategoryRepository = cashCategoryRepository;
         _cashTransactionRepository = cashTransactionRepository;
         _numberSequenceService = numberSequenceService;
+        _cashBalanceService = cashBalanceService;
         _unitOfWork = unitOfWork;
     }
 
@@ -75,48 +79,53 @@ public class CashManagementSeeder
             return;
         }
 
-        var demoSalesOrder = await _queryContext
+        var demoSalesOrders = await _queryContext
             .Set<SalesOrder>()
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(BatchDemoPrefix))
             .OrderBy(x => x.OrderDate)
-            .FirstOrDefaultAsync();
+            .Take(8)
+            .ToListAsync();
 
-        var demoPurchaseOrder = await _queryContext
+        var demoPurchaseOrders = await _queryContext
             .Set<PurchaseOrder>()
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(BatchDemoPrefix))
             .OrderBy(x => x.OrderDate)
-            .FirstOrDefaultAsync();
+            .Take(10)
+            .ToListAsync();
 
-        if (demoSalesOrder != null)
+        for (var index = 0; index < demoSalesOrders.Count; index++)
         {
+            var demoSalesOrder = demoSalesOrders[index];
             await CreateTransactionAsync(
-                date: new DateTime(2026, 4, 6),
+                date: (demoSalesOrder.OrderDate ?? new DateTime(2026, 4, 6)).AddDays(1),
                 type: CashTransactionType.Debit,
                 status: CashTransactionStatus.Paid,
                 amount: demoSalesOrder.AfterTaxAmount ?? demoSalesOrder.BeforeTaxAmount ?? 0d,
                 description: $"{DemoPrefix}Thu tiền đơn {demoSalesOrder.Number}",
-                cashAccountId: personalAccount.Id,
+                cashAccountId: index % 2 == 0 ? personalAccount.Id : companyAccount.Id,
                 cashCategoryId: categories["Bán hàng"].Id,
                 sourceModule: "SalesOrder",
                 sourceModuleId: demoSalesOrder.Id,
-                sourceModuleNumber: demoSalesOrder.Number);
+                sourceModuleNumber: demoSalesOrder.Number,
+                customerId: demoSalesOrder.CustomerId);
         }
 
-        if (demoPurchaseOrder != null)
+        foreach (var demoPurchaseOrder in demoPurchaseOrders)
         {
             await CreateTransactionAsync(
-                date: new DateTime(2026, 4, 3),
+                date: (demoPurchaseOrder.OrderDate ?? new DateTime(2026, 4, 3)).AddDays(2),
                 type: CashTransactionType.Credit,
                 status: CashTransactionStatus.Unpaid,
                 amount: demoPurchaseOrder.AfterTaxAmount ?? demoPurchaseOrder.BeforeTaxAmount ?? 0d,
                 description: $"{DemoPrefix}Nháp chi tiền đơn {demoPurchaseOrder.Number}",
-                cashAccountId: companyAccount.Id,
+                cashAccountId: null,
                 cashCategoryId: categories["Mua hàng"].Id,
                 sourceModule: "PurchaseOrder",
                 sourceModuleId: demoPurchaseOrder.Id,
-                sourceModuleNumber: demoPurchaseOrder.Number);
+                sourceModuleNumber: demoPurchaseOrder.Number,
+                vendorId: demoPurchaseOrder.VendorId);
         }
 
         await CreateTransactionAsync(
@@ -165,21 +174,17 @@ public class CashManagementSeeder
             .Set<CashCategory>()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == name);
 
-        var isNew = category == null;
-        category ??= new CashCategory();
-        category.Name = name;
-        category.Description = description;
-
-        if (isNew)
+        if (category == null)
         {
+            category = new CashCategory
+            {
+                Name = name,
+                Description = description
+            };
             await _cashCategoryRepository.CreateAsync(category);
-        }
-        else
-        {
-            _cashCategoryRepository.Update(category);
+            await _unitOfWork.SaveAsync();
         }
 
-        await _unitOfWork.SaveAsync();
         return category;
     }
 
@@ -193,27 +198,21 @@ public class CashManagementSeeder
             .Set<CashAccount>()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == name);
 
-        var isNew = account == null;
-        account ??= new CashAccount
+        if (account == null)
         {
-            Number = _numberSequenceService.GenerateNumber(nameof(CashAccount), "", "CA")
-        };
-
-        account.Name = name;
-        account.AccountType = accountType;
-        account.Description = description;
-        account.InitialBalance = initialBalance;
-
-        if (isNew)
-        {
+            account = new CashAccount
+            {
+                Number = _numberSequenceService.GenerateNumber(nameof(CashAccount), "", "CA"),
+                Name = name,
+                AccountType = accountType,
+                Description = description,
+                InitialBalance = initialBalance,
+                CurrentBalance = initialBalance
+            };
             await _cashAccountRepository.CreateAsync(account);
-        }
-        else
-        {
-            _cashAccountRepository.Update(account);
+            await _unitOfWork.SaveAsync();
         }
 
-        await _unitOfWork.SaveAsync();
         return account;
     }
 
@@ -227,7 +226,9 @@ public class CashManagementSeeder
         string? cashCategoryId,
         string? sourceModule = null,
         string? sourceModuleId = null,
-        string? sourceModuleNumber = null)
+        string? sourceModuleNumber = null,
+        string? vendorId = null,
+        string? customerId = null)
     {
         if (amount <= 0)
         {
@@ -245,6 +246,8 @@ public class CashManagementSeeder
             Description = description,
             CashAccountId = cashAccountId,
             CashCategoryId = cashCategoryId,
+            VendorId = vendorId,
+            CustomerId = customerId,
             SourceModule = sourceModule,
             SourceModuleId = sourceModuleId,
             SourceModuleNumber = sourceModuleNumber
@@ -256,27 +259,6 @@ public class CashManagementSeeder
 
     private async Task RecalculateAccountBalance(string cashAccountId)
     {
-        var account = await _cashAccountRepository.GetAsync(cashAccountId);
-        if (account == null) return;
-
-        var balances = await _queryContext
-            .Set<CashTransaction>()
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
-            .GroupBy(x => 1)
-            .Select(g => new
-            {
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
-            })
-            .FirstOrDefaultAsync();
-
-        var initialBalance = account.InitialBalance ?? 0d;
-        var totalDebit = balances?.TotalDebit ?? 0d;
-        var totalCredit = balances?.TotalCredit ?? 0d;
-        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
-
-        _cashAccountRepository.Update(account);
-        await _unitOfWork.SaveAsync();
+        await _cashBalanceService.RecalculateAsync(cashAccountId);
     }
 }

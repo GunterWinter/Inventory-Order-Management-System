@@ -10,8 +10,19 @@ namespace Application.Features.DashboardManager.Queries;
 
 public class GetInventoryDashboardDto
 {
-    public List<InventoryTransaction>? InventoryTransactionDashboard { get; init; }
+    public List<RecentInventoryTransactionDashboardDto>? InventoryTransactionDashboard { get; init; }
     public List<BarSeries>? InventoryStockDashboard { get; init; }
+}
+
+public sealed record RecentInventoryTransactionDashboardDto
+{
+    public string? Id { get; init; }
+    public DateTime? CreatedAtUtc { get; init; }
+    public string? Number { get; init; }
+    public string? WarehouseName { get; init; }
+    public string? ProductName { get; init; }
+    public double Stock { get; init; }
+    public string? ModuleName { get; init; }
 }
 
 public class GetInventoryDashboardResult
@@ -38,28 +49,33 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
         var inventoryTransactionData = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.Warehouse)
-            .Include(x => x.Product)
-            .Include(x => x.WarehouseFrom)
-            .Include(x => x.WarehouseTo)
             .Where(x =>
-                x.Product!.Physical == true &&
-                x.Warehouse!.SystemWarehouse == false &&
+                x.Product != null && x.Product.Physical == true &&
+                x.Warehouse != null && x.Warehouse.SystemWarehouse == false &&
                 x.Status == InventoryTransactionStatus.Confirmed
             )
             .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(50)
+            .Select(x => new RecentInventoryTransactionDashboardDto
+            {
+                Id = x.Id,
+                CreatedAtUtc = x.CreatedAtUtc,
+                Number = x.Number,
+                WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
+                ProductName = x.Product != null ? x.Product.Name : null,
+                Stock = x.Stock ?? 0d,
+                ModuleName = x.ModuleName
+            })
             .ToListAsync(cancellationToken);
 
 
-        var inventoryStockData = _context.InventoryTransaction
+        var inventoryStockData = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.Warehouse)
-            .Include(x => x.Product)
             .Where(x =>
                 x.Status == InventoryTransactionStatus.Confirmed &&
-                x.Warehouse!.SystemWarehouse == false &&
-                x.Product!.Physical == true
+                x.Warehouse != null && x.Warehouse.SystemWarehouse == false &&
+                x.Product != null && x.Product.Physical == true
             )
             .GroupBy(x => new { x.WarehouseId, x.ProductId })
             .Select(group => new
@@ -73,14 +89,14 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                 Id = group.Max(x => x.Id),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
             })
-        .ToList();
+            .ToListAsync(cancellationToken);
 
-        var warehouseData = _context.Warehouse
+        var warehouseData = await _context.Warehouse
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SystemWarehouse == false)
             .Select(x => x.Name)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
 
         var result = new GetInventoryDashboardResult

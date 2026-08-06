@@ -4,6 +4,7 @@ using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.MaterialExportManager.Commands;
 
@@ -31,14 +32,17 @@ public class DeleteMaterialExportHandler : IRequestHandler<DeleteMaterialExportR
     private readonly ICommandRepository<MaterialExport> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
 
     public DeleteMaterialExportHandler(
         ICommandRepository<MaterialExport> repository,
+        ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         IUnitOfWork unitOfWork,
         InventoryTransactionService inventoryTransactionService
         )
     {
         _repository = repository;
+        _inventoryTransactionRepository = inventoryTransactionRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
     }
@@ -53,10 +57,30 @@ public class DeleteMaterialExportHandler : IRequestHandler<DeleteMaterialExportR
             throw new Exception($"Entity not found: {request.Id}");
         }
 
-        entity.UpdatedById = request.DeletedById;
+        if (entity.Status != MaterialExportStatus.Draft)
+        {
+            throw new InvalidOperationException("Only draft material exports can be deleted.");
+        }
 
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            var lines = await _inventoryTransactionRepository.GetQuery()
+                .Where(x => !x.IsDeleted
+                    && x.ModuleName == nameof(MaterialExport)
+                    && x.ModuleId == entity.Id)
+                .ToListAsync(ct);
+            foreach (var line in lines)
+            {
+                await _inventoryTransactionService.MaterialExportDeleteInvenTrans(
+                    line.Id,
+                    request.DeletedById,
+                    ct);
+            }
+
+            entity.UpdatedById = request.DeletedById;
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
+        }, cancellationToken);
 
         return new DeleteMaterialExportResult
         {

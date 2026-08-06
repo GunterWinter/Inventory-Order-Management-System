@@ -1,5 +1,6 @@
 using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
 
@@ -24,6 +25,7 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
         builder.Property(x => x.VendorId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModule).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModuleId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.SourceDetailId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SourceModuleNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
 
         builder.HasOne(x => x.CashAccount)
@@ -48,5 +50,17 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
 
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.TransactionDate);
+        builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.SourceDetailId, e.TransactionType })
+            .HasDatabaseName("UX_CashTransaction_MaterialExportOffset")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceDetailId] IS NOT NULL");
+        builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.TransactionType })
+            .HasDatabaseName("UX_CashTransaction_PurchaseOrderObligation")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'PurchaseOrder'");
+        builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.TransactionType })
+            .HasDatabaseName("UX_CashTransaction_SalesOrderPayment")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'SalesOrder'");
     }
 }

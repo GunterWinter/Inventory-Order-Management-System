@@ -580,6 +580,36 @@
         );
 
         const handler = {
+            quickAddVendorGroup: async function () {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.simpleQuickAdd({
+                    title: 'Quick Add Vendor Group',
+                    apiUrl: '/VendorGroup/CreateVendorGroup',
+                    dropdownObj: vendorGroupListLookup.obj,
+                    refreshLookup: methods.populateVendorGroupListLookupData,
+                    state,
+                    stateKey: 'vendorGroupId',
+                    lookupKey: 'vendorGroupListLookupData'
+                });
+            },
+            quickAddVendorCategory: async function () {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.simpleQuickAdd({
+                    title: 'Quick Add Vendor Category',
+                    apiUrl: '/VendorCategory/CreateVendorCategory',
+                    dropdownObj: vendorCategoryListLookup.obj,
+                    refreshLookup: methods.populateVendorCategoryListLookupData,
+                    state,
+                    stateKey: 'vendorCategoryId',
+                    lookupKey: 'vendorCategoryListLookupData'
+                });
+            },
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;

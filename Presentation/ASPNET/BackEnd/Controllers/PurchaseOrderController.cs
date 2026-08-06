@@ -195,6 +195,24 @@ public class PurchaseOrderController : BaseApiController
         });
     }
 
+    [Authorize]
+    [HttpGet("GetPurchaseOrderPaymentHistory")]
+    public async Task<ActionResult<ApiSuccessResult<GetPurchaseOrderPaymentHistoryResult>>> GetPurchaseOrderPaymentHistoryAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string purchaseOrderId)
+    {
+        var response = await _sender.Send(
+            new GetPurchaseOrderPaymentHistoryRequest { PurchaseOrderId = purchaseOrderId },
+            cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetPurchaseOrderPaymentHistoryResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetPurchaseOrderPaymentHistoryAsync)}",
+            Content = response
+        });
+    }
+
 }
 
 

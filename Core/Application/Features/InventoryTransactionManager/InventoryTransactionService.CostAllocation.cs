@@ -11,42 +11,24 @@ public partial class InventoryTransactionService
         string? moduleId,
         string? productId,
         double? movement,
+        string? warehouseId,
+        string? moduleNumber,
         string? createdById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
         )
     {
-        var parent = await _queryContext
-            .Set<PurchaseOrderCostAllocation>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == moduleId, cancellationToken);
-
-        if (parent == null)
-        {
-            throw new Exception($"Parent entity not found: {moduleId}");
-        }
-        
-        var purchaseOrder = await _queryContext
-            .Set<PurchaseOrder>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == parent.PurchaseOrderId, cancellationToken);
-            
-        var purchaseOrderItem = await _queryContext
-            .Set<PurchaseOrderItem>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == parent.PurchaseOrderItemId, cancellationToken);
-
         var child = new InventoryTransaction();
         child.CreatedById = createdById;
 
         child.Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT");
-        child.ModuleId = parent.Id;
+        child.ModuleId = moduleId;
         child.ModuleName = "CostAllocation";
         child.ModuleCode = "CSAL";
-        child.ModuleNumber = purchaseOrder?.Number;
+        child.ModuleNumber = moduleNumber;
         child.MovementDate = DateTime.Now;
         child.Status = InventoryTransactionStatus.Confirmed;
-        child.WarehouseId = purchaseOrderItem?.WarehouseId; // Takes the warehouse of the PO item
+        child.WarehouseId = warehouseId;
 
         child.ProductId = productId;
         child.Movement = movement;

@@ -68,25 +68,27 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
             })
             .ToListAsync(cancellationToken);
 
-        // Keep the SQL simple, then pick the latest transaction per source in memory for most fields,
-        // but aggregate the Amount and PaidAmount to reflect the total payment status across all split transactions.
+        // A source document owns one obligation/payment transaction. Picking the latest row here keeps
+        // legacy duplicate data from inflating the order total while the compatibility repair is applied.
         var entities = transactions
             .GroupBy(x => x.SourceModuleId)
-            .Select(g => new GetPaymentStatusLookupDto
+            .Select(g =>
             {
-                SourceModuleId = g.Key,
-                SourceModule = g.First().SourceModule,
-                Status = g.All(x => x.Status == CashTransactionStatus.Paid) ? CashTransactionStatus.Paid 
-                       : g.All(x => x.Status == CashTransactionStatus.Unpaid) ? CashTransactionStatus.Unpaid 
-                       : CashTransactionStatus.PartiallyPaid,
-                CashTransactionId = g.First().CashTransactionId,
-                TransactionDate = g.First().TransactionDate,
-                CashAccountId = g.First().CashAccountId,
-                CashCategoryId = g.First().CashCategoryId,
-                Amount = g.Sum(x => x.Amount),
-                PaidAmount = g.Sum(x => x.PaidAmount),
-                Description = g.First().Description,
-                IsSplit = g.Count() > 1
+                var latest = g.First();
+                return new GetPaymentStatusLookupDto
+                {
+                    SourceModuleId = g.Key,
+                    SourceModule = latest.SourceModule,
+                    Status = latest.Status,
+                    CashTransactionId = latest.CashTransactionId,
+                    TransactionDate = latest.TransactionDate,
+                    CashAccountId = latest.CashAccountId,
+                    CashCategoryId = latest.CashCategoryId,
+                    Amount = latest.Amount,
+                    PaidAmount = latest.PaidAmount,
+                    Description = latest.Description,
+                    IsSplit = false
+                };
             })
             .ToList();
 

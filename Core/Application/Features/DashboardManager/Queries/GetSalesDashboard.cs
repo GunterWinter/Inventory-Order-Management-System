@@ -10,9 +10,19 @@ namespace Application.Features.DashboardManager.Queries;
 
 public class GetSalesDashboardDto
 {
-    public List<SalesOrderItem>? SalesOrderDashboard { get; init; }
+    public List<RecentSalesOrderDashboardDto>? SalesOrderDashboard { get; init; }
     public List<BarSeries>? SalesByCustomerGroupDashboard { get; init; }
     public List<BarSeries>? SalesByCustomerCategoryDashboard { get; init; }
+}
+
+public sealed record RecentSalesOrderDashboardDto
+{
+    public string? DocumentId { get; init; }
+    public DateTime? CreatedAtUtc { get; init; }
+    public DateTime? OrderDate { get; init; }
+    public string? Number { get; init; }
+    public string? ProductName { get; init; }
+    public double Total { get; init; }
 }
 
 public class GetSalesDashboardResult
@@ -39,26 +49,34 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
         var salesOrderItemData = await _context.SalesOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.SalesOrder)
-            .Include(x => x.Product)
-            .Where(x => x.SalesOrder!.OrderStatus == SalesOrderStatus.Confirmed)
-            .OrderByDescending(x => x.SalesOrder!.OrderDate)
+            .Where(x => x.SalesOrder != null
+                && !x.SalesOrder.IsDeleted
+                && x.SalesOrder.OrderStatus == SalesOrderStatus.Confirmed)
+            .OrderByDescending(x => x.SalesOrder!.CreatedAtUtc)
+            .ThenByDescending(x => x.CreatedAtUtc)
             .Take(30)
+            .Select(x => new RecentSalesOrderDashboardDto
+            {
+                DocumentId = x.SalesOrderId,
+                CreatedAtUtc = x.SalesOrder!.CreatedAtUtc,
+                OrderDate = x.SalesOrder.OrderDate,
+                Number = x.SalesOrder.Number,
+                ProductName = x.Product != null ? x.Product.Name : null,
+                Total = x.Total ?? 0d
+            })
             .ToListAsync(cancellationToken);
 
-        var salesByCustomerGroupData = _context.SalesOrderItem
+        var salesByCustomerGroupData = await _context.SalesOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-                .Include(x => x.SalesOrder)
-                    .ThenInclude(x => x!.Customer)
-                        .ThenInclude(x => x!.CustomerGroup)
-                .Include(x => x.Product)
-                .Where(x => x.Product!.Physical == true)
+            .Where(x => x.Product != null && x.Product.Physical == true)
             .Select(x => new
             {
                 Status = x.SalesOrder!.OrderStatus,
-                CustomerGroupName = x.SalesOrder!.Customer!.CustomerGroup!.Name,
-                Quantity = x.Quantity
+                CustomerGroupName = x.SalesOrder.Customer != null && x.SalesOrder.Customer.CustomerGroup != null
+                    ? x.SalesOrder.Customer.CustomerGroup.Name
+                    : null,
+                Quantity = x.Quantity ?? 0d
             })
             .GroupBy(x => new { x.Status, x.CustomerGroupName })
             .Select(g => new
@@ -67,21 +85,19 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                 CustomerGroupName = g.Key.CustomerGroupName,
                 Quantity = g.Sum(x => x.Quantity)
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
-        var salesByCustomerCategoryData = _context.SalesOrderItem
+        var salesByCustomerCategoryData = await _context.SalesOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Include(x => x.SalesOrder)
-                .ThenInclude(x => x!.Customer)
-                    .ThenInclude(x => x!.CustomerCategory)
-            .Include(x => x.Product)
-            .Where(x => x.Product!.Physical == true)
+            .Where(x => x.Product != null && x.Product.Physical == true)
             .Select(x => new
             {
                 Status = x.SalesOrder!.OrderStatus,
-                CustomerCategoryName = x.SalesOrder!.Customer!.CustomerCategory!.Name,
-                Quantity = x.Quantity
+                CustomerCategoryName = x.SalesOrder!.Customer != null && x.SalesOrder.Customer.CustomerCategory != null
+                    ? x.SalesOrder.Customer.CustomerCategory.Name
+                    : null,
+                Quantity = x.Quantity ?? 0d
             })
             .GroupBy(x => new { x.Status, x.CustomerCategoryName })
             .Select(g => new
@@ -90,7 +106,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                 CustomerCategoryName = g.Key.CustomerCategoryName,
                 Quantity = g.Sum(x => x.Quantity)
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
 
         var result = new GetSalesDashboardResult
@@ -116,7 +132,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                             {
                                 X = x.CustomerGroupName ?? "",
                                 TooltipMappingName = x.CustomerGroupName ?? "",
-                                Y = (int)x.Quantity!.Value
+                                Y = Convert.ToInt32(x.Quantity)
                             }).ToList()
                     })
                     .ToList(),
@@ -138,7 +154,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                             {
                                 X = x.CustomerCategoryName ?? "",
                                 TooltipMappingName = x.CustomerCategoryName ?? "",
-                                Y = (int)x.Quantity!.Value
+                                Y = Convert.ToInt32(x.Quantity)
                             }).ToList()
                     })
                     .ToList()

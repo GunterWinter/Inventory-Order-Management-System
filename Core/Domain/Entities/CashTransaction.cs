@@ -22,5 +22,7 @@ public class CashTransaction : BaseEntity
     public Vendor? Vendor { get; set; }
     public string? SourceModule { get; set; }
     public string? SourceModuleId { get; set; }
+    public string? SourceDetailId { get; set; }
     public string? SourceModuleNumber { get; set; }
+    public ICollection<CashTransactionPayment> PaymentList { get; set; } = new List<CashTransactionPayment>();
 }

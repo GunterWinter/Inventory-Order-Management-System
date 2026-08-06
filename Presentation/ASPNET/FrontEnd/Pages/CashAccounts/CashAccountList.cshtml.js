@@ -162,13 +162,14 @@ const App = {
             refresh: () => {
                 if (initialBalanceInput.obj) {
                     initialBalanceInput.obj.value = state.initialBalance;
+                    initialBalanceInput.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(initialBalanceInput.obj);
                 }
             }
         };
 
         Vue.watch(() => state.name, () => { state.errors.name = ''; nameText.refresh(); });
         Vue.watch(() => state.accountType, () => { state.errors.accountType = ''; accountTypeDropDown.refresh(); });
-        Vue.watch(() => state.initialBalance, () => { initialBalanceInput.refresh(); });
 
         const handler = {
             handleSubmit: async function () {
@@ -347,6 +348,7 @@ const App = {
                             state.deleteMode = false;
                             state.mainTitle = 'Add Cash Account';
                             resetFormState();
+                            initialBalanceInput.refresh();
                             mainModal.obj.show();
                         }
 
@@ -360,6 +362,7 @@ const App = {
                                 state.accountType = selectedRecord.accountType;
                                 state.description = selectedRecord.description ?? '';
                                 state.initialBalance = selectedRecord.initialBalance ?? 0;
+                                initialBalanceInput.refresh();
                                 mainModal.obj.show();
                             }
                         }
@@ -374,6 +377,7 @@ const App = {
                                 state.accountType = selectedRecord.accountType;
                                 state.description = selectedRecord.description ?? '';
                                 state.initialBalance = selectedRecord.initialBalance ?? 0;
+                                initialBalanceInput.refresh();
                                 mainModal.obj.show();
                             }
                         }

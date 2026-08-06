@@ -2,6 +2,7 @@ using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -56,7 +57,7 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
 
     public async Task<GetInventoryStockListResult> Handle(GetInventoryStockListRequest request, CancellationToken cancellationToken)
     {
-        var query = _context
+        var transactionStockQuery = _context
             .InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
@@ -64,6 +65,7 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
             .Include(x => x.Product)
             .Where(x =>
                 x.Product!.Physical == true &&
+                (x.Product.SerialTrackingMode == null || x.Product.SerialTrackingMode == SerialTrackingMode.None) &&
                 x.Warehouse!.SystemWarehouse == false &&
                 x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed
             )
@@ -83,7 +85,35 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
             })
             .AsQueryable();
 
-        var entities = await query.ToListAsync(cancellationToken);
+        var entities = await transactionStockQuery.ToListAsync(cancellationToken);
+
+        var serialStock = await _context.Set<ProductSerial>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(request.IsDeleted)
+            .Where(x =>
+                x.Product != null &&
+                x.Product.Physical == true &&
+                x.Product.SerialTrackingMode != SerialTrackingMode.None &&
+                x.CurrentWarehouse != null &&
+                x.CurrentWarehouse.SystemWarehouse == false &&
+                (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer))
+            .GroupBy(x => new { x.CurrentWarehouseId, x.ProductId, x.BatchNumber })
+            .Select(group => new GetInventoryStockListDto
+            {
+                WarehouseId = group.Key.CurrentWarehouseId,
+                ProductId = group.Key.ProductId,
+                BatchNumber = group.Key.BatchNumber,
+                WarehouseName = group.Max(x => x.CurrentWarehouse!.Name),
+                ProductName = group.Max(x => x.Product!.Name),
+                ProductNumber = group.Max(x => x.Product!.Number),
+                ProductReferenceCode = group.Max(x => x.Product!.ReferenceCode),
+                Stock = group.Count(),
+                StatusName = nameof(InventoryTransactionStatus.Confirmed),
+                CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
+            })
+            .ToListAsync(cancellationToken);
+
+        entities.AddRange(serialStock);
 
         // Lookup supplier warranty from PurchaseOrderItem (latest PO date wins)
         var warrantyLookup = await _context

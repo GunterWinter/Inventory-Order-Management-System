@@ -114,19 +114,6 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
             query = query.Where(x => purchaseOrderItemIds.Contains(x.PurchaseOrderItemId!));
         }
 
-        if (request.ModuleName == nameof(MaterialExport) && !string.IsNullOrWhiteSpace(request.ModuleId))
-        {
-            var purchaseOrderItemIds = await _context
-                .Set<PurchaseOrderItem>()
-                .AsNoTracking()
-                .ApplyIsDeletedFilter(false)
-                .Where(x => x.PurchaseOrderId == request.ModuleId)
-                .Select(x => x.Id!)
-                .ToListAsync(cancellationToken);
-
-            query = query.Where(x => purchaseOrderItemIds.Contains(x.PurchaseOrderItemId!));
-        }
-
         var data = await query
             .OrderBy(x => x.InternalSerialNumber)
             .Select(x => new ProductSerialPickerDto

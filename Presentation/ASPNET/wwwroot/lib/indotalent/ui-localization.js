@@ -3,6 +3,8 @@
     const DEFAULT_LOCALE = 'en';
     const textNodeOriginals = new WeakMap();
     const attributeOriginals = new WeakMap();
+    const localizedTextWrites = new WeakSet();
+    const localizedAttributeWrites = new WeakMap();
     const localizedDropDownInstances = new Set();
     const localizedSyncfusionTextInstances = new Set();
     const LOCALIZED_DROPDOWN_TEXT_FIELD = '__localizedText';
@@ -10,7 +12,8 @@
         'Draft', 'Cancelled', 'Canceled', 'Confirmed', 'Archived',
         'In', 'Out',
         'Debit', 'Credit',
-        'Paid', 'Unpaid',
+        'Paid', 'Unpaid', 'PartiallyPaid', 'Partially Paid',
+        'Exported',
         'Cash', 'Bank',
         'Open', 'Closed'
     ]);
@@ -18,11 +21,36 @@
     let originalTitle = document.title;
     let isApplying = false;
     let isScheduled = false;
+    let localizedTitleWrites = 0;
 
     const exactTranslations = {
         'This field is required.': 'Trường này là bắt buộc.',
         'Dashboards': 'Bảng điều khiển',
         'Default Dashboard': 'Bảng điều khiển tổng quan',
+        'Operations Overview': 'Tổng Quan Vận Hành',
+        'Warehouse Management System': 'Hệ Thống Quản Lý Kho',
+        'Sales, purchasing, cash flow and inventory in one place.': 'Theo Dõi Bán Hàng, Mua Hàng, Dòng Tiền Và Tồn Kho Tại Một Nơi.',
+        'Refresh': 'Làm Mới',
+        'Confirmed Sales': 'Doanh Số Đã Xác Nhận',
+        'Customer Receivable': 'Công Nợ Khách Hàng',
+        'Confirmed Purchases': 'Giá Trị Mua Đã Xác Nhận',
+        'Vendor Debt': 'Công Nợ Nhà Cung Cấp',
+        'Cash Balance': 'Số Dư Quỹ',
+        'Inventory Quantity': 'Số Lượng Tồn Kho',
+        'Material Exports': 'Phiếu Xuất Vật Tư',
+        'Order value': 'Giá Trị Đơn Hàng',
+        'Outstanding sales': 'Khoản Bán Chưa Thu',
+        'Outstanding purchases': 'Khoản Mua Chưa Trả',
+        'Across active accounts': 'Tổng Các Tài Khoản Hoạt Động',
+        'Confirmed on hand': 'Tồn Thực Tế Đã Xác Nhận',
+        'Confirmed documents': 'Chứng Từ Đã Xác Nhận',
+        'Recent Sales Orders': 'Đơn Bán Hàng Gần Đây',
+        'Recent Purchase Orders': 'Đơn Mua Hàng Gần Đây',
+        'Latest Inventory Movements': 'Biến Động Kho Gần Đây',
+        'Stock by Warehouse': 'Tồn Kho Theo Kho Hàng',
+        'View All': 'Xem Tất Cả',
+        'View Stock': 'Xem Tồn Kho',
+        'Dashboard data could not be loaded.': 'Không Thể Tải Dữ Liệu Tổng Quan.',
         'WHMS - .NET 9 - Warehouse & Inventory Management System': 'WHMS - .NET 9 - Hệ thống quản lý kho và tồn kho',
         'Sales': 'Bán hàng',
         'Sales Rtrn.': 'Trả hàng bán',
@@ -55,6 +83,7 @@
         'Product Group': 'Nhóm Hàng Hóa',
         'Product': 'Hàng Hóa',
         'Warehouse': 'Kho Hàng',
+        'Customer / Warehouse': 'Khách Hàng / Kho Hàng',
         'Delivery Order': 'Phiếu Xuất Kho',
         'Delivery Item': 'Chi Tiết Xuất Kho',
         'Sales Return': 'Phiếu Hàng Bán Trả Lại',
@@ -148,6 +177,17 @@
         'Select Partner': 'Chọn Đối Tác',
         'Partner': 'Đối Tác',
         'Finance Report': 'Báo Cáo Tài Chính',
+        'Customer Profit Report': 'Báo Cáo Lợi Nhuận Khách Hàng',
+        'Actual Received': 'Thực Thu',
+        'Project Cost': 'Chi Phí Công Trình',
+        'Select Customer': 'Chọn Khách Hàng',
+        'Retry': 'Thử Lại',
+        'Created At': 'Thời Điểm Tạo',
+        'Only paid amounts from customer-linked transactions are included. Vendor obligations are excluded.': 'Chỉ tính số tiền thực thu, thực chi của giao dịch gắn khách hàng. Nghĩa vụ nhà cung cấp không được tính vào báo cáo này.',
+        'Unable to load the customer profit report.': 'Không thể tải báo cáo lợi nhuận khách hàng.',
+        'Unable to initialize the customer profit report.': 'Không thể khởi tạo báo cáo lợi nhuận khách hàng.',
+        'Dashboard could not be initialized.': 'Không thể khởi tạo Bảng điều khiển.',
+        'Dashboard could not be initialized. Reload the page and check the browser Console/Network details.': 'Không thể khởi tạo Bảng điều khiển. Hãy tải lại trang và kiểm tra Console/Network của trình duyệt.',
         'Total Received': 'Tổng Thu',
         'Total Spent': 'Tổng Chi',
         'Received': 'Thu',
@@ -230,6 +270,23 @@
         'Scrapping Date': 'Ngày Hủy Hàng',
         'Count Date': 'Ngày Kiểm Kê',
         'Movement Date': 'Ngày Giao Dịch',
+        'Sales Order Payment': 'Thanh Toán Đơn Bán Hàng',
+        'Current Status': 'Trạng Thái Hiện Tại',
+        'Order Total': 'Tổng Tiền Đơn Hàng',
+        'Remaining': 'Còn Lại',
+        'Select Cash Account': 'Chọn Tài Khoản Quỹ',
+        'Changing the account updates this transaction; it does not create another transaction.': 'Đổi Tài Khoản Sẽ Cập Nhật Giao Dịch Này, Không Tạo Giao Dịch Mới.',
+        'Save Payment': 'Lưu Thanh Toán',
+        'Payment Completed': 'Đã Thanh Toán Đủ',
+        'Payment Saved': 'Đã Lưu Thanh Toán',
+        'Payment Failed': 'Thanh Toán Thất Bại',
+        'Select a cash account.': 'Vui Lòng Chọn Tài Khoản Quỹ.',
+        'Paid amount cannot be negative.': 'Số Tiền Đã Thanh Toán Không Được Âm.',
+        'Paid amount cannot exceed the order total.': 'Số Tiền Đã Thanh Toán Không Được Vượt Tổng Tiền Đơn Hàng.',
+        'Only Description and Cash Category can be edited for a material export transaction.': 'Giao Dịch Phiếu Xuất Vật Tư Chỉ Được Sửa Diễn Giải Và Danh Mục Thu Chi.',
+        'Document Not Found': 'Không Tìm Thấy Chứng Từ',
+        'The requested document could not be opened.': 'Không Thể Mở Chứng Từ Được Yêu Cầu.',
+        'Document View Unavailable': 'Chưa Hỗ Trợ Xem Chứng Từ Này',
         'Received Date': 'Ngày Nhập',
         'Number': 'Số Chứng Từ',
         'Number (Mã HT)': 'Số Chứng Từ (Mã Hệ Thống)',
@@ -522,12 +579,137 @@
         'Total Purchase': 'Tổng Tiền Mua',
         'Total Paid': 'Tổng Đã Thanh Toán',
         'Remaining Debt': 'Còn Nợ',
-        'Vendor Name': 'Tên Nhà Cung Cấp'
+        'Vendor Name': 'Tên Nhà Cung Cấp',
+        'Exported': 'Đã Xuất',
+        'PartiallyPaid': 'Thanh Toán Một Phần',
+        'Partially Paid': 'Thanh Toán Một Phần',
+        'Payment History': 'Lịch Sử Thanh Toán',
+        'No payments': 'Chưa Có Thanh Toán',
+        'No allocation details': 'Chưa Có Chi Tiết Phân Bổ',
+        'Payment Date': 'Ngày Thanh Toán',
+        'Payment This Time': 'Số Tiền Trả Lần Này',
+        'Remaining Amount': 'Số Tiền Còn Lại',
+        'Paid Amount': 'Số Tiền Đã Trả',
+        'Cost Allocation Details': 'Chi Tiết Phân Bổ',
+        'Purchase Obligation': 'Nghĩa Vụ Từ Đơn Mua',
+        'Manual Obligation': 'Nghĩa Vụ Thủ Công',
+        'Total Obligation': 'Tổng Nghĩa Vụ',
+        'Serial Numbers': 'Số Serial',
+        'Quick Add Customer Group': 'Thêm Nhanh Nhóm Khách Hàng',
+        'Quick Add Customer Category': 'Thêm Nhanh Loại Khách Hàng',
+        'Quick Add Vendor Group': 'Thêm Nhanh Nhóm Nhà Cung Cấp',
+        'Quick Add Vendor Category': 'Thêm Nhanh Loại Nhà Cung Cấp',
+        'Allocation saved': 'Đã Lưu Phân Bổ',
+        'Allocation is locked': 'Phân Bổ Đã Bị Khóa',
+        'Warehouse cannot be changed': 'Không Thể Đổi Kho',
+        'Quantity exceeds stock': 'Số Lượng Vượt Tồn Kho',
+        'Quick Add is unavailable': 'Không Thể Dùng Thêm Nhanh',
+        'Cost Allocation': 'Phân Bổ Công Trình',
+        'Confirm Allocation': 'Xác Nhận Phân Bổ',
+        'Allocation Quantity': 'Số Lượng Phân Bổ',
+        'Quick Add Customer': 'Thêm Nhanh Khách Hàng',
+        'No products selected': 'Chưa Chọn Sản Phẩm',
+        'Select at least one product to allocate.': 'Chọn Ít Nhất Một Sản Phẩm Để Phân Bổ.',
+        'Invalid quantity': 'Số Lượng Không Hợp Lệ',
+        'Allocation quantity cannot be negative.': 'Số Lượng Phân Bổ Không Được Âm.',
+        'Allocation exceeds purchase quantity': 'Phân Bổ Vượt Số Lượng Mua',
+        'Customer is required': 'Bắt Buộc Chọn Khách Hàng',
+        'Allocation failed': 'Phân Bổ Thất Bại',
+        'Check the allocation data and try again.': 'Kiểm Tra Dữ Liệu Phân Bổ Và Thử Lại.',
+        'An error occurred': 'Đã Xảy Ra Lỗi',
+        'The cost allocation could not be saved.': 'Không Thể Lưu Phân Bổ.',
+        'One unpaid vendor obligation was created or updated.': 'Đã Tạo Hoặc Cập Nhật Một Chứng Từ Công Nợ Nhà Cung Cấp Chưa Thanh Toán.',
+        'Open Cash Transactions?': 'Mở Giao Dịch Tiền?',
+        'Quick Add Vendor': 'Thêm Nhanh Nhà Cung Cấp',
+        'Quick Add Product': 'Thêm Nhanh Sản Phẩm',
+        'Quick Add Product Group': 'Thêm Nhanh Nhóm Hàng Hóa',
+        'Quick Add Warehouse': 'Thêm Nhanh Kho Hàng',
+        'Add Warehouse': 'Thêm Kho Hàng',
+        'Add Customer': 'Thêm Khách Hàng',
+        'Add Split Row': 'Thêm Dòng Chia',
+        'Select a row to split': 'Chọn Dòng Để Chia Thêm',
+        'Main Information': 'Thông Tin Chính',
+        'Added successfully!': 'Đã Thêm Thành Công!',
+        'Vendor added successfully!': 'Đã Thêm Nhà Cung Cấp Thành Công!',
+        'Customer added successfully!': 'Đã Thêm Khách Hàng Thành Công!',
+        'Product added successfully!': 'Đã Thêm Sản Phẩm Thành Công!',
+        'The record could not be added. Please try again.': 'Không Thể Thêm Bản Ghi. Vui Lòng Thử Lại.',
+        'The Vendor could not be added. Please try again.': 'Không Thể Thêm Nhà Cung Cấp. Vui Lòng Thử Lại.',
+        'The Customer could not be added. Please try again.': 'Không Thể Thêm Khách Hàng. Vui Lòng Thử Lại.',
+        'The Product could not be added. Please try again.': 'Không Thể Thêm Sản Phẩm. Vui Lòng Thử Lại.',
+        'Vendor name is required.': 'Tên Nhà Cung Cấp Là Bắt Buộc.',
+        'Customer name is required.': 'Tên Khách Hàng Là Bắt Buộc.',
+        'Product name is required.': 'Tên Sản Phẩm Là Bắt Buộc.',
+        'Select a Vendor Group.': 'Chọn Nhóm Nhà Cung Cấp.',
+        'Select a Vendor Category.': 'Chọn Loại Nhà Cung Cấp.',
+        'Select a Customer Group.': 'Chọn Nhóm Khách Hàng.',
+        'Select a Customer Category.': 'Chọn Loại Khách Hàng.',
+        'Select a Product Group.': 'Chọn Nhóm Hàng Hóa.',
+        'Payment': 'Thanh Toán',
+        'Payment successful': 'Thanh Toán Thành Công',
+        'Payment is unavailable': 'Không Thể Thanh Toán',
+        'Allocate this purchase order first to create its vendor obligation.': 'Hãy Chia Đơn Mua Hàng Trước Để Tạo Chứng Từ Công Nợ Nhà Cung Cấp.',
+        'The payment was not saved.': 'Không Thể Lưu Thanh Toán.',
+        'Page initialization failed': 'Khởi Tạo Trang Thất Bại',
+        'Material Export could not be loaded.': 'Không Thể Tải Trang Phiếu Xuất Vật Tư.',
+        'Select a payment account.': 'Chọn Tài Khoản Thanh Toán.',
+        'Payment amount must be greater than zero.': 'Số Tiền Thanh Toán Phải Lớn Hơn 0.',
+        'Payment amount cannot exceed the remaining amount.': 'Số Tiền Thanh Toán Không Được Vượt Quá Số Còn Lại.',
+        'Payment date is required.': 'Ngày Thanh Toán Là Bắt Buộc.',
+        'All installments for this transaction use the account selected on its first payment.': 'Tất Cả Các Lần Thanh Toán Của Giao Dịch Này Sử Dụng Tài Khoản Đã Chọn Ở Lần Thanh Toán Đầu Tiên.',
+        'All payments for a cash transaction must use the same cash account.': 'Tất Cả Các Lần Thanh Toán Của Một Giao Dịch Phải Dùng Cùng Một Tài Khoản Quỹ.',
+        'Original Amount': 'Số Tiền Gốc',
+        'View Cash Transaction': 'Xem Giao Dịch Thu Chi',
+        'View Purchase Order': 'Xem Đơn Mua Hàng',
+        'Loading source details...': 'Đang Tải Chi Tiết Nguồn...',
+        'The source transaction details could not be loaded.': 'Không Thể Tải Chi Tiết Phân Bổ Và Lịch Sử Thanh Toán.',
+        'Manual payment adjustment': 'Điều Chỉnh Thanh Toán Thủ Công',
+        'Paid amount must be between zero and the original amount.': 'Số Tiền Đã Trả Phải Nằm Trong Khoảng Từ 0 Đến Số Tiền Gốc.',
+        'Select a payment account before changing the paid amount.': 'Hãy Chọn Tài Khoản Thanh Toán Trước Khi Thay Đổi Số Tiền Đã Trả.',
+        'Only Paid Amount, Description and Cash Category can be edited for a source-generated transaction.': 'Giao Dịch Tự Động Chỉ Cho Phép Sửa Số Tiền Đã Trả, Diễn Giải Và Danh Mục Thu Chi.',
+        'Paid amount cannot exceed the original amount.': 'Số Tiền Đã Trả Không Được Lớn Hơn Số Tiền Gốc.',
+        'Purchase Order Details': 'Chi Tiết Đơn Mua Hàng',
+        'Selected': 'Đã Chọn',
+        'products for cost allocation. Add multiple rows when one product is allocated to multiple customers.': 'Sản Phẩm Để Phân Bổ Chi Phí. Thêm Nhiều Dòng Khi Một Sản Phẩm Được Phân Bổ Cho Nhiều Khách Hàng.',
+        'Incomplete product row': 'Dòng Sản Phẩm Chưa Hoàn Tất',
+        'Complete all required fields (Product, Warehouse, Tax and Quantity) on the edited row before saving the purchase order.': 'Điền Đầy Đủ Các Trường Bắt Buộc (Sản Phẩm, Kho, Thuế Và Số Lượng) Trên Dòng Đang Sửa Trước Khi Lưu Đơn Mua Hàng.',
+        'The purchase order has been deleted.': 'Đơn Mua Hàng Đã Được Xóa.',
+        'Allocation data could not be loaded.': 'Không Thể Tải Dữ Liệu Phân Bổ.',
+        'Select or enter Batch Number': 'Chọn Hoặc Nhập Số Lô',
+        'Supplier Warranty (Months)': 'Bảo Hành Nhà Cung Cấp (Tháng)',
+        'Warranty Months': 'Số Tháng Bảo Hành',
+        'Product Number': 'Mã Sản Phẩm',
+        'Allocated Quantity': 'Số Lượng Đã Chia',
+        'Remaining Quantity': 'Số Lượng Còn Lại',
+        'Missing Required Information': 'Thiếu Thông Tin Bắt Buộc',
+        'Select a product before saving.': 'Chọn Sản Phẩm Trước Khi Lưu.',
+        'Select a warehouse before saving.': 'Chọn Kho Trước Khi Lưu.',
+        'Select a tax before saving.': 'Chọn Thuế Trước Khi Lưu.',
+        'Quantity must be greater than zero.': 'Số Lượng Phải Lớn Hơn 0.',
+        'Value must be greater than zero.': 'Giá Trị Phải Lớn Hơn 0.',
+        'Allocate selected product costs to customers': 'Phân Bổ Chi Phí Các Sản Phẩm Đã Chọn Cho Khách Hàng',
+        'Select Category (Optional)': 'Chọn Danh Mục (Tùy Chọn)',
+        'No row selected': 'Chưa Chọn Dòng',
+        'Select one product row before adding another allocation.': 'Chọn Một Dòng Sản Phẩm Trước Khi Thêm Phân Bổ Khác.',
+        'Cost allocation is unavailable': 'Không Thể Phân Bổ Chi Phí',
+        'A purchase order can only be allocated after it is confirmed.': 'Chỉ Có Thể Phân Bổ Đơn Mua Hàng Sau Khi Đơn Đã Được Xác Nhận.'
     };
 
     const termTranslations = {
         'dashboard': 'bảng điều khiển',
         'default dashboard': 'bảng điều khiển tổng quan',
+        'operations overview': 'tổng quan vận hành',
+        'confirmed sales': 'doanh số đã xác nhận',
+        'customer receivable': 'công nợ khách hàng',
+        'confirmed purchases': 'giá trị mua đã xác nhận',
+        'vendor debt': 'công nợ nhà cung cấp',
+        'cash balance': 'số dư quỹ',
+        'inventory quantity': 'số lượng tồn kho',
+        'material exports': 'phiếu xuất vật tư',
+        'recent sales orders': 'đơn bán hàng gần đây',
+        'recent purchase orders': 'đơn mua hàng gần đây',
+        'latest inventory movements': 'biến động kho gần đây',
+        'stock by warehouse': 'tồn kho theo kho hàng',
         'sales': 'bán hàng',
         'sales rtrn.': 'trả hàng bán',
         'purchase': 'mua hàng',
@@ -801,8 +983,37 @@
         'total purchase': 'tổng tiền mua',
         'total paid': 'tổng đã thanh toán',
         'remaining debt': 'còn nợ',
-        'vendor name': 'tên nhà cung cấp'
+        'vendor name': 'tên nhà cung cấp',
+        'customer / warehouse': 'khách hàng / kho hàng',
+        'has total allocation': 'có tổng phân bổ',
+        'exceeding purchased quantity': 'vượt số lượng mua',
+        'has a positive allocation but no customer': 'có số lượng phân bổ lớn hơn 0 nhưng chưa chọn khách hàng',
+        'payment': 'thanh toán',
+        'payment for order': 'chi tiền đơn'
     };
+
+    Object.entries({ ...termTranslations }).forEach(([key, value]) => {
+        const normalizedKey = normalizeText(key).toLowerCase();
+        termTranslations[normalizedKey] = value;
+        if (key !== normalizedKey) {
+            delete termTranslations[key];
+        }
+    });
+
+    const exactEnglishByVietnamese = Object.entries(exactTranslations).reduce((result, [english, vietnamese]) => {
+        const normalizedVietnamese = normalizeText(vietnamese);
+        if (normalizedVietnamese && !result[normalizedVietnamese]) {
+            result[normalizedVietnamese] = english;
+        }
+        return result;
+    }, {});
+    const termEnglishByVietnamese = Object.entries(termTranslations).reduce((result, [english, vietnamese]) => {
+        const normalizedVietnamese = normalizeText(vietnamese).toLowerCase();
+        if (normalizedVietnamese && !result[normalizedVietnamese]) {
+            result[normalizedVietnamese] = english;
+        }
+        return result;
+    }, {});
 
     function normalizeText(value) {
         return (value ?? '').replace(/\s+/g, ' ').trim();
@@ -853,7 +1064,7 @@
 
     function translateBusinessTerm(value, locale = currentLocale) {
         if (locale === 'en') {
-            return value;
+            return termEnglishByVietnamese[normalizeText(value).toLowerCase()] ?? value;
         }
 
         const normalized = normalizeText(value).toLowerCase();
@@ -861,8 +1072,14 @@
     }
 
     function translateNormalized(value, locale = currentLocale) {
-        if (!value || locale === 'en') {
+        if (!value) {
             return value;
+        }
+
+        if (locale === 'en') {
+            return exactEnglishByVietnamese[value]
+                ?? termEnglishByVietnamese[value.toLowerCase()]
+                ?? value;
         }
 
         if (exactTranslations[value]) {
@@ -1157,7 +1374,7 @@
         }
 
         const originalValue = owner[originalPropertyName] ?? '';
-        const localizedValue = currentLocale === 'vi' ? translateText(originalValue) : originalValue;
+        const localizedValue = translateText(originalValue, currentLocale);
         if (owner[propertyName] === localizedValue) {
             return false;
         }
@@ -1345,9 +1562,10 @@
 
         captureTextNodeOriginal(node);
         const originalValue = textNodeOriginals.get(node) ?? '';
-        const translatedValue = currentLocale === 'vi' ? translateText(originalValue) : originalValue;
+        const translatedValue = translateText(originalValue, currentLocale);
 
         if (node.nodeValue !== translatedValue) {
+            localizedTextWrites.add(node);
             node.nodeValue = translatedValue;
         }
     }
@@ -1365,9 +1583,15 @@
             captureElementOriginal(element, attributeName);
             const store = attributeOriginals.get(element) ?? {};
             const originalValue = store[attributeName] ?? '';
-            const translatedValue = currentLocale === 'vi' ? translateText(originalValue) : originalValue;
+            const translatedValue = translateText(originalValue, currentLocale);
 
             if (element.getAttribute(attributeName) !== translatedValue) {
+                let attributes = localizedAttributeWrites.get(element);
+                if (!attributes) {
+                    attributes = new Set();
+                    localizedAttributeWrites.set(element, attributes);
+                }
+                attributes.add(attributeName);
                 element.setAttribute(attributeName, translatedValue);
             }
         });
@@ -1376,7 +1600,7 @@
             captureInputValueOriginal(element);
             const store = attributeOriginals.get(element) ?? {};
             const originalValue = store.__value ?? '';
-            const translatedValue = currentLocale === 'vi' ? translateText(originalValue) : originalValue;
+            const translatedValue = translateText(originalValue, currentLocale);
 
             if (element.value !== translatedValue) {
                 element.value = translatedValue;
@@ -1423,13 +1647,10 @@
     }
 
     function updateDocumentState() {
-        const translatedOriginalTitle = translateText(originalTitle, 'vi');
-
-        if (currentLocale === 'en') {
-            originalTitle = document.title === translatedOriginalTitle ? originalTitle : document.title;
-            document.title = originalTitle;
-        } else {
-            document.title = translatedOriginalTitle;
+        const localizedTitle = translateText(originalTitle, currentLocale);
+        if (document.title !== localizedTitle) {
+            localizedTitleWrites += 1;
+            document.title = localizedTitle;
         }
 
         document.documentElement.lang = currentLocale === 'vi' ? 'vi' : 'en';
@@ -1609,18 +1830,29 @@
 
             mutations.forEach(mutation => {
                 if (mutation.type === 'characterData') {
-                    if (mutation.target.parentNode?.nodeName === 'TITLE') {
-                        originalTitle = mutation.target.nodeValue ?? originalTitle;
+                    if (localizedTextWrites.has(mutation.target)) {
+                        localizedTextWrites.delete(mutation.target);
+                    } else if (mutation.target.parentNode?.nodeName === 'TITLE') {
+                        if (localizedTitleWrites > 0) {
+                            localizedTitleWrites -= 1;
+                        } else {
+                            originalTitle = mutation.target.nodeValue ?? originalTitle;
+                        }
                     } else {
                         captureTextNodeOriginal(mutation.target, true);
                     }
                 }
 
                 if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
-                    captureElementOriginal(mutation.target, mutation.attributeName, true);
+                    const localizedAttributes = localizedAttributeWrites.get(mutation.target);
+                    if (localizedAttributes?.has(mutation.attributeName)) {
+                        localizedAttributes.delete(mutation.attributeName);
+                    } else {
+                        captureElementOriginal(mutation.target, mutation.attributeName, true);
 
-                    if (mutation.attributeName === 'value' && mutation.target instanceof HTMLInputElement) {
-                        captureInputValueOriginal(mutation.target, true);
+                        if (mutation.attributeName === 'value' && mutation.target instanceof HTMLInputElement) {
+                            captureInputValueOriginal(mutation.target, true);
+                        }
                     }
                 }
 

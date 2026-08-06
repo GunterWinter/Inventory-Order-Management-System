@@ -60,7 +60,7 @@ public class GetCashTransactionCostAllocationsHandler : IRequestHandler<GetCashT
         var dtos = allocations.Select(a => new GetCashTransactionCostAllocationsDto
         {
             ProductName = a.PurchaseOrderItem?.Product?.Name,
-            CustomerName = a.CustomerId == null ? "Kho" : (a.Customer?.Name ?? "N/A"),
+            CustomerName = a.CustomerId == null ? "Warehouse" : (a.Customer?.Name ?? "N/A"),
             Quantity = a.Quantity,
             UnitPrice = a.UnitPrice,
             Total = (a.Quantity ?? 0) * (a.UnitPrice ?? 0)

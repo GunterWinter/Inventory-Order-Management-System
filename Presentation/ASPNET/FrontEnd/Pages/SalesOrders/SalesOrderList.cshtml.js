@@ -423,21 +423,8 @@ const App = {
                     throw error;
                 }
             },
-            createCashTransaction: async (data) => {
-                try {
-                    const response = await AxiosManager.post('/CashTransaction/CreateCashTransaction', data);
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
-            updateCashTransaction: async (data) => {
-                try {
-                    const response = await AxiosManager.post('/CashTransaction/UpdateCashTransaction', data);
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
+            upsertSalesOrderPayment: async (data) => {
+                return await AxiosManager.post('/SalesOrder/UpsertSalesOrderPayment', data);
             }
         };
 
@@ -445,6 +432,19 @@ const App = {
             populateCustomerListLookupData: async () => {
                 const response = await services.getCustomerListLookupData();
                 state.customerListLookupData = response?.data?.content?.data;
+            },
+            quickAddCustomer: async () => {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.complexQuickAddCustomer({
+                    dropdownObj: customerListLookup.obj,
+                    refreshLookup: methods.populateCustomerListLookupData,
+                    state,
+                    stateKey: 'customerId',
+                    lookupKey: 'customerListLookupData'
+                });
             },
             populateTaxListLookupData: async () => {
                 const response = await services.getTaxListLookupData();
@@ -547,42 +547,6 @@ const App = {
                 }
 
                 return NumberFormatManager.parseLocaleNumber(value) ?? 0;
-            },
-            ensureDraftCashTransactionForConfirmedOrder: async (orderId, orderNumber, totalAmount) => {
-                if (String(state.orderStatus) !== '2' || !orderId) {
-                    return;
-                }
-
-                const existingPayment = state.paymentStatusLookupData.find(p => p.sourceModuleId === orderId);
-                if (existingPayment?.status === 2) {
-                    return;
-                }
-
-                const payload = {
-                    transactionDate: existingPayment?.transactionDate ?? new Date().toISOString(),
-                    transactionType: 0,
-                    status: 0,
-                    amount: methods.resolvePaymentAmount(totalAmount),
-                    description: existingPayment?.description ?? `Thu tiền đơn ${orderNumber}`,
-                    cashAccountId: existingPayment?.cashAccountId ?? null,
-                    cashCategoryId: existingPayment?.cashCategoryId ?? methods.resolveCashCategoryId('Bán hàng'),
-                    customerId: state.mainData.find(o => o.id === orderId)?.customerId ?? state.customerId ?? null,
-                    sourceModule: 'SalesOrder',
-                    sourceModuleId: orderId,
-                    sourceModuleNumber: orderNumber
-                };
-
-                if (existingPayment?.cashTransactionId) {
-                    payload.id = existingPayment.cashTransactionId;
-                    payload.updatedById = StorageManager.getUserId();
-                    await services.updateCashTransaction(payload);
-                } else {
-                    payload.createdById = StorageManager.getUserId();
-                    await services.createCashTransaction(payload);
-                }
-
-                await methods.populateMainData();
-                mainGrid.refresh();
             },
             refreshInventoryAvailability: async () => {
                 await methods.populateInventoryStockData();
@@ -993,19 +957,7 @@ const App = {
                                 if (!row) return;
                                 const rowData = mainGrid.obj.getRowInfo(row).rowData;
                                 if (!rowData) return;
-                                await showPaymentPopup(
-                                    rowData.id,
-                                    rowData.number,
-                                    NumberFormatManager.formatToLocale(rowData.afterTaxAmount ?? 0),
-                                    rowData.cashTransactionId,
-                                    rowData.cashTransactionStatus,
-                                    rowData.cashTransactionCashAccountId,
-                                    rowData.cashTransactionAmount,
-                                    rowData.cashTransactionDescription,
-                                    rowData.cashTransactionCashCategoryId,
-                                    rowData.cashTransactionDate,
-                                    rowData.cashTransactionIsSplit
-                                );
+                                await showPaymentPopup(rowData);
                             });
                         });
                     },
@@ -1895,7 +1847,7 @@ const App = {
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
-                        { text: 'Thêm Kho', tooltipText: 'Thêm nhanh kho hàng mới', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
+                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () { },
@@ -1925,8 +1877,8 @@ const App = {
                         }
 
                         if (args.item.id === 'QuickAddWarehouseBtn') {
-                            await QuickAddHelper.simpleQuickAdd({
-                                title: 'Thêm nhanh Kho hàng',
+                            const created = await QuickAddHelper.simpleQuickAdd({
+                                title: 'Quick Add Warehouse',
                                 apiUrl: '/Warehouse/CreateWarehouse',
                                 dropdownObj: null,
                                 refreshLookup: methods.populateWarehouseListLookupData,
@@ -1934,6 +1886,13 @@ const App = {
                                 stateKey: null,
                                 lookupKey: 'warehouseListLookupData'
                             });
+                            if (created && warehouseObj && warehouseObj.isDestroyed !== true) {
+                                warehouseObj.dataSource = getAvailableWarehouseOptions(productObj?.value);
+                                warehouseObj.dataBind();
+                                warehouseObj.value = created.id;
+                                warehouseObj._pendingValue = created.id;
+                                warehouseObj.dataBind();
+                            }
                         }
                     },
                     actionBegin: (args) => {
@@ -2176,6 +2135,8 @@ const App = {
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        { type: 'Separator' },
+                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
                     ]
                 });
             }
@@ -2191,57 +2152,69 @@ const App = {
             }
         };
 
-        const showPaymentPopup = async (
-            orderId,
-            orderNumber,
-            totalAmount,
-            existingTransactionId = null,
-            existingStatus = null,
-            existingCashAccountId = null,
-            existingAmount = null,
-            existingDescription = null,
-            existingCashCategoryId = null,
-            existingTransactionDate = null,
-            isSplit = false) => {
-            const totalAmountValue = typeof totalAmount === 'number' ? totalAmount : (NumberFormatManager.parseLocaleNumber(totalAmount) ?? 0);
-            const displayAmount = existingAmount !== null && existingAmount !== undefined
-                ? NumberFormatManager.formatToLocale(existingAmount)
-                : NumberFormatManager.formatToLocale(totalAmountValue);
-            const displayDescription = existingDescription ?? `Thu tiền đơn ${orderNumber}`;
+        const escapeHtml = value => `${value ?? ''}`
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
+        const showPaymentPopup = async (order) => {
+            const orderId = order.id;
+            const orderNumber = order.number;
+            const totalAmountValue = methods.resolvePaymentAmount(order.afterTaxAmount);
+            const paidAmountValue = methods.resolvePaymentAmount(order.cashTransactionPaidAmount);
+            const remainingAmountValue = Math.max(0, totalAmountValue - paidAmountValue);
+            const displayDescription = order.cashTransactionDescription ?? `Sales order payment ${orderNumber}`;
             const accountOptions = state.cashAccountListData
-                .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
+                .map(a => `<option value="${escapeHtml(a.id)}" ${a.id === order.cashTransactionCashAccountId ? 'selected' : ''}>${escapeHtml(a.name)}</option>`)
                 .join('');
-            const defaultCashCategoryId = existingCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
-            const descHtml = isSplit
-                ? `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Mô tả</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
+            const defaultCashCategoryId = order.cashTransactionCashCategoryId ?? methods.resolveCashCategoryId('Bán hàng') ?? '';
+            const statusText = paidAmountValue >= totalAmountValue && totalAmountValue > 0
+                ? 'Paid'
+                : (paidAmountValue > 0 ? 'Partially Paid' : 'Unpaid');
             const result = await Swal.fire({
-                title: `Thanh toán ${orderNumber}`,
+                title: `Sales Order Payment ${orderNumber}`,
+                width: 620,
+                customClass: { popup: 'sales-order-payment-popup' },
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Tài khoản</label><select id="swal-account" class="form-select">${accountOptions}</select></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền cần thanh toán</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Tiền đã thanh toán</label><input id="swal-amount" class="form-control" value="${displayAmount}"></div>
-                    ${descHtml}
+                    <div class="text-start">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="text-muted">Current Status</span>
+                            <span class="badge ${statusText === 'Paid' ? 'bg-success' : (statusText === 'Partially Paid' ? 'bg-warning text-dark' : 'bg-secondary')}">${statusText}</span>
+                        </div>
+                        <div class="row g-2 mb-4">
+                            <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Order Total</div><div class="fw-bold mt-1">${NumberFormatManager.formatToLocale(totalAmountValue)}</div></div></div>
+                            <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Paid</div><div class="fw-bold text-success mt-1">${NumberFormatManager.formatToLocale(paidAmountValue)}</div></div></div>
+                            <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Remaining</div><div class="fw-bold text-danger mt-1">${NumberFormatManager.formatToLocale(remainingAmountValue)}</div></div></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select"><option value="">Select Cash Account</option>${accountOptions}</select><div class="form-text">Changing the account updates this transaction; it does not create another transaction.</div></div>
+                        <div class="mb-3"><label class="form-label fw-bold">Paid Amount</label><input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatToLocale(paidAmountValue)}"></div>
+                        <div class="mb-0"><label class="form-label fw-bold">Description</label><textarea id="swal-desc" class="form-control" rows="2">${escapeHtml(displayDescription)}</textarea></div>
+                    </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Lưu',
-                cancelButtonText: 'Hủy',
+                confirmButtonText: 'Save Payment',
+                cancelButtonText: 'Cancel',
                 focusConfirm: false,
+                didOpen: () => {
+                    NumberFormatManager.bindNumericInput(document.getElementById('swal-amount'));
+                },
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
                     const categoryId = defaultCashCategoryId;
                     const rawAmountValue = document.getElementById('swal-amount').value ?? '0';
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(rawAmountValue) ?? 0;
                     if (!accountId) {
-                        Swal.showValidationMessage('Vui lòng chọn tài khoản thanh toán.');
+                        Swal.showValidationMessage('Select a cash account.');
                         return false;
                     }
                     if (parsedAmount < 0) {
-                        Swal.showValidationMessage('Số tiền thanh toán không được âm.');
+                        Swal.showValidationMessage('Paid amount cannot be negative.');
                         return false;
                     }
                     if (parsedAmount > totalAmountValue) {
-                        Swal.showValidationMessage('Số tiền thanh toán không được vượt quá số tiền cần thanh toán.');
+                        Swal.showValidationMessage('Paid amount cannot exceed the order total.');
                         return false;
                     }
                     return {
@@ -2256,36 +2229,28 @@ const App = {
             if (result.isConfirmed && result.value) {
                 try {
                     const payload = {
-                        transactionDate: existingTransactionDate ?? new Date().toISOString(),
-                        transactionType: 0,
-                        amount: result.value.amount,
+                        salesOrderId: orderId,
+                        paidAmount: result.value.amount,
                         description: result.value.description,
                         cashAccountId: result.value.cashAccountId,
                         cashCategoryId: result.value.cashCategoryId ?? null,
-                        customerId: state.mainData.find(o => o.id === orderId)?.customerId ?? null,
-                        sourceModule: 'SalesOrder',
-                        sourceModuleId: orderId,
-                        sourceModuleNumber: orderNumber,
-                        createdById: StorageManager.getUserId()
+                        paymentDate: new Date().toISOString(),
+                        updatedById: StorageManager.getUserId()
                     };
-                    if (existingTransactionId) {
-                        payload.id = existingTransactionId;
-                        payload.updatedById = StorageManager.getUserId();
-                        delete payload.createdById;
-                        await services.updateCashTransaction(payload);
-                    } else {
-                        await services.createCashTransaction(payload);
-                    }
+                    const response = await services.upsertSalesOrderPayment(payload);
+                    if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Payment could not be saved.');
                     await methods.populateMainData();
                     mainGrid.refresh();
-                    if (result.value.status === 2) {
-                        Swal.fire({ icon: 'success', title: 'Thanh toán thành công', timer: 1000, showConfirmButton: false });
-                    } else {
-                        Swal.fire({ icon: 'success', title: 'Lưu thành công', timer: 1000, showConfirmButton: false });
-                    }
+                    const savedStatus = response?.data?.content?.status;
+                    Swal.fire({
+                        icon: 'success',
+                        title: savedStatus === 'Paid' ? 'Payment Completed' : 'Payment Saved',
+                        timer: 1200,
+                        showConfirmButton: false
+                    });
                 } catch (err) {
                     console.error('Payment Modal error:', err);
-                    Swal.fire({ icon: 'error', title: 'Lỗi', text: getErrorMessage(err, 'Vui lòng thử lại.') });
+                    Swal.fire({ icon: 'error', title: 'Payment Failed', text: getErrorMessage(err, 'Please try again.') });
                 }
             }
         };
@@ -2360,7 +2325,8 @@ const App = {
             state,
             methods,
             handler: {
-                handleSubmit: methods.handleFormSubmit
+                handleSubmit: methods.handleFormSubmit,
+                quickAddCustomer: methods.quickAddCustomer
             }
         };
     }

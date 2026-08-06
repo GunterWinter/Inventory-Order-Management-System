@@ -14,6 +14,7 @@ public class MaterialExportCreateInvenTransRequest : IRequest<MaterialExportCrea
     public string? ModuleId { get; init; }
     public string? ProductId { get; init; }
     public double? Movement { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -45,9 +46,10 @@ public class MaterialExportCreateInvenTransHandler : IRequestHandler<MaterialExp
             request.ModuleId,
             request.ProductId,
             request.Movement,
-            null, // warehouseId — set by UpdateMaterialExport when confirmed
+            null,
             request.CreatedById,
-            cancellationToken);
+            cancellationToken,
+            request.ProductSerialIds);
 
         return new MaterialExportCreateInvenTransResult
         {

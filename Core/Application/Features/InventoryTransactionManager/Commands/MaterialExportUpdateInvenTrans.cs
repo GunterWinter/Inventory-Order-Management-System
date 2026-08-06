@@ -14,6 +14,7 @@ public class MaterialExportUpdateInvenTransRequest : IRequest<MaterialExportUpda
     public string? Id { get; init; }
     public string? ProductId { get; init; }
     public double? Movement { get; init; }
+    public List<string>? ProductSerialIds { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -45,6 +46,7 @@ public class MaterialExportUpdateInvenTransHandler : IRequestHandler<MaterialExp
             request.Id,
             request.ProductId,
             request.Movement,
+            request.ProductSerialIds,
             request.UpdatedById,
             cancellationToken);
 

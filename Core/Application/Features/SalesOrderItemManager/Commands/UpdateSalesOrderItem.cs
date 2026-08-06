@@ -57,6 +57,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
     private readonly InventoryTransactionService _inventoryTransactionService;
     private readonly IQueryContext _queryContext;
     private readonly ProductSerialService _productSerialService;
+    private readonly InventoryAvailabilityService _inventoryAvailabilityService;
 
     public UpdateSalesOrderItemHandler(
         ICommandRepository<SalesOrderItem> repository,
@@ -64,7 +65,8 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         SalesOrderService salesOrderService,
         InventoryTransactionService inventoryTransactionService,
         IQueryContext queryContext,
-        ProductSerialService productSerialService
+        ProductSerialService productSerialService,
+        InventoryAvailabilityService inventoryAvailabilityService
     )
     {
         _repository = repository;
@@ -73,6 +75,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         _inventoryTransactionService = inventoryTransactionService;
         _queryContext = queryContext;
         _productSerialService = productSerialService;
+        _inventoryAvailabilityService = inventoryAvailabilityService;
     }
 
     public async Task<UpdateSalesOrderItemResult> Handle(UpdateSalesOrderItemRequest request, CancellationToken cancellationToken)
@@ -157,34 +160,12 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
             return;
         }
 
-        var availableStock = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x =>
-                x.Status == InventoryTransactionStatus.Confirmed &&
-                x.ProductId == productId &&
-                x.WarehouseId == warehouseId &&
-                x.BatchNumber == batchNumber)
-            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(currentSalesOrderItemId))
-        {
-            var currentIssuedStock = await _queryContext
-                .Set<InventoryTransaction>()
-                .AsNoTracking()
-                .ApplyIsDeletedFilter(false)
-                .Where(x =>
-                    x.Status == InventoryTransactionStatus.Confirmed &&
-                    x.ModuleName == nameof(DeliveryOrder) &&
-                    x.ModuleItemId == currentSalesOrderItemId &&
-                    x.ProductId == productId &&
-                    x.WarehouseId == warehouseId &&
-                    x.BatchNumber == batchNumber)
-                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
-
-            availableStock -= currentIssuedStock;
-        }
+        var availableStock = await _inventoryAvailabilityService.GetAvailableStockAsync(
+            productId,
+            warehouseId,
+            batchNumber,
+            currentSalesOrderItemId,
+            cancellationToken);
 
         if (availableStock <= 0d || quantity > availableStock)
         {

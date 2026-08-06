@@ -25,6 +25,7 @@ public class GetWarehouseProductStockResult
 public class GetWarehouseProductStockRequest : IRequest<GetWarehouseProductStockResult>
 {
     public string? WarehouseId { get; init; }
+    public string? MaterialExportId { get; init; }
 }
 
 public class GetWarehouseProductStockValidator : AbstractValidator<GetWarehouseProductStockRequest>
@@ -46,12 +47,24 @@ public class GetWarehouseProductStockHandler : IRequestHandler<GetWarehouseProdu
 
     public async Task<GetWarehouseProductStockResult> Handle(GetWarehouseProductStockRequest request, CancellationToken cancellationToken)
     {
-        // Group ProductSerial by ProductId where InStock in this warehouse
+        var ownReservedSerialIds = string.IsNullOrWhiteSpace(request.MaterialExportId)
+            ? new List<string>()
+            : await _context.Set<ProductSerialMovement>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.ModuleName == nameof(MaterialExport)
+                    && x.ModuleId == request.MaterialExportId
+                    && x.ProductSerialId != null)
+                .Select(x => x.ProductSerialId!)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
         var stockData = await _context.Set<ProductSerial>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.CurrentWarehouseId == request.WarehouseId
-                     && x.Status == ProductSerialStatus.InStock)
+                && (x.Status == ProductSerialStatus.InStock
+                    || (x.Status == ProductSerialStatus.Reserved && ownReservedSerialIds.Contains(x.Id))))
             .GroupBy(x => x.ProductId)
             .Select(g => new
             {

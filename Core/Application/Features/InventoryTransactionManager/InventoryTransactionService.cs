@@ -176,6 +176,9 @@ public partial class InventoryTransactionService
             case "CostAllocation":
                 CostAllocationProcessing(transaction);
                 break;
+            case nameof(MaterialExport):
+                MaterialExportProcessing(transaction);
+                break;
             default:
                 break;
         }

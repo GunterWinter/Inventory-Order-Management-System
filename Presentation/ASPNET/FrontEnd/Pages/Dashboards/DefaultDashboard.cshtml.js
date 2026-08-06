@@ -1,339 +1,209 @@
 const App = {
     setup() {
         const state = Vue.reactive({
-            cardsData: {},
-            salesData: {},
-            purchaseData: {},
-            inventoryData: {}
+            cards: {},
+            sales: {},
+            purchase: {},
+            inventory: {},
+            loading: false,
+            pageError: '',
+            errors: {
+                cards: '',
+                sales: '',
+                purchase: '',
+                inventory: ''
+            },
+            lastUpdated: ''
         });
 
-        const cardSalesQtyRef = Vue.ref(null);
-        const cardSalesReturnQtyRef = Vue.ref(null);
-        const cardPurchaseQtyRef = Vue.ref(null);
-        const cardPurchaseReturnQtyRef = Vue.ref(null);
-        const cardDeliveryOrderQtyRef = Vue.ref(null);
-        const cardGoodsReceiveQtyRef = Vue.ref(null);
-        const cardTransferOutQtyRef = Vue.ref(null);
-        const cardTransferInQtyRef = Vue.ref(null);
-
         const salesOrderGridRef = Vue.ref(null);
-        const inventoryTransactionGridRef = Vue.ref(null);
         const purchaseOrderGridRef = Vue.ref(null);
-        const customerGroupChartRef = Vue.ref(null);
-        const vendorGroupChartRef = Vue.ref(null);
-        const customerCategoryChartRef = Vue.ref(null);
-        const vendorCategoryChartRef = Vue.ref(null);
+        const inventoryTransactionGridRef = Vue.ref(null);
         const stockChartRef = Vue.ref(null);
 
+        const controls = { salesGrid: null, purchaseGrid: null, inventoryGrid: null, stockChart: null };
+
+        const getContent = response => {
+            if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Dashboard data could not be loaded.');
+            return response?.data?.content?.data ?? {};
+        };
+
         const services = {
-            getCardsData: async () => {
-                try {
-                    const response = await AxiosManager.get('/Dashboard/GetCardsDashboard', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
-            getSalesData: async () => {
-                try {
-                    const response = await AxiosManager.get('/Dashboard/GetSalesDashboard', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
-            getPurchaseData: async () => {
-                try {
-                    const response = await AxiosManager.get('/Dashboard/GetPurchaseDashboard', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
-            getInventoryData: async () => {
-                try {
-                    const response = await AxiosManager.get('/Dashboard/GetInventoryDashboard', {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
+            cards: () => AxiosManager.get('/Dashboard/GetCardsDashboard', {}),
+            sales: () => AxiosManager.get('/Dashboard/GetSalesDashboard', {}),
+            purchase: () => AxiosManager.get('/Dashboard/GetPurchaseDashboard', {}),
+            inventory: () => AxiosManager.get('/Dashboard/GetInventoryDashboard', {})
         };
 
         const methods = {
-            populateCardsData: async () => {
-                const response = await services.getCardsData();
-                state.cardsData = response?.data?.content?.data;
-                methods.populateCards();
+            money: value => NumberFormatManager.formatToLocale(value ?? 0),
+            quantity: value => NumberFormatManager.formatToLocale(value ?? 0),
+            date: value => DateFormatManager.formatToLocale(value),
+            dateTime: value => DateFormatManager.formatDateTimeToLocale(value),
+            kpiCards: () => [
+                { label: 'Confirmed Sales', value: methods.money(state.cards.confirmedSalesAmount), note: 'Order value', icon: 'fas fa-chart-line', iconClass: 'bg-primary-subtle text-primary', href: '/SalesOrders/SalesOrderList' },
+                { label: 'Customer Receivable', value: methods.money(state.cards.customerReceivable), note: 'Outstanding sales', icon: 'fas fa-hand-holding-usd', iconClass: 'bg-warning-subtle text-warning', href: '/CashTransactions/CustomerFinanceReport' },
+                { label: 'Confirmed Purchases', value: methods.money(state.cards.confirmedPurchaseAmount), note: 'Order value', icon: 'fas fa-shopping-cart', iconClass: 'bg-info-subtle text-info', href: '/PurchaseOrders/PurchaseOrderList' },
+                { label: 'Vendor Debt', value: methods.money(state.cards.vendorDebt), note: 'Outstanding purchases', icon: 'fas fa-file-invoice-dollar', iconClass: 'bg-danger-subtle text-danger', href: '/VendorDebtReports/VendorDebtReportList' },
+                { label: 'Cash Balance', value: methods.money(state.cards.cashBalance), note: 'Across active accounts', icon: 'fas fa-wallet', iconClass: 'bg-success-subtle text-success', href: '/CashAccounts/CashAccountList' },
+                { label: 'Inventory Quantity', value: methods.quantity(state.cards.inventoryQuantity), note: 'Confirmed on hand', icon: 'fas fa-boxes', iconClass: 'bg-secondary-subtle text-secondary', href: '/StockReports/StockReportList' },
+                { label: 'Material Exports', value: methods.quantity(state.cards.materialExportCount), note: 'Confirmed documents', icon: 'fas fa-dolly', iconClass: 'bg-primary-subtle text-primary', href: '/MaterialExports/MaterialExportList' }
+            ],
+            openDocument: (route, id) => {
+                if (id) window.open(`${route}?viewId=${encodeURIComponent(id)}`, '_blank', 'noopener');
             },
-            populateSalesData: async () => {
-                const response = await services.getSalesData();
-                state.salesData = response?.data?.content?.data;
-                methods.populateSalesOrderGrid();
-                methods.populateSalesByCustomerGroupChart();
-                methods.populateSalesByCustomerCategoryChart();
+            renderSalesGrid: () => {
+                controls.salesGrid?.destroy();
+                const data = (state.sales.salesOrderDashboard ?? []).map(item => ({
+                    ...item,
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                    orderDate: DateFormatManager.parseBusinessDate(item.orderDate)
+                }));
+                controls.salesGrid = new ej.grids.Grid({
+                    dataSource: data, height: 300, allowSorting: true, allowPaging: true,
+                    pageSettings: { pageSize: 8 }, gridLines: 'Horizontal',
+                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
+                    columns: [
+                        { field: 'createdAtUtc', visible: false },
+                        { field: 'orderDate', headerText: 'Date', width: 100, valueAccessor: (field, row) => methods.date(row[field]) },
+                        { field: 'number', headerText: 'Number', width: 145 },
+                        { field: 'productName', headerText: 'Product', width: 190 },
+                        { field: 'total', headerText: 'Total', width: 120, textAlign: 'Right', format: 'N0' }
+                    ],
+                    recordDoubleClick: args => methods.openDocument('/SalesOrders/SalesOrderList', args.rowData.documentId)
+                });
+                controls.salesGrid.appendTo(salesOrderGridRef.value);
             },
-            populatePurchaseData: async () => {
-                const response = await services.getPurchaseData();
-                state.purchaseData = response?.data?.content?.data;
-                methods.populatePurchaseOrderGrid();
-                methods.populatePurchaseByVendorGroupChart();
-                methods.populatePurchaseByVendorCategoryChart();
+            renderPurchaseGrid: () => {
+                controls.purchaseGrid?.destroy();
+                const data = (state.purchase.purchaseOrderDashboard ?? []).map(item => ({
+                    ...item,
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                    orderDate: DateFormatManager.parseBusinessDate(item.orderDate)
+                }));
+                controls.purchaseGrid = new ej.grids.Grid({
+                    dataSource: data, height: 300, allowSorting: true, allowPaging: true,
+                    pageSettings: { pageSize: 8 }, gridLines: 'Horizontal',
+                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
+                    columns: [
+                        { field: 'createdAtUtc', visible: false },
+                        { field: 'orderDate', headerText: 'Date', width: 100, valueAccessor: (field, row) => methods.date(row[field]) },
+                        { field: 'number', headerText: 'Number', width: 145 },
+                        { field: 'productName', headerText: 'Product', width: 190 },
+                        { field: 'total', headerText: 'Total', width: 120, textAlign: 'Right', format: 'N0' }
+                    ],
+                    recordDoubleClick: args => methods.openDocument('/PurchaseOrders/PurchaseOrderList', args.rowData.documentId)
+                });
+                controls.purchaseGrid.appendTo(purchaseOrderGridRef.value);
             },
-            populateInventoryData: async () => {
-                const response = await services.getInventoryData();
-                state.inventoryData = response?.data?.content?.data;
-                methods.populateInventoryTransactionGrid();
-                methods.populateInventoryStockChart();
+            renderInventoryGrid: () => {
+                controls.inventoryGrid?.destroy();
+                const data = (state.inventory.inventoryTransactionDashboard ?? []).map(item => ({
+                    ...item,
+                    createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
+                }));
+                controls.inventoryGrid = new ej.grids.Grid({
+                    dataSource: data, height: 340, allowSorting: true, allowPaging: true,
+                    pageSettings: { pageSize: 10 }, gridLines: 'Horizontal',
+                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
+                    columns: [
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, valueAccessor: (field, row) => methods.dateTime(row[field]) },
+                        { field: 'number', headerText: 'Number', width: 145 },
+                        { field: 'warehouseName', headerText: 'Warehouse', width: 150 },
+                        { field: 'productName', headerText: 'Product', width: 190 },
+                        { field: 'stock', headerText: 'Movement', width: 110, textAlign: 'Right', format: 'N0' },
+                        { field: 'moduleName', headerText: 'Source', width: 130 }
+                    ]
+                });
+                controls.inventoryGrid.appendTo(inventoryTransactionGridRef.value);
             },
-            populateCards: () => {
-                const cardsDashboard = state.cardsData?.cardsDashboard;
-
-                if (cardsDashboard) {
-                    cardSalesQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.salesTotal || 0);
-                    cardSalesReturnQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.salesReturnTotal || 0);
-                    cardPurchaseQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.purchaseTotal || 0);
-                    cardPurchaseReturnQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.purchaseReturnTotal || 0);
-                    cardDeliveryOrderQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.deliveryOrderTotal || 0);
-                    cardGoodsReceiveQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.goodsReceiveTotal || 0);
-                    cardTransferOutQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.transferOutTotal || 0);
-                    cardTransferInQtyRef.value.textContent = NumberFormatManager.formatToLocale(cardsDashboard.transferInTotal || 0);
-                } else {
-                    console.error('CardsDashboard data is not available.');
+            renderStockChart: () => {
+                controls.stockChart?.destroy();
+                controls.stockChart = new ej.charts.Chart({
+                    primaryXAxis: { valueType: 'Category', labelRotation: -25, majorGridLines: { width: 0 } },
+                    primaryYAxis: { title: 'Quantity', lineStyle: { width: 0 }, majorTickLines: { width: 0 } },
+                    series: state.inventory.inventoryStockDashboard ?? [],
+                    tooltip: { enable: true, shared: true },
+                    legendSettings: { visible: true },
+                    chartArea: { border: { width: 0 } },
+                    height: '340px'
+                });
+                controls.stockChart.appendTo(stockChartRef.value);
+            },
+            loadSection: async (section, request, applyData, render) => {
+                state.errors[section] = '';
+                try {
+                    const response = await request();
+                    applyData(getContent(response));
+                    await Vue.nextTick();
+                    render?.();
+                    return true;
+                } catch (error) {
+                    console.error(`Dashboard ${section} load error:`, error);
+                    state.errors[section] = error.response?.data?.message
+                        ?? error.message
+                        ?? 'Dashboard data could not be loaded.';
+                    return false;
                 }
             },
-            populateSalesOrderGrid: () => {
-                const salesOrderDashboard = state.salesData?.salesOrderDashboard ?? [];
-                new ej.grids.Grid({
-                    dataSource: salesOrderDashboard,
-                    allowFiltering: false,
-                    allowSorting: true,
-                    allowSelection: false,
-                    allowGrouping: false,
-                    allowTextWrap: false,
-                    allowResizing: false,
-                    allowPaging: true,
-                    allowExcelExport: false,
-                    sortSettings: { columns: [{ field: 'orderDate', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 10 },
-                    autoFit: false,
-                    showColumnMenu: false,
-                    gridLines: 'Horizontal',
-                    columns: [
-                        {
-                            field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
-                        },
-                        { field: 'salesOrder.orderDate', headerText: 'Order Date', width: 70, type: 'dateTime', format: 'yyyy-MM-dd', textAlign: 'Left' },
-                        { field: 'salesOrder.number', headerText: '#Number', width: 90 },
-                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
-                        { field: 'product.name', headerText: 'Product', width: 150 },
-                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N0', textAlign: 'Right' },
-                    ],
-                }, salesOrderGridRef.value);
-            },
-            populateInventoryTransactionGrid: () => {
-                const inventoryTransactionDashboard = state.inventoryData?.inventoryTransactionDashboard ?? [];
-                new ej.grids.Grid({
-                    dataSource: inventoryTransactionDashboard,
-                    allowFiltering: false,
-                    allowSorting: true,
-                    allowSelection: false,
-                    allowGrouping: false,
-                    allowTextWrap: false,
-                    allowResizing: false,
-                    allowPaging: true,
-                    allowExcelExport: false,
-                    sortSettings: { columns: [{ field: 'movementDate', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 10 },
-                    autoFit: false,
-                    showColumnMenu: false,
-                    gridLines: 'Horizontal',
-                    columns: [
-                        {
-                            field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
-                        },
-                        { field: 'movementDate', headerText: 'Date', width: 150, format: 'yyyy-MM-dd', textAlign: 'Left', type: 'dateTime' },
-                        { field: 'warehouse.name', headerText: 'Warehouse', width: 150 },
-                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 120 },
-                        { field: 'product.name', headerText: 'Product', width: 150 },
-                        { field: 'number', headerText: 'Number', width: 150 },
-                        { field: 'stock', headerText: 'Movement', width: 100, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
-                        { field: 'moduleName', headerText: 'Module Name', width: 150 },
-                        { field: 'moduleCode', headerText: 'Module Code', width: 150 },
-                        { field: 'moduleNumber', headerText: 'Module Number', width: 150 },
-                        { field: 'warehouseFrom.name', headerText: 'Warehouse From', width: 150 },
-                        { field: 'warehouseTo.name', headerText: 'Warehouse To', width: 150 },
-                    ],
-                }, inventoryTransactionGridRef.value);
-            },
-            populatePurchaseOrderGrid: () => {
-                const purchaseOrderDashboard = state.purchaseData?.purchaseOrderDashboard ?? [];
-                new ej.grids.Grid({
-                    dataSource: purchaseOrderDashboard,
-                    allowFiltering: false,
-                    allowSorting: true,
-                    allowSelection: false,
-                    allowGrouping: false,
-                    allowTextWrap: false,
-                    allowResizing: false,
-                    allowPaging: true,
-                    allowExcelExport: false,
-                    sortSettings: { columns: [{ field: 'orderDate', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 10 },
-                    autoFit: false,
-                    showColumnMenu: false,
-                    gridLines: 'Horizontal',
-                    columns: [
-                        {
-                            field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
-                        },
-                        { field: 'purchaseOrder.orderDate', headerText: 'Order Date', width: 70, type: 'dateTime', format: 'yyyy-MM-dd', textAlign: 'Left' },
-                        { field: 'purchaseOrder.number', headerText: '#Number', width: 90 },
-                        { field: 'product.referenceCode', headerText: 'Ref Code', width: 100 },
-                        { field: 'product.name', headerText: 'Product', width: 150 },
-                        { field: 'total', headerText: 'Total', width: 70, type: 'number', format: 'N0', textAlign: 'Right' },
-                    ],
-                }, purchaseOrderGridRef.value);
-            },
-            populateSalesByCustomerGroupChart: () => {
-                const salesByCustomerGroupDashboard = state.salesData?.salesByCustomerGroupDashboard ?? [];
-                new ej.charts.Chart(
-                    {
-                        primaryXAxis: {
-                            valueType: 'Category', interval: 1, majorGridLines: { width: 0 }, majorTickLines: { width: 0 }, labelIntersectAction: 'None', labelRotation: ej.base.Browser.isDevice ? -45 : 0, minorTickLines: { width: 0 }
-                        },
-                        chartArea: { border: { width: 0 } },
-                        primaryYAxis: {
-                            title: 'Quantity',
-                            majorTickLines: { width: 0 }, lineStyle: { width: 0 },
-                        },
-                        series: salesByCustomerGroupDashboard,
-                        title: 'Sales by Customer Group',
-                        tooltip: { enable: true, header: "<b>${point.tooltip}</b>", shared: true },
-                        legendSettings: { enableHighlight: true },
-                        palettes: ["#E94649", "#F6B53F", "#009CFF", "#C4C24A"],
-                    },
-                    customerGroupChartRef.value);
-            },
-            populatePurchaseByVendorGroupChart: () => {
-                const purchaseByVendorGroupDashboard = state.purchaseData?.purchaseByVendorGroupDashboard ?? [];
-                new ej.charts.Chart(
-                    {
-                        primaryXAxis: {
-                            valueType: 'Category', interval: 1, majorGridLines: { width: 0 }, majorTickLines: { width: 0 }, labelIntersectAction: 'None', labelRotation: ej.base.Browser.isDevice ? -45 : 0, minorTickLines: { width: 0 }
-                        },
-                        chartArea: { border: { width: 0 } },
-                        primaryYAxis: {
-                            title: 'Quantity',
-                            majorTickLines: { width: 0 }, lineStyle: { width: 0 },
-                        },
-                        series: purchaseByVendorGroupDashboard,
-                        title: 'Purchase by Vendor Group',
-                        tooltip: { enable: true, header: "<b>${point.tooltip}</b>", shared: true },
-                        legendSettings: { enableHighlight: true },
-                        palettes: ["#E94649", "#F6B53F", "#009CFF", "#C4C24A"],
-                    },
-                    vendorGroupChartRef.value);
-            },
-            populateSalesByCustomerCategoryChart: () => {
-                const salesByCustomerCategoryDashboard = state.salesData?.salesByCustomerCategoryDashboard ?? [];
-                new ej.charts.Chart(
-                    {
-                        primaryXAxis: {
-                            valueType: 'Category', interval: 1, majorGridLines: { width: 0 }, majorTickLines: { width: 0 }, labelIntersectAction: 'None', labelRotation: ej.base.Browser.isDevice ? -45 : 0, minorTickLines: { width: 0 }
-                        },
-                        chartArea: { border: { width: 0 } },
-                        primaryYAxis: {
-                            title: 'Quantity',
-                            majorTickLines: { width: 0 }, lineStyle: { width: 0 },
-                        },
-                        series: salesByCustomerCategoryDashboard,
-                        title: 'Sales by Customer Category',
-                        tooltip: { enable: true, header: "<b>${point.tooltip}</b>", shared: true },
-                        legendSettings: { enableHighlight: true },
-                        palettes: ["#E94649", "#F6B53F", "#009CFF", "#C4C24A"],
-                    },
-                    customerCategoryChartRef.value);
-            },
-            populatePurchaseByVendorCategoryChart: () => {
-                const purchaseByVendorCategoryDashboard = state.purchaseData?.purchaseByVendorCategoryDashboard ?? [];
-                new ej.charts.Chart(
-                    {
-                        primaryXAxis: {
-                            valueType: 'Category', interval: 1, majorGridLines: { width: 0 }, majorTickLines: { width: 0 }, labelIntersectAction: 'None', labelRotation: ej.base.Browser.isDevice ? -45 : 0, minorTickLines: { width: 0 }
-                        },
-                        chartArea: { border: { width: 0 } },
-                        primaryYAxis: {
-                            title: 'Quantity',
-                            majorTickLines: { width: 0 }, lineStyle: { width: 0 },
-                        },
-                        series: purchaseByVendorCategoryDashboard,
-                        title: 'Purchase by Vendor Category',
-                        tooltip: { enable: true, header: "<b>${point.tooltip}</b>", shared: true },
-                        legendSettings: { enableHighlight: true },
-                        palettes: ["#E94649", "#F6B53F", "#009CFF", "#C4C24A"],
-                    },
-                    vendorCategoryChartRef.value);
-            },
-            populateInventoryStockChart: () => {
-                const inventoryStockDashboard = state.inventoryData?.inventoryStockDashboard ?? [];
-                new ej.charts.Chart(
-                    {
-                        primaryXAxis: {
-                            valueType: 'Category', interval: 1, majorGridLines: { width: 0 }, majorTickLines: { width: 0 }, labelIntersectAction: 'None', labelRotation: -15, minorTickLines: { width: 0 }
-                        },
-                        chartArea: { border: { width: 0 } },
-                        primaryYAxis: {
-                            title: 'Quantity',
-                            majorTickLines: { width: 0 }, lineStyle: { width: 0 },
-                        },
-                        series: inventoryStockDashboard,
-                        title: 'Stock by Warehouse',
-                        tooltip: { enable: true, header: "<b>${point.tooltip}</b>", shared: true },
-                        legendSettings: { visible: true },
-                        palettes: ["#E94649", "#F6B53F", "#009CFF", "#C4C24A"],
-                    },
-                    stockChartRef.value);
-            },
+            loadCards: async () => methods.loadSection(
+                'cards',
+                services.cards,
+                data => { state.cards = data.cardsDashboard ?? {}; }),
+            loadSales: async () => methods.loadSection(
+                'sales',
+                services.sales,
+                data => { state.sales = data; },
+                methods.renderSalesGrid),
+            loadPurchase: async () => methods.loadSection(
+                'purchase',
+                services.purchase,
+                data => { state.purchase = data; },
+                methods.renderPurchaseGrid),
+            loadInventory: async () => methods.loadSection(
+                'inventory',
+                services.inventory,
+                data => { state.inventory = data; },
+                () => {
+                    methods.renderInventoryGrid();
+                    methods.renderStockChart();
+                }),
+            loadDashboard: async () => {
+                state.loading = true;
+                state.pageError = '';
+                try {
+                    await Promise.allSettled([
+                        methods.loadCards(),
+                        methods.loadSales(),
+                        methods.loadPurchase(),
+                        methods.loadInventory()
+                    ]);
+                    state.lastUpdated = methods.dateTime(new Date());
+                } catch (error) {
+                    console.error('Dashboard load error:', error);
+                    state.pageError = error.response?.data?.message ?? error.message ?? 'Dashboard data could not be loaded.';
+                } finally {
+                    state.loading = false;
+                }
+            }
         };
 
         Vue.onMounted(async () => {
             try {
                 await SecurityManager.authorizePage(['Dashboards']);
                 await SecurityManager.validateToken();
-
-                await methods.populateCardsData();
-                await methods.populateSalesData();
-                await methods.populatePurchaseData();
-                await methods.populateInventoryData();
-
-                
-
-            } catch (e) {
-                console.error('page init error:', e);
+                await methods.loadDashboard();
+            } catch (error) {
+                console.error('Dashboard initialization error:', error);
+                state.pageError = error.response?.data?.message
+                    ?? error.message
+                    ?? 'Dashboard could not be initialized.';
             }
         });
 
-        return {
-            cardSalesQtyRef,
-            cardSalesReturnQtyRef,
-            cardPurchaseQtyRef,
-            cardPurchaseReturnQtyRef,
-            cardDeliveryOrderQtyRef,
-            cardGoodsReceiveQtyRef,
-            cardTransferOutQtyRef,
-            cardTransferInQtyRef,
-            salesOrderGridRef,
-            inventoryTransactionGridRef,
-            purchaseOrderGridRef,
-            customerGroupChartRef,
-            vendorGroupChartRef,
-            customerCategoryChartRef,
-            vendorCategoryChartRef,
-            stockChartRef,
-            state,
-            methods
-        };
+        Vue.onBeforeUnmount(() => Object.values(controls).forEach(control => control?.destroy?.()));
+
+        return { state, methods, salesOrderGridRef, purchaseOrderGridRef, inventoryTransactionGridRef, stockChartRef };
     }
 };
 

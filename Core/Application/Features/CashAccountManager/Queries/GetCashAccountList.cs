@@ -65,22 +65,37 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
             .CashTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.CashAccountId != null)
+            .Where(x => x.CashAccountId != null
+                && !x.PaymentList.Any(payment => !payment.IsDeleted))
             .GroupBy(x => x.CashAccountId)
             .Select(g => new
             {
                 CashAccountId = g.Key,
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.PaidAmount ?? 0d),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.PaidAmount ?? 0d)
             })
             .ToDictionaryAsync(x => x.CashAccountId ?? string.Empty, cancellationToken);
+
+        var paymentBalances = await _context.Set<CashTransactionPayment>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.CashTransaction != null && !x.CashTransaction.IsDeleted)
+            .GroupBy(x => x.CashAccountId)
+            .Select(g => new
+            {
+                CashAccountId = g.Key,
+                TotalDebit = g.Where(x => x.CashTransaction!.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount),
+                TotalCredit = g.Where(x => x.CashTransaction!.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount)
+            })
+            .ToDictionaryAsync(x => x.CashAccountId, cancellationToken);
 
         var dtos = entities.Select(entity =>
         {
             transactionBalances.TryGetValue(entity.Id, out var balance);
             var initialBalance = entity.InitialBalance ?? 0d;
-            var totalDebit = balance?.TotalDebit ?? 0d;
-            var totalCredit = balance?.TotalCredit ?? 0d;
+            paymentBalances.TryGetValue(entity.Id, out var paymentBalance);
+            var totalDebit = (balance?.TotalDebit ?? 0d) + (paymentBalance?.TotalDebit ?? 0d);
+            var totalCredit = (balance?.TotalCredit ?? 0d) + (paymentBalance?.TotalCredit ?? 0d);
             var currentBalance = initialBalance + totalDebit - totalCredit;
 
             return new GetCashAccountListDto

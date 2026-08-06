@@ -11,6 +11,8 @@ public record WarrantyLookupMovementDto
     public string? ModuleName { get; init; }
     public string? ModuleId { get; init; }
     public string? ModuleItemId { get; init; }
+    public string? ViewModuleName { get; init; }
+    public string? ViewModuleId { get; init; }
     public string? FromWarehouseName { get; init; }
     public string? ToWarehouseName { get; init; }
     public DateTime? MovementDate { get; init; }
@@ -82,7 +84,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .ToListAsync(cancellationToken);
 
         var serialIds = serials.Select(x => x.Id).ToList();
-        var movements = await _context
+        var rawMovements = await _context
             .Set<ProductSerialMovement>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
@@ -93,21 +95,55 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .Select(x => new
             {
                 x.ProductSerialId,
+                x.ModuleName,
+                x.ModuleId,
+                x.ModuleItemId,
+                FromWarehouseName = x.FromWarehouse != null ? x.FromWarehouse.Name : null,
+                ToWarehouseName = x.ToWarehouse != null ? x.ToWarehouse.Name : null,
+                x.MovementDate,
+                StatusName = x.Status.ToString()
+            })
+            .ToListAsync(cancellationToken);
+
+        var allocationIds = rawMovements
+            .Where(x => x.ModuleName == "CostAllocation" && x.ModuleId != null)
+            .Select(x => x.ModuleId!)
+            .Distinct()
+            .ToList();
+        var allocationPurchaseOrders = await _context.Set<PurchaseOrderCostAllocation>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => allocationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.PurchaseOrderId, cancellationToken);
+
+        var movements = rawMovements.Select(x =>
+        {
+            var isAllocation = x.ModuleName == "CostAllocation";
+            var viewModuleId = isAllocation && x.ModuleId != null
+                && allocationPurchaseOrders.TryGetValue(x.ModuleId, out var purchaseOrderId)
+                    ? purchaseOrderId
+                    : x.ModuleId;
+            return new
+            {
+                x.ProductSerialId,
                 Movement = new WarrantyLookupMovementDto
                 {
                     ModuleName = x.ModuleName,
                     ModuleId = x.ModuleId,
                     ModuleItemId = x.ModuleItemId,
-                    FromWarehouseName = x.FromWarehouse != null ? x.FromWarehouse.Name : null,
-                    ToWarehouseName = x.ToWarehouse != null ? x.ToWarehouse.Name : null,
+                    ViewModuleName = isAllocation ? nameof(PurchaseOrder) : x.ModuleName,
+                    ViewModuleId = viewModuleId,
+                    FromWarehouseName = x.FromWarehouseName,
+                    ToWarehouseName = x.ToWarehouseName,
                     MovementDate = x.MovementDate,
-                    StatusName = x.Status.ToString()
+                    StatusName = x.StatusName
                 }
-            })
-            .ToListAsync(cancellationToken);
+            };
+        }).ToList();
 
         var movementLookup = movements
-            .GroupBy(x => x.ProductSerialId)
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProductSerialId))
+            .GroupBy(x => x.ProductSerialId!)
             .ToDictionary(x => x.Key, x => x.Select(y => y.Movement).ToList());
 
         var today = DateTime.UtcNow.Date;

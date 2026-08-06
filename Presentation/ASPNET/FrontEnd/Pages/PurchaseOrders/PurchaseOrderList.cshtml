@@ -61,7 +61,7 @@
                                     <div class="card-body">
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="OrderDate">Ngày đặt hàng</label>
+                                                <label for="OrderDate">Order Date</label>
                                                 <input ref="orderDateRef" />
                                                 <label class="text-danger">{{ state.errors.orderDate }}</label>
                                             </div>
@@ -72,11 +72,11 @@
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="VendorId">Nhà cung cấp</label>
+                                                <label for="VendorId">Vendor</label>
                                                 <div class="quick-add-wrapper">
                                                     <div ref="vendorIdRef"></div>
                                                     <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
-                                                            v-on:click="handler.quickAddVendor" title="Thêm nhanh NCC">
+                                                            v-on:click="handler.quickAddVendor" title="Quick Add Vendor">
                                                         <i class="fas fa-plus"></i>
                                                     </button>
                                                 </div>
@@ -85,14 +85,14 @@
                                         </div>
                                           <div class="row mb-2">
                                             <div class="col-md-6">
-                                                <label for="OrderStatus">Trạng thái</label>
+                                                <label for="OrderStatus">Status</label>
                                                 <div ref="orderStatusRef"></div>
                                                 <label class="text-danger">{{ state.errors.orderStatus }}</label>
                                             </div>
                                         </div>
                                         <div class="row mb-2">
                                             <div class="col-md-12">
-                                                <label for="Description">Mô tả</label>
+                                                <label for="Description">Description</label>
                                                 <textarea class="form-control" rows="3" v-model="state.description"></textarea>
                                                 <label class="text-danger">{{ state.errors.description }}</label>
                                             </div>
@@ -107,7 +107,7 @@
                             <div class="col-md-12">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h5>Chi tiết đơn mua hàng</h5>
+                                        <h5>Purchase Order Details</h5>
                                     </div>
                                     <div class="card-body">
                                         <p class="text-muted mb-3">
@@ -128,21 +128,21 @@
                             <div class="col-md-12">
                                 <div class="card shadow-sm">
                                     <div class="card-header text-white">
-                                        <h5 class="mb-0">Tóm tắt thanh toán</h5>
+                                        <h5 class="mb-0">Payment Summary</h5>
                                     </div>
                                     <div class="card-body">
                                         <div class="row justify-content-end">
                                             <div class="col-md-6">
                                                 <div class="d-flex justify-content-between py-2 border-bottom">
-                                                    <span class="fw-bold">Tạm tính</span>
+                                                    <span class="fw-bold">Subtotal</span>
                                                     <span id="SubTotalAmount">{{ state.subTotalAmount }}</span>
                                                 </div>
                                                 <div class="d-flex justify-content-between py-2 border-bottom">
-                                                    <span class="fw-bold">Thuế</span>
+                                                    <span class="fw-bold">Tax</span>
                                                     <span id="TaxAmount">{{ state.taxAmount }}</span>
                                                 </div>
                                                 <div class="d-flex justify-content-between py-2">
-                                                    <span class="fw-bold">Tổng tiền</span>
+                                                    <span class="fw-bold">Total Amount</span>
                                                     <span id="TotalAmount" class="fw-bold text-success">{{ state.totalAmount }}</span>
                                                 </div>
                                             </div>
@@ -154,7 +154,7 @@
                     </fieldset>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button"
                             v-if="!state.isViewMode"
                             id="MainSaveButton"
@@ -163,8 +163,8 @@
                             v-on:click="handler.handleSubmit"
                             v-bind:disabled="state.isSubmitting">
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Xóa' : 'Lưu' }}</span>
-                        <span v-else>{{ state.deleteMode ? 'Đang xóa...' : 'Đang lưu...' }}</span>
+                        <span v-if="!state.isSubmitting">{{ state.deleteMode ? 'Delete' : 'Save' }}</span>
+                        <span v-else>{{ state.deleteMode ? 'Deleting...' : 'Saving...' }}</span>
                     </button>
                 </div>
             </div>
@@ -175,14 +175,14 @@
         <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="bi bi-pie-chart me-2"></i>Phân bổ công trình</h5>
+                    <h5 class="modal-title"><i class="bi bi-pie-chart me-2"></i>Cost Allocation</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <div class="text-muted">
-                                <small>Đã chọn <strong>{{ state.costAllocationSelectedItems.length }}</strong> sản phẩm để chia chi phí. Thêm nhiều dòng nếu cùng 1 sản phẩm chia cho nhiều khách.</small>
+                                <small><span>Selected</span> <strong>{{ state.costAllocationSelectedItems.length }}</strong> <span>products for cost allocation. Add multiple rows when one product is allocated to multiple customers.</span></small>
                             </div>
                         </div>
                     </div>
@@ -190,7 +190,7 @@
                         <div class="col-md-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h6 class="mb-0">Chi tiết phân bổ công trình</h6>
+                                    <h6 class="mb-0">Cost Allocation Details</h6>
                                 </div>
                                 <div class="card-body p-0">
                                     <div class="grid-container">
@@ -202,15 +202,15 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button"
                             id="CostAllocationSaveButton"
                             class="btn btn-primary"
                             v-on:click="handler.handleCostAllocationSubmit"
                             v-bind:disabled="state.isCostAllocationSubmitting">
                         <span class="spinner-border spinner-border-sm me-2" v-if="state.isCostAllocationSubmitting" role="status" aria-hidden="true"></span>
-                        <span v-if="!state.isCostAllocationSubmitting">Xác nhận phân bổ</span>
-                        <span v-else>Đang xử lý...</span>
+                        <span v-if="!state.isCostAllocationSubmitting">Confirm Allocation</span>
+                        <span v-else>Processing...</span>
                     </button>
                 </div>
             </div>

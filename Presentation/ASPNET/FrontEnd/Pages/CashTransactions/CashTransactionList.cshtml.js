@@ -18,6 +18,10 @@ const App = {
             sourceModule: null,
             sourceModuleId: null,
             sourceModuleNumber: null,
+            allocationDetails: [],
+            paymentHistory: [],
+            sourceDetailsLoading: false,
+            sourceDetailsError: '',
             cashAccountList: [],
             cashCategoryList: [],
             partnerList: [],
@@ -43,14 +47,6 @@ const App = {
                     amount: ''
                 },
                 isSubmitting: false
-            },
-            summary: {
-                totalDebit: 0,
-                totalCredit: 0,
-                totalBalance: 0,
-                totalDebitText: '0',
-                totalCreditText: '0',
-                totalBalanceText: '0'
             }
         });
 
@@ -75,9 +71,9 @@ const App = {
         ];
 
         const statusOptions = [
-            { value: 0, text: 'Chưa thanh toán' },
-            { value: 1, text: 'Còn nợ' },
-            { value: 2, text: 'Đã thanh toán' }
+            { value: 0, text: 'Unpaid' },
+            { value: 1, text: 'Partially Paid' },
+            { value: 2, text: 'Paid' }
         ];
 
         const validateForm = function () {
@@ -90,10 +86,15 @@ const App = {
 
             if (!state.transactionDate) { state.errors.transactionDate = 'Transaction Date is required.'; isValid = false; }
             if (state.transactionType === null || state.transactionType === undefined) { state.errors.transactionType = 'Transaction Type is required.'; isValid = false; }
-            if (!state.cashAccountId) { state.errors.cashAccountId = 'Cash Account is required.'; isValid = false; }
+            if (!state.cashAccountId
+                && state.sourceModule !== 'MaterialExport'
+                && (!state.sourceModule || Number(state.paidAmount ?? 0) > 0)) {
+                state.errors.cashAccountId = 'Cash Account is required.';
+                isValid = false;
+            }
             if (!state.amount || state.amount <= 0) { state.errors.amount = 'Amount must be greater than 0.'; isValid = false; }
             if (state.paidAmount !== null && state.paidAmount !== undefined && Number(state.paidAmount) > Number(state.amount)) {
-                state.errors.paidAmount = 'Số tiền thanh toán không được lớn hơn số tiền gốc.';
+                state.errors.paidAmount = 'Paid amount cannot exceed the original amount.';
                 isValid = false;
             }
 
@@ -114,6 +115,10 @@ const App = {
             state.sourceModule = null;
             state.sourceModuleId = null;
             state.sourceModuleNumber = null;
+            state.allocationDetails = [];
+            state.paymentHistory = [];
+            state.sourceDetailsLoading = false;
+            state.sourceDetailsError = '';
             state.viewMode = false;
             state.errors = { transactionDate: '', transactionType: '', cashAccountId: '', amount: '', paidAmount: '' };
         };
@@ -174,9 +179,22 @@ const App = {
             deleteMainData: async (id, deletedById) => {
                 return await AxiosManager.post('/CashTransaction/DeleteCashTransaction', { id, deletedById });
             },
+            getAllocationDetails: async (purchaseOrderId) => {
+                return await AxiosManager.get(
+                    `/CashTransaction/GetCashTransactionCostAllocations?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`,
+                    {});
+            },
+            getPaymentHistory: async (purchaseOrderId) => {
+                return await AxiosManager.get(
+                    `/PurchaseOrder/GetPurchaseOrderPaymentHistory?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`,
+                    {});
+            }
         };
 
         const methods = {
+            formatMoney: value => NumberFormatManager.formatToLocale(value ?? 0),
+            formatNumber: value => NumberFormatManager.formatToLocale(value ?? 0),
+            formatDate: value => DateFormatManager.formatToLocale(value),
             populateMainData: async () => {
                 const response = await services.getMainData();
                 const rawData = response?.data?.content?.data ?? [];
@@ -191,7 +209,7 @@ const App = {
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
                         transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
                         transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
-                        statusName: (item.paidAmount >= item.amount && item.amount > 0) ? 'Đã thanh toán' : (item.paidAmount > 0 ? 'Còn nợ' : 'Chưa thanh toán'),
+                        statusName: (item.paidAmount >= item.amount && item.amount > 0) ? 'Paid' : (item.paidAmount > 0 ? 'Partially Paid' : 'Unpaid'),
                         partnerName: partnerName
                     };
                 });
@@ -210,14 +228,46 @@ const App = {
                 const vendors = (vendResp?.data?.content?.data ?? []).map(v => ({ id: 'vend_' + v.id, name: '[NCC] ' + v.name, customerId: null, vendorId: v.id }));
                 state.partnerList = [...customers, ...vendors];
             },
-            refreshSummary: () => {
-                state.summary.totalDebit = state.cashAccountList.reduce((sum, item) => sum + (item.totalDebit ?? 0), 0);
-                state.summary.totalCredit = state.cashAccountList.reduce((sum, item) => sum + (item.totalCredit ?? 0), 0);
-                state.summary.totalBalance = state.cashAccountList.reduce((sum, item) => sum + (item.currentBalance ?? 0), 0);
-                state.summary.totalDebitText = NumberFormatManager.formatToLocale(state.summary.totalDebit);
-                state.summary.totalCreditText = NumberFormatManager.formatToLocale(state.summary.totalCredit);
-                state.summary.totalBalanceText = NumberFormatManager.formatToLocale(state.summary.totalBalance);
-            }
+            loadSourceDetails: async () => {
+                state.allocationDetails = [];
+                state.paymentHistory = [];
+                state.sourceDetailsError = '';
+                if ((state.sourceModule ?? '').toLowerCase() !== 'purchaseorder' || !state.sourceModuleId) return;
+
+                state.sourceDetailsLoading = true;
+                try {
+                    const [allocationResponse, paymentResponse] = await Promise.all([
+                        services.getAllocationDetails(state.sourceModuleId),
+                        services.getPaymentHistory(state.sourceModuleId)
+                    ]);
+                    if (allocationResponse?.data?.code !== 200 || paymentResponse?.data?.code !== 200) {
+                        throw new Error('The source transaction details could not be loaded.');
+                    }
+                    state.allocationDetails = Array.isArray(allocationResponse?.data?.content?.data)
+                        ? allocationResponse.data.content.data
+                        : [];
+                    state.paymentHistory = Array.isArray(paymentResponse?.data?.content?.data)
+                        ? paymentResponse.data.content.data
+                        : [];
+                    await Vue.nextTick();
+                } catch (error) {
+                    state.sourceDetailsError = error.response?.data?.message
+                        ?? error.message
+                        ?? 'The source transaction details could not be loaded.';
+                } finally {
+                    state.sourceDetailsLoading = false;
+                }
+            },
+            isEditableSource: () => ['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(state.sourceModule),
+            isFormReadOnly: () => state.viewMode || state.deleteMode,
+            canEditPrimaryFields: () => !state.viewMode && !state.deleteMode && !state.sourceModule,
+            canEditRestrictedFields: () => !state.viewMode
+                && !state.deleteMode
+                && (!state.sourceModule || ['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(state.sourceModule)),
+            canEditPaidAmount: () => !state.viewMode
+                && !state.deleteMode
+                && state.sourceModule !== 'MaterialExport'
+                && (!state.sourceModule || ['PurchaseOrder', 'SalesOrder'].includes(state.sourceModule))
         };
 
         // UI Controls
@@ -250,7 +300,13 @@ const App = {
                 });
                 transactionTypeDropDown.obj.appendTo(transactionTypeRef.value);
             },
-            refresh: () => { if (transactionTypeDropDown.obj) transactionTypeDropDown.obj.value = state.transactionType; }
+            refresh: () => {
+                if (transactionTypeDropDown.obj) {
+                    transactionTypeDropDown.obj.value = state.transactionType;
+                    transactionTypeDropDown.obj.enabled = methods.canEditPrimaryFields();
+                    transactionTypeDropDown.obj.dataBind();
+                }
+            }
         };
 
         const cashAccountDropDown = {
@@ -264,7 +320,13 @@ const App = {
                 });
                 cashAccountDropDown.obj.appendTo(cashAccountRef.value);
             },
-            refresh: () => { if (cashAccountDropDown.obj) cashAccountDropDown.obj.value = state.cashAccountId; }
+            refresh: () => {
+                if (cashAccountDropDown.obj) {
+                    cashAccountDropDown.obj.value = state.cashAccountId;
+                    cashAccountDropDown.obj.enabled = methods.canEditPrimaryFields();
+                    cashAccountDropDown.obj.dataBind();
+                }
+            }
         };
 
         const cashCategoryDropDown = {
@@ -279,7 +341,13 @@ const App = {
                 });
                 cashCategoryDropDown.obj.appendTo(cashCategoryRef.value);
             },
-            refresh: () => { if (cashCategoryDropDown.obj) cashCategoryDropDown.obj.value = state.cashCategoryId; }
+            refresh: () => {
+                if (cashCategoryDropDown.obj) {
+                    cashCategoryDropDown.obj.value = state.cashCategoryId;
+                    cashCategoryDropDown.obj.enabled = methods.canEditRestrictedFields();
+                    cashCategoryDropDown.obj.dataBind();
+                }
+            }
         };
 
         const partnerDropDown = {
@@ -288,8 +356,8 @@ const App = {
                 partnerDropDown.obj = new ej.dropdowns.DropDownList({
                     dataSource: state.partnerList,
                     fields: { value: 'id', text: 'name' },
-                    placeholder: 'Chọn đối tác',
-                    filterBarPlaceholder: 'Tìm kiếm...',
+                    placeholder: 'Select Partner',
+                    filterBarPlaceholder: 'Search...',
                     allowFiltering: true,
                     showClearButton: true,
                     filtering: (e) => {
@@ -301,7 +369,13 @@ const App = {
                 });
                 partnerDropDown.obj.appendTo(partnerRef.value);
             },
-            refresh: () => { if (partnerDropDown.obj) partnerDropDown.obj.value = state.partnerId; }
+            refresh: () => {
+                if (partnerDropDown.obj) {
+                    partnerDropDown.obj.value = state.partnerId;
+                    partnerDropDown.obj.enabled = methods.canEditPrimaryFields();
+                    partnerDropDown.obj.dataBind();
+                }
+            }
         };
 
         const amountInput = {
@@ -315,7 +389,14 @@ const App = {
                 });
                 amountInput.obj.appendTo(amountRef.value);
             },
-            refresh: () => { if (amountInput.obj) amountInput.obj.value = state.amount; }
+            refresh: () => {
+                if (amountInput.obj) {
+                    amountInput.obj.value = state.amount;
+                    amountInput.obj.enabled = methods.canEditPrimaryFields();
+                    amountInput.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(amountInput.obj);
+                }
+            }
         };
 
         const transferDatePicker = {
@@ -375,14 +456,20 @@ const App = {
                 });
                 transferAmountInput.obj.appendTo(transferAmountRef.value);
             },
-            refresh: () => { if (transferAmountInput.obj) transferAmountInput.obj.value = state.transfer.amount; }
+            refresh: () => {
+                if (transferAmountInput.obj) {
+                    transferAmountInput.obj.value = state.transfer.amount;
+                    transferAmountInput.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(transferAmountInput.obj);
+                }
+            }
         };
 
         const paidAmountInput = {
             obj: null,
             create: () => {
                 paidAmountInput.obj = new ej.inputs.NumericTextBox({
-                    placeholder: 'Số tiền thanh toán',
+                    placeholder: 'Paid Amount',
                     format: 'N0',
                     min: 0,
                     max: state.amount || 0,
@@ -390,7 +477,15 @@ const App = {
                 });
                 paidAmountInput.obj.appendTo(paidAmountRef.value);
             },
-            refresh: () => { if (paidAmountInput.obj) paidAmountInput.obj.value = state.paidAmount; }
+            refresh: () => {
+                if (paidAmountInput.obj) {
+                    paidAmountInput.obj.value = state.paidAmount;
+                    paidAmountInput.obj.enabled = methods.canEditPaidAmount()
+                        && (!state.sourceModule || !!state.cashAccountId || Number(state.paidAmount ?? 0) === 0);
+                    paidAmountInput.obj.dataBind();
+                    NumberFormatManager.refreshNumericTextBox(paidAmountInput.obj);
+                }
+            }
         };
 
         Vue.watch(() => state.transactionDate, () => { state.errors.transactionDate = ''; transactionDatePicker.refresh(); });
@@ -400,16 +495,47 @@ const App = {
         Vue.watch(() => state.partnerId, () => { partnerDropDown.refresh(); });
         Vue.watch(() => state.amount, () => {
             state.errors.amount = '';
-            amountInput.refresh();
+            if (document.activeElement !== amountInput.obj?.element) {
+                amountInput.refresh();
+            }
             if (paidAmountInput.obj) {
                 paidAmountInput.obj.max = state.amount || 0;
             }
         });
-        Vue.watch(() => state.paidAmount, () => { state.errors.paidAmount = ''; paidAmountInput.refresh(); });
+        Vue.watch(() => state.paidAmount, () => {
+            state.errors.paidAmount = '';
+            if (document.activeElement !== paidAmountInput.obj?.element) {
+                paidAmountInput.refresh();
+            }
+        });
         Vue.watch(() => state.transfer.transferDate, () => { state.transfer.errors.transferDate = ''; transferDatePicker.refresh(); });
         Vue.watch(() => state.transfer.fromCashAccountId, () => { state.transfer.errors.fromCashAccountId = ''; fromAccountDropDown.refresh(); });
         Vue.watch(() => state.transfer.toCashAccountId, () => { state.transfer.errors.toCashAccountId = ''; toAccountDropDown.refresh(); });
-        Vue.watch(() => state.transfer.amount, () => { state.transfer.errors.amount = ''; transferAmountInput.refresh(); });
+        Vue.watch(() => state.transfer.amount, () => {
+            state.transfer.errors.amount = '';
+            if (document.activeElement !== transferAmountInput.obj?.element) {
+                transferAmountInput.refresh();
+            }
+        });
+
+        const refreshMainFormControls = () => {
+            if (transactionDatePicker.obj) {
+                transactionDatePicker.obj.enabled = methods.canEditPrimaryFields();
+                transactionDatePicker.obj.dataBind();
+            }
+            transactionTypeDropDown.refresh();
+            cashAccountDropDown.refresh();
+            cashCategoryDropDown.refresh();
+            partnerDropDown.refresh();
+            amountInput.refresh();
+            paidAmountInput.refresh();
+        };
+
+        const showMainModal = async () => {
+            await Vue.nextTick();
+            refreshMainFormControls();
+            mainModal.obj.show();
+        };
 
         const handler = {
             handleSubmit: async function () {
@@ -461,7 +587,6 @@ const App = {
                     if (response.data.code === 200) {
                         await methods.populateMainData();
                         await methods.populateCashAccountList();
-                        methods.refreshSummary();
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
@@ -477,6 +602,10 @@ const App = {
                             state.cashAccountId = data.cashAccountId;
                             state.cashCategoryId = data.cashCategoryId;
                             state.partnerId = data.customerId ? ('cust_' + data.customerId) : (data.vendorId ? ('vend_' + data.vendorId) : null);
+                            state.sourceModule = data.sourceModule ?? state.sourceModule;
+                            state.sourceModuleId = data.sourceModuleId ?? state.sourceModuleId;
+                            state.sourceModuleNumber = data.sourceModuleNumber ?? state.sourceModuleNumber;
+                            await methods.loadSourceDetails();
                         }
 
                         Swal.fire({
@@ -530,7 +659,6 @@ const App = {
                     if (response.data.code === 200) {
                         await methods.populateMainData();
                         await methods.populateCashAccountList();
-                        methods.refreshSummary();
                         mainGrid.refresh();
 
                         Swal.fire({
@@ -575,7 +703,6 @@ const App = {
                 await methods.populateCashCategoryList();
                 await methods.populatePartnerList();
                 await methods.populateMainData();
-                methods.refreshSummary();
                 await mainGrid.create(state.mainData);
 
                 transactionDatePicker.create();
@@ -591,7 +718,18 @@ const App = {
                 transferAmountInput.create();
                 mainModal.create();
                 transferModal.create();
-                mainModalRef.value?.addEventListener('hidden.bs.modal', () => { resetFormState(); });
+                mainModalRef.value?.addEventListener('shown.bs.modal', () => {
+                    refreshMainFormControls();
+                });
+                mainModalRef.value?.addEventListener('hidden.bs.modal', () => {
+                    resetFormState();
+                    requestAnimationFrame(() => {
+                        if (!mainGrid.obj?.isDestroyed) {
+                            mainGrid.obj.setProperties({ dataSource: state.mainData }, true);
+                            mainGrid.obj.refresh();
+                        }
+                    });
+                });
                 transferModalRef.value?.addEventListener('hidden.bs.modal', () => { resetTransferState(); });
 
             } catch (e) {
@@ -608,25 +746,25 @@ const App = {
                     allowFiltering: true, allowSorting: true, allowSelection: true, allowGrouping: true,
                     allowTextWrap: true, allowResizing: true, allowPaging: true, allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
-                    sortSettings: { columns: [{ field: 'transactionDate', direction: 'Descending' }] },
+                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true, showColumnMenu: true, gridLines: 'Horizontal',
                     columns: [
                         { type: 'checkbox', width: 60 },
                         { field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false },
-                        { field: 'number', headerText: 'Số chứng từ', width: 180, minWidth: 180 },
-                        { field: 'transactionDate', headerText: 'Ngày', width: 130, format: 'yyyy-MM-dd' },
-                        { field: 'transactionTypeName', headerText: 'Loại', width: 100, minWidth: 100 },
-                        { field: 'cashAccountName', headerText: 'Tài khoản', width: 180, minWidth: 180 },
-                        { field: 'cashCategoryName', headerText: 'Danh mục', width: 150, minWidth: 150 },
-                        { field: 'partnerName', headerText: 'Đối tác', width: 180, minWidth: 180 },
-                        { field: 'amount', headerText: 'Số tiền gốc', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'paidAmount', headerText: 'Đã thanh toán', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'description', headerText: 'Mô tả', width: 250, minWidth: 250 },
-                        { field: 'sourceModuleNumber', headerText: 'Nguồn', width: 130, minWidth: 130 },
-                        { field: 'statusName', headerText: 'Trạng thái', width: 120, minWidth: 120 },
-                        { field: 'createdAtUtc', headerText: 'Thời điểm tạo', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
+                        { field: 'transactionDate', headerText: 'Date', width: 130, format: 'yyyy-MM-dd' },
+                        { field: 'transactionTypeName', headerText: 'Type', width: 100, minWidth: 100 },
+                        { field: 'cashAccountName', headerText: 'Cash Account', width: 180, minWidth: 180 },
+                        { field: 'cashCategoryName', headerText: 'Cash Category', width: 150, minWidth: 150 },
+                        { field: 'partnerName', headerText: 'Partner', width: 180, minWidth: 180 },
+                        { field: 'amount', headerText: 'Original Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'paidAmount', headerText: 'Paid Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
+                        { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 },
+                        { field: 'statusName', headerText: 'Status', width: 120, minWidth: 120 },
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
                         {
@@ -635,17 +773,17 @@ const App = {
                                     type: 'Sum',
                                     field: 'amount',
                                     format: 'N0',
-                                    footerTemplate: 'T\u1ed5ng: ${Sum}',
-                                    groupFooterTemplate: 'T\u1ed5ng: ${Sum}',
-                                    groupCaptionTemplate: 'T\u1ed5ng: ${Sum}'
+                                    footerTemplate: 'Total: ${Sum}',
+                                    groupFooterTemplate: 'Total: ${Sum}',
+                                    groupCaptionTemplate: 'Total: ${Sum}'
                                 },
                                 {
                                     type: 'Sum',
                                     field: 'paidAmount',
                                     format: 'N0',
-                                    footerTemplate: 'T\u1ed5ng: ${Sum}',
-                                    groupFooterTemplate: 'T\u1ed5ng: ${Sum}',
-                                    groupCaptionTemplate: '\u0110\u00e3 TT: ${Sum}'
+                                    footerTemplate: 'Total: ${Sum}',
+                                    groupFooterTemplate: 'Total: ${Sum}',
+                                    groupCaptionTemplate: 'Paid: ${Sum}'
                                 }
                             ]
                         }
@@ -654,7 +792,7 @@ const App = {
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
-                        { text: 'Xem', tooltipText: 'Xem chi ti\u1ebft', prefixIcon: 'e-eye', id: 'ViewCustom' },
+                        { text: 'View', tooltipText: 'View details', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
@@ -671,11 +809,11 @@ const App = {
                         mainGrid.obj.toolbarModule.enableItems(['ViewCustom', 'EditCustom', 'DeleteCustom'], hasSelection);
                     },
                     rowSelecting: () => { if (mainGrid.obj.getSelectedRecords().length) mainGrid.obj.clearSelection(); },
-                    recordDoubleClick: (args) => {
+                    recordDoubleClick: async (args) => {
                         if (args.rowData) {
                             state.viewMode = true;
                             state.deleteMode = false;
-                            state.mainTitle = 'Xem giao d\u1ecbch';
+                            state.mainTitle = 'View Cash Transaction';
                             state.id = args.rowData.id ?? '';
                             state.number = args.rowData.number ?? '';
                             state.transactionDate = DateFormatManager.parseBusinessDate(args.rowData.transactionDate);
@@ -689,7 +827,8 @@ const App = {
                             state.sourceModule = args.rowData.sourceModule;
                             state.sourceModuleId = args.rowData.sourceModuleId;
                             state.sourceModuleNumber = args.rowData.sourceModuleNumber;
-                            mainModal.obj.show();
+                            await methods.loadSourceDetails();
+                            await showMainModal();
                         }
                     },
                     toolbarClick: async (args) => {
@@ -700,7 +839,7 @@ const App = {
                             state.mainTitle = 'Add Cash Transaction';
                             resetFormState();
                             state.transactionDate = DateFormatManager.parseBusinessDate(new Date());
-                            mainModal.obj.show();
+                            await showMainModal();
                         }
 
                         if (args.item.id === 'TransferCustom') {
@@ -714,7 +853,7 @@ const App = {
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Xem giao d\u1ecbch';
+                                state.mainTitle = 'View Cash Transaction';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
@@ -728,7 +867,8 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
-                                mainModal.obj.show();
+                                await methods.loadSourceDetails();
+                                await showMainModal();
                             }
                         }
 
@@ -737,14 +877,14 @@ const App = {
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                if (r.sourceModule === 'CashTransfer') {
+                                if (r.sourceModule && !['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(r.sourceModule)) {
                                     Swal.fire({
                                         icon: 'info',
-                                        text: 'Cash transfer legs cannot be edited. Delete the transfer and create a new one.'
+                                        text: 'Source-generated cash transactions are read-only.'
                                     });
                                     return;
                                 }
-                                state.mainTitle = 'S\u1eeda giao d\u1ecbch';
+                                state.mainTitle = 'Edit Cash Transaction';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
@@ -758,7 +898,8 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
-                                mainModal.obj.show();
+                                await methods.loadSourceDetails();
+                                await showMainModal();
                             }
                         }
 
@@ -767,7 +908,11 @@ const App = {
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'X\u00f3a chuy\u1ec3n kho\u1ea3n?' : 'X\u00f3a giao d\u1ecbch?';
+                                if (r.sourceModule && r.sourceModule !== 'CashTransfer') {
+                                    Swal.fire({ icon: 'info', text: 'Source-generated cash transactions cannot be deleted.' });
+                                    return;
+                                }
+                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'Delete Cash Transfer?' : 'Delete Cash Transaction?';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
                                 state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
@@ -778,7 +923,7 @@ const App = {
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
                                 state.partnerId = r.customerId ? ('cust_' + r.customerId) : (r.vendorId ? ('vend_' + r.vendorId) : null);
-                                mainModal.obj.show();
+                                await showMainModal();
                             }
                         }
                     }
@@ -806,7 +951,7 @@ const App = {
             mainGridRef, mainModalRef,
             transactionDateRef, transactionTypeRef, cashAccountRef, cashCategoryRef, partnerRef, amountRef, paidAmountRef,
             transferModalRef, transferDateRef, fromAccountRef, toAccountRef, transferAmountRef,
-            state, handler
+            state, handler, methods
         };
     }
 };

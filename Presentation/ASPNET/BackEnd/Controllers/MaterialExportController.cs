@@ -133,10 +133,15 @@ public class MaterialExportController : BaseApiController
     [HttpGet("GetWarehouseProductStock")]
     public async Task<ActionResult<ApiSuccessResult<GetWarehouseProductStockResult>>> GetWarehouseProductStockAsync(
         CancellationToken cancellationToken,
-        [FromQuery] string warehouseId
+        [FromQuery] string warehouseId,
+        [FromQuery] string? materialExportId = null
     )
     {
-        var request = new GetWarehouseProductStockRequest { WarehouseId = warehouseId };
+        var request = new GetWarehouseProductStockRequest
+        {
+            WarehouseId = warehouseId,
+            MaterialExportId = materialExportId
+        };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetWarehouseProductStockResult>

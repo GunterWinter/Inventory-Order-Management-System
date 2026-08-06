@@ -34,14 +34,54 @@ const QuickAddHelper = (() => {
     };
 
     const _restoreModalFocusTrap = () => {
-        _trappedModalInstances.forEach(modalInstance => {
+        const modalInstances = _trappedModalInstances;
+        _trappedModalInstances = [];
+        modalInstances.forEach(modalInstance => {
             try {
                 if (modalInstance._focustrap) {
                     modalInstance._focustrap.activate();
                 }
             } catch (e) { /* ignore */ }
         });
-        _trappedModalInstances = [];
+    };
+
+    const _completeQuickAdd = async (config, response, fallbackName) => {
+        const data = response?.data?.content?.data;
+        const newId = data?.id;
+        if (!newId) {
+            throw new Error('Quick Add API did not return the created entity id.');
+        }
+
+        if (typeof config.refreshLookup === 'function') {
+            await config.refreshLookup();
+        }
+
+        if (config.state && config.stateKey) {
+            config.state[config.stateKey] = newId;
+        }
+
+        const dropdownObj = config.dropdownObj;
+        const canUpdateDropdown = dropdownObj
+            && dropdownObj.isDestroyed !== true
+            && (!dropdownObj.element || dropdownObj.element.isConnected);
+        if (canUpdateDropdown) {
+            if (config.state && config.lookupKey) {
+                dropdownObj.dataSource = config.state[config.lookupKey] ?? [];
+            }
+            dropdownObj.dataBind?.();
+            dropdownObj.value = newId;
+            dropdownObj.dataBind?.();
+        }
+
+        const created = {
+            id: newId,
+            name: data?.name ?? fallbackName ?? '',
+            data
+        };
+        if (typeof config.onSuccess === 'function') {
+            await config.onSuccess(created);
+        }
+        return created;
     };
 
 
@@ -243,7 +283,7 @@ const QuickAddHelper = (() => {
      * After creation, refreshes the dropdown and auto-selects the new item.
      *
      * @param {Object} config
-     * @param {string} config.title - Popup title (e.g., 'Thêm nhanh Nhóm sản phẩm')
+     * @param {string} config.title - Popup title (e.g., 'Quick Add Product Group')
      * @param {string} config.apiUrl - API endpoint for creating the entity (e.g., '/ProductGroup/CreateProductGroup')
      * @param {Object} config.dropdownObj - Syncfusion DropDownList instance
      * @param {Function} config.refreshLookup - Async function to re-fetch lookup data
@@ -259,24 +299,24 @@ const QuickAddHelper = (() => {
             html:
                 '<div class="qa-form">' +
                 '<div class="qa-field">' +
-                '<label class="qa-label">Tên <span class="text-danger">*</span></label>' +
-                '<input id="swal-quick-add-name" class="qa-input" placeholder="Nhập tên...">' +
+                '<label class="qa-label">Name <span class="text-danger">*</span></label>' +
+                '<input id="swal-quick-add-name" class="qa-input" placeholder="Enter name...">' +
                 '</div>' +
                 '<div class="qa-field">' +
-                '<label class="qa-label">Diễn giải</label>' +
-                '<textarea id="swal-quick-add-description" class="qa-input" rows="2" placeholder="Mô tả..."></textarea>' +
+                '<label class="qa-label">Description</label>' +
+                '<textarea id="swal-quick-add-description" class="qa-input" rows="2" placeholder="Description..."></textarea>' +
                 '</div>' +
                 '</div>',
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
-            cancelButtonText: 'Hủy',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
+            cancelButtonText: 'Cancel',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('swal-quick-add-name').value.trim();
                 if (!name) {
-                    Swal.showValidationMessage('Tên không được để trống.');
+                    Swal.showValidationMessage('Name is required.');
                     return false;
                 }
                 const description = document.getElementById('swal-quick-add-description').value.trim();
@@ -292,7 +332,7 @@ const QuickAddHelper = (() => {
             }
         });
 
-        if (!result.isConfirmed || !result.value) return;
+        if (!result.isConfirmed || !result.value) return null;
 
         try {
             const response = await AxiosManager.post(apiUrl, {
@@ -301,38 +341,25 @@ const QuickAddHelper = (() => {
                 createdById: StorageManager.getUserId()
             });
 
-            const newId = response?.data?.content?.data?.id;
-
-            // Refresh lookup data
-            await refreshLookup();
-
-            // Set the new value and refresh dropdown
-            if (newId && state && stateKey) {
-                state[stateKey] = newId;
-            }
-            if (dropdownObj) {
-                dropdownObj.dataSource = state[lookupKey];
-                dropdownObj.dataBind();
-                if (newId) {
-                    dropdownObj.value = newId;
-                }
-            }
+            const created = await _completeQuickAdd(config, response, result.value.name);
 
             Swal.fire({
                 icon: 'success',
-                title: 'Đã thêm thành công!',
+                title: 'Added successfully!',
                 text: result.value.name,
                 timer: 1500,
                 showConfirmButton: false
             });
+            return created;
 
         } catch (error) {
             console.error('Quick add error:', error);
             Swal.fire({
                 icon: 'error',
-                title: 'Lỗi',
-                text: 'Không thể thêm mới. Vui lòng thử lại.'
+                title: 'Error',
+                text: 'The record could not be added. Please try again.'
             });
+            return null;
         }
     };
 
@@ -366,42 +393,42 @@ const QuickAddHelper = (() => {
         const catOptions = vendorCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Thêm nhanh Nhà cung cấp',
+            title: 'Quick Add Vendor',
             width: '700px',
             html: `
                 <div class="qa-form">
-                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Thông tin chính</div>
+                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-v-name" class="qa-input" placeholder="Tên NCC"></div>
-                        <div class="qa-field"><label class="qa-label">Nhóm NCC <span class="text-danger">*</span></label><select id="qa-v-group" class="qa-input"><option value="">-- Chọn --</option>${grpOptions}</select></div>
+                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-v-name" class="qa-input" placeholder="Vendor Name"></div>
+                        <div class="qa-field"><label class="qa-label">Vendor Group <span class="text-danger">*</span></label><select id="qa-v-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Loại NCC <span class="text-danger">*</span></label><select id="qa-v-category" class="qa-input"><option value="">-- Chọn --</option>${catOptions}</select></div>
-                        <div class="qa-field"><label class="qa-label">Diễn giải</label><input id="qa-v-desc" class="qa-input" placeholder="Mô tả"></div>
+                        <div class="qa-field"><label class="qa-label">Vendor Category <span class="text-danger">*</span></label><select id="qa-v-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select></div>
+                        <div class="qa-field"><label class="qa-label">Description</label><input id="qa-v-desc" class="qa-input" placeholder="Description"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Địa chỉ</div>
+                    <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Address</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Đường</label><input id="qa-v-street" class="qa-input"></div>
-                        <div class="qa-field"><label class="qa-label">Thành phố</label><input id="qa-v-city" class="qa-input"></div>
-                    </div>
-                    <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Tỉnh/Bang</label><input id="qa-v-state" class="qa-input"></div>
-                        <div class="qa-field"><label class="qa-label">Mã bưu chính</label><input id="qa-v-zip" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Street</label><input id="qa-v-street" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">City</label><input id="qa-v-city" class="qa-input"></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Quốc gia</label><input id="qa-v-country" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">State/Province</label><input id="qa-v-state" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Postal Code</label><input id="qa-v-zip" class="qa-input"></div>
+                    </div>
+                    <div class="qa-row">
+                        <div class="qa-field"><label class="qa-label">Country</label><input id="qa-v-country" class="qa-input"></div>
                         <div class="qa-field"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-phone-alt"></i> Liên hệ</div>
+                    <div class="qa-section-title"><i class="fas fa-phone-alt"></i> Contact</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Điện thoại</label><input id="qa-v-phone" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Phone</label><input id="qa-v-phone" class="qa-input"></div>
                         <div class="qa-field"><label class="qa-label">Fax</label><input id="qa-v-fax" class="qa-input"></div>
                     </div>
                     <div class="qa-row">
                         <div class="qa-field"><label class="qa-label">Email</label><input id="qa-v-email" class="qa-input"></div>
                         <div class="qa-field"><label class="qa-label">Website</label><input id="qa-v-website" class="qa-input"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-share-alt"></i> Mạng xã hội</div>
+                    <div class="qa-section-title"><i class="fas fa-share-alt"></i> Social Media</div>
                     <div class="qa-row">
                         <div class="qa-field qa-col-4"><label class="qa-label">WhatsApp</label><input id="qa-v-whatsapp" class="qa-input"></div>
                         <div class="qa-field qa-col-4"><label class="qa-label">LinkedIn</label><input id="qa-v-linkedin" class="qa-input"></div>
@@ -416,16 +443,16 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
-            cancelButtonText: 'Hủy',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
+            cancelButtonText: 'Cancel',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-v-name').value.trim();
                 const vendorGroupId = document.getElementById('qa-v-group').value || null;
                 const vendorCategoryId = document.getElementById('qa-v-category').value || null;
-                if (!name) { Swal.showValidationMessage('Tên NCC không được để trống.'); return false; }
-                if (!vendorGroupId) { Swal.showValidationMessage('Vui lòng chọn Nhóm NCC.'); return false; }
-                if (!vendorCategoryId) { Swal.showValidationMessage('Vui lòng chọn Loại NCC.'); return false; }
+                if (!name) { Swal.showValidationMessage('Vendor name is required.'); return false; }
+                if (!vendorGroupId) { Swal.showValidationMessage('Select a Vendor Group.'); return false; }
+                if (!vendorCategoryId) { Swal.showValidationMessage('Select a Vendor Category.'); return false; }
                 return {
                     name, vendorGroupId, vendorCategoryId,
                     description: document.getElementById('qa-v-desc').value.trim(),
@@ -456,22 +483,17 @@ const QuickAddHelper = (() => {
             }
         });
 
-        if (!result.isConfirmed || !result.value) return;
+        if (!result.isConfirmed || !result.value) return null;
 
         try {
             const response = await AxiosManager.post('/Vendor/CreateVendor', result.value);
-            const newId = response?.data?.content?.data?.id;
-            await refreshLookup();
-            if (newId && state && stateKey) { state[stateKey] = newId; }
-            if (dropdownObj) {
-                dropdownObj.dataSource = state[lookupKey];
-                dropdownObj.dataBind();
-                if (newId) dropdownObj.value = newId;
-            }
-            Swal.fire({ icon: 'success', title: 'Đã thêm NCC thành công!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            const created = await _completeQuickAdd(config, response, result.value.name);
+            Swal.fire({ icon: 'success', title: 'Vendor added successfully!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            return created;
         } catch (error) {
             console.error('Quick add vendor error:', error);
-            Swal.fire({ icon: 'error', title: 'Lỗi', text: error.response?.data?.message ?? 'Không thể thêm NCC. Vui lòng thử lại.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Vendor could not be added. Please try again.' });
+            return null;
         }
     };
 
@@ -496,42 +518,42 @@ const QuickAddHelper = (() => {
         const catOptions = customerCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Thêm nhanh Khách hàng',
+            title: 'Quick Add Customer',
             width: '700px',
             html: `
                 <div class="qa-form">
-                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Thông tin chính</div>
+                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-c-name" class="qa-input" placeholder="Tên KH"></div>
-                        <div class="qa-field"><label class="qa-label">Nhóm KH <span class="text-danger">*</span></label><select id="qa-c-group" class="qa-input"><option value="">-- Chọn --</option>${grpOptions}</select></div>
+                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-c-name" class="qa-input" placeholder="Customer Name"></div>
+                        <div class="qa-field"><label class="qa-label">Customer Group <span class="text-danger">*</span></label><select id="qa-c-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Loại KH <span class="text-danger">*</span></label><select id="qa-c-category" class="qa-input"><option value="">-- Chọn --</option>${catOptions}</select></div>
-                        <div class="qa-field"><label class="qa-label">Diễn giải</label><input id="qa-c-desc" class="qa-input" placeholder="Mô tả"></div>
+                        <div class="qa-field"><label class="qa-label">Customer Category <span class="text-danger">*</span></label><select id="qa-c-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select></div>
+                        <div class="qa-field"><label class="qa-label">Description</label><input id="qa-c-desc" class="qa-input" placeholder="Description"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Địa chỉ</div>
+                    <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Address</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Đường</label><input id="qa-c-street" class="qa-input"></div>
-                        <div class="qa-field"><label class="qa-label">Thành phố</label><input id="qa-c-city" class="qa-input"></div>
-                    </div>
-                    <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Tỉnh/Bang</label><input id="qa-c-state" class="qa-input"></div>
-                        <div class="qa-field"><label class="qa-label">Mã bưu chính</label><input id="qa-c-zip" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Street</label><input id="qa-c-street" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">City</label><input id="qa-c-city" class="qa-input"></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Quốc gia</label><input id="qa-c-country" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">State/Province</label><input id="qa-c-state" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Postal Code</label><input id="qa-c-zip" class="qa-input"></div>
+                    </div>
+                    <div class="qa-row">
+                        <div class="qa-field"><label class="qa-label">Country</label><input id="qa-c-country" class="qa-input"></div>
                         <div class="qa-field"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-phone-alt"></i> Liên hệ</div>
+                    <div class="qa-section-title"><i class="fas fa-phone-alt"></i> Contact</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Điện thoại</label><input id="qa-c-phone" class="qa-input"></div>
+                        <div class="qa-field"><label class="qa-label">Phone</label><input id="qa-c-phone" class="qa-input"></div>
                         <div class="qa-field"><label class="qa-label">Fax</label><input id="qa-c-fax" class="qa-input"></div>
                     </div>
                     <div class="qa-row">
                         <div class="qa-field"><label class="qa-label">Email</label><input id="qa-c-email" class="qa-input"></div>
                         <div class="qa-field"><label class="qa-label">Website</label><input id="qa-c-website" class="qa-input"></div>
                     </div>
-                    <div class="qa-section-title"><i class="fas fa-share-alt"></i> Mạng xã hội</div>
+                    <div class="qa-section-title"><i class="fas fa-share-alt"></i> Social Media</div>
                     <div class="qa-row">
                         <div class="qa-field qa-col-4"><label class="qa-label">WhatsApp</label><input id="qa-c-whatsapp" class="qa-input"></div>
                         <div class="qa-field qa-col-4"><label class="qa-label">LinkedIn</label><input id="qa-c-linkedin" class="qa-input"></div>
@@ -546,16 +568,16 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
-            cancelButtonText: 'Hủy',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
+            cancelButtonText: 'Cancel',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-c-name').value.trim();
                 const customerGroupId = document.getElementById('qa-c-group').value || null;
                 const customerCategoryId = document.getElementById('qa-c-category').value || null;
-                if (!name) { Swal.showValidationMessage('Tên KH không được để trống.'); return false; }
-                if (!customerGroupId) { Swal.showValidationMessage('Vui lòng chọn Nhóm KH.'); return false; }
-                if (!customerCategoryId) { Swal.showValidationMessage('Vui lòng chọn Loại KH.'); return false; }
+                if (!name) { Swal.showValidationMessage('Customer name is required.'); return false; }
+                if (!customerGroupId) { Swal.showValidationMessage('Select a Customer Group.'); return false; }
+                if (!customerCategoryId) { Swal.showValidationMessage('Select a Customer Category.'); return false; }
                 return {
                     name, customerGroupId, customerCategoryId,
                     description: document.getElementById('qa-c-desc').value.trim(),
@@ -586,22 +608,17 @@ const QuickAddHelper = (() => {
             }
         });
 
-        if (!result.isConfirmed || !result.value) return;
+        if (!result.isConfirmed || !result.value) return null;
 
         try {
             const response = await AxiosManager.post('/Customer/CreateCustomer', result.value);
-            const newId = response?.data?.content?.data?.id;
-            await refreshLookup();
-            if (newId && state && stateKey) { state[stateKey] = newId; }
-            if (dropdownObj) {
-                dropdownObj.dataSource = state[lookupKey];
-                dropdownObj.dataBind();
-                if (newId) dropdownObj.value = newId;
-            }
-            Swal.fire({ icon: 'success', title: 'Đã thêm KH thành công!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            const created = await _completeQuickAdd(config, response, result.value.name);
+            Swal.fire({ icon: 'success', title: 'Customer added successfully!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            return created;
         } catch (error) {
             console.error('Quick add customer error:', error);
-            Swal.fire({ icon: 'error', title: 'Lỗi', text: error.response?.data?.message ?? 'Không thể thêm KH. Vui lòng thử lại.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Customer could not be added. Please try again.' });
+            return null;
         }
     };
 
@@ -626,63 +643,63 @@ const QuickAddHelper = (() => {
         const whOptions = warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Thêm nhanh Sản phẩm',
+            title: 'Quick Add Product',
             width: '700px',
             html: `
                 <div class="qa-form">
-                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Thông tin chính</div>
+                    <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-p-name" class="qa-input" placeholder="Tên sản phẩm"></div>
-                        <div class="qa-field"><label class="qa-label">Mã Tham Khảo</label><input id="qa-p-refcode" class="qa-input" placeholder="Mã SKU"></div>
+                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-p-name" class="qa-input" placeholder="Product Name"></div>
+                        <div class="qa-field"><label class="qa-label">Reference Code</label><input id="qa-p-refcode" class="qa-input" placeholder="SKU Code"></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Nhóm Hàng Hóa <span class="text-danger">*</span></label><select id="qa-p-group" class="qa-input"><option value="">-- Chọn --</option>${pgOptions}</select></div>
-                        <div class="qa-field"><label class="qa-label">Đơn Vị Tính</label><input id="qa-p-unit" class="qa-input" placeholder="Cái, Hộp, Kg..."></div>
+                        <div class="qa-field"><label class="qa-label">Product Group <span class="text-danger">*</span></label><select id="qa-p-group" class="qa-input"><option value="">-- Select --</option>${pgOptions}</select></div>
+                        <div class="qa-field"><label class="qa-label">Unit Measure</label><input id="qa-p-unit" class="qa-input" placeholder="Piece, Box, Kg..."></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field qa-col-4"><label class="qa-label">Giá vốn</label><input id="qa-p-costprice" class="qa-input" type="number" min="0" value="0"></div>
-                        <div class="qa-field qa-col-4"><label class="qa-label">Giá bán</label><input id="qa-p-unitprice" class="qa-input" type="number" min="0" value="0"></div>
-                        <div class="qa-field qa-col-4"><label class="qa-label">Kho Hàng</label><select id="qa-p-warehouse" class="qa-input"><option value="">-- Chọn --</option>${whOptions}</select></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Warehouse</label><select id="qa-p-warehouse" class="qa-input"><option value="">-- Select --</option>${whOptions}</select></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Thời Gian Bảo Hành (Tháng)</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field"><label class="qa-label">Warranty Period (Months)</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
                         <div class="qa-field" style="display:flex;align-items:flex-end;">
                             <div class="qa-checkbox-wrapper">
                                 <input type="checkbox" id="qa-p-physical" checked>
-                                <label for="qa-p-physical">Là Hàng Hóa Vật Lý?</label>
+                                <label for="qa-p-physical">Is Physical Product?</label>
                             </div>
                         </div>
                     </div>
                     <div id="qa-p-serial-section" class="qa-field">
-                        <label class="qa-label">Kiểu Quản Lý Mã Thiết Bị</label>
+                        <label class="qa-label">Serial Tracking Mode</label>
                         <div class="qa-radio-group">
                             <div class="qa-radio-item">
                                 <input type="radio" name="qa-p-serial" id="qa-p-serial-auto" value="1" checked>
-                                <label for="qa-p-serial-auto">Tự Sinh Mã Nội Bộ</label>
+                                <label for="qa-p-serial-auto">Internal Auto</label>
                             </div>
                             <div class="qa-fixedcode-section" id="qa-p-fixedcode-section">
-                                <label class="qa-label">Mã Cố Định</label>
+                                <label class="qa-label">Fixed Code</label>
                                 <input id="qa-p-fixedcode" class="qa-input" maxlength="4" placeholder="CAM" value="CAM" style="width:120px;">
                             </div>
                         </div>
                     </div>
                     <div class="qa-field">
-                        <label class="qa-label">Diễn Giải</label>
-                        <textarea id="qa-p-desc" class="qa-input" rows="2" placeholder="Mô tả..."></textarea>
+                        <label class="qa-label">Description</label>
+                        <textarea id="qa-p-desc" class="qa-input" rows="2" placeholder="Description..."></textarea>
                     </div>
                 </div>`,
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
-            cancelButtonText: 'Hủy',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
+            cancelButtonText: 'Cancel',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-p-name').value.trim();
                 const productGroupId = document.getElementById('qa-p-group').value || null;
                 const unitMeasureName = document.getElementById('qa-p-unit').value.trim();
-                if (!name) { Swal.showValidationMessage('Tên sản phẩm không được để trống.'); return false; }
-                if (!productGroupId) { Swal.showValidationMessage('Vui lòng chọn Nhóm sản phẩm.'); return false; }
+                if (!name) { Swal.showValidationMessage('Product name is required.'); return false; }
+                if (!productGroupId) { Swal.showValidationMessage('Select a Product Group.'); return false; }
                 const physical = document.getElementById('qa-p-physical').checked;
                 const serialRadio = document.querySelector('input[name="qa-p-serial"]:checked');
                 const serialTrackingMode = physical ? (serialRadio ? parseInt(serialRadio.value) : 1) : 0;
@@ -718,22 +735,17 @@ const QuickAddHelper = (() => {
             }
         });
 
-        if (!result.isConfirmed || !result.value) return;
+        if (!result.isConfirmed || !result.value) return null;
 
         try {
             const response = await AxiosManager.post('/Product/CreateProduct', result.value);
-            const newId = response?.data?.content?.data?.id;
-            await refreshLookup();
-            if (newId && state && stateKey) { state[stateKey] = newId; }
-            if (dropdownObj) {
-                dropdownObj.dataSource = state[lookupKey];
-                dropdownObj.dataBind();
-                if (newId) dropdownObj.value = newId;
-            }
-            Swal.fire({ icon: 'success', title: 'Đã thêm sản phẩm thành công!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            const created = await _completeQuickAdd(config, response, result.value.name);
+            Swal.fire({ icon: 'success', title: 'Product added successfully!', text: result.value.name, timer: 1500, showConfirmButton: false });
+            return created;
         } catch (error) {
             console.error('Quick add product error:', error);
-            Swal.fire({ icon: 'error', title: 'Lỗi', text: error.response?.data?.message ?? 'Không thể thêm sản phẩm. Vui lòng thử lại.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Product could not be added. Please try again.' });
+            return null;
         }
     };
 

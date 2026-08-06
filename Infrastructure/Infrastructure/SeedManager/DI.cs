@@ -84,6 +84,7 @@ public static class DI
         services.AddScoped<ScrappingSeeder>();
         services.AddScoped<StockCountSeeder>();
         services.AddScoped<BatchCostingDemoSeeder>();
+        services.AddScoped<ProjectAllocationDemoSeeder>();
         services.AddScoped<CashManagementSeeder>();
         return services;
     }
@@ -142,6 +143,9 @@ public static class DI
 
             var batchCostingDemoSeeder = serviceProvider.GetRequiredService<BatchCostingDemoSeeder>();
             batchCostingDemoSeeder.GenerateDataAsync().Wait();
+
+            var projectAllocationDemoSeeder = serviceProvider.GetRequiredService<ProjectAllocationDemoSeeder>();
+            projectAllocationDemoSeeder.GenerateDataAsync().Wait();
 
             //var salesOrderSeeder = serviceProvider.GetRequiredService<SalesOrderSeeder>();
             //salesOrderSeeder.GenerateDataAsync().Wait();

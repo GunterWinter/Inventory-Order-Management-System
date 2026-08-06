@@ -4,10 +4,10 @@ namespace Domain.Enums;
 
 public enum CashTransactionStatus
 {
-    [Description("Chưa thanh toán")]
+    [Description("Unpaid")]
     Unpaid = 0,
-    [Description("Còn nợ")]
+    [Description("Partially Paid")]
     PartiallyPaid = 1,
-    [Description("Đã thanh toán")]
+    [Description("Paid")]
     Paid = 2
 }

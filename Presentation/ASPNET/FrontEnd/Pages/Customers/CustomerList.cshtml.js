@@ -580,6 +580,36 @@
         );
 
         const handler = {
+            quickAddCustomerGroup: async function () {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.simpleQuickAdd({
+                    title: 'Quick Add Customer Group',
+                    apiUrl: '/CustomerGroup/CreateCustomerGroup',
+                    dropdownObj: customerGroupListLookup.obj,
+                    refreshLookup: methods.populateCustomerGroupListLookupData,
+                    state,
+                    stateKey: 'customerGroupId',
+                    lookupKey: 'customerGroupListLookupData'
+                });
+            },
+            quickAddCustomerCategory: async function () {
+                if (typeof QuickAddHelper === 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                    return null;
+                }
+                return await QuickAddHelper.simpleQuickAdd({
+                    title: 'Quick Add Customer Category',
+                    apiUrl: '/CustomerCategory/CreateCustomerCategory',
+                    dropdownObj: customerCategoryListLookup.obj,
+                    refreshLookup: methods.populateCustomerCategoryListLookupData,
+                    state,
+                    stateKey: 'customerCategoryId',
+                    lookupKey: 'customerCategoryListLookupData'
+                });
+            },
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;

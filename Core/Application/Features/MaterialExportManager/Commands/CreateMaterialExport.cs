@@ -59,7 +59,7 @@ public class CreateMaterialExportHandler : IRequestHandler<CreateMaterialExportR
         entity.ExportDate = request.MaterialExportDate;
         entity.WarehouseId = request.WarehouseId;
         entity.CustomerId = request.CustomerId;
-        entity.Status = (MaterialExportStatus)int.Parse(request.Status!);
+        entity.Status = MaterialExportStatus.Draft;
         entity.Description = request.Description;
         
 

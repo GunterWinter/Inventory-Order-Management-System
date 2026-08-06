@@ -60,7 +60,7 @@
                     });
 
                     setTimeout(() => {
-                        window.location.href = '/Profiles/MyProfile';
+                        window.location.href = '/Dashboards/DefaultDashboard';
                     }, 2000);
                 } else {
                     Swal.fire({

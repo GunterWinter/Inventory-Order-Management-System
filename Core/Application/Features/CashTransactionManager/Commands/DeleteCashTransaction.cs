@@ -1,5 +1,6 @@
 using Application.Common.Repositories;
 using Application.Common.CQS.Queries;
+using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -30,21 +31,21 @@ public class DeleteCashTransactionValidator : AbstractValidator<DeleteCashTransa
 public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactionRequest, DeleteCashTransactionResult>
 {
     private readonly ICommandRepository<CashTransaction> _repository;
-    private readonly ICommandRepository<CashAccount> _accountRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly CashBalanceService _cashBalanceService;
 
     public DeleteCashTransactionHandler(
         ICommandRepository<CashTransaction> repository,
-        ICommandRepository<CashAccount> accountRepository,
         IQueryContext queryContext,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        CashBalanceService cashBalanceService
         )
     {
         _repository = repository;
-        _accountRepository = accountRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
+        _cashBalanceService = cashBalanceService;
     }
 
     public async Task<DeleteCashTransactionResult> Handle(DeleteCashTransactionRequest request, CancellationToken cancellationToken)
@@ -57,6 +58,11 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         }
 
         var cashAccountId = entity.CashAccountId;
+
+        if (!string.IsNullOrWhiteSpace(entity.SourceModule) && entity.SourceModule != "CashTransfer")
+        {
+            throw new Exception("Source-generated cash transactions are read-only.");
+        }
 
         entity.UpdatedById = request.DeletedById;
 
@@ -92,12 +98,12 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         // Recalculate balance for the affected account
         if (!string.IsNullOrEmpty(cashAccountId))
         {
-            await RecalculateAccountBalance(cashAccountId, cancellationToken);
+            await _cashBalanceService.RecalculateAsync(cashAccountId, cancellationToken);
         }
 
         if (!string.IsNullOrEmpty(siblingAccountId) && siblingAccountId != cashAccountId)
         {
-            await RecalculateAccountBalance(siblingAccountId, cancellationToken);
+            await _cashBalanceService.RecalculateAsync(siblingAccountId, cancellationToken);
         }
 
         return new DeleteCashTransactionResult
@@ -106,29 +112,4 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         };
     }
 
-    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
-    {
-        var account = await _accountRepository.GetAsync(cashAccountId, cancellationToken);
-        if (account == null) return;
-
-        var balances = await _queryContext
-            .CashTransaction
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
-            .GroupBy(x => 1)
-            .Select(g => new
-            {
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var initialBalance = account.InitialBalance ?? 0d;
-        var totalDebit = balances?.TotalDebit ?? 0d;
-        var totalCredit = balances?.TotalCredit ?? 0d;
-        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
-
-        _accountRepository.Update(account);
-        await _unitOfWork.SaveAsync(cancellationToken);
-    }
 }

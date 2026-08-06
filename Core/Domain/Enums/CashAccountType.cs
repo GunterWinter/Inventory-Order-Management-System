@@ -4,8 +4,8 @@ namespace Domain.Enums;
 
 public enum CashAccountType
 {
-    [Description("Tiền mặt")]
+    [Description("Cash")]
     Cash = 0,
-    [Description("Ngân hàng")]
+    [Description("Bank")]
     Bank = 1
 }

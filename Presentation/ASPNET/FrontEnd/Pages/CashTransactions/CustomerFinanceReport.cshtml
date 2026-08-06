@@ -6,23 +6,23 @@
 <div id="app" v-cloak>
     <div class="row mb-3">
         <div class="col-12">
-            <h3 class="mb-0">Finance Report</h3>
+            <h3 class="mb-0">Customer Profit Report</h3>
         </div>
     </div>
     <div class="row mb-3">
         <div class="col-md-4 mb-2">
             <div class="card">
                 <div class="card-body">
-                    <div class="text-muted">Total Received</div>
-                    <h4 class="mb-0">{{ state.summary.totalReceivedText }}</h4>
+                    <div class="text-muted">Actual Received</div>
+                    <h4 class="mb-0">{{ state.summary.actualReceivedText }}</h4>
                 </div>
             </div>
         </div>
         <div class="col-md-4 mb-2">
             <div class="card">
                 <div class="card-body">
-                    <div class="text-muted">Total Spent</div>
-                    <h4 class="mb-0">{{ state.summary.totalSpentText }}</h4>
+                    <div class="text-muted">Project Cost</div>
+                    <h4 class="mb-0">{{ state.summary.projectCostText }}</h4>
                 </div>
             </div>
         </div>
@@ -42,8 +42,8 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4 mb-2">
-                            <label for="Partner">Partner</label>
-                            <div id="PartnerDropDown" ref="partnerRef"></div>
+                            <label for="Customer">Partner</label>
+                            <div id="CustomerDropDown" ref="customerRef"></div>
                         </div>
                         <div class="col-md-3 mb-2">
                             <label for="FromDate">From Date</label>
@@ -57,7 +57,11 @@
                             <button type="button" class="btn btn-secondary w-100" v-on:click="handler.handleClearFilters">Clear Filters</button>
                         </div>
                     </div>
-                    <div class="text-muted small">Only confirmed transactions linked to a partner are included.</div>
+                    <div class="text-muted small">Only paid amounts from customer-linked transactions are included. Vendor obligations are excluded.</div>
+                    <div v-if="state.error" class="alert alert-warning mt-3 mb-0">
+                        <span>{{ state.error }}</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" v-on:click="handler.handleRetry">Retry</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -73,5 +77,5 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js"></script>
+    <script src="~/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js?v=20260806-2"></script>
 }

@@ -21,5 +21,7 @@ public enum ProductSerialStatus
     [Description("Scrapped")]
     Scrapped = 7,
     [Description("Returned By Customer")]
-    ReturnedByCustomer = 8
+    ReturnedByCustomer = 8,
+    [Description("Exported")]
+    Exported = 9
 }

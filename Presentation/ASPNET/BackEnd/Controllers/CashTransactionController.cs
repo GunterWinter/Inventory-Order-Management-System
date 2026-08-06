@@ -125,6 +125,29 @@ public class CashTransactionController : BaseApiController
     }
 
     [Authorize]
+    [HttpGet("GetCustomerProfitReport")]
+    public async Task<ActionResult<ApiSuccessResult<GetCustomerProfitReportResult>>> GetCustomerProfitReportAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string? customerId = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+    {
+        var response = await _sender.Send(new GetCustomerProfitReportRequest
+        {
+            CustomerId = customerId,
+            FromDate = fromDate,
+            ToDate = toDate
+        }, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetCustomerProfitReportResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetCustomerProfitReportAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
     [HttpGet("GetCashTransactionCostAllocations")]
     public async Task<ActionResult<ApiSuccessResult<GetCashTransactionCostAllocationsResult>>> GetCashTransactionCostAllocationsAsync(
         CancellationToken cancellationToken,

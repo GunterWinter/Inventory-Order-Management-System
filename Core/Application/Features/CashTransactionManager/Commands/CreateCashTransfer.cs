@@ -4,8 +4,7 @@ using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
-using Application.Common.CQS.Queries;
+using Application.Features.CashTransactionManager;
 
 namespace Application.Features.CashTransactionManager.Commands;
 
@@ -44,23 +43,23 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
 {
     private readonly ICommandRepository<CashTransaction> _repository;
     private readonly ICommandRepository<CashAccount> _accountRepository;
-    private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
+    private readonly CashBalanceService _cashBalanceService;
 
     public CreateCashTransferHandler(
         ICommandRepository<CashTransaction> repository,
         ICommandRepository<CashAccount> accountRepository,
-        IQueryContext queryContext,
         IUnitOfWork unitOfWork,
-        NumberSequenceService numberSequenceService
+        NumberSequenceService numberSequenceService,
+        CashBalanceService cashBalanceService
         )
     {
         _repository = repository;
         _accountRepository = accountRepository;
-        _queryContext = queryContext;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
+        _cashBalanceService = cashBalanceService;
     }
 
     public async Task<CreateCashTransferResult> Handle(CreateCashTransferRequest request, CancellationToken cancellationToken = default)
@@ -122,8 +121,9 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
         await _repository.CreateAsync(destinationLeg, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        await RecalculateAccountBalance(request.FromCashAccountId!, cancellationToken);
-        await RecalculateAccountBalance(request.ToCashAccountId!, cancellationToken);
+        await _cashBalanceService.RecalculateManyAsync(
+            new[] { request.FromCashAccountId, request.ToCashAccountId },
+            cancellationToken);
 
         return new CreateCashTransferResult
         {
@@ -132,29 +132,4 @@ public class CreateCashTransferHandler : IRequestHandler<CreateCashTransferReque
         };
     }
 
-    private async Task RecalculateAccountBalance(string cashAccountId, CancellationToken cancellationToken)
-    {
-        var account = await _accountRepository.GetAsync(cashAccountId, cancellationToken);
-        if (account == null) return;
-
-        var balances = await _queryContext
-            .CashTransaction
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.CashAccountId == cashAccountId)
-            .GroupBy(x => 1)
-            .Select(g => new
-            {
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount ?? 0d)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var initialBalance = account.InitialBalance ?? 0d;
-        var totalDebit = balances?.TotalDebit ?? 0d;
-        var totalCredit = balances?.TotalCredit ?? 0d;
-        account.CurrentBalance = initialBalance + totalDebit - totalCredit;
-
-        _accountRepository.Update(account);
-        await _unitOfWork.SaveAsync(cancellationToken);
-    }
 }
