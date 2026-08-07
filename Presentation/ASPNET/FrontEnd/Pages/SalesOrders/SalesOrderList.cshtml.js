@@ -2188,7 +2188,7 @@ const App = {
                             <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Paid</div><div class="fw-bold text-success mt-1">${NumberFormatManager.formatToLocale(paidAmountValue)}</div></div></div>
                             <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Remaining</div><div class="fw-bold text-danger mt-1">${NumberFormatManager.formatToLocale(remainingAmountValue)}</div></div></div>
                         </div>
-                        <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select"><option value="">Select Cash Account</option>${accountOptions}</select><div class="form-text">Changing the account updates this transaction; it does not create another transaction.</div></div>
+                        <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select"><option value="">Select Cash Account</option>${accountOptions}</select></div>
                         <div class="mb-3"><label class="form-label fw-bold">Paid Amount</label><input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatToLocale(paidAmountValue)}"></div>
                         <div class="mb-0"><label class="form-label fw-bold">Description</label><textarea id="swal-desc" class="form-control" rows="2">${escapeHtml(displayDescription)}</textarea></div>
                     </div>

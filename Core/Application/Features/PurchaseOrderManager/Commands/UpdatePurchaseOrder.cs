@@ -37,16 +37,19 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
     private readonly ICommandRepository<PurchaseOrder> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PurchaseOrderService _purchaseOrderService;
+    private readonly ISender _sender;
 
     public UpdatePurchaseOrderHandler(
         ICommandRepository<PurchaseOrder> repository,
         IUnitOfWork unitOfWork,
-        PurchaseOrderService purchaseOrderService
+        PurchaseOrderService purchaseOrderService,
+        ISender sender
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _purchaseOrderService = purchaseOrderService;
+        _sender = sender;
     }
 
     public async Task<UpdatePurchaseOrderResult> Handle(UpdatePurchaseOrderRequest request, CancellationToken cancellationToken)
@@ -76,10 +79,23 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
             cancellationToken
         );
 
+        // Auto-allocate all items to Kho (customerId = null) when PO is Confirmed.
+        // Empty items list = handler defaults everything to Kho and creates CashTransaction.
+        if (entity.OrderStatus == PurchaseOrderStatus.Confirmed)
+        {
+            await _sender.Send(new AllocatePurchaseOrderCostsRequest
+            {
+                PurchaseOrderId = entity.Id,
+                Items = new List<AllocatePurchaseOrderCostsItem>(),
+                CreatedById = request.UpdatedById
+            }, cancellationToken);
+        }
+
         return new UpdatePurchaseOrderResult
         {
             Data = entity
         };
     }
 }
+
 

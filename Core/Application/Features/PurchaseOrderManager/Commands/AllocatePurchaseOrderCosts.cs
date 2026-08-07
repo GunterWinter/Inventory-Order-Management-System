@@ -344,6 +344,8 @@ public class AllocatePurchaseOrderCostsHandler
                 }
             }
 
+            await _unitOfWork.SaveAsync(ct);
+
             var totalAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? 0d);
             var isNewObligation = obligation == null;
             if (isNewObligation)

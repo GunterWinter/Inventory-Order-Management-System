@@ -1635,6 +1635,7 @@ const App = {
                         { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                         { type: 'Separator' },
                         { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
+                        { text: 'Add Product', tooltipText: 'Quick Add Product', prefixIcon: 'e-plus', id: 'QuickAddProductBtn' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
@@ -1688,6 +1689,24 @@ const App = {
                                 warehouseObj.dataBind();
                                 warehouseObj.value = created.id;
                                 warehouseObj.dataBind();
+                            }
+                        }
+
+                        if (args.item.id === 'QuickAddProductBtn') {
+                            if (typeof QuickAddHelper === 'undefined') {
+                                Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
+                                return;
+                            }
+                            const created = await QuickAddHelper.complexQuickAddProduct({
+                                refreshLookup: methods.populateProductListLookupData,
+                                state: state,
+                                lookupKey: 'productListLookupData'
+                            });
+                            if (created && productObj && productObj.isDestroyed !== true) {
+                                productObj.dataSource = state.productListLookupData;
+                                productObj.dataBind();
+                                productObj.value = created.id;
+                                productObj.dataBind();
                             }
                         }
                     },
@@ -1834,7 +1853,8 @@ const App = {
                         { type: 'Separator' },
                         { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                         { type: 'Separator' },
-                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
+                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
+                        { text: 'Add Product', tooltipText: 'Quick Add Product', prefixIcon: 'e-plus', id: 'QuickAddProductBtn' }
                     ]
                 });
             }
@@ -2263,7 +2283,7 @@ const App = {
                 .join('');
             const accountIsLocked = Boolean(existingCashAccountId);
             const accountHelpText = accountIsLocked
-                ? '<div class="form-text">All installments for this transaction use the account selected on its first payment.</div>'
+                ? '<div class="form-text"></div>'
                 : '';
             const statusHtml = ``; // Status is auto-calculated by backend now
             const descHtml = isSplit

@@ -662,7 +662,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field qa-col-4"><label class="qa-label">Warehouse</label><select id="qa-p-warehouse" class="qa-input"><option value="">-- Select --</option>${whOptions}</select></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Warranty Period (Months)</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field"><label class="qa-label">Warranty Months</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
                         <div class="qa-field" style="display:flex;align-items:flex-end;">
                             <div class="qa-checkbox-wrapper">
                                 <input type="checkbox" id="qa-p-physical" checked>
@@ -671,11 +671,11 @@ const QuickAddHelper = (() => {
                         </div>
                     </div>
                     <div id="qa-p-serial-section" class="qa-field">
-                        <label class="qa-label">Serial Tracking Mode</label>
+                        <label class="qa-label">Device Code Management</label>
                         <div class="qa-radio-group">
                             <div class="qa-radio-item">
                                 <input type="radio" name="qa-p-serial" id="qa-p-serial-auto" value="1" checked>
-                                <label for="qa-p-serial-auto">Internal Auto</label>
+                                <label for="qa-p-serial-auto">Auto-generate Internal Code</label>
                             </div>
                             <div class="qa-fixedcode-section" id="qa-p-fixedcode-section">
                                 <label class="qa-label">Fixed Code</label>
