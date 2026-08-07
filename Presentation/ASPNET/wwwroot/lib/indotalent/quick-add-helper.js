@@ -84,6 +84,84 @@ const QuickAddHelper = (() => {
         return created;
     };
 
+    /**
+     * Attaches an inline quick-add form to a dropdown inside a SweetAlert2 popup.
+     * @param {string} btnId - ID of the + button
+     * @param {string} selectId - ID of the target <select> element
+     * @param {string} apiUrl - API endpoint to create the record
+     */
+    const _attachInlineQuickAdd = (btnId, selectId, apiUrl) => {
+        const btn = document.getElementById(btnId);
+        const select = document.getElementById(selectId);
+        if (!btn || !select) return;
+
+        const wrapper = select.closest('.quick-add-wrapper');
+        const fieldContainer = wrapper.parentElement;
+
+        const inlineForm = document.createElement('div');
+        inlineForm.className = 'qa-inline-form';
+        inlineForm.innerHTML = `
+            <input type="text" class="qa-input inline-name" placeholder="Name *">
+            <input type="text" class="qa-input inline-desc" placeholder="Description">
+            <div class="d-flex gap-2 mt-1">
+                <button type="button" class="btn btn-sm btn-success inline-save"><i class="fas fa-check"></i></button>
+                <button type="button" class="btn btn-sm btn-secondary inline-cancel"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+        fieldContainer.appendChild(inlineForm);
+
+        const nameInput = inlineForm.querySelector('.inline-name');
+        const descInput = inlineForm.querySelector('.inline-desc');
+        const saveBtn = inlineForm.querySelector('.inline-save');
+        const cancelBtn = inlineForm.querySelector('.inline-cancel');
+
+        btn.addEventListener('click', () => {
+            wrapper.style.display = 'none';
+            inlineForm.style.display = 'block';
+            nameInput.value = '';
+            descInput.value = '';
+            nameInput.focus();
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            inlineForm.style.display = 'none';
+            wrapper.style.display = 'flex';
+        });
+
+        saveBtn.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                nameInput.style.borderColor = 'red';
+                return;
+            }
+            nameInput.style.borderColor = '';
+
+            try {
+                saveBtn.disabled = true;
+                const response = await AxiosManager.post(apiUrl, {
+                    name,
+                    description: descInput.value.trim(),
+                    createdById: StorageManager.getUserId()
+                });
+                const data = response?.data?.content?.data;
+                const newId = data?.id;
+                if (newId) {
+                    const option = document.createElement('option');
+                    option.value = newId;
+                    option.textContent = data.name || name;
+                    select.appendChild(option);
+                    select.value = newId;
+                }
+                inlineForm.style.display = 'none';
+                wrapper.style.display = 'flex';
+            } catch (error) {
+                console.error('Inline quick add error', error);
+                alert('Error creating record.');
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+    };
 
     // Inject CSS once
     const _injectCss = (() => {
@@ -273,6 +351,25 @@ const QuickAddHelper = (() => {
                         flex: 1;
                     }
                 }
+                /* Inline Quick Add inside Swal forms */
+                .qa-inline-form {
+                    display: none;
+                    margin-top: 4px;
+                    padding: 8px;
+                    background-color: #f8f9fa;
+                    border: 1px solid #ced4da;
+                    border-radius: 4px;
+                }
+                .qa-inline-form .qa-input {
+                    height: 30px;
+                    font-size: 0.8rem;
+                    padding: 4px 8px;
+                    margin-bottom: 4px;
+                }
+                .qa-inline-form .btn-sm {
+                    padding: 2px 8px;
+                    font-size: 0.8rem;
+                }
             `;
             document.head.appendChild(style);
         };
@@ -400,10 +497,22 @@ const QuickAddHelper = (() => {
                     <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
                         <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-v-name" class="qa-input" placeholder="Vendor Name"></div>
-                        <div class="qa-field"><label class="qa-label">Vendor Group <span class="text-danger">*</span></label><select id="qa-v-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select></div>
+                        <div class="qa-field">
+                            <label class="qa-label">Vendor Group <span class="text-danger">*</span></label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-v-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select>
+                                <button type="button" id="qa-v-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Vendor Category <span class="text-danger">*</span></label><select id="qa-v-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select></div>
+                        <div class="qa-field">
+                            <label class="qa-label">Vendor Category <span class="text-danger">*</span></label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-v-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select>
+                                <button type="button" id="qa-v-category-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                         <div class="qa-field"><label class="qa-label">Description</label><input id="qa-v-desc" class="qa-input" placeholder="Description"></div>
                     </div>
                     <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Address</div>
@@ -477,6 +586,8 @@ const QuickAddHelper = (() => {
             didOpen: () => {
                 _disableModalFocusTrap();
                 document.getElementById('qa-v-name')?.focus();
+                _attachInlineQuickAdd('qa-v-group-add', 'qa-v-group', '/VendorGroup/CreateVendorGroup');
+                _attachInlineQuickAdd('qa-v-category-add', 'qa-v-category', '/VendorCategory/CreateVendorCategory');
             },
             willClose: () => {
                 _restoreModalFocusTrap();
@@ -525,10 +636,22 @@ const QuickAddHelper = (() => {
                     <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
                         <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-c-name" class="qa-input" placeholder="Customer Name"></div>
-                        <div class="qa-field"><label class="qa-label">Customer Group <span class="text-danger">*</span></label><select id="qa-c-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select></div>
+                        <div class="qa-field">
+                            <label class="qa-label">Customer Group <span class="text-danger">*</span></label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-c-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select>
+                                <button type="button" id="qa-c-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Customer Category <span class="text-danger">*</span></label><select id="qa-c-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select></div>
+                        <div class="qa-field">
+                            <label class="qa-label">Customer Category <span class="text-danger">*</span></label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-c-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select>
+                                <button type="button" id="qa-c-category-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                         <div class="qa-field"><label class="qa-label">Description</label><input id="qa-c-desc" class="qa-input" placeholder="Description"></div>
                     </div>
                     <div class="qa-section-title"><i class="fas fa-map-marker-alt"></i> Address</div>
@@ -602,6 +725,8 @@ const QuickAddHelper = (() => {
             didOpen: () => {
                 _disableModalFocusTrap();
                 document.getElementById('qa-c-name')?.focus();
+                _attachInlineQuickAdd('qa-c-group-add', 'qa-c-group', '/CustomerGroup/CreateCustomerGroup');
+                _attachInlineQuickAdd('qa-c-category-add', 'qa-c-category', '/CustomerCategory/CreateCustomerCategory');
             },
             willClose: () => {
                 _restoreModalFocusTrap();
@@ -653,13 +778,25 @@ const QuickAddHelper = (() => {
                         <div class="qa-field"><label class="qa-label">Reference Code</label><input id="qa-p-refcode" class="qa-input" placeholder="SKU Code"></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Product Group <span class="text-danger">*</span></label><select id="qa-p-group" class="qa-input"><option value="">-- Select --</option>${pgOptions}</select></div>
+                        <div class="qa-field">
+                            <label class="qa-label">Product Group <span class="text-danger">*</span></label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-p-group" class="qa-input"><option value="">-- Select --</option>${pgOptions}</select>
+                                <button type="button" id="qa-p-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                         <div class="qa-field"><label class="qa-label">Unit Measure</label><input id="qa-p-unit" class="qa-input" placeholder="Piece, Box, Kg..."></div>
                     </div>
                     <div class="qa-row">
                         <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="number" min="0" value="0"></div>
                         <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="number" min="0" value="0"></div>
-                        <div class="qa-field qa-col-4"><label class="qa-label">Warehouse</label><select id="qa-p-warehouse" class="qa-input"><option value="">-- Select --</option>${whOptions}</select></div>
+                        <div class="qa-field qa-col-4">
+                            <label class="qa-label">Warehouse</label>
+                            <div class="quick-add-wrapper">
+                                <select id="qa-p-warehouse" class="qa-input"><option value="">-- Select --</option>${whOptions}</select>
+                                <button type="button" id="qa-p-warehouse-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
                     </div>
                     <div class="qa-row">
                         <div class="qa-field"><label class="qa-label">Warranty Months</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
@@ -721,6 +858,9 @@ const QuickAddHelper = (() => {
             didOpen: () => {
                 _disableModalFocusTrap();
                 document.getElementById('qa-p-name')?.focus();
+                _attachInlineQuickAdd('qa-p-group-add', 'qa-p-group', '/ProductGroup/CreateProductGroup');
+                _attachInlineQuickAdd('qa-p-warehouse-add', 'qa-p-warehouse', '/Warehouse/CreateWarehouse');
+
                 // Toggle serial section visibility based on physical checkbox
                 const physCb = document.getElementById('qa-p-physical');
                 const serialSection = document.getElementById('qa-p-serial-section');

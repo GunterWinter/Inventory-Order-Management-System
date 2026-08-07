@@ -108,9 +108,7 @@ const App = {
 
                     const response = state.id === ''
                         ? await services.createMainData(state.name, state.description, StorageManager.getUserId())
-                        : state.deleteMode
-                            ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.description, StorageManager.getUserId());
+                        : await services.updateMainData(state.id, state.name, state.description, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
@@ -118,7 +116,7 @@ const App = {
 
                         Swal.fire({
                             icon: 'success',
-                            title: state.deleteMode ? 'Delete Successful' : 'Save Successful',
+                            title: 'Lưu thành công',
                             text: 'Form will be closed...',
                             timer: 2000,
                             showConfirmButton: false
@@ -130,7 +128,7 @@ const App = {
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
+                            title: 'Lưu thất bại',
                             text: response.data.message ?? 'Please check your data.',
                             confirmButtonText: 'Try Again'
                         });
@@ -246,14 +244,52 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete Vendor Group?';
-                                state.id = selectedRecord.id ?? '';
-                                state.name = selectedRecord.name ?? '';
-                                state.description = selectedRecord.description ?? '';
-                                mainModal.obj.show();
+                                Swal.fire({
+                                    title: 'Xóa Nhóm Nhà Cung Cấp?',
+                                    text: `Bạn có chắc chắn muốn xóa nhóm nhà cung cấp: ${selectedRecord.name}?`,
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#d33',
+                                    cancelButtonColor: '#3085d6',
+                                    confirmButtonText: 'Đồng ý',
+                                    cancelButtonText: 'Hủy',
+                                    heightAuto: false
+                                }).then(async (result) => {
+                                    if (result.isConfirmed) {
+                                        try {
+                                            const response = await services.deleteMainData(selectedRecord.id, StorageManager.getUserId());
+                                            if (response.data.code === 200) {
+                                                Swal.fire({
+                                                    icon: 'success',
+                                                    title: 'Xóa thành công',
+                                                    showConfirmButton: false,
+                                                    timer: 2000,
+                                                    heightAuto: false
+                                                });
+                                                await methods.populateMainData();
+                                                mainGrid.refresh();
+                                            } else {
+                                                Swal.fire({
+                                                    icon: 'error',
+                                                    title: 'Xóa thất bại',
+                                                    text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                                    confirmButtonText: 'Thử lại',
+                                                    heightAuto: false
+                                                });
+                                            }
+                                        } catch (error) {
+                                            Swal.fire({
+                                                icon: 'error',
+                                                title: 'Đã xảy ra lỗi',
+                                                text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                                confirmButtonText: 'Đồng ý',
+                                                heightAuto: false
+                                            });
+                                        }
+                                    }
+                                });
                             }
                         }
                     }

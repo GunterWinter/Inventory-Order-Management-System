@@ -298,54 +298,37 @@ const App = {
 
                     const response = state.id === ''
                         ? await services.createMainData(state.name, state.jobTitle, state.phoneNumber, state.emailAddress, state.description, state.vendorId, StorageManager.getUserId())
-                        : state.deleteMode
-                            ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.jobTitle, state.phoneNumber, state.emailAddress, state.description, state.vendorId, StorageManager.getUserId());
+                        : await services.updateMainData(state.id, state.name, state.jobTitle, state.phoneNumber, state.emailAddress, state.description, state.vendorId, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
                         mainGrid.refresh();
 
-                        if (!state.deleteMode) {
-                            state.mainTitle = 'Edit Vendor Contact';
-                            state.id = response?.data?.content?.data.id ?? '';
-                            state.number = response?.data?.content?.data.number ?? '';
-                            state.name = response?.data?.content?.data.name ?? '';
-                            state.jobTitle = response?.data?.content?.data.jobTitle ?? '';
-                            state.phoneNumber = response?.data?.content?.data.phoneNumber ?? '';
-                            state.emailAddress = response?.data?.content?.data.emailAddress ?? '';
-                            state.description = response?.data?.content?.data.description ?? '';
-                            state.vendorId = response?.data?.content?.data.vendorId ?? '';
+                        state.mainTitle = 'Edit Vendor Contact';
+                        state.id = response?.data?.content?.data.id ?? '';
+                        state.number = response?.data?.content?.data.number ?? '';
+                        state.name = response?.data?.content?.data.name ?? '';
+                        state.jobTitle = response?.data?.content?.data.jobTitle ?? '';
+                        state.phoneNumber = response?.data?.content?.data.phoneNumber ?? '';
+                        state.emailAddress = response?.data?.content?.data.emailAddress ?? '';
+                        state.description = response?.data?.content?.data.description ?? '';
+                        state.vendorId = response?.data?.content?.data.vendorId ?? '';
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: state.deleteMode ? 'Delete Successful' : 'Save Successful',
-                                text: 'Form will be closed...',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                            setTimeout(() => {
-                                mainModal.obj.hide();
-                            }, 2000);
-
-                        } else {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Delete Successful',
-                                text: 'Form will be closed...',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-                            setTimeout(() => {
-                                mainModal.obj.hide();
-                                resetFormState();
-                            }, 2000);
-                        }
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Lưu thành công',
+                            text: 'Form will be closed...',
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                        setTimeout(() => {
+                            mainModal.obj.hide();
+                        }, 2000);
 
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
+                            title: 'Lưu thất bại',
                             text: response.data.message ?? 'Please check your data.',
                             confirmButtonText: 'Try Again'
                         });
@@ -504,19 +487,52 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete Vendor Contact?';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.name = selectedRecord.name ?? '';
-                                state.jobTitle = selectedRecord.jobTitle ?? '';
-                                state.phoneNumber = selectedRecord.phoneNumber ?? '';
-                                state.emailAddress = selectedRecord.emailAddress ?? '';
-                                state.description = selectedRecord.description ?? '';
-                                state.vendorId = selectedRecord.vendorId ?? '';
-                                mainModal.obj.show();
+                                Swal.fire({
+                                    title: 'Xóa Liên Hệ?',
+                                    text: `Bạn có chắc chắn muốn xóa liên hệ: ${selectedRecord.name}?`,
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#d33',
+                                    cancelButtonColor: '#3085d6',
+                                    confirmButtonText: 'Đồng ý',
+                                    cancelButtonText: 'Hủy',
+                                    heightAuto: false
+                                }).then(async (result) => {
+                                    if (result.isConfirmed) {
+                                        try {
+                                            const response = await services.deleteMainData(selectedRecord.id, StorageManager.getUserId());
+                                            if (response.data.code === 200) {
+                                                Swal.fire({
+                                                    icon: 'success',
+                                                    title: 'Xóa thành công',
+                                                    showConfirmButton: false,
+                                                    timer: 2000,
+                                                    heightAuto: false
+                                                });
+                                                await methods.populateMainData();
+                                                mainGrid.refresh();
+                                            } else {
+                                                Swal.fire({
+                                                    icon: 'error',
+                                                    title: 'Xóa thất bại',
+                                                    text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                                    confirmButtonText: 'Thử lại',
+                                                    heightAuto: false
+                                                });
+                                            }
+                                        } catch (error) {
+                                            Swal.fire({
+                                                icon: 'error',
+                                                title: 'Đã xảy ra lỗi',
+                                                text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                                confirmButtonText: 'Đồng ý',
+                                                heightAuto: false
+                                            });
+                                        }
+                                    }
+                                });
                             }
                         }
                     }
