@@ -56,6 +56,9 @@ public class GetPurchaseOrderSingleHandler : IRequestHandler<GetPurchaseOrderSin
                 .ThenInclude(x => x.Warehouse)
             .Include(x => x.PurchaseOrderItemList.Where(item => !item.IsDeleted))
                 .ThenInclude(x => x.Tax)
+            .Include(x => x.PurchaseOrderItemList.Where(item => !item.IsDeleted))
+                .ThenInclude(x => x.CostAllocations.Where(a => !a.IsDeleted))
+                .ThenInclude(a => a.Customer)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

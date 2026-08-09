@@ -18,7 +18,6 @@ public record GetSalesOrderItemBySalesOrderIdListDto
     public string? ProductReferenceCode { get; init; }
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
-    public string? BatchNumber { get; init; }
     public int? WarrantyMonths { get; init; }
     public string? Summary { get; init; }
     public string? TaxId { get; init; }

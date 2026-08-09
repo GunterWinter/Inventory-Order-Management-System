@@ -124,9 +124,11 @@ public class CashBalanceServiceTests
         var cashAccountRepository = new CommandRepository<CashAccount>(commandContext);
         var handler = new PayPurchaseOrderHandler(
             cashTransactionRepository,
+            new CommandRepository<PurchaseOrder>(commandContext),
             paymentRepository,
             cashAccountRepository,
-            unitOfWork);
+            unitOfWork,
+            new NumberSequenceService(new CommandRepository<NumberSequence>(commandContext), unitOfWork));
 
         var firstResult = await handler.Handle(new PayPurchaseOrderRequest
         {
@@ -165,6 +167,52 @@ public class CashBalanceServiceTests
             CashAccountId = accountOne.Id,
             PaymentAmount = 51d
         }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PayPurchaseOrder_CreatesMissingVendorObligationWithoutRequiringProjectSplit()
+    {
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase($"purchase-payment-no-split-{Guid.NewGuid()}")
+            .Options;
+        await using var commandContext = new CommandContext(options);
+        var account = new CashAccount { Name = "Bank", InitialBalance = 200d, CurrentBalance = 200d };
+        var vendor = new Vendor { Name = "Vendor" };
+        var purchaseOrder = new PurchaseOrder
+        {
+            Number = "PO-NO-SPLIT",
+            OrderDate = new DateTime(2026, 8, 10),
+            OrderStatus = PurchaseOrderStatus.Confirmed,
+            VendorId = vendor.Id,
+            AfterTaxAmount = 100d
+        };
+        commandContext.AddRange(account, vendor, purchaseOrder);
+        await commandContext.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(commandContext);
+        var handler = new PayPurchaseOrderHandler(
+            new CommandRepository<CashTransaction>(commandContext),
+            new CommandRepository<PurchaseOrder>(commandContext),
+            new CommandRepository<CashTransactionPayment>(commandContext),
+            new CommandRepository<CashAccount>(commandContext),
+            unitOfWork,
+            new NumberSequenceService(new CommandRepository<NumberSequence>(commandContext), unitOfWork));
+
+        var result = await handler.Handle(new PayPurchaseOrderRequest
+        {
+            PurchaseOrderId = purchaseOrder.Id,
+            CashAccountId = account.Id,
+            PaymentAmount = 100d,
+            PaymentDate = new DateTime(2026, 8, 10)
+        }, CancellationToken.None);
+
+        var transaction = Assert.Single(await commandContext.Set<CashTransaction>().ToListAsync());
+        Assert.Equal(purchaseOrder.Id, transaction.SourceModuleId);
+        Assert.Equal(vendor.Id, transaction.VendorId);
+        Assert.Equal(100d, result.PaidAmount);
+        Assert.Equal(nameof(CashTransactionStatus.Paid), result.Status);
+        Assert.Single(await commandContext.Set<CashTransactionPayment>().ToListAsync());
+        Assert.Equal(100d, account.CurrentBalance);
     }
 
     [Fact]
@@ -209,6 +257,7 @@ public class CashBalanceServiceTests
         var handler = new UpdateCashTransactionHandler(
             transactionRepository,
             paymentRepository,
+            new CommandRepository<CashTransactionCostAllocation>(commandContext),
             unitOfWork,
             balanceService);
 
@@ -334,6 +383,7 @@ public class CashBalanceServiceTests
         var handler = new UpsertSalesOrderPaymentHandler(
             new CommandRepository<SalesOrder>(commandContext),
             transactionRepository,
+            new CommandRepository<CashTransactionPayment>(commandContext),
             accountRepository,
             unitOfWork,
             numberSequenceService,
@@ -343,7 +393,7 @@ public class CashBalanceServiceTests
         {
             SalesOrderId = order.Id,
             CashAccountId = accountOne.Id,
-            PaidAmount = 40d,
+            PaymentAmount = 40d,
             Description = "First save"
         }, CancellationToken.None);
 
@@ -351,7 +401,7 @@ public class CashBalanceServiceTests
         {
             SalesOrderId = order.Id,
             CashAccountId = accountTwo.Id,
-            PaidAmount = 100d,
+            PaymentAmount = 60d,
             Description = "Paid in full"
         }, CancellationToken.None);
 
@@ -361,12 +411,77 @@ public class CashBalanceServiceTests
         Assert.Single(await commandContext.Set<CashTransaction>()
             .Where(x => x.SourceModule == nameof(SalesOrder) && x.SourceModuleId == order.Id)
             .ToListAsync());
-        Assert.Equal(100d, accountOne.CurrentBalance);
-        Assert.Equal(300d, accountTwo.CurrentBalance);
+        Assert.Equal(2, await commandContext.Set<CashTransactionPayment>().CountAsync());
+        Assert.Equal(140d, accountOne.CurrentBalance);
+        Assert.Equal(260d, accountTwo.CurrentBalance);
     }
 
     [Fact]
-    public async Task MaterialExportCashTransaction_CanEditCategoryAndDescriptionWithoutCashAccount()
+    public async Task SalesOrderPayment_PaysRemainingAmountAndBackfillsLegacyHistory()
+    {
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase($"sales-payment-legacy-{Guid.NewGuid()}")
+            .Options;
+        await using var commandContext = new CommandContext(options);
+        await using var queryContext = new QueryContext(options);
+
+        var customer = new Customer { Name = "Legacy customer" };
+        var account = new CashAccount { Name = "Bank", InitialBalance = 0d, CurrentBalance = 10d };
+        var order = new SalesOrder
+        {
+            Number = "SO-LEGACY-PAYMENT",
+            CustomerId = customer.Id,
+            OrderStatus = SalesOrderStatus.Confirmed,
+            AfterTaxAmount = 100d
+        };
+        var transaction = new CashTransaction
+        {
+            SourceModule = nameof(SalesOrder),
+            SourceModuleId = order.Id,
+            SourceModuleNumber = order.Number,
+            TransactionType = CashTransactionType.Debit,
+            Amount = 100d,
+            PaidAmount = 10d,
+            Status = CashTransactionStatus.PartiallyPaid,
+            CashAccountId = account.Id,
+            CustomerId = customer.Id,
+            TransactionDate = new DateTime(2026, 8, 1),
+            Description = "Legacy payment"
+        };
+        commandContext.AddRange(customer, account, order, transaction);
+        await commandContext.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(commandContext);
+        var handler = new UpsertSalesOrderPaymentHandler(
+            new CommandRepository<SalesOrder>(commandContext),
+            new CommandRepository<CashTransaction>(commandContext),
+            new CommandRepository<CashTransactionPayment>(commandContext),
+            new CommandRepository<CashAccount>(commandContext),
+            unitOfWork,
+            new NumberSequenceService(new CommandRepository<NumberSequence>(commandContext), unitOfWork),
+            new CashBalanceService(queryContext, new CommandRepository<CashAccount>(commandContext), unitOfWork));
+
+        var result = await handler.Handle(new UpsertSalesOrderPaymentRequest
+        {
+            SalesOrderId = order.Id,
+            CashAccountId = account.Id,
+            PaymentAmount = 90d,
+            PaymentDate = new DateTime(2026, 8, 10),
+            Description = "Paid remaining"
+        }, CancellationToken.None);
+
+        var payments = await commandContext.Set<CashTransactionPayment>()
+            .OrderBy(x => x.PaymentDate)
+            .ToListAsync();
+        Assert.Equal(new[] { 10d, 90d }, payments.Select(x => x.Amount));
+        Assert.Equal(100d, result.PaidAmount);
+        Assert.Equal(0d, result.RemainingAmount);
+        Assert.Equal(nameof(CashTransactionStatus.Paid), result.Status);
+        Assert.Equal(100d, account.CurrentBalance);
+    }
+
+    [Fact]
+    public async Task MaterialExportCashTransaction_CanUpdatePaymentWithoutCashAccount()
     {
         var options = new DbContextOptionsBuilder<DataContext>()
             .UseInMemoryDatabase($"material-export-cash-edit-{Guid.NewGuid()}")
@@ -394,6 +509,7 @@ public class CashBalanceServiceTests
         var handler = new UpdateCashTransactionHandler(
             new CommandRepository<CashTransaction>(commandContext),
             new CommandRepository<CashTransactionPayment>(commandContext),
+            new CommandRepository<CashTransactionCostAllocation>(commandContext),
             unitOfWork,
             new CashBalanceService(queryContext, accountRepository, unitOfWork));
 
@@ -409,8 +525,91 @@ public class CashBalanceServiceTests
 
         Assert.Equal(category.Id, transaction.CashCategoryId);
         Assert.Equal("Updated", transaction.Description);
-        Assert.Equal(100d, transaction.PaidAmount);
+        Assert.Equal(0d, transaction.PaidAmount);
+        Assert.Equal(CashTransactionStatus.Unpaid, transaction.Status);
         Assert.Null(transaction.CashAccountId);
+    }
+
+    [Fact]
+    public async Task ManualCashTransaction_RecordsPaymentHistoryWithoutCashAccount()
+    {
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase($"manual-cash-payment-{Guid.NewGuid()}")
+            .Options;
+        await using var commandContext = new CommandContext(options);
+        await using var queryContext = new QueryContext(options);
+        var transaction = new CashTransaction
+        {
+            TransactionType = CashTransactionType.Credit,
+            Amount = 100d,
+            PaidAmount = 0d,
+            Status = CashTransactionStatus.Unpaid
+        };
+        commandContext.Add(transaction);
+        await commandContext.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(commandContext);
+        var handler = new UpdateCashTransactionHandler(
+            new CommandRepository<CashTransaction>(commandContext),
+            new CommandRepository<CashTransactionPayment>(commandContext),
+            new CommandRepository<CashTransactionCostAllocation>(commandContext),
+            unitOfWork,
+            new CashBalanceService(queryContext, new CommandRepository<CashAccount>(commandContext), unitOfWork));
+
+        await handler.Handle(new UpdateCashTransactionRequest
+        {
+            Id = transaction.Id,
+            TransactionType = (int)CashTransactionType.Credit,
+            Amount = 100d,
+            PaidAmount = 40d,
+            CashAccountId = null
+        }, CancellationToken.None);
+
+        var payment = Assert.Single(await commandContext.Set<CashTransactionPayment>().ToListAsync());
+        Assert.Equal(40d, payment.Amount);
+        Assert.Null(payment.CashAccountId);
+        Assert.Equal(40d, transaction.PaidAmount);
+        Assert.Equal(CashTransactionStatus.PartiallyPaid, transaction.Status);
+    }
+
+    [Fact]
+    public async Task SourceCashTransaction_DeleteSoftDeletesPaymentsAndAllocations()
+    {
+        var options = new DbContextOptionsBuilder<DataContext>()
+            .UseInMemoryDatabase($"source-cash-delete-{Guid.NewGuid()}")
+            .Options;
+        await using var commandContext = new CommandContext(options);
+        await using var queryContext = new QueryContext(options);
+        var transaction = new CashTransaction
+        {
+            SourceModule = nameof(PurchaseOrder),
+            SourceModuleId = "po-delete",
+            TransactionType = CashTransactionType.Credit,
+            Amount = 100d,
+            PaidAmount = 25d
+        };
+        var customer = new Customer { Name = "Allocated customer" };
+        commandContext.AddRange(transaction, customer);
+        await commandContext.SaveChangesAsync();
+        commandContext.AddRange(
+            new CashTransactionPayment { CashTransactionId = transaction.Id, Amount = 25d, PaymentDate = DateTime.Today },
+            new CashTransactionCostAllocation { CashTransactionId = transaction.Id, CustomerId = customer.Id, Amount = 100d });
+        await commandContext.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(commandContext);
+        var handler = new DeleteCashTransactionHandler(
+            new CommandRepository<CashTransaction>(commandContext),
+            new CommandRepository<CashTransactionPayment>(commandContext),
+            new CommandRepository<CashTransactionCostAllocation>(commandContext),
+            queryContext,
+            unitOfWork,
+            new CashBalanceService(queryContext, new CommandRepository<CashAccount>(commandContext), unitOfWork));
+
+        await handler.Handle(new DeleteCashTransactionRequest { Id = transaction.Id }, CancellationToken.None);
+
+        Assert.True(transaction.IsDeleted);
+        Assert.All(await commandContext.Set<CashTransactionPayment>().ToListAsync(), item => Assert.True(item.IsDeleted));
+        Assert.All(await commandContext.Set<CashTransactionCostAllocation>().ToListAsync(), item => Assert.True(item.IsDeleted));
     }
 
     [Fact]

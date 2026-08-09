@@ -146,7 +146,6 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }
@@ -159,7 +158,6 @@ public class UpdateGoodsReceiveHandler : IRequestHandler<UpdateGoodsReceiveReque
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }

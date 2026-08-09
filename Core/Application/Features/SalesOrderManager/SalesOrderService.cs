@@ -91,7 +91,6 @@ public class SalesOrderService
                 x.Product?.Physical == true &&
                 !string.IsNullOrWhiteSpace(x.WarehouseId) &&
                 !string.IsNullOrWhiteSpace(x.ProductId) &&
-                !string.IsNullOrWhiteSpace(x.BatchNumber) &&
                 x.WarrantyMonths.HasValue &&
                 (x.Quantity ?? 0) > 0)
             .ToList();
@@ -179,7 +178,6 @@ public class SalesOrderService
                     item.Quantity,
                     userId,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }
@@ -192,7 +190,6 @@ public class SalesOrderService
                     item.Quantity,
                     userId,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }
@@ -267,21 +264,19 @@ public class SalesOrderService
             .Where(x =>
                 x.Status == InventoryTransactionStatus.Confirmed &&
                 x.ProductId == item.ProductId &&
-                x.WarehouseId == item.WarehouseId &&
-                x.BatchNumber == item.BatchNumber)
+                x.WarehouseId == item.WarehouseId)
             .SumAsync(x => x.Stock ?? 0d, cancellationToken);
 
         if (existingTransaction?.Status == InventoryTransactionStatus.Confirmed &&
             existingTransaction.ProductId == item.ProductId &&
-            existingTransaction.WarehouseId == item.WarehouseId &&
-            existingTransaction.BatchNumber == item.BatchNumber)
+            existingTransaction.WarehouseId == item.WarehouseId)
         {
             availableStock -= existingTransaction.Stock ?? 0d;
         }
 
         if ((item.Quantity ?? 0d) > availableStock)
         {
-            throw new Exception($"Not enough stock for the selected warehouse and batch. Available: {availableStock}.");
+            throw new Exception($"Not enough stock for the selected warehouse. Available: {availableStock}.");
         }
     }
 }

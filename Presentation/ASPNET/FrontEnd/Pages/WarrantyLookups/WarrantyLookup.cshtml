@@ -96,7 +96,6 @@
                                             <tr>
                                                 <th class="ps-3">Product</th>
                                                 <th>Warehouse</th>
-                                                <th>Batch</th>
                                                 <th class="text-end">Qty</th>
                                                 <th class="text-end">Price</th>
                                                 <th class="text-end pe-3">Total</th>
@@ -109,7 +108,6 @@
                                                     <div class="small text-muted">{{ item.product?.number }}</div>
                                                 </td>
                                                 <td class="align-middle">{{ item.warehouse?.name }}</td>
-                                                <td class="align-middle">{{ item.batchNumber }}</td>
                                                 <td class="text-end align-middle">{{ methods.formatNumber(item.quantity) }}</td>
                                                 <td class="text-end align-middle">{{ methods.formatNumber(item.unitPrice) }}</td>
                                                 <td class="text-end fw-bold pe-3 align-middle">{{ methods.formatNumber(item.quantity * item.unitPrice) }}</td>

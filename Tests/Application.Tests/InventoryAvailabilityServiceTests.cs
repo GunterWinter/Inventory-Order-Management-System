@@ -10,7 +10,7 @@ namespace Application.Tests;
 public class InventoryAvailabilityServiceTests
 {
     [Fact]
-    public async Task SerialTrackedAvailability_UsesPhysicalSerialsInsteadOfMismatchedBatchLedger()
+    public async Task SerialTrackedAvailability_UsesPhysicalSerialsInsteadOfLedgerQuantity()
     {
         var options = new DbContextOptionsBuilder<DataContext>()
             .UseInMemoryDatabase($"serial-availability-{Guid.NewGuid()}")
@@ -31,7 +31,6 @@ public class InventoryAvailabilityServiceTests
             {
                 ProductId = product.Id,
                 WarehouseId = warehouse.Id,
-                BatchNumber = "LOT-01",
                 Status = InventoryTransactionStatus.Confirmed,
                 Stock = 42d
             },
@@ -39,7 +38,6 @@ public class InventoryAvailabilityServiceTests
             {
                 ProductId = product.Id,
                 WarehouseId = warehouse.Id,
-                BatchNumber = null,
                 Status = InventoryTransactionStatus.Confirmed,
                 Stock = -2d
             });
@@ -50,7 +48,6 @@ public class InventoryAvailabilityServiceTests
             {
                 ProductId = product.Id,
                 CurrentWarehouseId = warehouse.Id,
-                BatchNumber = "LOT-01",
                 InternalSerialNumber = $"SERIAL-{index:D3}",
                 Status = ProductSerialStatus.InStock
             });
@@ -59,7 +56,7 @@ public class InventoryAvailabilityServiceTests
 
         var service = new InventoryAvailabilityService(queryContext);
         var available = await service.GetAvailableStockAsync(
-            product.Id, warehouse.Id, "LOT-01", null, CancellationToken.None);
+            product.Id, warehouse.Id, null, CancellationToken.None);
 
         Assert.Equal(40d, available);
     }
@@ -81,14 +78,12 @@ public class InventoryAvailabilityServiceTests
             {
                 ProductId = product.Id,
                 CurrentWarehouseId = warehouse.Id,
-                BatchNumber = "LOT-EDIT",
                 Status = ProductSerialStatus.InStock
             },
             new ProductSerial
             {
                 ProductId = product.Id,
                 CurrentWarehouseId = warehouse.Id,
-                BatchNumber = "LOT-EDIT",
                 Status = ProductSerialStatus.Reserved,
                 SalesOrderItemId = salesOrderItemId
             },
@@ -96,7 +91,6 @@ public class InventoryAvailabilityServiceTests
             {
                 ProductId = product.Id,
                 CurrentWarehouseId = warehouse.Id,
-                BatchNumber = "LOT-EDIT",
                 Status = ProductSerialStatus.Reserved,
                 SalesOrderItemId = "another-item"
             });
@@ -104,7 +98,7 @@ public class InventoryAvailabilityServiceTests
 
         var service = new InventoryAvailabilityService(queryContext);
         var available = await service.GetAvailableStockAsync(
-            product.Id, warehouse.Id, "LOT-EDIT", salesOrderItemId, CancellationToken.None);
+            product.Id, warehouse.Id, salesOrderItemId, CancellationToken.None);
 
         Assert.Equal(2d, available);
     }

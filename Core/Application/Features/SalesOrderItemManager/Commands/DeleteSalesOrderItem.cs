@@ -73,7 +73,7 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
 
         if (isConfirmedSalesOrder)
         {
-            throw new Exception("Cannot delete items from a confirmed sales order. You can adjust quantity, batch number, warranty months, or add a new item.");
+            throw new Exception("Cannot delete items from a confirmed sales order. You can adjust quantity, warranty months, or add a new item.");
         }
 
         entity.UpdatedById = request.DeletedById;

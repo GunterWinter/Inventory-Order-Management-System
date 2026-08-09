@@ -18,7 +18,6 @@ public class InventoryTransaction : BaseEntity
     public string? WarehouseId { get; set; }
     public Warehouse? Warehouse { get; set; }
     public string? ProductId { get; set; }
-    public string? BatchNumber { get; set; }
     public string? ModuleItemId { get; set; }
     public Product? Product { get; set; }
     public double? Movement { get; set; }

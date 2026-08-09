@@ -17,7 +17,7 @@ public class PurchaseOrderCostAllocationConfiguration : BaseEntityConfiguration<
             .OnDelete(DeleteBehavior.Restrict);
             
         builder.HasOne(x => x.PurchaseOrderItem)
-            .WithMany()
+            .WithMany(x => x.CostAllocations)
             .HasForeignKey(x => x.PurchaseOrderItemId)
             .OnDelete(DeleteBehavior.Restrict);
             
@@ -25,5 +25,12 @@ public class PurchaseOrderCostAllocationConfiguration : BaseEntityConfiguration<
             .WithMany()
             .HasForeignKey(x => x.CustomerId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Warehouse)
+            .WithMany()
+            .HasForeignKey(x => x.WarehouseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => x.WarehouseId);
     }
 }

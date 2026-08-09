@@ -28,7 +28,6 @@ public record GetSalesOrderItemListDto
     public double? Total { get; init; }
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
-    public string? BatchNumber { get; init; }
     public double? CogsAmount { get; init; }
     public double? ProfitAmount { get; init; }
     public List<string>? ProductSerialIds { get; set; }

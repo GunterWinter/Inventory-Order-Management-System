@@ -3,6 +3,8 @@ using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Application.Common.CQS.Queries;
 
 namespace Application.Features.PurchaseOrderManager.Commands;
 
@@ -38,18 +40,21 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
     private readonly IUnitOfWork _unitOfWork;
     private readonly PurchaseOrderService _purchaseOrderService;
     private readonly ISender _sender;
+    private readonly IQueryContext _queryContext;
 
     public UpdatePurchaseOrderHandler(
         ICommandRepository<PurchaseOrder> repository,
         IUnitOfWork unitOfWork,
         PurchaseOrderService purchaseOrderService,
-        ISender sender
+        ISender sender,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _purchaseOrderService = purchaseOrderService;
         _sender = sender;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdatePurchaseOrderResult> Handle(UpdatePurchaseOrderRequest request, CancellationToken cancellationToken)
@@ -83,12 +88,25 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
         // Empty items list = handler defaults everything to Kho and creates CashTransaction.
         if (entity.OrderStatus == PurchaseOrderStatus.Confirmed)
         {
-            await _sender.Send(new AllocatePurchaseOrderCostsRequest
+            var hasActiveAllocations = await _queryContext.Set<PurchaseOrderCostAllocation>()
+                .AsNoTracking()
+                .AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == entity.Id, cancellationToken);
+            if (!hasActiveAllocations)
             {
-                PurchaseOrderId = entity.Id,
-                Items = new List<AllocatePurchaseOrderCostsItem>(),
-                CreatedById = request.UpdatedById
-            }, cancellationToken);
+                await _sender.Send(new AllocatePurchaseOrderCostsRequest
+                {
+                    PurchaseOrderId = entity.Id,
+                    Items = new List<AllocatePurchaseOrderCostsItem>(),
+                    CreatedById = request.UpdatedById
+                }, cancellationToken);
+            }
+            else
+            {
+                await _purchaseOrderService.EnsureVendorObligationAsync(
+                    entity.Id,
+                    request.UpdatedById,
+                    cancellationToken);
+            }
         }
 
         return new UpdatePurchaseOrderResult

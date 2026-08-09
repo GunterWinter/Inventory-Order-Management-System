@@ -1,4 +1,4 @@
-﻿const App = {
+const App = {
     setup() {
         const state = Vue.reactive({
             number: '',
@@ -88,7 +88,6 @@
                 state.mappedItems = (state.pdfTransactionList || []).map(item => ({
                     warehouse: item.warehouse?.name || 'Unknown',
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim() || 'Unknown Product',
-                    batchNumber: item.batchNumber || '',
                     movement: NumberFormatManager.formatToLocale(item.movement || 0),
                 }));
 

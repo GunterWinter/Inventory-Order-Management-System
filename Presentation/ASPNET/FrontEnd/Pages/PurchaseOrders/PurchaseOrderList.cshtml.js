@@ -54,7 +54,6 @@ const App = {
         const costAllocationCashCategoryIdRef = Vue.ref(null);
         const costAllocationPreviewGridRef = Vue.ref(null);
 
-        const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
         const getSelectedProductIds = (currentRowId = null) => new Set(
             state.secondaryData
@@ -69,40 +68,81 @@ const App = {
                 product.id === currentProductId || !selectedProductIds.has(product.id)
             );
         };
-        const getHistoricalBatchOptions = (productId) => {
-            if (!productId) {
-                return [];
-            }
+        const getPurchaseOrderItemAmounts = (row, overrides = {}) => {
+            const quantity = Number(overrides.quantity ?? row?.quantity ?? 0) || 0;
+            const unitPrice = Number(overrides.unitPrice ?? row?.unitPrice ?? 0) || 0;
+            const taxId = overrides.taxId ?? row?.taxId ?? null;
+            const taxPercentage = Number(state.taxListLookupData.find(tax => tax.id === taxId)?.percentage ?? 0) || 0;
+            const total = quantity * unitPrice;
+            const taxAmount = total * taxPercentage / 100;
 
-            const options = [];
-            const registered = new Set();
-
-            state.purchaseOrderItemHistoryData
-                .filter(item => item.productId === productId && normalizeBatchNumber(item.batchNumber) !== '')
-                .sort((a, b) => toDateTicks(b.createdAtUtc) - toDateTicks(a.createdAtUtc))
-                .forEach(item => {
-                    const batchNumber = normalizeBatchNumber(item.batchNumber);
-                    if (registered.has(batchNumber)) {
-                        return;
-                    }
-
-                    registered.add(batchNumber);
-                    options.push({
-                        batchNumber,
-                        displayText: batchNumber
-                    });
-                });
-
-            return options;
+            return { quantity, unitPrice, taxId, total, taxAmount, afterTaxAmount: total + taxAmount };
         };
-        const getCurrentPoBatch = () => {
-            for (const item of state.secondaryData) {
-                const batch = normalizeBatchNumber(item.batchNumber);
-                if (batch !== '') return batch;
-            }
-            return '';
+        const applyPurchaseOrderItemAmounts = (row, overrides = {}) => {
+            if (!row) return null;
+            const amounts = getPurchaseOrderItemAmounts(row, overrides);
+            Object.assign(row, amounts);
+            requestAnimationFrame(() => refreshPurchaseOrderSummaryFromItems());
+            return amounts;
         };
+        const applyPurchaseOrderProductDefaults = (row, productId, resetQuantity = true) => {
+            const product = state.productListLookupData.find(item => item.id === productId);
+            if (!row || !product) return null;
 
+            const quantity = resetQuantity ? 1 : (Number(row.quantity) || 1);
+            const unitPrice = Number(product.unitPrice ?? product.costPrice ?? 0) || 0;
+            const warehouseId = product.physical === false ? null : (product.defaultWarehouseId ?? null);
+            const defaults = {
+                productId: product.id,
+                productReferenceCode: product.referenceCode ?? '',
+                productNumber: product.number ?? '',
+                warehouseId,
+                warehouseName: warehouseId ? (product.defaultWarehouseName ?? '') : '',
+                supplierWarrantyMonths: product.defaultWarrantyMonths ?? 6,
+                summary: product.description ?? '',
+                manufacturerSerialNumbers: Number(product.serialTrackingMode ?? 0) === 2
+                    ? (row.manufacturerSerialNumbers ?? [])
+                    : null
+            };
+            Object.assign(row, defaults);
+            applyPurchaseOrderItemAmounts(row, { unitPrice, quantity });
+            return { ...defaults, quantity: row.quantity, unitPrice: row.unitPrice, total: row.total, taxAmount: row.taxAmount, afterTaxAmount: row.afterTaxAmount };
+        };
+        const writePurchaseOrderBatchFields = (row, values) => {
+            if (!secondaryGrid?.obj || !row || !values) return;
+            const rowIndex = secondaryGrid.obj.getRowIndexByPrimaryKey(row.id);
+            if (rowIndex == null || rowIndex < 0) return;
+
+            Object.entries(values).forEach(([field, value]) => {
+                if (field === 'productId' || !secondaryGrid.obj.getColumnByField(field)) return;
+                secondaryGrid.obj.updateCell(rowIndex, field, value);
+            });
+        };
+        const refreshPurchaseOrderItemAmountCells = (editorElement, row) => {
+            const grid = secondaryGrid?.obj;
+            const tableRow = editorElement?.closest?.('tr');
+            if (!grid || !tableRow || !row) return;
+
+            ['total', 'taxAmount', 'afterTaxAmount'].forEach(field => {
+                const cellIndex = grid.getColumnIndexByField(field);
+                if (cellIndex >= 0 && tableRow.cells[cellIndex]) {
+                    tableRow.cells[cellIndex].textContent = NumberFormatManager.formatToLocale(row[field] ?? 0);
+                }
+            });
+        };
+        const refreshPurchaseOrderSummaryFromItems = () => {
+            const rows = secondaryGrid?.obj?.getCurrentViewRecords?.() ?? state.secondaryData ?? [];
+            const totals = rows.reduce((result, row) => {
+                const amounts = getPurchaseOrderItemAmounts(row);
+                result.beforeTax += amounts.total;
+                result.tax += amounts.taxAmount;
+                result.afterTax += amounts.afterTaxAmount;
+                return result;
+            }, { beforeTax: 0, tax: 0, afterTax: 0 });
+            state.subTotalAmount = NumberFormatManager.formatToLocale(totals.beforeTax);
+            state.taxAmount = NumberFormatManager.formatToLocale(totals.tax);
+            state.totalAmount = NumberFormatManager.formatToLocale(totals.afterTax);
+        };
         const validateForm = function () {
             state.errors.orderDate = '';
             state.errors.vendorId = '';
@@ -217,20 +257,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, taxId, purchaseOrderId, createdById) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, supplierWarrantyMonths, taxId, purchaseOrderId, createdById, manufacturerSerialNumbers) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/CreatePurchaseOrderItem', {
-                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, taxId, purchaseOrderId, createdById
+                        unitPrice, quantity, summary, productId, warehouseId, supplierWarrantyMonths, taxId, purchaseOrderId, createdById, manufacturerSerialNumbers
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, taxId, purchaseOrderId, updatedById) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, supplierWarrantyMonths, taxId, purchaseOrderId, updatedById, manufacturerSerialNumbers) => {
                 try {
                     const response = await AxiosManager.post('/PurchaseOrderItem/UpdatePurchaseOrderItem', {
-                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, supplierWarrantyMonths, taxId, purchaseOrderId, updatedById
+                        id, unitPrice, quantity, summary, productId, warehouseId, supplierWarrantyMonths, taxId, purchaseOrderId, updatedById, manufacturerSerialNumbers
                     });
                     return response;
                 } catch (error) {
@@ -360,6 +400,7 @@ const App = {
                 return await QuickAddHelper.complexQuickAddVendor({
                     dropdownObj: vendorListLookup.obj,
                     refreshLookup: methods.populateVendorListLookupData,
+                    refreshLookups: [methods.populateWarehouseListLookupData],
                     state,
                     stateKey: 'vendorId',
                     lookupKey: 'vendorListLookupData'
@@ -422,14 +463,38 @@ const App = {
             populateSecondaryData: async (purchaseOrderId) => {
                 try {
                     const response = await services.getSecondaryData(purchaseOrderId);
-                    state.secondaryData = response?.data?.content?.data.map(item => ({
+                    const items = response?.data?.content?.data ?? [];
+                    state.secondaryData = items.map(item => ({
                         ...item,
+                        manufacturerSerialNumbers: Array.isArray(item.manufacturerSerialNumbers)
+                            ? item.manufacturerSerialNumbers
+                            : (typeof item.manufacturerSerialNumbers === 'string' && item.manufacturerSerialNumbers
+                                ? item.manufacturerSerialNumbers.split(',').map(x => x.trim()).filter(Boolean) : []),
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
-                    methods.refreshPaymentSummary(purchaseOrderId);
+                    requestAnimationFrame(() => refreshPurchaseOrderSummaryFromItems());
                 } catch (error) {
-                    state.secondaryData = [];
+                    console.error('Không thể tải lại danh sách hàng hóa của đơn mua hàng.', error);
+                    throw error;
                 }
+            },
+            verifySecondaryDataPersisted: async (expectedItems, knownPersistedItems = null) => {
+                if (!state.id) return true;
+                let persistedItems = knownPersistedItems;
+                if (!Array.isArray(persistedItems)) {
+                    const response = await services.getSecondaryData(state.id);
+                    persistedItems = response?.data?.content?.data ?? [];
+                }
+                const sameNumber = (left, right) => Number(left ?? 0) === Number(right ?? 0);
+                const matches = expected => persistedItems.some(item => {
+                    if (expected?.id && item.id !== expected.id) return false;
+                    return item.productId === expected?.productId
+                        && (item.warehouseId ?? null) === (expected?.warehouseId ?? null)
+                        && item.taxId === expected?.taxId
+                        && sameNumber(item.quantity, expected?.quantity)
+                        && sameNumber(item.unitPrice, expected?.unitPrice);
+                });
+                return (expectedItems ?? []).every(matches);
             },
             populateProductListLookupData: async () => {
                 const response = await services.getProductListLookupData();
@@ -458,27 +523,42 @@ const App = {
                 return state.cashCategoryListData.find(item => item.name === categoryName)?.id ?? null;
             },
             refreshPaymentSummary: async (id) => {
-                const record = state.mainData.find(item => item.id === id);
-                if (record) {
-                    state.subTotalAmount = NumberFormatManager.formatToLocale(record.beforeTaxAmount ?? 0);
-                    state.taxAmount = NumberFormatManager.formatToLocale(record.taxAmount ?? 0);
-                    state.totalAmount = NumberFormatManager.formatToLocale(record.afterTaxAmount ?? 0);
-                }
+                refreshPurchaseOrderSummaryFromItems();
             },
             handleFormSubmit: async () => {
                 state.isSubmitting = true;
-                await new Promise(resolve => setTimeout(resolve, 200));
 
-                if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
-                    secondaryGrid.obj.endEdit();
-                    await new Promise(resolve => setTimeout(resolve, 150));
-                    if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                if (secondaryGrid.obj && typeof GridInteractionManager !== 'undefined') {
+                    const itemChangesSaved = await GridInteractionManager.save(secondaryGrid.obj);
+                    if (!itemChangesSaved) {
                         state.isSubmitting = false;
                         Swal.fire({
                             icon: 'warning',
-                            title: 'Incomplete product row',
-                            text: 'Complete all required fields (Product, Warehouse, Tax and Quantity) on the edited row before saving the purchase order.',
-                            confirmButtonText: 'OK'
+                            title: 'Chưa lưu được hàng hóa',
+                            text: 'Vui lòng kiểm tra dòng đang sửa trước khi lưu đơn mua hàng.',
+                            confirmButtonText: 'Đồng ý'
+                        });
+                        return;
+                    }
+                } else if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
+                    secondaryGrid.obj.endEdit();
+                }
+
+                if (!state.deleteMode && state.id && secondaryGrid.obj) {
+                    const expectedItems = secondaryGrid.obj.getCurrentViewRecords?.() ?? state.secondaryData ?? [];
+                    let itemsPersisted = false;
+                    try {
+                        itemsPersisted = await methods.verifySecondaryDataPersisted(expectedItems);
+                    } catch (error) {
+                        console.error('Không thể xác minh danh sách hàng hóa đã lưu.', error);
+                    }
+                    if (!itemsPersisted) {
+                        state.isSubmitting = false;
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Chưa lưu được hàng hóa',
+                            text: 'Danh sách trên màn hình chưa khớp với dữ liệu đã lưu. Đơn mua hàng chưa được cập nhật; vui lòng lưu lại danh sách hàng hóa.',
+                            confirmButtonText: 'Đồng ý'
                         });
                         return;
                     }
@@ -709,7 +789,6 @@ const App = {
                                 poItemId: alloc.purchaseOrderItemId,
                                 productId: poItem ? poItem.productId : '',
                                 warehouseId: poItem ? poItem.warehouseId : '',
-                                batchNumber: poItem ? poItem.batchNumber : '',
                                 remainingQuantity: 0,
                                 customerId: alloc.customerId,
                                 allocateQuantity: alloc.quantity,
@@ -730,7 +809,6 @@ const App = {
                                 poItemId: item.id,
                                 productId: item.productId,
                                 warehouseId: item.warehouseId,
-                                batchNumber: item.batchNumber,
                                 remainingQuantity: 0,
                                 customerId: null,
                                 allocateQuantity: 0,
@@ -749,8 +827,7 @@ const App = {
 
                     previewData.forEach(row => {
                         const poItem = state.secondaryData.find(x => x.id === row.poItemId);
-                        const baseStock = (poItem?.stockQuantity || 0) + (backendAllocByItem[row.poItemId] || 0);
-                        row.remainingQuantity = baseStock - (totalAllocByItem[row.poItemId] || 0);
+                        row.remainingQuantity = Math.max(0, Number(poItem?.quantity || 0) - (totalAllocByItem[row.poItemId] || 0));
                     });
 
                     // Reset state
@@ -916,9 +993,16 @@ const App = {
                             dataSource: [],
                             columns: [
                                 { field: 'purchaseOrderItem.product.name', headerText: 'Product', width: 150 },
-                                { field: 'purchaseOrderItem.warehouse.name', headerText: 'Kho', width: 120 },
+                                {
+                                    field: 'warehouse.name',
+                                    headerText: 'Kho',
+                                    width: 150,
+                                    valueAccessor: (field, row) => row.warehouse?.name ?? row.purchaseOrderItem?.warehouse?.name ?? ''
+                                },
                                 { field: 'customer.name', headerText: 'Customer', width: 150 },
-                                { field: 'quantity', headerText: 'Quantity', width: 100, format: 'N0' }
+                                { field: 'quantity', headerText: 'Quantity', width: 100, format: 'N0' },
+                                { field: 'unitPrice', headerText: 'Unit Price', width: 120, format: 'N0' },
+                                { field: 'amount', headerText: 'Amount', width: 120, format: 'N0', valueAccessor: (field, row) => row.amount ?? ((row.quantity || 0) * (row.unitPrice || 0)) }
                             ]
                         });
 
@@ -931,7 +1015,7 @@ const App = {
                                     let allocData = response.data.content.data;
                                     allocData.forEach(x => {
                                         if (!x.customer) {
-                                            x.customer = { name: 'Kho' };
+                                            x.customer = { name: '' };
                                         }
                                         if (!x.purchaseOrderItem) {
                                             x.purchaseOrderItem = { product: { name: 'N/A' }, warehouse: { name: 'N/A' } };
@@ -953,7 +1037,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -1006,14 +1090,6 @@ const App = {
                                 if (!row) return;
                                 const rowData = mainGrid.obj.getRowInfo(row).rowData;
                                 if (!rowData) return;
-                                if (!rowData.cashTransactionId) {
-                                    Swal.fire({
-                                        icon: 'warning',
-                                        title: 'Payment is unavailable',
-                                        text: 'Allocate this purchase order first to create its vendor obligation.'
-                                    });
-                                    return;
-                                }
                                 await showPaymentPopup(
                                     rowData.id,
                                     rowData.number,
@@ -1031,23 +1107,14 @@ const App = {
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
+                        const count = mainGrid.obj.getSelectedRecords().length;
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'PrintPDFCustom'], count === 1);
+                        mainGrid.obj.toolbarModule.enableItems(['DeleteCustom'], count > 0);
                     },
                     rowDeselected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
-                    },
-                    rowSelecting: () => {
-                        if (mainGrid.obj.getSelectedRecords().length) {
-                            mainGrid.obj.clearSelection();
-                        }
+                        const count = mainGrid.obj.getSelectedRecords().length;
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'PrintPDFCustom'], count === 1);
+                        mainGrid.obj.toolbarModule.enableItems(['DeleteCustom'], count > 0);
                     },
                     recordDoubleClick: async (args) => {
                         if (args.rowData) {
@@ -1129,23 +1196,24 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            state.deleteMode = true;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete Purchase Order?';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.orderDate = selectedRecord.orderDate ? DateFormatManager.parseBusinessDate(selectedRecord.orderDate) : null;
-                                state.description = selectedRecord.description ?? '';
-                                state.vendorId = selectedRecord.vendorId ?? '';
-                                state.orderStatus = String(selectedRecord.orderStatus ?? '');
-                                state.showComplexDiv = false;
-
-                                await methods.populateSecondaryData(selectedRecord.id);
-                                secondaryGrid.refresh();
-
-                                mainModal.obj.show();
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const confirmation = await Swal.fire({
+                                icon: 'warning',
+                                title: 'Bạn có chắc chắn muốn xóa?',
+                                text: `${selected.length} dòng đã chọn sẽ bị xóa.`,
+                                showCancelButton: true,
+                                confirmButtonText: 'Xóa',
+                                cancelButtonText: 'Hủy',
+                                heightAuto: false
+                            });
+                            if (!confirmation.isConfirmed) return;
+                            for (const record of selected) {
+                                await services.deleteMainData(record.id, StorageManager.getUserId());
                             }
+                            mainGrid.obj.clearSelection();
+                            await methods.populateMainData();
+                            mainGrid.refresh();
                         }
 
 
@@ -1168,14 +1236,49 @@ const App = {
 
         let productObj;
         let warehouseObj;
-        let batchObj;
         let priceObj;
         let quantityObj;
-        let totalObj;
         let taxObj;
         let numberObj;
         let summaryObj;
         let supplierWarrantyObj;
+
+        const getSerialTrackingMode = (productId) => Number(state.productListLookupData.find(p => p.id === productId)?.serialTrackingMode ?? 0);
+        const isManufacturerSerialProduct = (productId) => {
+            const product = state.productListLookupData.find(p => p.id === productId);
+            return product?.physical === true && getSerialTrackingMode(productId) === 2;
+        };
+        const editManufacturerSerials = async (rowData, refreshQuantity) => {
+            if (!isManufacturerSerialProduct(rowData.productId)) return;
+            const serials = [...(rowData.manufacturerSerialNumbers ?? [])];
+            const result = await Swal.fire({
+                title: 'Manufacturer serial numbers',
+                html: '<div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Add serial</button>',
+                showCancelButton: true, confirmButtonText: 'Apply',
+                didOpen: () => {
+                    const list = document.getElementById('manufacturer-serial-list');
+                    const render = () => {
+                        list.innerHTML = serials.map((value, index) => `<div class="input-group mb-1"><input class="form-control manufacturer-serial" value="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><button type="button" class="btn btn-outline-danger manufacturer-serial-delete" data-index="${index}">Delete</button></div>`).join('');
+                        list.querySelectorAll('.manufacturer-serial').forEach((input, i) => input.addEventListener('input', e => serials[i] = e.target.value));
+                        list.querySelectorAll('.manufacturer-serial-delete').forEach(button => button.addEventListener('click', () => { serials.splice(Number(button.dataset.index), 1); render(); }));
+                    };
+                    document.getElementById('manufacturer-serial-add').addEventListener('click', () => { serials.push(''); render(); });
+                    render();
+                },
+                preConfirm: () => {
+                    const normalized = serials.map(x => String(x).trim());
+                    if (normalized.some(x => !x)) { Swal.showValidationMessage('Serial numbers cannot be empty.'); return false; }
+                    if (new Set(normalized.map(x => x.toLowerCase())).size !== normalized.length) { Swal.showValidationMessage('Serial numbers must be unique.'); return false; }
+                    if (!normalized.length) { Swal.showValidationMessage('Add at least one serial number.'); return false; }
+                    return normalized;
+                }
+            });
+            if (result.isConfirmed) {
+                rowData.manufacturerSerialNumbers = result.value;
+                rowData.quantity = result.value.length;
+                if (refreshQuantity && quantityObj) { quantityObj.value = rowData.quantity; quantityObj.readonly = true; quantityObj.dataBind(); }
+            }
+        };
 
         const secondaryGrid = {
             obj: null,
@@ -1184,7 +1287,7 @@ const App = {
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -1209,7 +1312,7 @@ const App = {
                             field: 'productId',
                             headerText: 'Product',
                             width: 250,
-                            validationRules: { required: true },
+                            validationRules: { required: [true, 'Vui lòng chọn hàng hóa.'] },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
@@ -1237,40 +1340,27 @@ const App = {
                                             const selectedProduct = productOptions.find(item => item.id === e.value)
                                                 ?? state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
-                                                args.rowData.productId = selectedProduct.id;
-                                                args.rowData.productReferenceCode = selectedProduct.referenceCode;
-                                                args.rowData.warehouseId = selectedProduct.defaultWarehouseId ?? null;
-                                                args.rowData.warehouseName = selectedProduct.defaultWarehouseName ?? '';
-                                                const poBatch = getCurrentPoBatch();
-                                                args.rowData.batchNumber = poBatch;
+                                                const defaults = applyPurchaseOrderProductDefaults(args.rowData, selectedProduct.id, true);
+                                                requestAnimationFrame(() => writePurchaseOrderBatchFields(args.rowData, defaults));
                                                 if (warehouseObj) {
                                                     warehouseObj.value = args.rowData.warehouseId;
                                                     warehouseObj.dataBind();
                                                 }
                                                 if (numberObj) {
-                                                    numberObj.value = selectedProduct.number;
+                                                    numberObj.value = args.rowData.productNumber;
                                                 }
-                                                const defaultPrice = selectedProduct.costPrice ?? selectedProduct.unitPrice ?? null;
                                                 if (priceObj) {
-                                                    priceObj.value = defaultPrice;
+                                                    priceObj.value = args.rowData.unitPrice;
                                                 }
                                                 if (summaryObj) {
-                                                    summaryObj.value = selectedProduct.description;
+                                                    summaryObj.value = args.rowData.summary;
                                                 }
                                                 if (quantityObj) {
-                                                    quantityObj.value = 1;
-                                                    const total = (defaultPrice ?? 0) * quantityObj.value;
-                                                    if (totalObj) {
-                                                        totalObj.value = total;
-                                                    }
+                                                    quantityObj.value = args.rowData.quantity;
                                                 }
-                                                if (batchObj) {
-                                                    batchObj.dataSource = getHistoricalBatchOptions(selectedProduct.id);
-                                                    batchObj.value = poBatch;
-                                                    batchObj.text = poBatch;
-                                                }
+                                                refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
                                                 if (supplierWarrantyObj) {
-                                                    supplierWarrantyObj.value = 6;
+                                                    supplierWarrantyObj.value = args.rowData.supplierWarrantyMonths;
                                                 }
                                             }
                                         },
@@ -1285,7 +1375,7 @@ const App = {
                             field: 'warehouseId',
                             headerText: 'Kho',
                             width: 180,
-                            validationRules: { required: true },
+                            validationRules: { required: false },
                             valueAccessor: (field, data, column) => {
                                 const warehouse = state.warehouseListLookupData.find(item => item.id === data[field]);
                                 return warehouse ? warehouse.name : (data.warehouseName ?? '');
@@ -1306,6 +1396,7 @@ const App = {
                                     }
                                 },
                                 write: (args) => {
+                                    const selectedProduct = state.productListLookupData?.find(p => p.id === args.rowData.productId);
                                     warehouseObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.warehouseListLookupData,
                                         fields: { value: 'id', text: 'name' },
@@ -1320,42 +1411,8 @@ const App = {
                                         },
                                         floatLabelType: 'Never'
                                     });
+                                    warehouseObj.enabled = selectedProduct?.physical !== false;
                                     warehouseObj.appendTo(args.element);
-                                }
-                            }
-                        },
-                        {
-                            field: 'batchNumber',
-                            headerText: 'Batch Number',
-                            width: 150,
-                            validationRules: { required: true },
-                            edit: {
-                                create: () => {
-                                    let batchElem = document.createElement('input');
-                                    return batchElem;
-                                },
-                                read: () => {
-                                    return batchObj.value;
-                                },
-                                destroy: () => {
-                                    if (batchObj) batchObj.destroy();
-                                },
-                                write: (args) => {
-                                    const existingBatch = args.rowData.batchNumber || '';
-                                    const initialBatch = existingBatch !== '' ? existingBatch : getCurrentPoBatch();
-                                    batchObj = new ej.dropdowns.ComboBox({
-                                        dataSource: getHistoricalBatchOptions(args.rowData.productId),
-                                        fields: { value: 'batchNumber', text: 'displayText' },
-                                        value: initialBatch,
-                                        allowCustom: true,
-                                        allowFiltering: true,
-                                        autofill: true,
-                                        placeholder: 'Select or enter Batch Number',
-                                        change: (e) => {
-                                            args.rowData.batchNumber = normalizeBatchNumber(e.value);
-                                        }
-                                    });
-                                    batchObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -1396,7 +1453,12 @@ const App = {
                         {
                             field: 'unitPrice',
                             headerText: 'Unit Price',
-                            width: 200, validationRules: { required: true }, type: 'number', format: 'N0', textAlign: 'Right',
+                            width: 200,
+                            validationRules: {
+                                required: true,
+                                custom: [(args) => Number(args.value) > 0, 'Đơn giá phải lớn hơn 0.']
+                            },
+                            type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let priceElem = document.createElement('input');
@@ -1416,13 +1478,28 @@ const App = {
                                         validateDecimalOnType: false,
                                         value: args.rowData.unitPrice ?? 0,
                                         change: (e) => {
-                                            if (quantityObj && totalObj) {
-                                                const total = e.value * quantityObj.value;
-                                                totalObj.value = total;
-                                            }
+                                            applyPurchaseOrderItemAmounts(args.rowData, { unitPrice: e.value });
+                                            refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
                                         }
                                     });
                                     priceObj.appendTo(args.element);
+                                }
+                            }
+                        },
+                        {
+                            field: 'manufacturerSerialNumbers',
+                            headerText: 'Manufacturer Serials',
+                            width: 220,
+                            valueAccessor: (field, data) => (data.manufacturerSerialNumbers || []).join(', '),
+                            edit: {
+                                create: () => { const el = document.createElement('button'); el.type = 'button'; el.className = 'btn btn-outline-primary btn-sm'; el.textContent = 'Edit serials'; return el; },
+                                read: () => '',
+                                write: (args) => {
+                                    const button = args.element;
+                                    const enabled = isManufacturerSerialProduct(args.rowData.productId);
+                                    button.disabled = !enabled;
+                                    button.textContent = enabled ? 'Edit serials' : 'Not applicable';
+                                    button.addEventListener('click', () => editManufacturerSerials(args.rowData, true));
                                 }
                             }
                         },
@@ -1456,12 +1533,13 @@ const App = {
                                         decimals: 0,
                                         validateDecimalOnType: true,
                                         change: (e) => {
-                                            if (priceObj && totalObj) {
-                                                const total = e.value * priceObj.value;
-                                                totalObj.value = total;
-                                            }
+                                            applyPurchaseOrderItemAmounts(args.rowData, { quantity: e.value });
+                                            refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
                                         }
                                     });
+                                    if (isManufacturerSerialProduct(args.rowData.productId)) {
+                                        quantityObj.readonly = true;
+                                    }
                                     quantityObj.appendTo(args.element);
                                 }
                             }
@@ -1469,28 +1547,12 @@ const App = {
                         {
                             field: 'total',
                             headerText: 'Total',
-                            width: 200, validationRules: { required: false }, type: 'number', format: 'N0', textAlign: 'Right',
-                            edit: {
-                                create: () => {
-                                    let totalElem = document.createElement('input');
-                                    return totalElem;
-                                },
-                                read: () => {
-                                    return totalObj.value;
-                                },
-                                destroy: () => {
-                                    totalObj.destroy();
-                                },
-                                write: (args) => {
-                                    totalObj = new ej.inputs.NumericTextBox({
-                                        format: 'n0',
-                                        decimals: 0,
-                                        value: args.rowData.total ?? 0,
-                                        readonly: true
-                                    });
-                                    totalObj.appendTo(args.element);
-                                }
-                            }
+                            width: 200,
+                            allowEditing: false,
+                            type: 'number',
+                            format: 'N0',
+                            textAlign: 'Right',
+                            valueAccessor: (field, data) => getPurchaseOrderItemAmounts(data).total
                         },
                         {
                             field: 'taxId',
@@ -1522,6 +1584,10 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.taxId ?? null,
                                         placeholder: 'Select Tax',
+                                        change: (e) => {
+                                            applyPurchaseOrderItemAmounts(args.rowData, { taxId: e.value });
+                                            refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
+                                        },
                                         floatLabelType: 'Never'
                                     });
                                     taxObj.appendTo(args.element);
@@ -1535,7 +1601,8 @@ const App = {
                             width: 160,
                             type: 'number',
                             format: 'N0',
-                            textAlign: 'Right'
+                            textAlign: 'Right',
+                            valueAccessor: (field, data) => getPurchaseOrderItemAmounts(data).taxAmount
                         },
                         {
                             field: 'afterTaxAmount',
@@ -1544,7 +1611,8 @@ const App = {
                             width: 170,
                             type: 'number',
                             format: 'N0',
-                            textAlign: 'Right'
+                            textAlign: 'Right',
+                            valueAccessor: (field, data) => getPurchaseOrderItemAmounts(data).afterTaxAmount
                         },
                         {
                             field: 'productNumber',
@@ -1623,14 +1691,14 @@ const App = {
                             format: 'N0',
                             textAlign: 'Right',
                             valueAccessor: (field, data, column) => {
-                                return data.stockQuantity || 0;
+                                return Math.max(0, Number(data.quantity || 0) - Number(data.allocatedQuantity || 0));
                             }
                         },
                     ],
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        'Add', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
                         { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                         { type: 'Separator' },
@@ -1649,19 +1717,44 @@ const App = {
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
+                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         } else {
                             secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
+                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         } else {
                             secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
                     toolbarClick: async (args) => {
+                        if (args.item.id === 'SecondaryGrid_add') {
+                            // EJ2's built-in toolbar dispatch can be skipped when the grid is
+                            // wrapped by the async Batch persistence lifecycle. Add explicitly so
+                            // the button always creates an editable spreadsheet row.
+                            args.cancel = true;
+                            const temporaryId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                            secondaryGrid.obj.addRecord({
+                                id: temporaryId,
+                                purchaseOrderId: state.id,
+                                productId: null,
+                                warehouseId: null,
+                                supplierWarrantyMonths: 6,
+                                unitPrice: 0,
+                                quantity: 1,
+                                total: 0,
+                                taxId: null,
+                                taxAmount: 0,
+                                afterTaxAmount: 0,
+                                manufacturerSerialNumbers: [],
+                                summary: ''
+                            }, 0);
+                            requestAnimationFrame(() => secondaryGrid.obj.editCell(0, 'productId'));
+                            return;
+                        }
+
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
                         }
@@ -1699,6 +1792,7 @@ const App = {
                             }
                             const created = await QuickAddHelper.complexQuickAddProduct({
                                 refreshLookup: methods.populateProductListLookupData,
+                                refreshLookups: [methods.populateWarehouseListLookupData],
                                 state: state,
                                 lookupKey: 'productListLookupData'
                             });
@@ -1710,30 +1804,47 @@ const App = {
                             }
                         }
                     },
+                    cellSave: (args) => {
+                        const field = args.columnName ?? args.column?.field;
+                        if (field === 'productId') {
+                            const defaults = applyPurchaseOrderProductDefaults(args.rowData, args.value, true);
+                            requestAnimationFrame(() => writePurchaseOrderBatchFields(args.rowData, defaults));
+                            requestAnimationFrame(() => refreshPurchaseOrderSummaryFromItems());
+                            return;
+                        }
+                        if (!['quantity', 'unitPrice', 'taxId'].includes(field)) return;
+                        applyPurchaseOrderItemAmounts(args.rowData, { [field]: args.value });
+                        requestAnimationFrame(() => {
+                            refreshPurchaseOrderItemAmountCells(args.cell, args.rowData);
+                            refreshPurchaseOrderSummaryFromItems();
+                        });
+                    },
                     actionBegin: (args) => {
                         if (args.requestType !== 'save') {
                             return;
                         }
 
                         const data = args.data ?? {};
+                        applyPurchaseOrderItemAmounts(data);
                         if (!data.productId) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Missing Required Information',
-                                text: 'Select a product before saving.',
-                                confirmButtonText: 'OK'
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn hàng hóa trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
                             });
                             return;
                         }
 
-                        if (!data.warehouseId) {
+                        const selectedProduct = state.productListLookupData?.find(p => p.id === data.productId);
+                        if (selectedProduct?.physical !== false && !data.warehouseId) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Missing Required Information',
-                                text: 'Select a warehouse before saving.',
-                                confirmButtonText: 'OK'
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn kho cho hàng hóa vật lý trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
                             });
                             return;
                         }
@@ -1742,9 +1853,9 @@ const App = {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Missing Required Information',
-                                text: 'Select a tax before saving.',
-                                confirmButtonText: 'OK'
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn thuế trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
                             });
                             return;
                         }
@@ -1759,39 +1870,84 @@ const App = {
                             });
                             return;
                         }
+                        if (!Number.isFinite(Number(data.unitPrice)) || Number(data.unitPrice) <= 0) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Đơn giá phải lớn hơn 0 trước khi lưu.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+                        const mode2 = selectedProduct?.physical === true && Number(selectedProduct.serialTrackingMode ?? 0) === 2;
+                        if (mode2) {
+                            const serials = (data.manufacturerSerialNumbers ?? args.rowData?.manufacturerSerialNumbers ?? []).map(x => String(x).trim()).filter(Boolean);
+                            if (!serials.length || new Set(serials.map(x => x.toLowerCase())).size !== serials.length || serials.length !== Number(data.quantity)) {
+                                args.cancel = true;
+                                Swal.fire({ icon: 'warning', title: 'Invalid serial numbers', text: 'Enter unique, non-empty manufacturer serial numbers; quantity must equal the serial count.' });
+                                return;
+                            }
+                            data.manufacturerSerialNumbers = serials;
+                            data.quantity = serials.length;
+                        } else {
+                            data.manufacturerSerialNumbers = null;
+                        }
                     },
                     actionComplete: async (args) => {
+                        const refreshAfterAction = args.managedBatch !== true;
                         if (args.requestType === 'save' && args.action === 'add') {
                             const purchaseOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.supplierWarrantyMonths, data?.taxId, purchaseOrderId, userId);
-                            await methods.populateSecondaryData(purchaseOrderId);
-                            secondaryGrid.refresh();
-
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Save Successful',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                            try {
+                                const manufacturerSerialNumbers = Array.isArray(data?.manufacturerSerialNumbers) && data.manufacturerSerialNumbers.length
+                                    ? data.manufacturerSerialNumbers
+                                    : null;
+                                const response = await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.supplierWarrantyMonths, data?.taxId, purchaseOrderId, userId, manufacturerSerialNumbers);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Không thể lưu hàng hóa.');
+                                data.__persistedId = response?.data?.content?.data?.id ?? null;
+                                if (refreshAfterAction) {
+                                    await methods.populateSecondaryData(purchaseOrderId);
+                                    secondaryGrid.refresh();
+                                    Swal.fire({ icon: 'success', title: 'Lưu hàng hóa thành công', timer: 1200, showConfirmButton: false });
+                                }
+                            } catch (error) {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Lưu hàng hóa thất bại',
+                                    text: error.response?.data?.message ?? error.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                    confirmButtonText: 'Đồng ý'
+                                });
+                                throw error;
+                            }
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             const purchaseOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
-                            await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.supplierWarrantyMonths, data?.taxId, purchaseOrderId, userId);
-                            await methods.populateSecondaryData(purchaseOrderId);
-                            secondaryGrid.refresh();
-
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Save Successful',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                            try {
+                                const manufacturerSerialNumbers = Array.isArray(data?.manufacturerSerialNumbers) && data.manufacturerSerialNumbers.length
+                                    ? data.manufacturerSerialNumbers
+                                    : null;
+                                const response = await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.supplierWarrantyMonths, data?.taxId, purchaseOrderId, userId, manufacturerSerialNumbers);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Không thể cập nhật hàng hóa.');
+                                if (refreshAfterAction) {
+                                    await methods.populateSecondaryData(purchaseOrderId);
+                                    secondaryGrid.refresh();
+                                    Swal.fire({ icon: 'success', title: 'Cập nhật hàng hóa thành công', timer: 1200, showConfirmButton: false });
+                                }
+                            } catch (error) {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Cập nhật hàng hóa thất bại',
+                                    text: error.response?.data?.message ?? error.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                    confirmButtonText: 'Đồng ý'
+                                });
+                                throw error;
+                            }
                         }
                         if (args.requestType === 'delete') {
                             const purchaseOrderId = state.id;
@@ -1800,16 +1956,18 @@ const App = {
 
                             try {
                                 const response = await services.deleteSecondaryData(data?.id, userId);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to delete this item.');
                                 if (response?.data?.code === 200) {
-                                    await methods.populateSecondaryData(purchaseOrderId);
-                                    secondaryGrid.refresh();
-
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Delete Successful',
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
+                                    if (refreshAfterAction) {
+                                        await methods.populateSecondaryData(purchaseOrderId);
+                                        secondaryGrid.refresh();
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'Delete Successful',
+                                            timer: 2000,
+                                            showConfirmButton: false
+                                        });
+                                    }
                                 } else {
                                     await methods.populateSecondaryData(purchaseOrderId);
                                     secondaryGrid.refresh();
@@ -1822,8 +1980,10 @@ const App = {
                                     });
                                 }
                             } catch (error) {
-                                await methods.populateSecondaryData(purchaseOrderId);
-                                secondaryGrid.refresh();
+                                if (refreshAfterAction) {
+                                    await methods.populateSecondaryData(purchaseOrderId);
+                                    secondaryGrid.refresh();
+                                }
 
                                 Swal.fire({
                                     icon: 'error',
@@ -1831,25 +1991,61 @@ const App = {
                                     text: error.response?.data?.message ?? 'Unable to delete this item.',
                                     confirmButtonText: 'OK'
                                 });
+                                throw error;
                             }
                         }
 
-                        await methods.populateMainData();
-                        mainGrid.refresh();
-                        await methods.refreshPaymentSummary(state.id);
+                        if (refreshAfterAction) {
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            await methods.refreshPaymentSummary(state.id);
+                        }
                     }
                 });
+                if (typeof GridInteractionManager !== 'undefined') {
+                    GridInteractionManager.track(secondaryGrid.obj, {
+                        afterPersist: async (changes) => {
+                            await methods.populateSecondaryData(state.id);
+
+                            const persistedItems = state.secondaryData ?? [];
+                            const addedRows = (changes.addedRecords ?? []).map(row => ({
+                                ...row,
+                                id: row.__persistedId ?? null
+                            }));
+                            const savedRows = [...addedRows, ...(changes.changedRecords ?? [])];
+                            const savedRowsPersisted = await methods.verifySecondaryDataPersisted(savedRows, persistedItems);
+                            const undeletedRow = (changes.deletedRecords ?? []).find(row => row?.id && persistedItems.some(item => item.id === row.id));
+
+                            if (!savedRowsPersisted || undeletedRow) {
+                                const error = new Error('Backend chưa xác nhận đầy đủ thay đổi hàng hóa. Đơn mua hàng chưa được lưu.');
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Chưa lưu được hàng hóa',
+                                    text: error.message,
+                                    confirmButtonText: 'Đồng ý'
+                                });
+                                throw error;
+                            }
+
+                            secondaryGrid.refresh();
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            await methods.refreshPaymentSummary(state.id);
+                            Swal.fire({ icon: 'success', title: 'Lưu danh sách hàng hóa thành công', timer: 1200, showConfirmButton: false });
+                        }
+                    });
+                }
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
             },
             refresh: () => {
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        'Add', 'Delete', 'Update', 'Cancel',
                         { type: 'Separator' },
                         { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' },
                         { type: 'Separator' },
@@ -2007,6 +2203,7 @@ const App = {
                             const selectedRecord = costAllocationPreviewGrid.obj.getSelectedRecords()[0] ?? customerEditorRow;
                             const created = await QuickAddHelper.complexQuickAddCustomer({
                                 refreshLookup: methods.populateCustomerListLookupData,
+                                refreshLookups: [methods.populateWarehouseListLookupData],
                                 state,
                                 lookupKey: 'customerListLookupData'
                             });
@@ -2043,6 +2240,13 @@ const App = {
                                 const product = state.productListLookupData.find(item => item.id === data[field]);
                                 return product ? product.name : '';
                             }
+                        },
+                        {
+                            field: 'warehouseId',
+                            headerText: 'Warehouse',
+                            allowEditing: false,
+                            width: 140,
+                            valueAccessor: (field, data) => state.warehouseListLookupData.find(item => item.id === data[field])?.name ?? ''
                         },
                         { field: 'remainingQuantity', headerText: 'Remaining', width: 80, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
                         {
@@ -2253,15 +2457,6 @@ const App = {
             existingDescription = null,
             existingTransactionDate = null,
             isSplit = false) => {
-            if (!existingTransactionId) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Payment is unavailable',
-                    text: 'Allocate this purchase order first to create its vendor obligation.'
-                });
-                return;
-            }
-
             const resolveMoneyAmount = (value) => {
                 if (typeof value === 'number' && Number.isFinite(value)) {
                     return value;

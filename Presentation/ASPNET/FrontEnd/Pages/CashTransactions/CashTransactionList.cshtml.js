@@ -19,6 +19,8 @@ const App = {
             sourceModuleId: null,
             sourceModuleNumber: null,
             allocationDetails: [],
+            allocationRows: [],
+            showAllocationDetails: false,
             paymentHistory: [],
             sourceDetailsLoading: false,
             sourceDetailsError: '',
@@ -86,12 +88,6 @@ const App = {
 
             if (!state.transactionDate) { state.errors.transactionDate = 'Transaction Date is required.'; isValid = false; }
             if (state.transactionType === null || state.transactionType === undefined) { state.errors.transactionType = 'Transaction Type is required.'; isValid = false; }
-            if (!state.cashAccountId
-                && state.sourceModule !== 'MaterialExport'
-                && (!state.sourceModule || Number(state.paidAmount ?? 0) > 0)) {
-                state.errors.cashAccountId = 'Cash Account is required.';
-                isValid = false;
-            }
             if (!state.amount || state.amount <= 0) { state.errors.amount = 'Amount must be greater than 0.'; isValid = false; }
             if (state.paidAmount !== null && state.paidAmount !== undefined && Number(state.paidAmount) > Number(state.amount)) {
                 state.errors.paidAmount = 'Paid amount cannot exceed the original amount.';
@@ -116,6 +112,8 @@ const App = {
             state.sourceModuleId = null;
             state.sourceModuleNumber = null;
             state.allocationDetails = [];
+            state.allocationRows = [];
+            state.showAllocationDetails = false;
             state.paymentHistory = [];
             state.sourceDetailsLoading = false;
             state.sourceDetailsError = '';
@@ -184,9 +182,9 @@ const App = {
                     `/CashTransaction/GetCashTransactionCostAllocations?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`,
                     {});
             },
-            getPaymentHistory: async (purchaseOrderId) => {
+            getPaymentHistory: async (cashTransactionId) => {
                 return await AxiosManager.get(
-                    `/PurchaseOrder/GetPurchaseOrderPaymentHistory?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`,
+                    `/PurchaseOrder/GetPurchaseOrderPaymentHistory?cashTransactionId=${encodeURIComponent(cashTransactionId)}`,
                     {});
             }
         };
@@ -210,7 +208,9 @@ const App = {
                         transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
                         transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : '',
                         statusName: (item.paidAmount >= item.amount && item.amount > 0) ? 'Paid' : (item.paidAmount > 0 ? 'Partially Paid' : 'Unpaid'),
+                        remaining: Math.max(0, Number(item.amount ?? 0) - Number(item.paidAmount ?? 0)),
                         partnerName: partnerName
+                        ,allocations: item.allocations ?? []
                     };
                 });
             },
@@ -229,18 +229,19 @@ const App = {
                 state.partnerList = [...customers, ...vendors];
             },
             loadSourceDetails: async () => {
-                state.allocationDetails = [];
+                    state.allocationDetails = [];
                 state.paymentHistory = [];
                 state.sourceDetailsError = '';
-                if ((state.sourceModule ?? '').toLowerCase() !== 'purchaseorder' || !state.sourceModuleId) return;
+                if (!state.id) return;
 
                 state.sourceDetailsLoading = true;
                 try {
+                    const isPurchaseOrder = (state.sourceModule ?? '').toLowerCase() === 'purchaseorder' && !!state.sourceModuleId;
                     const [allocationResponse, paymentResponse] = await Promise.all([
-                        services.getAllocationDetails(state.sourceModuleId),
-                        services.getPaymentHistory(state.sourceModuleId)
+                        isPurchaseOrder ? services.getAllocationDetails(state.sourceModuleId) : Promise.resolve(null),
+                        services.getPaymentHistory(state.id)
                     ]);
-                    if (allocationResponse?.data?.code !== 200 || paymentResponse?.data?.code !== 200) {
+                    if ((allocationResponse && allocationResponse?.data?.code !== 200) || paymentResponse?.data?.code !== 200) {
                         throw new Error('The source transaction details could not be loaded.');
                     }
                     state.allocationDetails = Array.isArray(allocationResponse?.data?.content?.data)
@@ -258,16 +259,39 @@ const App = {
                     state.sourceDetailsLoading = false;
                 }
             },
-            isEditableSource: () => ['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(state.sourceModule),
+            isEditableSource: () => !!state.sourceModule,
             isFormReadOnly: () => state.viewMode || state.deleteMode,
             canEditPrimaryFields: () => !state.viewMode && !state.deleteMode && !state.sourceModule,
-            canEditRestrictedFields: () => !state.viewMode
-                && !state.deleteMode
-                && (!state.sourceModule || ['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(state.sourceModule)),
-            canEditPaidAmount: () => !state.viewMode
-                && !state.deleteMode
-                && state.sourceModule !== 'MaterialExport'
-                && (!state.sourceModule || ['PurchaseOrder', 'SalesOrder'].includes(state.sourceModule))
+            canEditRestrictedFields: () => !state.viewMode && !state.deleteMode,
+            canEditPaidAmount: () => !state.viewMode && !state.deleteMode
+            ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
+            ,validateAllocations: () => {
+                if (!state.showAllocationDetails || !methods.canEditPrimaryFields()) return true;
+                return Math.abs(methods.allocationTotal() - (Number(state.amount) || 0)) <= 0.000001;
+            }
+            ,syncAmountFromAllocations: () => {
+                if (!state.showAllocationDetails || !methods.canEditPrimaryFields()) return;
+                state.amount = methods.allocationTotal();
+            }
+            ,onAllocationAmountInput: () => {
+                Vue.nextTick(() => methods.syncAmountFromAllocations());
+            }
+            ,partnerOptions: () => state.showAllocationDetails
+                ? state.partnerList.filter(partner => !!partner.vendorId)
+                : state.partnerList
+            ,toggleAllocationDetails: () => {
+                state.showAllocationDetails = !state.showAllocationDetails;
+                if (state.showAllocationDetails) {
+                    const selected = state.partnerList.find(partner => partner.id === state.partnerId);
+                    if (selected && !selected.vendorId) state.partnerId = null;
+                }
+                partnerDropDown.refresh();
+            }
+            ,addAllocation: () => state.allocationRows.push({ customerId: null, amount: 0, description: '' })
+            ,removeAllocation: (index) => {
+                state.allocationRows.splice(index, 1);
+                methods.syncAmountFromAllocations();
+            }
         };
 
         // UI Controls
@@ -354,7 +378,7 @@ const App = {
             obj: null,
             create: () => {
                 partnerDropDown.obj = new ej.dropdowns.DropDownList({
-                    dataSource: state.partnerList,
+                    dataSource: methods.partnerOptions(),
                     fields: { value: 'id', text: 'name' },
                     placeholder: 'Select Partner',
                     filterBarPlaceholder: 'Search...',
@@ -363,7 +387,7 @@ const App = {
                     filtering: (e) => {
                         let query = new ej.data.Query();
                         query = (e.text !== '') ? query.where('name', 'startswith', e.text, true) : query;
-                        e.updateData(state.partnerList, query);
+                        e.updateData(methods.partnerOptions(), query);
                     },
                     change: (args) => { state.partnerId = args.value; }
                 });
@@ -371,6 +395,7 @@ const App = {
             },
             refresh: () => {
                 if (partnerDropDown.obj) {
+                    partnerDropDown.obj.dataSource = methods.partnerOptions();
                     partnerDropDown.obj.value = state.partnerId;
                     partnerDropDown.obj.enabled = methods.canEditPrimaryFields();
                     partnerDropDown.obj.dataBind();
@@ -480,8 +505,7 @@ const App = {
             refresh: () => {
                 if (paidAmountInput.obj) {
                     paidAmountInput.obj.value = state.paidAmount;
-                    paidAmountInput.obj.enabled = methods.canEditPaidAmount()
-                        && (!state.sourceModule || !!state.cashAccountId || Number(state.paidAmount ?? 0) === 0);
+                    paidAmountInput.obj.enabled = methods.canEditPaidAmount();
                     paidAmountInput.obj.dataBind();
                     NumberFormatManager.refreshNumericTextBox(paidAmountInput.obj);
                 }
@@ -493,6 +517,12 @@ const App = {
         Vue.watch(() => state.cashAccountId, () => { state.errors.cashAccountId = ''; cashAccountDropDown.refresh(); });
         Vue.watch(() => state.cashCategoryId, () => { cashCategoryDropDown.refresh(); });
         Vue.watch(() => state.partnerId, () => { partnerDropDown.refresh(); });
+        Vue.watch(() => state.sourceModule, (sourceModule) => {
+            if (['PurchaseOrder', 'MaterialExport'].includes(sourceModule)) {
+                state.showAllocationDetails = true;
+            }
+            partnerDropDown.refresh();
+        });
         Vue.watch(() => state.amount, () => {
             state.errors.amount = '';
             if (document.activeElement !== amountInput.obj?.element) {
@@ -544,6 +574,10 @@ const App = {
                     await new Promise(resolve => setTimeout(resolve, 300));
 
                     if (!validateForm()) return;
+                    if (!methods.validateAllocations()) {
+                        Swal.fire({ icon: 'error', title: 'Phân bổ chưa hợp lệ', text: 'Tổng giá trị phân bổ phải bằng số tiền của giao dịch.' });
+                        return;
+                    }
 
 
 
@@ -571,6 +605,7 @@ const App = {
                         sourceModule: state.sourceModule,
                         sourceModuleId: state.sourceModuleId,
                         sourceModuleNumber: state.sourceModuleNumber,
+                        allocations: state.allocationRows.map(row => ({ customerId: row.customerId || null, amount: Number(row.amount) || 0, description: row.description || null })).filter(row => row.amount > 0),
                     };
 
                     let response;
@@ -605,6 +640,7 @@ const App = {
                             state.sourceModule = data.sourceModule ?? state.sourceModule;
                             state.sourceModuleId = data.sourceModuleId ?? state.sourceModuleId;
                             state.sourceModuleNumber = data.sourceModuleNumber ?? state.sourceModuleNumber;
+                            state.allocationRows = (data.allocations ?? []).map(a => ({ ...a }));
                             await methods.loadSourceDetails();
                         }
 
@@ -748,7 +784,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true, showColumnMenu: true, gridLines: 'Horizontal',
                     columns: [
                         { type: 'checkbox', width: 60 },
@@ -761,6 +797,7 @@ const App = {
                         { field: 'partnerName', headerText: 'Partner', width: 180, minWidth: 180 },
                         { field: 'amount', headerText: 'Original Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'paidAmount', headerText: 'Paid Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'remaining', headerText: 'Remaining', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
                         { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 },
                         { field: 'statusName', headerText: 'Status', width: 120, minWidth: 120 },
@@ -826,7 +863,8 @@ const App = {
                             state.partnerId = args.rowData.customerId ? ('cust_' + args.rowData.customerId) : (args.rowData.vendorId ? ('vend_' + args.rowData.vendorId) : null);
                             state.sourceModule = args.rowData.sourceModule;
                             state.sourceModuleId = args.rowData.sourceModuleId;
-                            state.sourceModuleNumber = args.rowData.sourceModuleNumber;
+                                state.sourceModuleNumber = args.rowData.sourceModuleNumber;
+                                state.allocationRows = (args.rowData.allocations ?? []).map(a => ({ ...a }));
                             await methods.loadSourceDetails();
                             await showMainModal();
                         }
@@ -867,6 +905,7 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
+                                state.allocationRows = (r.allocations ?? []).map(a => ({ ...a }));
                                 await methods.loadSourceDetails();
                                 await showMainModal();
                             }
@@ -877,13 +916,6 @@ const App = {
                             state.deleteMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];
-                                if (r.sourceModule && !['PurchaseOrder', 'SalesOrder', 'MaterialExport'].includes(r.sourceModule)) {
-                                    Swal.fire({
-                                        icon: 'info',
-                                        text: 'Source-generated cash transactions are read-only.'
-                                    });
-                                    return;
-                                }
                                 state.mainTitle = 'Edit Cash Transaction';
                                 state.id = r.id ?? '';
                                 state.number = r.number ?? '';
@@ -898,33 +930,21 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
+                                state.allocationRows = (r.allocations ?? []).map(a => ({ ...a }));
                                 await methods.loadSourceDetails();
                                 await showMainModal();
                             }
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            state.viewMode = false;
-                            state.deleteMode = true;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const r = mainGrid.obj.getSelectedRecords()[0];
-                                if (r.sourceModule && r.sourceModule !== 'CashTransfer') {
-                                    Swal.fire({ icon: 'info', text: 'Source-generated cash transactions cannot be deleted.' });
-                                    return;
-                                }
-                                state.mainTitle = r.sourceModule === 'CashTransfer' ? 'Delete Cash Transfer?' : 'Delete Cash Transaction?';
-                                state.id = r.id ?? '';
-                                state.number = r.number ?? '';
-                                state.transactionDate = DateFormatManager.parseBusinessDate(r.transactionDate);
-                                state.transactionType = r.transactionType;
-                                state.amount = r.amount;
-                                state.paidAmount = r.paidAmount;
-                                state.description = r.description ?? '';
-                                state.cashAccountId = r.cashAccountId;
-                                state.cashCategoryId = r.cashCategoryId;
-                                state.partnerId = r.customerId ? ('cust_' + r.customerId) : (r.vendorId ? ('vend_' + r.vendorId) : null);
-                                await showMainModal();
-                            }
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} giao dịch tiền mặt đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
+                            if (!result.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId());
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} giao dịch tiền mặt.`, heightAuto: false });
                         }
                     }
                 });

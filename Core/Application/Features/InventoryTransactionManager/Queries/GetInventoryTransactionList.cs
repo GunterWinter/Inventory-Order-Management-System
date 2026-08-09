@@ -21,7 +21,6 @@ public record GetInventoryTransactionListDto
     public string? WarehouseName { get; init; }
     public string? ProductName { get; init; }
     public string? ProductReferenceCode { get; init; }
-    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? TransTypeName { get; init; }
     public double? Stock { get; init; }

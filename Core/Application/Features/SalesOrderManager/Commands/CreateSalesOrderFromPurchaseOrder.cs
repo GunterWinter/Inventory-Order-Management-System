@@ -111,7 +111,6 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
                 SalesOrderId = salesOrder.Id,
                 ProductId = poItem.ProductId,
                 WarehouseId = poItem.WarehouseId,
-                BatchNumber = poItem.BatchNumber,
                 Quantity = quantity,
                 UnitPrice = unitPrice,
                 Total = total,

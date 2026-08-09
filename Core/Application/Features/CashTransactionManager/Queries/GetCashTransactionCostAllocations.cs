@@ -13,6 +13,8 @@ public record GetCashTransactionCostAllocationsDto
     public double? Quantity { get; init; }
     public double? UnitPrice { get; init; }
     public double? Total { get; init; }
+    public string? WarehouseId { get; init; }
+    public string? WarehouseName { get; init; }
 }
 
 public class GetCashTransactionCostAllocationsResult
@@ -49,6 +51,9 @@ public class GetCashTransactionCostAllocationsHandler : IRequestHandler<GetCashT
             .Where(x => x.PurchaseOrderId == request.PurchaseOrderId && !x.IsDeleted)
             .Include(x => x.PurchaseOrderItem)
                 .ThenInclude(x => x!.Product)
+            .Include(x => x.PurchaseOrderItem)
+                .ThenInclude(x => x!.Warehouse)
+            .Include(x => x.Warehouse)
             .Include(x => x.Customer)
             .ToListAsync(cancellationToken);
 
@@ -60,10 +65,12 @@ public class GetCashTransactionCostAllocationsHandler : IRequestHandler<GetCashT
         var dtos = allocations.Select(a => new GetCashTransactionCostAllocationsDto
         {
             ProductName = a.PurchaseOrderItem?.Product?.Name,
-            CustomerName = a.CustomerId == null ? "Warehouse" : (a.Customer?.Name ?? "N/A"),
+            CustomerName = a.CustomerId == null ? null : (a.Customer?.Name ?? "N/A"),
             Quantity = a.Quantity,
             UnitPrice = a.UnitPrice,
             Total = (a.Quantity ?? 0) * (a.UnitPrice ?? 0)
+            ,WarehouseId = a.WarehouseId ?? a.PurchaseOrderItem?.WarehouseId
+            ,WarehouseName = a.Warehouse?.Name ?? a.PurchaseOrderItem?.Warehouse?.Name
         }).ToList();
 
         return new GetCashTransactionCostAllocationsResult { Data = dtos };

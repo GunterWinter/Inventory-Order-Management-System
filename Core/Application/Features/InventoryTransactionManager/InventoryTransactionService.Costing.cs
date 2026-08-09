@@ -7,7 +7,7 @@ namespace Application.Features.InventoryTransactionManager;
 
 public partial class InventoryTransactionService
 {
-    public async Task UpdateSalesOrderItemBatchCostAsync(
+    public async Task UpdateSalesOrderItemCostAsync(
         SalesOrderItem salesOrderItem,
         string? updatedById,
         CancellationToken cancellationToken = default)
@@ -22,10 +22,9 @@ public partial class InventoryTransactionService
             return;
         }
 
-        var unitCost = await GetBatchUnitCostAsync(
+        var unitCost = await GetUnitCostAsync(
             salesOrderItem.ProductId,
             salesOrderItem.WarehouseId,
-            salesOrderItem.BatchNumber,
             cancellationToken
         );
 
@@ -40,10 +39,9 @@ public partial class InventoryTransactionService
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 
-    private async Task<double> GetBatchUnitCostAsync(
+    private async Task<double> GetUnitCostAsync(
         string? productId,
         string? warehouseId,
-        string? batchNumber,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(productId))
@@ -55,9 +53,7 @@ public partial class InventoryTransactionService
             .Set<GoodsReceive>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x =>
-                x.Status == GoodsReceiveStatus.Confirmed &&
-                x.PurchaseOrderId != null)
+            .Where(x => x.Status == GoodsReceiveStatus.Confirmed && x.PurchaseOrderId != null)
             .Select(x => x.PurchaseOrderId!)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -71,35 +67,14 @@ public partial class InventoryTransactionService
             .Set<PurchaseOrderItem>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x =>
-                receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
-                x.ProductId == productId);
+            .Where(x => receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) && x.ProductId == productId);
 
         if (!string.IsNullOrWhiteSpace(warehouseId))
         {
             query = query.Where(x => x.WarehouseId == warehouseId);
         }
 
-        if (!string.IsNullOrWhiteSpace(batchNumber))
-        {
-            query = query.Where(x => x.BatchNumber == batchNumber);
-        }
-
         var purchaseItems = await query.ToListAsync(cancellationToken);
-
-        if (!purchaseItems.Any() && !string.IsNullOrWhiteSpace(batchNumber))
-        {
-            purchaseItems = await _queryContext
-                .Set<PurchaseOrderItem>()
-                .AsNoTracking()
-                .ApplyIsDeletedFilter(false)
-                .Where(x =>
-                    receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) &&
-                    x.ProductId == productId &&
-                    x.BatchNumber == batchNumber)
-                .ToListAsync(cancellationToken);
-        }
-
         var totalQty = purchaseItems.Sum(x => x.Quantity ?? 0d);
         if (totalQty <= 0d)
         {

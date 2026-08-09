@@ -15,7 +15,6 @@ public class DeliveryOrderUpdateInvenTransRequest : IRequest<DeliveryOrderUpdate
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
     public string? ModuleItemId { get; init; }
-    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? UpdatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
@@ -56,7 +55,6 @@ public class DeliveryOrderUpdateInvenTransHandler
             request.Movement,
             request.UpdatedById,
             request.ModuleItemId,
-            request.BatchNumber,
             cancellationToken,
             request.ProductSerialIds);
 

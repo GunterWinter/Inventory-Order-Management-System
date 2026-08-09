@@ -487,7 +487,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -606,6 +606,9 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
+                            const selected = mainGrid.obj.getSelectedRecords(); if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} phiếu giao hàng đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false }); if (!result.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId()); await methods.populateMainData(); mainGrid.refresh(); Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} phiếu giao hàng.`, heightAuto: false }); return;
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
@@ -702,8 +705,6 @@ const App = {
                             }
                         },
                         {
-                            field: 'batchNumber',
-                            headerText: 'Batch Number',
                             width: 180
                         },
                         {
@@ -740,7 +741,7 @@ const App = {
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },

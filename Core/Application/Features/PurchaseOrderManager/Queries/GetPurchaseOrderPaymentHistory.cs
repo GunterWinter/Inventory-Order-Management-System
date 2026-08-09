@@ -31,6 +31,7 @@ public class GetPurchaseOrderPaymentHistoryResult
 public class GetPurchaseOrderPaymentHistoryRequest : IRequest<GetPurchaseOrderPaymentHistoryResult>
 {
     public string? PurchaseOrderId { get; init; }
+    public string? CashTransactionId { get; init; }
 }
 
 public class GetPurchaseOrderPaymentHistoryHandler
@@ -50,9 +51,11 @@ public class GetPurchaseOrderPaymentHistoryHandler
         var transaction = await _queryContext.Set<CashTransaction>()
             .AsNoTracking()
             .Where(x => !x.IsDeleted
-                && x.SourceModule == nameof(PurchaseOrder)
-                && x.SourceModuleId == request.PurchaseOrderId
-                && x.TransactionType == CashTransactionType.Credit)
+                && (string.IsNullOrWhiteSpace(request.CashTransactionId)
+                    ? (x.SourceModule == nameof(PurchaseOrder)
+                        && x.SourceModuleId == request.PurchaseOrderId
+                        && x.TransactionType == CashTransactionType.Credit)
+                    : x.Id == request.CashTransactionId))
             .Select(x => new
             {
                 x.Id,
@@ -66,7 +69,7 @@ public class GetPurchaseOrderPaymentHistoryHandler
 
         if (transaction == null)
         {
-            throw new InvalidOperationException("Purchase order cash transaction was not found.");
+            throw new InvalidOperationException("Cash transaction was not found.");
         }
 
         var payments = await _queryContext.Set<CashTransactionPayment>()

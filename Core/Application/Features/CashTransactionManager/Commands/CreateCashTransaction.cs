@@ -28,14 +28,23 @@ public class CreateCashTransactionRequest : IRequest<CreateCashTransactionResult
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
     public string? CreatedById { get; init; }
+    public List<CashTransactionAllocationInput>? Allocations { get; init; }
+}
+
+public class CashTransactionAllocationInput
+{
+    public string? CustomerId { get; init; }
+    public double Amount { get; init; }
+    public string? Description { get; init; }
 }
 
 public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransactionRequest>
 {
     public CreateCashTransactionValidator()
     {
-        RuleFor(x => x.CashAccountId).NotEmpty();
         RuleFor(x => x.Amount).GreaterThan(0);
+        RuleFor(x => x.Allocations).Must((r, a) => (a?.Sum(x => x.Amount) ?? 0d) <= (r.Amount ?? 0d) + 0.000001d)
+            .WithMessage("Allocation total cannot exceed transaction amount.");
         RuleFor(x => x.PaidAmount)
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)
@@ -46,18 +55,24 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
 public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactionRequest, CreateCashTransactionResult>
 {
     private readonly ICommandRepository<CashTransaction> _repository;
+    private readonly ICommandRepository<CashTransactionCostAllocation> _allocationRepository;
+    private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly CashBalanceService _cashBalanceService;
 
     public CreateCashTransactionHandler(
         ICommandRepository<CashTransaction> repository,
+        ICommandRepository<CashTransactionCostAllocation> allocationRepository,
+        ICommandRepository<CashTransactionPayment> paymentRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
         CashBalanceService cashBalanceService
         )
     {
         _repository = repository;
+        _allocationRepository = allocationRepository;
+        _paymentRepository = paymentRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _cashBalanceService = cashBalanceService;
@@ -86,6 +101,34 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
         entity.SourceModuleNumber = null;
 
         await _repository.CreateAsync(entity, cancellationToken);
+
+        if ((entity.PaidAmount ?? 0d) > 0d)
+        {
+            await _paymentRepository.CreateAsync(new CashTransactionPayment
+            {
+                CashTransactionId = entity.Id,
+                CashAccountId = entity.CashAccountId,
+                PaymentDate = entity.TransactionDate ?? DateTime.Today,
+                Amount = entity.PaidAmount ?? 0d,
+                Description = entity.Description,
+                CreatedById = request.CreatedById
+            }, cancellationToken);
+        }
+
+        if (request.Allocations != null)
+        {
+            foreach (var input in request.Allocations.Where(x => x.Amount > 0))
+            {
+                if (string.IsNullOrWhiteSpace(input.CustomerId))
+                    throw new InvalidOperationException("An allocation must target a customer.");
+                await _allocationRepository.CreateAsync(new CashTransactionCostAllocation
+                {
+                    CashTransactionId = entity.Id, CustomerId = input.CustomerId,
+                    Amount = input.Amount, Description = input.Description, CreatedById = request.CreatedById
+                }, cancellationToken);
+            }
+        }
+
         await _unitOfWork.SaveAsync(cancellationToken);
 
         if (!string.IsNullOrEmpty(request.CashAccountId))

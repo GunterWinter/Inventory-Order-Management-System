@@ -143,7 +143,7 @@ public static class NavigationTreeStructure
                 },
                 {
                     "URL": "/MovementReports/MovementReportList",
-                    "Name": "Batch Profit Report",
+                    "Name": "Inventory Profit Report",
                     "IsModule": false
                 }
             ]

@@ -20,7 +20,6 @@ public class ProductSerialController : BaseApiController
         CancellationToken cancellationToken,
         [FromQuery] string? productId = null,
         [FromQuery] string? warehouseId = null,
-        [FromQuery] string? batchNumber = null,
         [FromQuery] string? moduleName = null,
         [FromQuery] string? moduleId = null,
         [FromQuery] string? moduleItemId = null)
@@ -29,7 +28,6 @@ public class ProductSerialController : BaseApiController
         {
             ProductId = productId,
             WarehouseId = warehouseId,
-            BatchNumber = batchNumber,
             ModuleName = moduleName,
             ModuleId = moduleId,
             ModuleItemId = moduleItemId

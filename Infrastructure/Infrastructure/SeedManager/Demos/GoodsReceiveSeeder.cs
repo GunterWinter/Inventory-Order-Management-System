@@ -49,6 +49,16 @@ public class GoodsReceiveSeeder
             .Where(x => x.OrderStatus >= PurchaseOrderStatus.Confirmed)
             .ToListAsync();
 
+        var purchaseOrderIdsWithGoodsReceive = await _goodsReceiveRepository
+            .GetQuery()
+            .Where(x => !x.IsDeleted && x.PurchaseOrderId != null)
+            .Select(x => x.PurchaseOrderId!)
+            .Distinct()
+            .ToListAsync();
+        purchaseOrders = purchaseOrders
+            .Where(x => !purchaseOrderIdsWithGoodsReceive.Contains(x.Id))
+            .ToList();
+
         var warehouses = await _warehouseRepository
             .GetQuery()
             .Where(x => x.SystemWarehouse == false)
@@ -86,7 +96,6 @@ public class GoodsReceiveSeeder
                     Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
                     WarehouseId = warehouseId,
                     ProductId = item.ProductId,
-                    BatchNumber = item.BatchNumber,
                     ModuleItemId = item.Id,
                     Movement = item.Quantity!.Value
                 };

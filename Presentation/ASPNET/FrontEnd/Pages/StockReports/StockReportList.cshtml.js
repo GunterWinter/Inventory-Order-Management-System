@@ -59,7 +59,6 @@ const App = {
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
-                    sortSettings: { columns: [{ field: 'productName', direction: 'Ascending' }, { field: 'batchNumber', direction: 'Ascending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ['10', '20', '50', '100', '200', 'All'] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true,
@@ -71,7 +70,6 @@ const App = {
                         { field: 'productNumber', headerText: 'Product Number', width: 160 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },
-                        { field: 'batchNumber', headerText: 'Batch Number', width: 170 },
                         { field: 'stock', headerText: 'Stock', width: 140, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'statusName', headerText: 'Status', width: 120 },
                         { field: 'createdAtUtc', headerText: 'Last Updated', width: 170, format: 'yyyy-MM-dd HH:mm' }
@@ -90,6 +88,7 @@ const App = {
                     ],
                     toolbar: ['ExcelExport', 'Search'],
                     dataBound: function () {
+                        GridInteractionManager.collapseGroupsOnFirstLoad(mainGrid.obj);
                         mainGrid.obj.autoFitColumns(['stock', 'statusName', 'createdAtUtc']);
                     },
                     toolbarClick: (args) => {

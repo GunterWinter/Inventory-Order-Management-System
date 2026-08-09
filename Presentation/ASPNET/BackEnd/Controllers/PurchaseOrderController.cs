@@ -199,10 +199,15 @@ public class PurchaseOrderController : BaseApiController
     [HttpGet("GetPurchaseOrderPaymentHistory")]
     public async Task<ActionResult<ApiSuccessResult<GetPurchaseOrderPaymentHistoryResult>>> GetPurchaseOrderPaymentHistoryAsync(
         CancellationToken cancellationToken,
-        [FromQuery] string purchaseOrderId)
+        [FromQuery] string? purchaseOrderId = null,
+        [FromQuery] string? cashTransactionId = null)
     {
         var response = await _sender.Send(
-            new GetPurchaseOrderPaymentHistoryRequest { PurchaseOrderId = purchaseOrderId },
+            new GetPurchaseOrderPaymentHistoryRequest
+            {
+                PurchaseOrderId = purchaseOrderId,
+                CashTransactionId = cashTransactionId
+            },
             cancellationToken);
 
         return Ok(new ApiSuccessResult<GetPurchaseOrderPaymentHistoryResult>

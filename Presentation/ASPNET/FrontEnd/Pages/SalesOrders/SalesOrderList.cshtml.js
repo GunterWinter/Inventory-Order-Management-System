@@ -46,7 +46,6 @@ const App = {
         const orderStatusRef = Vue.ref(null);
         const secondaryGridRef = Vue.ref(null);
 
-        const normalizeBatchNumber = (value) => (value ?? '').toString().trim();
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
         const formatQuantity = (value) => NumberFormatManager.formatToLocale(value ?? 0);
         const getErrorMessage = (error, defaultMsg = 'Vui lòng thử lại.') => {
@@ -74,150 +73,74 @@ const App = {
             if (error.message) return error.message;
             return defaultMsg;
         };
-        const getBatchSelectionKey = (warehouseId, batchNumber) => `${warehouseId ?? ''}::${normalizeBatchNumber(batchNumber)}`;
-        const findWarehouseNameById = (warehouseId) => state.warehouseListLookupData.find(item => item.id === warehouseId)?.name ?? '';
-        const getSelectedProductIds = (currentRowId = null) => new Set(
-            state.secondaryData
+        const normalizeLookupId = value => SalesOrderItemEditor.normalizeId(value);
+        const getSelectedProductIds = (currentRowId = null) => {
+            const rows = secondaryGrid?.obj?.getRowsObject?.().map(row => row.data) ?? state.secondaryData;
+            return new Set(rows
                 .filter(item => item.id !== currentRowId && item.productId)
-                .map(item => item.productId)
+                .map(item => normalizeLookupId(item.productId))
+            );
+        };
+        const getAvailableWarehouseOptions = productId => SalesOrderItemEditor.getAvailableWarehouses(
+            state.inventoryStockData,
+            normalizeLookupId(productId),
+            state.warehouseListLookupData
         );
-        const getAvailableWarehouseOptions = (productId) => {
-            if (!productId) {
-                return [];
-            }
-
-            const grouped = new Map();
-            state.inventoryStockData
-                .filter(item =>
-                    item.productId === productId &&
-                    item.warehouseId &&
-                    normalizeBatchNumber(item.batchNumber) !== '' &&
-                    Number(item.stock ?? 0) > 0
-                )
-                .forEach(item => {
-                    const warehouseId = item.warehouseId;
-                    const current = grouped.get(warehouseId) ?? {
-                        id: warehouseId,
-                        name: item.warehouseName ?? findWarehouseNameById(warehouseId),
-                        availableStock: 0
-                    };
-
-                    current.availableStock += Number(item.stock ?? 0);
-                    grouped.set(warehouseId, current);
-                });
-
-            return [...grouped.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+        const getAvailableStock = (productId, warehouseId) => state.inventoryStockData
+            .filter(item =>
+                normalizeLookupId(item.productId) === normalizeLookupId(productId) &&
+                normalizeLookupId(item.warehouseId) === normalizeLookupId(warehouseId)
+            )
+            .reduce((total, item) => total + Number(item.stock ?? 0), 0);
+        const updateEditorRowCell = (element, field, value) => {
+            const row = element?.closest?.('tr');
+            const rowIndex = row && secondaryGrid.obj ? secondaryGrid.obj.getRows().indexOf(row) : -1;
+            if (rowIndex >= 0) secondaryGrid.obj.updateCell(rowIndex, field, value);
         };
         const getSelectableProductOptions = (currentRow = {}) => {
             const selectedProductIds = getSelectedProductIds(currentRow.id ?? null);
-            const currentProductId = currentRow.productId ?? null;
-
-            return state.productListLookupData.filter(product =>
-                product.id === currentProductId ||
-                (!selectedProductIds.has(product.id) && getAvailableWarehouseOptions(product.id).length > 0)
-            );
+            return SalesOrderItemEditor.getSelectableProducts({
+                products: state.productListLookupData,
+                stockData: state.inventoryStockData,
+                warehouseData: state.warehouseListLookupData,
+                selectedProductIds,
+                currentRow
+            });
         };
         const isSerialTrackedProduct = (productId) => {
-            const product = state.productListLookupData.find(item => item.id === productId);
-            return product?.physical === true && Number(product?.serialTrackingMode ?? 0) === 1;
+            const normalizedProductId = normalizeLookupId(productId);
+            const product = state.productListLookupData.find(item => normalizeLookupId(item.id) === normalizedProductId);
+            return product?.physical === true && Number(product?.serialTrackingMode ?? 0) !== 0;
         };
         const clearSerialSelection = (rowData) => {
             rowData.productSerialIds = [];
             rowData.productSerialNumbers = '';
         };
         const applySerialSelection = (rowData, selectedSerials) => {
-            if (!selectedSerials) {
-                return;
-            }
-
-            rowData.productSerialIds = selectedSerials.map(item => item.id);
-            rowData.productSerialNumbers = selectedSerials.map(item => item.internalSerialNumber).join(', ');
-            rowData.quantity = selectedSerials.length;
-        };
-        const getAvailableBatchOptions = (productId, warehouseId) => {
-            if (!productId) {
-                return [];
-            }
-
-            const filterWarehouseId = warehouseId ?? null;
-            const grouped = new Map();
-
-            state.inventoryStockData
-                .filter(item =>
-                    item.productId === productId &&
-                    (!filterWarehouseId || item.warehouseId === filterWarehouseId) &&
-                    item.warehouseId &&
-                    normalizeBatchNumber(item.batchNumber) !== '' &&
-                    Number(item.stock ?? 0) > 0
-                )
-                .forEach(item => {
-                    const batchNumber = normalizeBatchNumber(item.batchNumber);
-                    const selectionKey = getBatchSelectionKey(item.warehouseId, batchNumber);
-                    const current = grouped.get(selectionKey) ?? {
-                        selectionKey,
-                        batchNumber,
-                        remainingQty: 0,
-                        warehouseId: item.warehouseId,
-                        warehouseName: item.warehouseName ?? findWarehouseNameById(item.warehouseId),
-                        firstReceivedDate: null
-                    };
-
-                    current.remainingQty += Number(item.stock ?? 0);
-
-                    grouped.set(selectionKey, current);
-                });
-
-            return [...grouped.values()]
-                .sort((a, b) => {
-                    const warehouseCompare = (a.warehouseName ?? '').localeCompare(b.warehouseName ?? '');
-                    return warehouseCompare !== 0 ? warehouseCompare : a.batchNumber.localeCompare(b.batchNumber);
-                })
-                .map(item => ({
-                    selectionKey: item.selectionKey,
-                    batchNumber: item.batchNumber,
-                    warehouseId: item.warehouseId,
-                    warehouseName: item.warehouseName,
-                    remainingQty: item.remainingQty,
-                    displayText: `${item.batchNumber} (${item.warehouseName || 'Warehouse'} - ${formatQuantity(item.remainingQty)})`
-                }));
-        };
-        const getSuggestedBatchOption = (productId, warehouseId) => getAvailableBatchOptions(productId, warehouseId)[0] ?? null;
-        const getRemainingQtyForBatch = (productId, batchNumber, warehouseId) => {
-            const options = getAvailableBatchOptions(productId, warehouseId);
-            const normalizedBatchNumber = normalizeBatchNumber(batchNumber);
-
-            if (normalizedBatchNumber !== '') {
-                return options.find(item => item.batchNumber === normalizedBatchNumber)?.remainingQty ?? 0;
-            }
-
-            return options[0]?.remainingQty ?? 0;
+            if (selectedSerials === null) return false;
+            const selection = SalesOrderItemEditor.normalizeSerialSelection(selectedSerials);
+            rowData.productSerialIds = selection.ids;
+            rowData.productSerialNumbers = selection.numbers;
+            rowData.quantity = selection.quantity;
+            rowData.total = Number(rowData.unitPrice ?? 0) * selection.quantity;
+            return true;
         };
         const enrichSalesOrderItem = (item) => ({
             ...item,
-            batchNumber: normalizeBatchNumber(item.batchNumber),
-            availableBatchQty: getRemainingQtyForBatch(item.productId, item.batchNumber, item.warehouseId)
+            productId: normalizeLookupId(item.productId),
+            warehouseId: normalizeLookupId(item.warehouseId),
+            taxId: normalizeLookupId(item.taxId),
+            productSerialIds: Array.isArray(item.productSerialIds)
+                ? item.productSerialIds.map(normalizeLookupId).filter(Boolean)
+                : [],
+            productSerialNumbers: typeof item.productSerialNumbers === 'string'
+                ? item.productSerialNumbers
+                : ''
         });
         const syncSecondaryAvailability = () => {
             state.secondaryData = state.secondaryData.map(enrichSalesOrderItem);
             if (secondaryGrid.obj) {
                 secondaryGrid.refresh();
-            }
-        };
-        const refreshAvailableBatchQtyCell = (editorElement, value) => {
-            if (availableBatchQtyObj) {
-                availableBatchQtyObj.value = Number(value ?? 0);
-                availableBatchQtyObj.dataBind();
-            }
-
-            const rowElement = editorElement?.closest?.('tr');
-            const visibleColumns = secondaryGrid.obj?.getVisibleColumns?.() ?? [];
-            const columnIndex = visibleColumns.findIndex(column => column.field === 'availableBatchQty');
-
-            if (rowElement && columnIndex >= 0) {
-                const cell = rowElement.cells[columnIndex];
-                if (cell && !cell.querySelector('input')) {
-                    cell.textContent = formatQuantity(value);
-                }
             }
         };
 
@@ -278,7 +201,7 @@ const App = {
             createMainData: async (orderDate, description, orderStatus, customerId, salesType, createdById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/CreateSalesOrder', {
-                        orderDate, description, orderStatus, customerId, salesType: Number(salesType ?? 1), createdById
+                        orderDate, description, orderStatus, customerId, salesType: Number(normalizeLookupId(salesType) ?? 1), createdById
                     });
                     return response;
                 } catch (error) {
@@ -288,7 +211,7 @@ const App = {
             updateMainData: async (id, orderDate, description, orderStatus, customerId, salesType, updatedById) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrder/UpdateSalesOrder', {
-                        id, orderDate, description, orderStatus, customerId, salesType: Number(salesType ?? 1), updatedById
+                        id, orderDate, description, orderStatus, customerId, salesType: Number(normalizeLookupId(salesType) ?? 1), updatedById
                     });
                     return response;
                 } catch (error) {
@@ -345,20 +268,20 @@ const App = {
                     throw error;
                 }
             },
-            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds) => {
+            createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
-                        unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds
+                        unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds) => {
+            updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
-                        id, unitPrice, quantity, summary, productId, warehouseId, batchNumber, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds
+                        id, unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -441,6 +364,7 @@ const App = {
                 return await QuickAddHelper.complexQuickAddCustomer({
                     dropdownObj: customerListLookup.obj,
                     refreshLookup: methods.populateCustomerListLookupData,
+                    refreshLookups: [methods.populateWarehouseListLookupData],
                     state,
                     stateKey: 'customerId',
                     lookupKey: 'customerListLookupData'
@@ -560,111 +484,77 @@ const App = {
                 }
             },
             onSalesTypeChanged: async (newSalesType) => {
-                const isInternal = String(newSalesType) === '2' || Number(newSalesType) === 2;
+                const normalizedSalesType = normalizeLookupId(newSalesType) ?? '1';
+                state.salesType = normalizedSalesType;
+                const rowObjects = secondaryGrid.obj?.getRowsObject?.() ?? [];
+                const rows = rowObjects.length > 0
+                    ? rowObjects.map(row => row.data)
+                    : state.secondaryData;
 
-                if (state.secondaryData && Array.isArray(state.secondaryData) && state.secondaryData.length > 0) {
-                    for (const item of state.secondaryData) {
-                        const product = state.productListLookupData?.find(p => p.id === item.productId);
-                        if (product) {
-                            const targetUnitPrice = isInternal
-                                ? (product.costPrice ?? product.unitPrice ?? 0)
-                                : (product.unitPrice ?? 0);
+                rows.forEach((item, rowIndex) => {
+                    const product = state.productListLookupData.find(candidate =>
+                        normalizeLookupId(candidate.id) === normalizeLookupId(item.productId));
+                    if (!product) return;
 
-                            item.unitPrice = targetUnitPrice;
-                            item.total = targetUnitPrice * (item.quantity ?? 0);
+                    item.unitPrice = SalesOrderItemEditor.resolveUnitPrice(product, normalizedSalesType);
+                    item.total = item.unitPrice * Number(item.quantity ?? 0);
+                    const tax = state.taxListLookupData.find(candidate =>
+                        normalizeLookupId(candidate.id) === normalizeLookupId(item.taxId));
+                    const taxPercentage = Number(tax?.percentage ?? item.taxPercentage ?? 0);
+                    item.taxAmount = item.total * taxPercentage / 100;
+                    item.afterTaxAmount = item.total + item.taxAmount;
 
-                            const tax = state.taxListLookupData?.find(t => t.id === item.taxId);
-                            const taxPercentage = tax ? (tax.percentage ?? 0) : (item.taxPercentage ?? 0);
-                            item.taxAmount = (item.total * taxPercentage) / 100;
-                            item.afterTaxAmount = item.total + item.taxAmount;
-
-                            if (state.id && item.id) {
-                                try {
-                                    await services.updateSecondaryData(
-                                        item.id,
-                                        item.unitPrice,
-                                        item.quantity,
-                                        item.summary,
-                                        item.productId,
-                                        item.warehouseId,
-                                        item.batchNumber,
-                                        item.warrantyMonths,
-                                        item.taxId,
-                                        state.id,
-                                        StorageManager.getUserId(),
-                                        item.productSerialIds ?? []
-                                    );
-                                } catch (err) {
-                                    console.error('Update SalesOrderItem price error:', err);
-                                }
-                            }
-                        }
+                    if (secondaryGrid.obj && rowIndex < secondaryGrid.obj.getRows().length) {
+                        secondaryGrid.obj.updateCell(rowIndex, 'unitPrice', item.unitPrice);
+                        secondaryGrid.obj.updateCell(rowIndex, 'total', item.total);
+                        secondaryGrid.obj.updateCell(rowIndex, 'taxAmount', item.taxAmount);
+                        secondaryGrid.obj.updateCell(rowIndex, 'afterTaxAmount', item.afterTaxAmount);
                     }
+                });
 
-                    if (secondaryGrid.obj) {
-                        secondaryGrid.refresh();
-                    }
-                }
-
-                if (secondaryGrid.obj && secondaryGrid.obj.isEdit && priceObj && selectedProduct) {
-                    const targetPrice = isInternal
-                        ? (selectedProduct.costPrice ?? selectedProduct.unitPrice ?? 0)
-                        : (selectedProduct.unitPrice ?? 0);
+                const activeProductId = normalizeLookupId(productObj?.value);
+                const activeProduct = state.productListLookupData.find(product => normalizeLookupId(product.id) === activeProductId);
+                if (secondaryGrid.obj?.isEdit && priceObj && activeProduct) {
+                    const targetPrice = SalesOrderItemEditor.resolveUnitPrice(activeProduct, normalizedSalesType);
 
                     priceObj.value = targetPrice;
+                    priceObj.dataBind();
                     if (quantityObj && totalObj) {
                         totalObj.value = targetPrice * (quantityObj.value ?? 0);
+                        totalObj.dataBind();
                     }
                 }
 
-                if (state.id) {
-                    await methods.populateSecondaryData(state.id);
-                    await methods.populateMainData();
-                    if (mainGrid.obj) mainGrid.refresh();
-                } else {
-                    let subTotal = 0;
-                    let taxTotal = 0;
-                    let grandTotal = 0;
-                    state.secondaryData.forEach(item => {
-                        subTotal += item.total ?? 0;
-                        taxTotal += item.taxAmount ?? 0;
-                        grandTotal += item.afterTaxAmount ?? 0;
-                    });
-                    state.subTotalAmount = NumberFormatManager.formatToLocale(subTotal);
-                    state.taxAmount = NumberFormatManager.formatToLocale(taxTotal);
-                    state.totalAmount = NumberFormatManager.formatToLocale(grandTotal);
-                }
+                const subTotal = rows.reduce((total, item) => total + Number(item.total ?? 0), 0);
+                const taxTotal = rows.reduce((total, item) => total + Number(item.taxAmount ?? 0), 0);
+                const grandTotal = rows.reduce((total, item) => total + Number(item.afterTaxAmount ?? 0), 0);
+                state.subTotalAmount = NumberFormatManager.formatToLocale(subTotal);
+                state.taxAmount = NumberFormatManager.formatToLocale(taxTotal);
+                state.totalAmount = NumberFormatManager.formatToLocale(grandTotal);
             },
             handleFormSubmit: async () => {
                 state.isSubmitting = true;
-                await new Promise(resolve => setTimeout(resolve, 200));
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 200));
 
-                if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
-                    secondaryGrid.obj.endEdit();
-                    await new Promise(resolve => setTimeout(resolve, 150));
-                    if (secondaryGrid.obj && secondaryGrid.obj.isEdit) {
-                        state.isSubmitting = false;
+                    if (secondaryGrid.obj && !(await GridInteractionManager.save(secondaryGrid.obj))) {
                         Swal.fire({
                             icon: 'warning',
                             title: 'Dòng sản phẩm chưa hoàn tất',
-                            text: 'Vui lòng điền đầy đủ các trường bắt buộc (Hàng hóa, Kho hàng, Thuế, Số lượng) trên dòng đang chỉnh sửa trước khi lưu đơn hàng.',
+                            text: 'Vui lòng hoàn tất sản phẩm, kho, thuế, số lượng hoặc mã thiết bị trước khi lưu đơn hàng.',
                             confirmButtonText: 'Đồng ý'
                         });
                         return;
                     }
-                }
 
-                if (!validateForm()) {
-                    state.isSubmitting = false;
-                    return;
-                }
+                    if (!validateForm()) {
+                        return;
+                    }
 
-                if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.orderStatus))) {
-                    state.isSubmitting = false;
-                    return;
-                }
+                    if (!state.deleteMode && !(await DocumentStatusGuard.confirmIfFinalStatus(state.orderStatus))) {
+                        return;
+                    }
 
-                try {
                     const response = state.id === ''
                         ? await services.createMainData(state.orderDate, state.description, state.orderStatus, state.customerId, state.salesType, StorageManager.getUserId())
                         : state.deleteMode
@@ -672,25 +562,47 @@ const App = {
                             : await services.updateMainData(state.id, state.orderDate, state.description, state.orderStatus, state.customerId, state.salesType, StorageManager.getUserId());
 
                     if (response.data.code === 200) {
-                        await methods.populateMainData();
-                        mainGrid.refresh();
-
                         if (!state.deleteMode) {
+                            const savedOrder = response?.data?.content?.data;
                             state.mainTitle = 'Sửa đơn bán hàng';
-                            state.id = response?.data?.content?.data.id ?? '';
-                            state.number = response?.data?.content?.data.number ?? '';
-                            state.orderDate = response?.data?.content?.data.orderDate ? DateFormatManager.parseBusinessDate(response.data.content.data.orderDate) : null;
-                            state.description = response?.data?.content?.data.description ?? '';
-                            state.customerId = response?.data?.content?.data.customerId ?? '';
-                            state.salesType = response?.data?.content?.data.salesType ?? 1;
-                            state.orderStatus = String(response?.data?.content?.data.orderStatus ?? '');
+                            state.id = savedOrder?.id ?? '';
+                            state.number = savedOrder?.number ?? '';
+                            state.orderDate = savedOrder?.orderDate ? DateFormatManager.parseBusinessDate(savedOrder.orderDate) : null;
+                            state.description = savedOrder?.description ?? '';
+                            state.customerId = savedOrder?.customerId ?? '';
+                            state.salesType = savedOrder?.salesType ?? 1;
+                            state.orderStatus = String(savedOrder?.orderStatus ?? '0');
                             state.showComplexDiv = true;
 
-                            await methods.refreshInventoryAvailability();
-                            await methods.refreshPaymentSummary(state.id);
+                            if (!state.id) {
+                                throw new Error('API đã lưu nhưng không trả về mã đơn bán hàng.');
+                            }
+
+                            await Vue.nextTick();
+
+                            try {
+                                await methods.refreshInventoryAvailability();
+                            } catch (refreshError) {
+                                console.error('Unable to refresh SO inventory lookup after save:', refreshError);
+                            }
+
+                            try {
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await methods.refreshPaymentSummary(state.id);
+                            } catch (refreshError) {
+                                console.error('Unable to refresh SO main grid after save:', refreshError);
+                            }
 
                             Swal.fire({ icon: 'success', title: 'Lưu thành công', timer: 1000, showConfirmButton: false });
                         } else {
+                            try {
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                            } catch (refreshError) {
+                                console.error('Unable to refresh SO main grid after delete:', refreshError);
+                            }
+
                             Swal.fire({
                                 icon: 'success',
                                 title: 'Xóa thành công',
@@ -773,11 +685,12 @@ const App = {
                     salesTypeListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.salesTypeListLookupData,
                         fields: { value: 'id', text: 'name' },
+                        value: normalizeLookupId(state.salesType) ?? '1',
                         placeholder: 'Chọn loại xuất',
                         change: async (e) => {
-                            if (state.salesType !== e.value) {
-                                state.salesType = e.value;
-                                await methods.onSalesTypeChanged(e.value);
+                            const selectedSalesType = normalizeLookupId(e.value) ?? '1';
+                            if (normalizeLookupId(state.salesType) !== selectedSalesType) {
+                                await methods.onSalesTypeChanged(selectedSalesType);
                             }
                         }
                     });
@@ -786,7 +699,8 @@ const App = {
             },
             refresh: () => {
                 if (salesTypeListLookup.obj) {
-                    salesTypeListLookup.obj.value = state.salesType != null ? String(state.salesType) : '1';
+                    salesTypeListLookup.obj.value = normalizeLookupId(state.salesType) ?? '1';
+                    salesTypeListLookup.obj.dataBind();
                 }
             }
         };
@@ -903,7 +817,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -944,20 +858,22 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'orderDate', 'customerName', 'salesTypeName', 'orderStatusName', 'afterTaxAmount', 'createdAtUtc', 'paymentStatusText']);
+                        window.requestAnimationFrame(() => {
+                            if (!mainGrid.obj?.element?.isConnected) return;
+                            mainGrid.obj.toolbarModule?.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
 
-                        const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
-                        paymentActions.forEach(paymentAction => {
-                            paymentAction.addEventListener('mousedown', e => e.stopPropagation());
-                            paymentAction.addEventListener('click', async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const row = paymentAction.closest('tr');
-                                if (!row) return;
-                                const rowData = mainGrid.obj.getRowInfo(row).rowData;
-                                if (!rowData) return;
-                                await showPaymentPopup(rowData);
+                            const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
+                            paymentActions.forEach(paymentAction => {
+                                paymentAction.addEventListener('mousedown', e => e.stopPropagation());
+                                paymentAction.addEventListener('click', async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const row = paymentAction.closest('tr');
+                                    if (!row) return;
+                                    const rowData = mainGrid.obj.getRowInfo(row).rowData;
+                                    if (!rowData) return;
+                                    await showPaymentPopup(rowData);
+                                });
                             });
                         });
                     },
@@ -1012,7 +928,6 @@ const App = {
                             state.mainTitle = 'Thêm đơn bán hàng';
                             resetFormState();
                             state.secondaryData = [];
-                            secondaryGrid.refresh();
                             state.showComplexDiv = false;
                             mainModal.obj.show();
                         }
@@ -1062,6 +977,9 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
+                            const selected = mainGrid.obj.getSelectedRecords(); if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} đơn bán hàng đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false }); if (!result.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId()); await methods.populateMainData(); mainGrid.refresh(); Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} đơn bán hàng.`, heightAuto: false }); return;
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
@@ -1093,6 +1011,12 @@ const App = {
                 });
 
                 mainGrid.obj.appendTo(mainGridRef.value);
+                mainGrid.obj.element.dataset.groupCollapseWired = 'true';
+                window.setTimeout(() => {
+                    if (mainGrid.obj?.element?.isConnected) {
+                        GridInteractionManager.collapseGroups(mainGrid.obj);
+                    }
+                }, 250);
             },
             refresh: () => {
                 mainGrid.obj.setProperties({ dataSource: state.mainData });
@@ -1101,8 +1025,6 @@ const App = {
 
         let productObj;
         let warehouseObj;
-        let batchObj;
-        let availableBatchQtyObj;
         let priceObj;
         let quantityObj;
         let totalObj;
@@ -1122,7 +1044,7 @@ const App = {
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -1134,7 +1056,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'productName', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple' },
                     autoFit: false,
                     showColumnMenu: false,
                     gridLines: 'Horizontal',
@@ -1150,7 +1072,8 @@ const App = {
                             validationRules: { required: true },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
-                                const product = state.productListLookupData.find(item => item.id === data[field]);
+                                const productId = normalizeLookupId(data[field]);
+                                const product = state.productListLookupData.find(item => normalizeLookupId(item.id) === productId);
                                 return product ? `${product.name}` : '';
                             },
                             editType: 'dropdownedit',
@@ -1160,10 +1083,13 @@ const App = {
                                     return productElem;
                                 },
                                 read: () => {
-                                    return productObj.value;
+                                    return normalizeLookupId(productObj?.value);
                                 },
                                 destroy: () => {
-                                    productObj.destroy();
+                                    if (productObj) {
+                                        productObj.destroy();
+                                        productObj = null;
+                                    }
                                 },
                                 write: (args) => {
                                     const productOptions = getSelectableProductOptions(args.rowData);
@@ -1176,82 +1102,72 @@ const App = {
                                             return valueOrItem;
                                         }
 
-                                        return productOptions.find(item => item.id === valueOrItem)
-                                            ?? state.productListLookupData.find(item => item.id === valueOrItem);
+                                        const productId = normalizeLookupId(valueOrItem);
+                                        return productOptions.find(item => normalizeLookupId(item.id) === productId)
+                                            ?? state.productListLookupData.find(item => normalizeLookupId(item.id) === productId);
                                     };
                                     const applyProductSelection = (selectedProduct) => {
                                         if (selectedProduct) {
                                             const warehouseOptions = getAvailableWarehouseOptions(selectedProduct.id);
-                                            const defaultWarehouseId = selectedProduct.defaultWarehouseId ?? null;
-                                            const defaultWarehouseHasStock = defaultWarehouseId && warehouseOptions.some(item => item.id === defaultWarehouseId);
-                                            let selectedWarehouseId = defaultWarehouseHasStock ? defaultWarehouseId : null;
-                                            let batchOptions = getAvailableBatchOptions(selectedProduct.id, selectedWarehouseId);
-                                            let suggestedBatch = getSuggestedBatchOption(selectedProduct.id, selectedWarehouseId);
-
-                                            if (!selectedWarehouseId && suggestedBatch?.warehouseId) {
-                                                selectedWarehouseId = suggestedBatch.warehouseId;
-                                                batchOptions = getAvailableBatchOptions(selectedProduct.id, selectedWarehouseId);
-                                                suggestedBatch = getSuggestedBatchOption(selectedProduct.id, selectedWarehouseId);
-                                            }
-
-                                            args.rowData.productId = selectedProduct.id;
-                                            args.rowData.productReferenceCode = selectedProduct.referenceCode;
-                                            args.rowData.warehouseId = selectedWarehouseId;
-                                            args.rowData.warehouseName = warehouseOptions.find(item => item.id === selectedWarehouseId)?.name ?? suggestedBatch?.warehouseName ?? '';
-                                            args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
-                                            args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
-                                            args.rowData.warrantyMonths = selectedProduct.defaultWarrantyMonths ?? null;
-                                            clearSerialSelection(args.rowData);
+                                            const selection = SalesOrderItemEditor.buildProductSelection({
+                                                rowData: args.rowData,
+                                                product: selectedProduct,
+                                                warehouseOptions,
+                                                salesType: state.salesType
+                                            });
+                                            const { serialTracked, productChanged, ...rowValues } = selection;
+                                            Object.assign(args.rowData, rowValues);
+                                            if (productChanged) clearSerialSelection(args.rowData);
                                             if (productObj) {
-                                                productObj.value = selectedProduct.id;
+                                                productObj.value = selection.productId;
                                                 productObj.dataBind();
                                             }
                                             if (warehouseObj) {
                                                 warehouseObj.dataSource = warehouseOptions;
-                                                warehouseObj.value = selectedWarehouseId;
+                                                warehouseObj.value = selection.warehouseId;
+                                                warehouseObj.enabled = selectedProduct.physical !== false;
                                                 warehouseObj.dataBind();
                                             }
-                                            refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
-                                            const defaultPrice = (String(state.salesType) === '2' || Number(state.salesType) === 2)
-                                                ? (selectedProduct.costPrice ?? selectedProduct.unitPrice ?? null)
-                                                : (selectedProduct.unitPrice ?? null);
                                             if (numberObj) {
                                                 numberObj.value = selectedProduct.number;
                                             }
                                             if (priceObj) {
-                                                priceObj.value = defaultPrice;
+                                                priceObj.value = selection.unitPrice;
                                             }
                                             if (summaryObj) {
                                                 summaryObj.value = selectedProduct.description;
                                             }
                                             if (warrantyObj) {
-                                                warrantyObj.value = args.rowData.warrantyMonths;
+                                                warrantyObj.value = selection.warrantyMonths;
                                             }
                                             if (quantityObj) {
-                                                quantityObj.value = 1;
-                                                const total = (defaultPrice ?? 0) * quantityObj.value;
+                                                quantityObj.value = selection.quantity;
+                                                quantityObj.readonly = serialTracked;
+                                                quantityObj.dataBind();
                                                 if (totalObj) {
-                                                    totalObj.value = total;
+                                                    totalObj.value = selection.total;
+                                                    totalObj.dataBind();
                                                 }
                                             }
-                                            if (batchObj) {
-                                                batchObj.dataSource = batchOptions;
-                                                batchObj.value = suggestedBatch?.selectionKey ?? null;
-                                                batchObj.text = args.rowData.batchNumber;
-                                                batchObj.dataBind();
-                                            }
+
+                                            [
+                                                ['warehouseId', selection.warehouseId],
+                                                ['warrantyMonths', selection.warrantyMonths],
+                                                ['unitPrice', selection.unitPrice],
+                                                ['quantity', selection.quantity],
+                                                ['total', selection.total],
+                                                ['summary', selection.summary]
+                                            ].forEach(([field, value]) => updateEditorRowCell(args.element, field, value));
                                         }
                                     };
 
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: productOptions,
                                         fields: { value: 'id', text: 'name' },
-                                        value: args.rowData.productId,
-                                        select: (e) => {
-                                            applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
-                                        },
+                                        value: normalizeLookupId(args.rowData.productId),
+                                        allowFiltering: true,
                                         change: (e) => {
-                                            applyProductSelection(resolveSelectedProduct(e.value));
+                                            applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
                                         },
                                         placeholder: 'Chọn sản phẩm',
                                         floatLabelType: 'Never'
@@ -1264,9 +1180,10 @@ const App = {
                             field: 'warehouseId',
                             headerText: 'Kho',
                             width: 180,
-                            validationRules: { required: true },
+                            validationRules: { required: false },
                             valueAccessor: (field, data, column) => {
-                                const warehouse = state.warehouseListLookupData.find(item => item.id === data[field]);
+                                const warehouseId = normalizeLookupId(data[field]);
+                                const warehouse = state.warehouseListLookupData.find(item => normalizeLookupId(item.id) === warehouseId);
                                 return warehouse ? warehouse.name : (data.warehouseName ?? '');
                             },
                             editType: 'dropdownedit',
@@ -1276,7 +1193,7 @@ const App = {
                                     return warehouseElem;
                                 },
                                 read: () => {
-                                    return warehouseObj?._pendingValue ?? warehouseObj?.value ?? null;
+                                    return normalizeLookupId(warehouseObj?._pendingValue ?? warehouseObj?.value);
                                 },
                                 destroy: () => {
                                     if (warehouseObj) {
@@ -1285,139 +1202,38 @@ const App = {
                                     }
                                 },
                                 write: (args) => {
+                                    const productId = normalizeLookupId(args.rowData.productId);
+                                    const product = state.productListLookupData.find(item => normalizeLookupId(item.id) === productId);
+                                    const warehouseOptions = product?.physical === false ? [] : getAvailableWarehouseOptions(productId);
+                                    const currentWarehouseId = normalizeLookupId(args.rowData.warehouseId);
+                                    const selectedWarehouseId = warehouseOptions.some(item => item.id === currentWarehouseId)
+                                        ? currentWarehouseId
+                                        : null;
+                                    if (product?.physical === false) {
+                                        args.rowData.warehouseId = null;
+                                        args.rowData.warehouseName = '';
+                                    } else if (!selectedWarehouseId) {
+                                        args.rowData.warehouseId = null;
+                                        args.rowData.warehouseName = '';
+                                    }
                                     warehouseObj = new ej.dropdowns.DropDownList({
-                                        dataSource: getAvailableWarehouseOptions(args.rowData.productId),
+                                        dataSource: warehouseOptions,
                                         fields: { value: 'id', text: 'name' },
-                                        value: args.rowData.warehouseId ?? null,
+                                        value: selectedWarehouseId,
                                         allowFiltering: true,
-                                        showClearButton: false,
+                                        showClearButton: true,
+                                        enabled: product?.physical !== false,
                                         placeholder: 'Chọn kho',
                                         change: (e) => {
-                                            const selectedWarehouse = state.warehouseListLookupData.find(item => item.id === e.value);
-                                            args.rowData.warehouseId = e.value || null;
+                                            const warehouseId = normalizeLookupId(e.value);
+                                            const selectedWarehouse = warehouseOptions.find(item => item.id === warehouseId);
+                                            args.rowData.warehouseId = selectedWarehouse ? warehouseId : null;
                                             args.rowData.warehouseName = selectedWarehouse?.name ?? '';
-                                            // Re-filter batch options by new warehouse
-                                            const batchOptions = getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
-                                            const suggestedBatch = batchOptions[0] ?? null;
-                                            args.rowData.batchNumber = suggestedBatch?.batchNumber ?? '';
-                                            args.rowData.availableBatchQty = suggestedBatch?.remainingQty ?? 0;
                                             clearSerialSelection(args.rowData);
-                                            refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
-                                            if (batchObj) {
-                                                batchObj.dataSource = batchOptions;
-                                                batchObj.value = suggestedBatch?.selectionKey ?? null;
-                                                batchObj.text = args.rowData.batchNumber;
-                                                batchObj.dataBind();
-                                            }
                                         },
                                         floatLabelType: 'Never'
                                     });
                                     warehouseObj.appendTo(args.element);
-                                }
-                            }
-                        },
-                        {
-                            field: 'batchNumber',
-                            headerText: 'Số lô',
-                            width: 180,
-                            validationRules: { required: true },
-                            edit: {
-                                create: () => {
-                                    let batchElem = document.createElement('input');
-                                    return batchElem;
-                                },
-                                read: () => {
-                                    return batchObj?.itemData?.batchNumber ?? normalizeBatchNumber(batchObj?.text ?? batchObj?.value);
-                                },
-                                destroy: () => {
-                                    if (batchObj) {
-                                        batchObj.destroy();
-                                    }
-                                },
-                                write: (args) => {
-                                    const batchOptions = getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
-                                    const suggestedBatch = getSuggestedBatchOption(args.rowData.productId, args.rowData.warehouseId);
-                                    const initialBatchOption = batchOptions.find(item =>
-                                        item.batchNumber === normalizeBatchNumber(args.rowData.batchNumber) &&
-                                        (!args.rowData.warehouseId || item.warehouseId === args.rowData.warehouseId)
-                                    ) ?? suggestedBatch;
-                                    const getCurrentBatchOptions = () => Array.isArray(batchObj?.dataSource)
-                                        ? batchObj.dataSource
-                                        : getAvailableBatchOptions(args.rowData.productId, args.rowData.warehouseId);
-                                    const syncBatchSelection = (selectionValue, selectedItem = null) => {
-                                        const currentBatchOptions = getCurrentBatchOptions();
-                                        const selectedBatch = selectedItem ??
-                                            currentBatchOptions.find(item => item.selectionKey === selectionValue) ??
-                                            currentBatchOptions.find(item => item.batchNumber === normalizeBatchNumber(selectionValue));
-
-                                        const previousBatchNumber = args.rowData.batchNumber;
-                                        const previousWarehouseId = args.rowData.warehouseId;
-                                        args.rowData.batchNumber = selectedBatch?.batchNumber ?? '';
-                                        args.rowData.warehouseId = selectedBatch?.warehouseId ?? args.rowData.warehouseId ?? null;
-                                        args.rowData.warehouseName = selectedBatch?.warehouseName ?? args.rowData.warehouseName ?? '';
-                                        args.rowData.availableBatchQty = selectedBatch?.remainingQty ?? 0;
-                                        if (previousBatchNumber !== args.rowData.batchNumber || previousWarehouseId !== args.rowData.warehouseId) {
-                                            clearSerialSelection(args.rowData);
-                                        }
-                                        refreshAvailableBatchQtyCell(args.element, args.rowData.availableBatchQty);
-
-                                        if (warehouseObj && selectedBatch?.warehouseId) {
-                                            warehouseObj.dataSource = getAvailableWarehouseOptions(args.rowData.productId);
-                                            warehouseObj.value = selectedBatch.warehouseId;
-                                            warehouseObj.dataBind();
-                                        }
-                                    };
-
-                                    batchObj = new ej.dropdowns.DropDownList({
-                                        dataSource: batchOptions,
-                                        fields: { value: 'selectionKey', text: 'batchNumber' },
-                                        value: initialBatchOption?.selectionKey ?? null,
-                                        allowFiltering: true,
-                                        showClearButton: false,
-                                        itemTemplate: '<span>${batchNumber}</span>',
-                                        placeholder: batchOptions.length ? 'Lô đề xuất FIFO' : 'Không có lô còn tồn',
-                                        select: (e) => {
-                                            syncBatchSelection(e.itemData?.selectionKey ?? e.itemData?.value, e.itemData);
-                                        },
-                                        change: (e) => {
-                                            syncBatchSelection(e.value, e.itemData);
-                                        }
-                                    });
-                                    syncBatchSelection(initialBatchOption?.selectionKey ?? null, initialBatchOption);
-                                    batchObj.appendTo(args.element);
-                                }
-                            }
-                        },
-                        {
-                            field: 'availableBatchQty',
-                            headerText: 'SL còn lại',
-                            allowEditing: true,
-                            width: 170,
-                            type: 'number',
-                            format: 'N0',
-                            textAlign: 'Right',
-                            edit: {
-                                create: () => {
-                                    let availableBatchQtyElem = document.createElement('input');
-                                    return availableBatchQtyElem;
-                                },
-                                read: () => {
-                                    return availableBatchQtyObj?.value ?? 0;
-                                },
-                                destroy: () => {
-                                    if (availableBatchQtyObj) {
-                                        availableBatchQtyObj.destroy();
-                                        availableBatchQtyObj = null;
-                                    }
-                                },
-                                write: (args) => {
-                                    availableBatchQtyObj = new ej.inputs.NumericTextBox({
-                                        value: args.rowData.availableBatchQty ?? 0,
-                                        format: 'N0',
-                                        decimals: 2,
-                                        readonly: true
-                                    });
-                                    availableBatchQtyObj.appendTo(args.element);
                                 }
                             }
                         },
@@ -1466,22 +1282,33 @@ const App = {
                                     return priceElem;
                                 },
                                 read: () => {
-                                    return priceObj.value;
+                                    return Number(priceObj?.value ?? 0);
                                 },
                                 destroy: () => {
-                                    priceObj.destroy();
+                                    if (priceObj) {
+                                        priceObj.destroy();
+                                        priceObj = null;
+                                    }
                                 },
                                 write: (args) => {
+                                    const product = state.productListLookupData.find(item =>
+                                        normalizeLookupId(item.id) === normalizeLookupId(args.rowData.productId));
+                                    const initialPrice = args.rowData.unitPrice ?? SalesOrderItemEditor.resolveUnitPrice(product, state.salesType);
+                                    args.rowData.unitPrice = Number(initialPrice ?? 0);
                                     priceObj = new ej.inputs.NumericTextBox({
                                         format: 'n0',
                                         decimals: 0,
                                         step: 1000,
                                         validateDecimalOnType: false,
-                                        value: args.rowData.unitPrice ?? 0,
+                                        value: args.rowData.unitPrice,
                                         change: (e) => {
-                                            if (quantityObj && totalObj) {
-                                                const total = e.value * quantityObj.value;
+                                            args.rowData.unitPrice = Number(e.value ?? 0);
+                                            args.rowData.total = args.rowData.unitPrice * Number(args.rowData.quantity ?? quantityObj?.value ?? 0);
+                                            updateEditorRowCell(args.element, 'total', args.rowData.total);
+                                            if (totalObj) {
+                                                const total = args.rowData.total;
                                                 totalObj.value = total;
+                                                totalObj.dataBind();
                                             }
                                         }
                                     });
@@ -1493,74 +1320,82 @@ const App = {
                             field: 'productSerialNumbers',
                             headerText: 'Mã thiết bị',
                             width: 220,
-                            valueAccessor: (field, data) => data.productSerialNumbers || (data.productSerialIds?.length ? `${data.productSerialIds.length} serial` : ''),
-                            edit: {
-                                create: () => {
-                                    const wrapper = document.createElement('div');
-                                    wrapper.className = 'd-flex gap-2 align-items-center';
-                                    wrapper.innerHTML = '<button type="button" class="btn btn-outline-primary btn-sm">Select Device Code</button><span class="text-muted serial-count"></span>';
-                                    return wrapper;
-                                },
-                                read: () => {
-                                    return '';
-                                },
-                                write: (args) => {
-                                    const button = args.element.querySelector('button');
-                                    const label = args.element.querySelector('.serial-count');
-                                    const refreshLabel = () => {
-                                        const count = args.rowData.productSerialIds?.length ?? 0;
-                                        //label.textContent = count ? `${count} mã` : '';
-                                    };
+                            allowEditing: false,
+                            valueAccessor: (field, data) => typeof data.productSerialNumbers === 'string'
+                                ? data.productSerialNumbers
+                                : '',
+                            template: (rowData) => {
+                                const wrapper = document.createElement('div');
+                                wrapper.className = 'd-flex gap-2 align-items-center';
 
-                                    refreshLabel();
-                                    button.addEventListener('click', async () => {
-                                        if (!isSerialTrackedProduct(args.rowData.productId)) {
-                                            Swal.fire({
-                                                icon: 'info',
-                                                title: 'No serial tracking',
-                                                text: 'This product does not use device serial tracking.'
-                                            });
-                                            return;
-                                        }
-                                        if (!args.rowData.productId || !args.rowData.warehouseId || !args.rowData.batchNumber) {
-                                            Swal.fire({ icon: 'warning', title: 'Missing Data', text: 'Please select product, warehouse and batch first.' });
-                                            return;
-                                        }
+                                const button = document.createElement('button');
+                                button.type = 'button';
+                                button.className = 'btn btn-outline-primary btn-sm so-serial-picker';
+                                button.textContent = 'Chọn mã thiết bị';
 
-                                        const selectedSerials = await ProductSerialPicker.open({
-                                            productId: args.rowData.productId,
-                                            warehouseId: args.rowData.warehouseId,
-                                            batchNumber: args.rowData.batchNumber,
-                                            moduleName: 'DeliveryOrder',
-                                            moduleId: state.id,
-                                            moduleItemId: args.rowData.id,
-                                            selectedIds: args.rowData.productSerialIds ?? []
+                                const label = document.createElement('span');
+                                label.className = 'text-muted small text-truncate';
+                                label.style.maxWidth = '120px';
+
+                                const refreshLabel = () => {
+                                    const count = Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds.length : 0;
+                                    label.textContent = count > 0 ? `${count} mã đã chọn` : '';
+                                    label.title = typeof rowData.productSerialNumbers === 'string' ? rowData.productSerialNumbers : '';
+                                };
+
+                                const serialEnabled = isSerialTrackedProduct(normalizeLookupId(rowData.productId));
+                                button.disabled = !serialEnabled;
+                                if (!serialEnabled) button.title = 'Sản phẩm không theo dõi serial';
+                                refreshLabel();
+
+                                button.addEventListener('click', async (event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+
+                                    const productId = normalizeLookupId(rowData.productId);
+                                    const warehouseId = normalizeLookupId(rowData.warehouseId);
+                                    if (!productId || !warehouseId) {
+                                        Swal.fire({
+                                            icon: 'warning',
+                                            title: 'Thiếu thông tin',
+                                            text: 'Vui lòng chọn sản phẩm và kho trước khi chọn mã thiết bị.',
+                                            confirmButtonText: 'Đồng ý'
                                         });
+                                        return;
+                                    }
 
-                                        applySerialSelection(args.rowData, selectedSerials);
-                                        if (quantityObj) {
-                                            quantityObj.value = args.rowData.quantity ?? 0;
-                                            quantityObj.readonly = true;
-                                            quantityObj.dataBind();
-                                        }
-                                        if (priceObj && totalObj) {
-                                            totalObj.value = (priceObj.value ?? 0) * (args.rowData.quantity ?? 0);
-                                        }
-                                        refreshLabel();
+                                    const selectedSerials = await ProductSerialPicker.open({
+                                        productId,
+                                        warehouseId,
+                                        moduleName: 'DeliveryOrder',
+                                        moduleId: state.id,
+                                        moduleItemId: normalizeLookupId(rowData.id),
+                                        selectedIds: Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds : []
                                     });
-                                }
+
+                                    if (!applySerialSelection(rowData, selectedSerials)) return;
+
+                                    const row = wrapper.closest('tr');
+                                    const rowIndex = row ? secondaryGrid.obj.getRows().indexOf(row) : -1;
+                                    if (rowIndex >= 0) {
+                                        secondaryGrid.obj.updateCell(rowIndex, 'productSerialNumbers', rowData.productSerialNumbers);
+                                        secondaryGrid.obj.updateCell(rowIndex, 'quantity', rowData.quantity);
+                                        secondaryGrid.obj.updateCell(rowIndex, 'total', rowData.total);
+                                    }
+                                    refreshLabel();
+                                });
+
+                                wrapper.append(button, label);
+                                return wrapper;
                             }
                         },
                         {
                             field: 'quantity',
                             headerText: 'Số lượng',
                             width: 200,
-                            validationRules: {
-                                required: true,
-                                custom: [(args) => {
-                                    return args['value'] > 0;
-                                }, 'Must be a positive number and not zero']
-                            },
+                            // Validate the completed row in actionBegin. Cell-level validation
+                            // fires too early while the user is still choosing product/warehouse.
+                            validationRules: { required: false },
                             type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1568,10 +1403,13 @@ const App = {
                                     return quantityElem;
                                 },
                                 read: () => {
-                                    return quantityObj.value;
+                                    return Number(quantityObj?.value ?? 0);
                                 },
                                 destroy: () => {
-                                    quantityObj.destroy();
+                                    if (quantityObj) {
+                                        quantityObj.destroy();
+                                        quantityObj = null;
+                                    }
                                 },
                                 write: (args) => {
                                     quantityObj = new ej.inputs.NumericTextBox({
@@ -1581,9 +1419,13 @@ const App = {
                                         decimals: 0,
                                         validateDecimalOnType: true,
                                         change: (e) => {
-                                            if (priceObj && totalObj) {
-                                                const total = e.value * priceObj.value;
+                                            args.rowData.quantity = Number(e.value ?? 0);
+                                            args.rowData.total = args.rowData.quantity * Number(args.rowData.unitPrice ?? priceObj?.value ?? 0);
+                                            updateEditorRowCell(args.element, 'total', args.rowData.total);
+                                            if (totalObj) {
+                                                const total = args.rowData.total;
                                                 totalObj.value = total;
+                                                totalObj.dataBind();
                                             }
                                         }
                                     });
@@ -1647,6 +1489,19 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.taxId ?? null,
                                         placeholder: 'Chọn thuế',
+                                        change: (e) => {
+                                            const taxId = normalizeLookupId(e.value);
+                                            const tax = state.taxListLookupData.find(item => normalizeLookupId(item.id) === taxId);
+                                            const total = Number(args.rowData.total ?? 0);
+                                            const taxPercentage = Number(tax?.percentage ?? 0);
+                                            args.rowData.taxId = taxId;
+                                            args.rowData.taxName = tax?.name ?? '';
+                                            args.rowData.taxPercentage = taxPercentage;
+                                            args.rowData.taxAmount = total * taxPercentage / 100;
+                                            args.rowData.afterTaxAmount = total + args.rowData.taxAmount;
+                                            updateEditorRowCell(args.element, 'taxAmount', args.rowData.taxAmount);
+                                            updateEditorRowCell(args.element, 'afterTaxAmount', args.rowData.afterTaxAmount);
+                                        },
                                         floatLabelType: 'Never'
                                     });
                                     taxObj.appendTo(args.element);
@@ -1845,62 +1700,64 @@ const App = {
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
-                        { type: 'Separator' },
-                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
+                        'Add', 'Delete', 'Update', 'Cancel'
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () { },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
                         } else {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
                     rowDeselected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], true);
                         } else {
-                            secondaryGrid.obj.toolbarModule.enableItems(['Edit'], false);
                         }
                     },
-                    rowSelecting: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length) {
-                            secondaryGrid.obj.clearSelection();
-                        }
-                    },
+                    rowSelecting: () => { },
                     toolbarClick: async (args) => {
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
                         }
 
-                        if (args.item.id === 'QuickAddWarehouseBtn') {
-                            const created = await QuickAddHelper.simpleQuickAdd({
-                                title: 'Quick Add Warehouse',
-                                apiUrl: '/Warehouse/CreateWarehouse',
-                                dropdownObj: null,
-                                refreshLookup: methods.populateWarehouseListLookupData,
-                                state: state,
-                                stateKey: null,
-                                lookupKey: 'warehouseListLookupData'
-                            });
-                            if (created && warehouseObj && warehouseObj.isDestroyed !== true) {
-                                warehouseObj.dataSource = getAvailableWarehouseOptions(productObj?.value);
-                                warehouseObj.dataBind();
-                                warehouseObj.value = created.id;
-                                warehouseObj._pendingValue = created.id;
-                                warehouseObj.dataBind();
-                            }
-                        }
                     },
                     actionBegin: (args) => {
-                        if (args.requestType !== 'save') {
+                        const requestType = String(args.requestType ?? '').toLowerCase();
+                        if (requestType === 'add' || requestType === 'batchadd') {
+                            const defaults = {
+                                warrantyMonths: 0,
+                                unitPrice: 0,
+                                quantity: 1,
+                                total: 0,
+                                taxAmount: 0,
+                                afterTaxAmount: 0,
+                                cogsAmount: 0,
+                                profitAmount: 0,
+                                productSerialIds: [],
+                                productSerialNumbers: ''
+                            };
+                            args.data = Object.assign(args.data ?? {}, defaults);
+                            args.defaultData = Object.assign(args.defaultData ?? {}, defaults);
+                            return;
+                        }
+
+                        if (requestType !== 'save') {
                             return;
                         }
 
                         const data = args.data ?? {};
+                        data.productId = normalizeLookupId(data.productId);
+                        data.warehouseId = normalizeLookupId(data.warehouseId);
+                        data.taxId = normalizeLookupId(data.taxId);
+                        data.productSerialIds = Array.isArray(data.productSerialIds)
+                            ? data.productSerialIds.map(normalizeLookupId).filter(Boolean)
+                            : [];
+                        data.productSerialNumbers = typeof data.productSerialNumbers === 'string'
+                            ? data.productSerialNumbers
+                            : '';
+                        data.unitPrice = Number(data.unitPrice ?? 0);
+                        data.quantity = Number(data.quantity ?? 0);
                         if (!data.productId) {
                             args.cancel = true;
                             Swal.fire({
@@ -1912,7 +1769,9 @@ const App = {
                             return;
                         }
 
-                        if (!data.warehouseId) {
+                        const selectedProduct = state.productListLookupData.find(item =>
+                            normalizeLookupId(item.id) === data.productId);
+                        if (selectedProduct?.physical !== false && !data.warehouseId) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
@@ -1972,17 +1831,15 @@ const App = {
                         }
 
                         const quantity = Number(data.quantity ?? 0);
-                        const availableBatchQty = Number(data.availableBatchQty ?? 0);
                         const currentRow = state.secondaryData.find(item => item.id === data.id);
                         const currentQuantity = args.action === 'edit'
                             && currentRow?.productId === data.productId
                             && currentRow?.warehouseId === data.warehouseId
-                            && normalizeBatchNumber(currentRow?.batchNumber) === normalizeBatchNumber(data.batchNumber)
                             ? Number(currentRow.quantity ?? 0)
                             : 0;
-                        const maxQuantity = availableBatchQty + currentQuantity;
+                        const maxQuantity = getAvailableStock(data.productId, data.warehouseId) + currentQuantity;
 
-                        if (!isSerialTracked && quantity > maxQuantity) {
+                        if (selectedProduct?.physical !== false && !isSerialTracked && quantity > maxQuantity) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'error',
@@ -1993,13 +1850,28 @@ const App = {
                         }
                     },
                     actionComplete: async (args) => {
+                        const requestType = String(args.requestType ?? '').toLowerCase();
+                        if (requestType === 'batchadd') {
+                            const rowData = args.data ?? args.rowData;
+                            if (rowData) {
+                                rowData.warrantyMonths ??= 0;
+                                rowData.unitPrice ??= 0;
+                                rowData.quantity = Number(rowData.quantity ?? 1) || 1;
+                                rowData.total ??= 0;
+                                rowData.productSerialIds = [];
+                                rowData.productSerialNumbers = '';
+                            }
+                            return;
+                        }
+
                         if (args.requestType === 'save' && args.action === 'add') {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
 
                             try {
-                                const response = await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                const response = await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to create sales order item.');
                                 if (response?.data?.code === 200) {
                                     await methods.refreshInventoryAvailability();
                                     await methods.populateSecondaryData(salesOrderId);
@@ -2033,6 +1905,7 @@ const App = {
                                     text: getErrorMessage(error, 'Không thể lưu.'),
                                     confirmButtonText: 'OK'
                                 });
+                                throw error;
                             }
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
@@ -2041,7 +1914,8 @@ const App = {
                             const data = args.data;
 
                             try {
-                                const response = await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.batchNumber, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                const response = await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to update sales order item.');
                                 if (response?.data?.code === 200) {
                                     await methods.refreshInventoryAvailability();
                                     await methods.populateSecondaryData(salesOrderId);
@@ -2075,6 +1949,7 @@ const App = {
                                     text: getErrorMessage(error, 'Không thể cập nhật.'),
                                     confirmButtonText: 'OK'
                                 });
+                                throw error;
                             }
                         }
                         if (args.requestType === 'delete') {
@@ -2084,6 +1959,7 @@ const App = {
 
                             try {
                                 const response = await services.deleteSecondaryData(data?.id, userId);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to delete sales order item.');
                                 if (response?.data?.code === 200) {
                                     await methods.refreshInventoryAvailability();
                                     await methods.populateSecondaryData(salesOrderId);
@@ -2116,6 +1992,7 @@ const App = {
                                     text: getErrorMessage(error, 'Không thể xóa mục này.'),
                                     confirmButtonText: 'OK'
                                 });
+                                throw error;
                             }
                         }
 
@@ -2125,18 +2002,18 @@ const App = {
                     }
                 });
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
+                secondaryGrid.obj.element.dataset.batchManaged = 'true';
+                GridInteractionManager.track(secondaryGrid.obj);
             },
             refresh: () => {
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
-                        { type: 'Separator' },
-                        { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' }
+                        'Add', 'Delete', 'Update', 'Cancel'
                     ]
                 });
             }
@@ -2189,7 +2066,7 @@ const App = {
                             <div class="col-4"><div class="border rounded p-3 h-100"><div class="small text-muted">Remaining</div><div class="fw-bold text-danger mt-1">${NumberFormatManager.formatToLocale(remainingAmountValue)}</div></div></div>
                         </div>
                         <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select"><option value="">Select Cash Account</option>${accountOptions}</select></div>
-                        <div class="mb-3"><label class="form-label fw-bold">Paid Amount</label><input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatToLocale(paidAmountValue)}"></div>
+                        <div class="mb-3"><label class="form-label fw-bold">Thanh toán lần này</label><input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatToLocale(remainingAmountValue)}"></div>
                         <div class="mb-0"><label class="form-label fw-bold">Description</label><textarea id="swal-desc" class="form-control" rows="2">${escapeHtml(displayDescription)}</textarea></div>
                     </div>
                 `,
@@ -2209,12 +2086,12 @@ const App = {
                         Swal.showValidationMessage('Select a cash account.');
                         return false;
                     }
-                    if (parsedAmount < 0) {
-                        Swal.showValidationMessage('Paid amount cannot be negative.');
+                    if (parsedAmount <= 0) {
+                        Swal.showValidationMessage('Số tiền thanh toán phải lớn hơn 0.');
                         return false;
                     }
-                    if (parsedAmount > totalAmountValue) {
-                        Swal.showValidationMessage('Paid amount cannot exceed the order total.');
+                    if (parsedAmount > remainingAmountValue) {
+                        Swal.showValidationMessage('Số tiền thanh toán không được vượt quá số tiền còn lại.');
                         return false;
                     }
                     return {
@@ -2230,7 +2107,7 @@ const App = {
                 try {
                     const payload = {
                         salesOrderId: orderId,
-                        paidAmount: result.value.amount,
+                        paymentAmount: result.value.amount,
                         description: result.value.description,
                         cashAccountId: result.value.cashAccountId,
                         cashCategoryId: result.value.cashCategoryId ?? null,
@@ -2240,7 +2117,8 @@ const App = {
                     const response = await services.upsertSalesOrderPayment(payload);
                     if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Payment could not be saved.');
                     await methods.populateMainData();
-                    mainGrid.refresh();
+                    mainGrid.obj.setProperties({ dataSource: state.mainData }, true);
+                    mainGrid.obj.refresh();
                     const savedStatus = response?.data?.content?.status;
                     Swal.fire({
                         icon: 'success',
@@ -2332,4 +2210,13 @@ const App = {
     }
 };
 
-Vue.createApp(App).mount('#app');
+const mountSalesOrderApp = () => Vue.createApp(App).mount('#app');
+if (window.SalesOrderItemEditor) {
+    mountSalesOrderApp();
+} else {
+    const editorScript = document.createElement('script');
+    editorScript.src = '/lib/indotalent/sales-order-item-editor.js?v=20260810-so-item-fix';
+    editorScript.onload = mountSalesOrderApp;
+    editorScript.onerror = () => console.error('Không thể tải logic chỉnh sửa chi tiết đơn bán hàng.');
+    document.head.appendChild(editorScript);
+}

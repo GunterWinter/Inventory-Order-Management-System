@@ -57,7 +57,7 @@ public sealed class GetCustomerProfitReportHandler
         var query = _queryContext.Set<CashTransaction>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.CustomerId != null);
+            .Where(x => x.CustomerId != null || x.CostAllocations.Any(a => a.CustomerId != null));
 
         if (!string.IsNullOrWhiteSpace(request.CustomerId))
         {
@@ -105,6 +105,23 @@ public sealed class GetCustomerProfitReportHandler
                         : 0d
             })
             .ToListAsync(cancellationToken);
+
+        // Include customer allocations from manually classified transactions.
+        var txIds = data.Select(x => x.Id).ToList();
+        var allocations = await _queryContext.Set<CashTransactionCostAllocation>().AsNoTracking()
+            .Where(a => !a.IsDeleted && txIds.Contains(a.CashTransactionId!) && a.CustomerId != null)
+            .Include(a => a.Customer).ToListAsync(cancellationToken);
+        foreach (var allocation in allocations)
+        {
+            var source = data.FirstOrDefault(x => x.Id == allocation.CashTransactionId);
+            if (source == null) continue;
+            var amount = allocation.Amount;
+            var item = source with { CustomerId = allocation.CustomerId, CustomerName = allocation.Customer?.Name,
+                ActualReceived = source.TransactionType == CashTransactionType.Debit ? amount : 0d,
+                ProjectCost = source.TransactionType == CashTransactionType.Credit ? amount : 0d,
+                Profit = source.TransactionType == CashTransactionType.Debit ? amount : source.TransactionType == CashTransactionType.Credit ? -amount : 0d };
+            data.Add(item);
+        }
 
         var actualReceived = data.Sum(x => x.ActualReceived);
         var projectCost = data.Sum(x => x.ProjectCost);

@@ -26,7 +26,6 @@ public record WarrantyLookupDto
     public string? ProductName { get; init; }
     public string? StatusName { get; init; }
     public string? WarehouseName { get; init; }
-    public string? BatchNumber { get; init; }
     public string? SalesOrderNumber { get; init; }
     public string? CustomerName { get; init; }
     public string? CustomerPhoneNumber { get; init; }
@@ -154,7 +153,6 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             ProductName = x.Product?.Name,
             StatusName = x.Status.ToString(),
             WarehouseName = x.CurrentWarehouse?.Name,
-            BatchNumber = x.BatchNumber,
             SalesOrderNumber = x.SalesOrderItem?.SalesOrder?.Number,
             CustomerName = x.SalesOrderItem?.SalesOrder?.Customer?.Name,
             CustomerPhoneNumber = x.SalesOrderItem?.SalesOrder?.Customer?.PhoneNumber,

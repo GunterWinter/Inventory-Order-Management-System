@@ -13,7 +13,7 @@ public class CashTransactionPaymentConfiguration : BaseEntityConfiguration<CashT
         base.Configure(builder);
 
         builder.Property(x => x.CashTransactionId).HasMaxLength(IdConsts.MaxLength).IsRequired();
-        builder.Property(x => x.CashAccountId).HasMaxLength(IdConsts.MaxLength).IsRequired();
+        builder.Property(x => x.CashAccountId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.PaymentDate).IsRequired();
         builder.Property(x => x.Amount).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);

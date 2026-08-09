@@ -6,7 +6,7 @@ const App = {
 
         const mainGridRef = Vue.ref(null);
 
-        const aggregateBatchProfitRows = (items) => {
+        const aggregateProfitRows = (items) => {
             const rows = new Map();
 
             items.forEach(item => {
@@ -15,11 +15,9 @@ const App = {
                 const totalSales = Number(item.total ?? 0);
                 const unitCost = soldQty > 0 ? totalCost / soldQty : 0;
                 const salesUnitPrice = Number(item.unitPrice ?? 0);
-                const batchNumber = (item.batchNumber ?? '').toString().trim();
                 const soldDate = item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null;
                 const key = [
                     item.productId ?? '',
-                    batchNumber,
                     unitCost.toFixed(4),
                     salesUnitPrice.toFixed(4)
                 ].join('|');
@@ -29,7 +27,6 @@ const App = {
                     productNumber: item.productNumber ?? '',
                     productReferenceCode: item.productReferenceCode ?? '',
                     productName: item.productName ?? '',
-                    batchNumber,
                     soldQty: 0,
                         unitCost,
                         salesUnitPrice,
@@ -73,7 +70,7 @@ const App = {
             populateMainData: async () => {
                 const response = await services.getMainData();
                 const allocations = response?.data?.content?.data ?? [];
-                state.mainData = aggregateBatchProfitRows(allocations);
+                state.mainData = aggregateProfitRows(allocations);
             }
         };
 
@@ -114,7 +111,6 @@ const App = {
                         { field: 'productNumber', headerText: 'Product Number', width: 160 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product', width: 220 },
-                        { field: 'batchNumber', headerText: 'Batch Number', width: 180 },
                         { field: 'soldQty', headerText: 'Sold Qty', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'unitCost', headerText: 'Unit Cost', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'salesUnitPrice', headerText: 'Sales Price', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },

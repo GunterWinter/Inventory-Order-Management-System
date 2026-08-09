@@ -24,7 +24,6 @@ public class UpdateSalesOrderItemRequest : IRequest<UpdateSalesOrderItemResult>
     public string? ProductId { get; init; }
     public string? WarehouseId { get; init; }
     public string? Summary { get; init; }
-    public string? BatchNumber { get; init; }
     public string? TaxId { get; init; }
     public int? WarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
@@ -40,8 +39,7 @@ public class UpdateSalesOrderItemValidator : AbstractValidator<UpdateSalesOrderI
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.SalesOrderId).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
-        RuleFor(x => x.WarehouseId).NotEmpty();
-        RuleFor(x => x.BatchNumber).NotEmpty();
+        // Warehouse is required only for physical products.
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.WarrantyMonths).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.UnitPrice).NotEmpty();
@@ -88,6 +86,12 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
         await ValidateProductNotDuplicatedAsync(request.SalesOrderId, request.ProductId, entity.Id, cancellationToken);
 
+        var isPhysical = await _queryContext.Set<Product>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == request.ProductId)
+            .Select(x => x.Physical == true).SingleOrDefaultAsync(cancellationToken);
+        if (isPhysical && string.IsNullOrWhiteSpace(request.WarehouseId))
+            throw new Exception("Warehouse is required for physical products.");
+
         var quantity = request.Quantity;
         if (await _productSerialService.IsProductSerialTrackedAsync(request.ProductId, cancellationToken))
         {
@@ -101,7 +105,6 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         await ValidateAvailableStockAsync(
             request.ProductId,
             request.WarehouseId,
-            request.BatchNumber,
             quantity,
             entity.Id,
             cancellationToken
@@ -113,7 +116,6 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         entity.ProductId = request.ProductId;
         entity.WarehouseId = request.WarehouseId;
         entity.Summary = request.Summary;
-        entity.BatchNumber = request.BatchNumber;
         entity.TaxId = request.TaxId;
         entity.WarrantyMonths = request.WarrantyMonths;
         entity.UnitPrice = request.UnitPrice;
@@ -128,7 +130,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         await _unitOfWork.SaveAsync(cancellationToken);
         await _productSerialService.ReserveSalesOrderItemSerialsAsync(entity, request.ProductSerialIds, entity.UpdatedById, cancellationToken);
 
-        await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
+        await _inventoryTransactionService.UpdateSalesOrderItemCostAsync(
             entity,
             entity.UpdatedById,
             cancellationToken
@@ -147,14 +149,12 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
     private async Task ValidateAvailableStockAsync(
         string? productId,
         string? warehouseId,
-        string? batchNumber,
         double? quantity,
         string? currentSalesOrderItemId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(productId) ||
             string.IsNullOrWhiteSpace(warehouseId) ||
-            string.IsNullOrWhiteSpace(batchNumber) ||
             quantity == null)
         {
             return;
@@ -163,13 +163,12 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         var availableStock = await _inventoryAvailabilityService.GetAvailableStockAsync(
             productId,
             warehouseId,
-            batchNumber,
             currentSalesOrderItemId,
             cancellationToken);
 
         if (availableStock <= 0d || quantity > availableStock)
         {
-            throw new Exception($"Not enough stock for the selected warehouse and batch. Available: {availableStock}.");
+            throw new Exception($"Not enough stock for the selected warehouse. Available: {availableStock}.");
         }
     }
 

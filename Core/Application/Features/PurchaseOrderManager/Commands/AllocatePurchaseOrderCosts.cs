@@ -2,6 +2,7 @@ using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
+using Application.Features.ProductSerialManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -60,6 +61,7 @@ public class AllocatePurchaseOrderCostsHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ProductSerialService _productSerialService;
 
     public AllocatePurchaseOrderCostsHandler(
         ICommandRepository<PurchaseOrder> purchaseOrderRepository,
@@ -71,7 +73,8 @@ public class AllocatePurchaseOrderCostsHandler
         ICommandRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService)
+        InventoryTransactionService inventoryTransactionService,
+        ProductSerialService productSerialService)
     {
         _purchaseOrderRepository = purchaseOrderRepository;
         _purchaseOrderItemRepository = purchaseOrderItemRepository;
@@ -83,6 +86,7 @@ public class AllocatePurchaseOrderCostsHandler
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
         _inventoryTransactionService = inventoryTransactionService;
+        _productSerialService = productSerialService;
     }
 
     public async Task<AllocatePurchaseOrderCostsResult> Handle(
@@ -265,6 +269,8 @@ public class AllocatePurchaseOrderCostsHandler
                         PurchaseOrderId = purchaseOrder.Id,
                         PurchaseOrderItemId = purchaseOrderItem.Id,
                         CustomerId = item.CustomerId,
+                        WarehouseId = purchaseOrderItem.WarehouseId,
+                        Warehouse = purchaseOrderItem.Warehouse,
                         Quantity = item.Quantity,
                         UnitPrice = ResolveUnitPrice(purchaseOrderItem),
                         Amount = item.Quantity * ResolveUnitPrice(purchaseOrderItem),
@@ -303,6 +309,26 @@ public class AllocatePurchaseOrderCostsHandler
 
                         if (selected.Count < required)
                         {
+                            // Older/demo confirmed POs could have a valid GoodsReceive stock
+                            // transaction without the corresponding internal serial rows. Repair
+                            // that source data before deciding that stock is unavailable.
+                            var incomingTransaction = await _inventoryTransactionRepository.GetQuery()
+                                .Where(x => !x.IsDeleted
+                                    && x.ModuleName == nameof(GoodsReceive)
+                                    && x.ModuleItemId == purchaseOrderItem.Id
+                                    && x.Status == InventoryTransactionStatus.Confirmed)
+                                .OrderByDescending(x => x.CreatedAtUtc)
+                                .FirstOrDefaultAsync(ct);
+                            if (incomingTransaction != null)
+                            {
+                                purchaseOrderItem.PurchaseOrder = purchaseOrder;
+                                await _productSerialService.SyncPurchaseOrderItemSerialsAsync(
+                                    purchaseOrderItem,
+                                    incomingTransaction,
+                                    request.CreatedById,
+                                    ct);
+                            }
+
                             var selectedIds = selected.Select(x => x.Id).ToList();
                             var extra = await _productSerialRepository.GetQuery()
                                 .Where(x => !x.IsDeleted

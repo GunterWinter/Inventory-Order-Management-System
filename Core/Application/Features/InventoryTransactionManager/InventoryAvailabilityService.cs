@@ -18,7 +18,6 @@ public class InventoryAvailabilityService
     public async Task<double> GetAvailableStockAsync(
         string productId,
         string warehouseId,
-        string batchNumber,
         string? currentSalesOrderItemId,
         CancellationToken cancellationToken)
     {
@@ -36,7 +35,6 @@ public class InventoryAvailabilityService
                 .Where(x =>
                     x.ProductId == productId &&
                     x.CurrentWarehouseId == warehouseId &&
-                    x.BatchNumber == batchNumber &&
                     (x.Status == ProductSerialStatus.InStock ||
                      x.Status == ProductSerialStatus.ReturnedByCustomer ||
                      (!string.IsNullOrEmpty(currentSalesOrderItemId) &&
@@ -51,8 +49,7 @@ public class InventoryAvailabilityService
             .Where(x =>
                 x.Status == InventoryTransactionStatus.Confirmed &&
                 x.ProductId == productId &&
-                x.WarehouseId == warehouseId &&
-                x.BatchNumber == batchNumber)
+                x.WarehouseId == warehouseId)
             .SumAsync(x => x.Stock ?? 0d, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(currentSalesOrderItemId))
@@ -65,8 +62,7 @@ public class InventoryAvailabilityService
                     x.ModuleName == nameof(DeliveryOrder) &&
                     x.ModuleItemId == currentSalesOrderItemId &&
                     x.ProductId == productId &&
-                    x.WarehouseId == warehouseId &&
-                    x.BatchNumber == batchNumber)
+                    x.WarehouseId == warehouseId)
                 .SumAsync(x => x.Stock ?? 0d, cancellationToken);
 
             availableStock -= currentIssuedStock;

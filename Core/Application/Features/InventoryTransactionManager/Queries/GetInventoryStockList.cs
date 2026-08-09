@@ -18,7 +18,7 @@ public record GetInventoryStockListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
-    public string? BatchNumber { get; init; }
+
     public double? Stock { get; init; }
     public int? SupplierWarrantyMonths { get; set; }
     public double? SupplierWarrantyRemaining { get; set; }
@@ -69,12 +69,11 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.Warehouse!.SystemWarehouse == false &&
                 x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed
             )
-            .GroupBy(x => new { x.WarehouseId, x.ProductId, x.BatchNumber })
+            .GroupBy(x => new { x.WarehouseId, x.ProductId })
             .Select(group => new GetInventoryStockListDto
             {
                 WarehouseId = group.Key.WarehouseId,
                 ProductId = group.Key.ProductId,
-                BatchNumber = group.Key.BatchNumber,
                 WarehouseName = group.Max(x => x.Warehouse!.Name),
                 ProductName = group.Max(x => x.Product!.Name),
                 ProductNumber = group.Max(x => x.Product!.Number),
@@ -97,12 +96,11 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.CurrentWarehouse != null &&
                 x.CurrentWarehouse.SystemWarehouse == false &&
                 (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer))
-            .GroupBy(x => new { x.CurrentWarehouseId, x.ProductId, x.BatchNumber })
+            .GroupBy(x => new { x.CurrentWarehouseId, x.ProductId })
             .Select(group => new GetInventoryStockListDto
             {
                 WarehouseId = group.Key.CurrentWarehouseId,
                 ProductId = group.Key.ProductId,
-                BatchNumber = group.Key.BatchNumber,
                 WarehouseName = group.Max(x => x.CurrentWarehouse!.Name),
                 ProductName = group.Max(x => x.Product!.Name),
                 ProductNumber = group.Max(x => x.Product!.Number),
@@ -130,14 +128,13 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
             {
                 x.ProductId,
                 x.WarehouseId,
-                x.BatchNumber,
                 x.SupplierWarrantyMonths,
                 OrderDate = x.PurchaseOrder!.OrderDate
             })
             .ToListAsync(cancellationToken);
 
         var warrantyMap = warrantyLookup
-            .GroupBy(x => new { x.ProductId, x.WarehouseId, x.BatchNumber })
+            .GroupBy(x => new { x.ProductId, x.WarehouseId })
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(x => x.OrderDate).First()
@@ -147,7 +144,7 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
 
         foreach (var entity in entities)
         {
-            var key = new { entity.ProductId, entity.WarehouseId, entity.BatchNumber };
+            var key = new { entity.ProductId, entity.WarehouseId };
             if (warrantyMap.TryGetValue(key, out var warranty))
             {
                 entity.SupplierWarrantyMonths = warranty.SupplierWarrantyMonths;

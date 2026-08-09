@@ -35,7 +35,7 @@
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'name', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -58,7 +58,7 @@
                     rowDeselected: () => { },
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {
-                            mainGrid.obj.clearSelection();
+                            // preserve multiple selection
                         }
                     },
                     toolbarClick: (args) => {

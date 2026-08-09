@@ -11,12 +11,13 @@ namespace Infrastructure.SeedManager.Demos;
 public class CashManagementSeeder
 {
     private const string DemoPrefix = "DEMO THU CHI ";
-    private const string BatchDemoPrefix = "DEMO THIẾT BỊ NHÀ THÔNG MINH";
+    private const string DemoDescriptionPrefix = "DEMO THIẾT BỊ NHÀ THÔNG MINH";
 
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<CashAccount> _cashAccountRepository;
     private readonly ICommandRepository<CashCategory> _cashCategoryRepository;
     private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
+    private readonly ICommandRepository<CashTransactionPayment> _cashTransactionPaymentRepository;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly CashBalanceService _cashBalanceService;
     private readonly IUnitOfWork _unitOfWork;
@@ -26,6 +27,7 @@ public class CashManagementSeeder
         ICommandRepository<CashAccount> cashAccountRepository,
         ICommandRepository<CashCategory> cashCategoryRepository,
         ICommandRepository<CashTransaction> cashTransactionRepository,
+        ICommandRepository<CashTransactionPayment> cashTransactionPaymentRepository,
         NumberSequenceService numberSequenceService,
         CashBalanceService cashBalanceService,
         IUnitOfWork unitOfWork)
@@ -34,6 +36,7 @@ public class CashManagementSeeder
         _cashAccountRepository = cashAccountRepository;
         _cashCategoryRepository = cashCategoryRepository;
         _cashTransactionRepository = cashTransactionRepository;
+        _cashTransactionPaymentRepository = cashTransactionPaymentRepository;
         _numberSequenceService = numberSequenceService;
         _cashBalanceService = cashBalanceService;
         _unitOfWork = unitOfWork;
@@ -82,17 +85,15 @@ public class CashManagementSeeder
         var demoSalesOrders = await _queryContext
             .Set<SalesOrder>()
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(BatchDemoPrefix))
+            .Where(x => !x.IsDeleted && x.OrderStatus == SalesOrderStatus.Confirmed)
             .OrderBy(x => x.OrderDate)
-            .Take(8)
             .ToListAsync();
 
         var demoPurchaseOrders = await _queryContext
             .Set<PurchaseOrder>()
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(BatchDemoPrefix))
+            .Where(x => !x.IsDeleted && x.OrderStatus == PurchaseOrderStatus.Confirmed)
             .OrderBy(x => x.OrderDate)
-            .Take(10)
             .ToListAsync();
 
         for (var index = 0; index < demoSalesOrders.Count; index++)
@@ -235,6 +236,20 @@ public class CashManagementSeeder
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(sourceModule) && !string.IsNullOrWhiteSpace(sourceModuleId))
+        {
+            var sourceTransactionExists = await _queryContext.Set<CashTransaction>()
+                .AsNoTracking()
+                .AnyAsync(x => !x.IsDeleted
+                    && x.SourceModule == sourceModule
+                    && x.SourceModuleId == sourceModuleId
+                    && x.TransactionType == type);
+            if (sourceTransactionExists)
+            {
+                return;
+            }
+        }
+
         var entity = new CashTransaction
         {
             Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
@@ -255,6 +270,19 @@ public class CashManagementSeeder
 
         await _cashTransactionRepository.CreateAsync(entity);
         await _unitOfWork.SaveAsync();
+
+        if ((entity.PaidAmount ?? 0d) > 0d)
+        {
+            await _cashTransactionPaymentRepository.CreateAsync(new CashTransactionPayment
+            {
+                CashTransactionId = entity.Id,
+                CashAccountId = entity.CashAccountId,
+                PaymentDate = entity.TransactionDate ?? DateTime.Today,
+                Amount = entity.PaidAmount ?? 0d,
+                Description = entity.Description
+            });
+            await _unitOfWork.SaveAsync();
+        }
     }
 
     private async Task RecalculateAccountBalance(string cashAccountId)

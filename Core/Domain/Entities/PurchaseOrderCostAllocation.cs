@@ -9,6 +9,10 @@ public class PurchaseOrderCostAllocation : BaseEntity
     
     public string? PurchaseOrderItemId { get; set; }
     public PurchaseOrderItem? PurchaseOrderItem { get; set; }
+
+    /// <summary>Warehouse inherited from the purchase-order item; null is allowed for legacy allocations.</summary>
+    public string? WarehouseId { get; set; }
+    public Warehouse? Warehouse { get; set; }
     
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }

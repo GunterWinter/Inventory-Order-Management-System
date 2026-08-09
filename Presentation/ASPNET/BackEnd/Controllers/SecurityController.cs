@@ -13,9 +13,11 @@ namespace ASPNET.BackEnd.Controllers;
 public class SecurityController : BaseApiController
 {
     private readonly IConfiguration _configuration;
-    public SecurityController(ISender sender, IConfiguration configuration) : base(sender)
+    private readonly ILogger<SecurityController> _logger;
+    public SecurityController(ISender sender, IConfiguration configuration, ILogger<SecurityController> logger) : base(sender)
     {
         _configuration = configuration;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -123,7 +125,16 @@ public class SecurityController : BaseApiController
     [HttpPost("RefreshToken")]
     public async Task<ActionResult<ApiSuccessResult<RefreshTokenResult>>> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        var response = await _sender.Send(request, cancellationToken);
+        RefreshTokenResult response;
+        try
+        {
+            response = await _sender.Send(request, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Refresh token failed. Reason={Reason}", ex.Message);
+            throw;
+        }
 
         return Ok(new ApiSuccessResult<RefreshTokenResult>
         {

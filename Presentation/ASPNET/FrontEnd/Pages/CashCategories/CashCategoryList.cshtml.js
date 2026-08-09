@@ -166,7 +166,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true, showColumnMenu: true, gridLines: 'Horizontal',
                     columns: [
                         { type: 'checkbox', width: 60 },
@@ -190,7 +190,7 @@ const App = {
                     rowDeselected: () => {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], mainGrid.obj.getSelectedRecords().length == 1);
                     },
-                    rowSelecting: () => { if (mainGrid.obj.getSelectedRecords().length) mainGrid.obj.clearSelection(); },
+                    rowSelecting: () => { },
                     toolbarClick: async (args) => {
                         if (args.item.id === 'MainGrid_excelexport') mainGrid.obj.excelExport();
 
@@ -214,6 +214,16 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const confirmation = await Swal.fire({ title: 'Bạn có chắc chắn muốn xóa?', text: 'Số dòng sẽ xóa: ' + selected.length, icon: 'warning', showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
+                            if (!confirmation.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, null);
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            return;
+                        }
+                        if (args.item.id === 'DeleteCustomLegacy') {
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const r = mainGrid.obj.getSelectedRecords()[0];

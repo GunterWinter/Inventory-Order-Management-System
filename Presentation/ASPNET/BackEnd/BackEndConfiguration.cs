@@ -93,15 +93,23 @@ public static class BackEndConfiguration
         )
     {
         // >>> Create database
-        host.CreateDatabase();
+        // Only demo mode gets a clean database. Non-demo startup is strictly
+        // non-destructive and merely ensures the schema exists.
+        var isDemoVersion = configuration.GetValue<bool>("IsDemoVersion");
+        host.CreateDatabase(isDemoVersion);
 
-        //seed database with system data
-        host.SeedSystemData();
-
-        //seed database with demo data
-        if (configuration.GetValue<bool>("IsDemoVersion"))
+        if (isDemoVersion)
         {
+            // Demo mode starts from a clean database and receives the full system,
+            // catalog, master-data and transaction dataset.
+            host.SeedSystemData();
             host.SeedDemoData();
+        }
+        else
+        {
+            // Production/non-demo startup is non-destructive and only fills the
+            // six required business catalogs when entries are missing.
+            host.SeedCatalogData();
         }
 
         if (environment.IsDevelopment())

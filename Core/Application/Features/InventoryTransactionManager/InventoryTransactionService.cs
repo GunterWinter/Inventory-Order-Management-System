@@ -75,7 +75,9 @@ public partial class InventoryTransactionService
         var childIds = await _queryContext
             .Set<InventoryTransaction>()
             .AsNoTracking()
-            .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)
+            // Never resurrect a transaction that was explicitly removed by a
+            // line update. Parent synchronization only owns active children.
+            .Where(x => !x.IsDeleted && x.ModuleId == moduleId && x.ModuleName == moduleName)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
 

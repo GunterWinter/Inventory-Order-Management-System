@@ -6,6 +6,23 @@
  */
 const QuickAddHelper = (() => {
 
+    // Active parent forms register lookup refresh callbacks while a Quick Add
+    // dialog is open. Inline/nested creates notify every ancestor so each
+    // parent can refresh its live dropdown data source.
+    const _activeRefreshCallbacks = new Set();
+    const registerRefresh = (callback) => {
+        if (typeof callback !== 'function') return () => { };
+        _activeRefreshCallbacks.add(callback);
+        return () => _activeRefreshCallbacks.delete(callback);
+    };
+    const _notifyLookupCreated = async (created) => {
+        const callbacks = Array.from(_activeRefreshCallbacks);
+        await Promise.all(callbacks.map(async callback => {
+            try { await callback(created); } catch (e) { console.warn('Quick Add parent refresh failed', e); }
+        }));
+        document.dispatchEvent(new CustomEvent('quickadd:created', { detail: created }));
+    };
+
     /**
      * Disable Bootstrap 5 modal focus trap so SweetAlert2 inputs can receive focus.
      * Bootstrap 5's Modal class uses an internal FocusTrap that intercepts 'focusin' events
@@ -52,9 +69,11 @@ const QuickAddHelper = (() => {
             throw new Error('Quick Add API did not return the created entity id.');
         }
 
-        if (typeof config.refreshLookup === 'function') {
-            await config.refreshLookup();
-        }
+        const refreshCallbacks = [
+            ...(typeof config.refreshLookup === 'function' ? [config.refreshLookup] : []),
+            ...(Array.isArray(config.refreshLookups) ? config.refreshLookups.filter(fn => typeof fn === 'function') : [])
+        ];
+        await Promise.all(refreshCallbacks.map(fn => fn()));
 
         if (config.state && config.stateKey) {
             config.state[config.stateKey] = newId;
@@ -78,6 +97,7 @@ const QuickAddHelper = (() => {
             name: data?.name ?? fallbackName ?? '',
             data
         };
+        await _notifyLookupCreated(created);
         if (typeof config.onSuccess === 'function') {
             await config.onSuccess(created);
         }
@@ -101,7 +121,7 @@ const QuickAddHelper = (() => {
         const inlineForm = document.createElement('div');
         inlineForm.className = 'qa-inline-form';
         inlineForm.innerHTML = `
-            <input type="text" class="qa-input inline-name" placeholder="Name *">
+            <input type="text" class="qa-input inline-name" placeholder="Tên *">
             <input type="text" class="qa-input inline-desc" placeholder="Description">
             <div class="d-flex gap-2 mt-1">
                 <button type="button" class="btn btn-sm btn-success inline-save"><i class="fas fa-check"></i></button>
@@ -151,6 +171,7 @@ const QuickAddHelper = (() => {
                     option.textContent = data.name || name;
                     select.appendChild(option);
                     select.value = newId;
+                    await _notifyLookupCreated({ id: newId, name: data?.name || name, data, apiUrl });
                 }
                 inlineForm.style.display = 'none';
                 wrapper.style.display = 'flex';
@@ -396,8 +417,8 @@ const QuickAddHelper = (() => {
             html:
                 '<div class="qa-form">' +
                 '<div class="qa-field">' +
-                '<label class="qa-label">Name <span class="text-danger">*</span></label>' +
-                '<input id="swal-quick-add-name" class="qa-input" placeholder="Enter name...">' +
+                '<label class="qa-label">Tên <span class="text-danger">*</span></label>' +
+                '<input id="swal-quick-add-name" class="qa-input" placeholder="Nhập tên...">' +
                 '</div>' +
                 '<div class="qa-field">' +
                 '<label class="qa-label">Description</label>' +
@@ -407,13 +428,13 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
+            cancelButtonText: 'Hủy',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('swal-quick-add-name').value.trim();
                 if (!name) {
-                    Swal.showValidationMessage('Name is required.');
+                    Swal.showValidationMessage('Tên là bắt buộc.');
                     return false;
                 }
                 const description = document.getElementById('swal-quick-add-description').value.trim();
@@ -473,6 +494,15 @@ const QuickAddHelper = (() => {
      */
     const complexQuickAddVendor = async (config) => {
         const { dropdownObj, refreshLookup, state, stateKey, lookupKey } = config;
+        const unregisterParentRefresh = registerRefresh(async () => {
+            await Promise.all([
+            refreshLookup?.(), ...(Array.isArray(config.refreshLookups) ? config.refreshLookups : []).map(fn => typeof fn === 'function' ? fn() : null)
+            ]);
+            if (dropdownObj && config.state && config.lookupKey) {
+                dropdownObj.dataSource = config.state[config.lookupKey] ?? [];
+                dropdownObj.dataBind?.();
+            }
+        });
 
         // Fetch lookup data for dropdowns inside the form
         let vendorGroups = [];
@@ -490,13 +520,13 @@ const QuickAddHelper = (() => {
         const catOptions = vendorCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Quick Add Vendor',
+            title: 'Thêm nhanh nhà cung cấp',
             width: '700px',
             html: `
                 <div class="qa-form">
                     <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-v-name" class="qa-input" placeholder="Vendor Name"></div>
+                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-v-name" class="qa-input" placeholder="Tên nhà cung cấp"></div>
                         <div class="qa-field">
                             <label class="qa-label">Vendor Group <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
@@ -552,8 +582,8 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
+            cancelButtonText: 'Hủy',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-v-name').value.trim();
@@ -594,6 +624,7 @@ const QuickAddHelper = (() => {
             }
         });
 
+        unregisterParentRefresh();
         if (!result.isConfirmed || !result.value) return null;
 
         try {
@@ -613,6 +644,15 @@ const QuickAddHelper = (() => {
      */
     const complexQuickAddCustomer = async (config) => {
         const { dropdownObj, refreshLookup, state, stateKey, lookupKey } = config;
+        const unregisterParentRefresh = registerRefresh(async () => {
+            await Promise.all([
+            refreshLookup?.(), ...(Array.isArray(config.refreshLookups) ? config.refreshLookups : []).map(fn => typeof fn === 'function' ? fn() : null)
+            ]);
+            if (dropdownObj && config.state && config.lookupKey) {
+                dropdownObj.dataSource = config.state[config.lookupKey] ?? [];
+                dropdownObj.dataBind?.();
+            }
+        });
 
         let customerGroups = [];
         let customerCategories = [];
@@ -629,13 +669,13 @@ const QuickAddHelper = (() => {
         const catOptions = customerCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Quick Add Customer',
+            title: 'Thêm nhanh khách hàng',
             width: '700px',
             html: `
                 <div class="qa-form">
                     <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-c-name" class="qa-input" placeholder="Customer Name"></div>
+                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-c-name" class="qa-input" placeholder="Tên khách hàng"></div>
                         <div class="qa-field">
                             <label class="qa-label">Customer Group <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
@@ -691,8 +731,8 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
+            cancelButtonText: 'Hủy',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-c-name').value.trim();
@@ -733,6 +773,7 @@ const QuickAddHelper = (() => {
             }
         });
 
+        unregisterParentRefresh();
         if (!result.isConfirmed || !result.value) return null;
 
         try {
@@ -752,6 +793,15 @@ const QuickAddHelper = (() => {
      */
     const complexQuickAddProduct = async (config) => {
         const { dropdownObj, refreshLookup, state, stateKey, lookupKey } = config;
+        const unregisterParentRefresh = registerRefresh(async () => {
+            await Promise.all([
+            refreshLookup?.(), ...(Array.isArray(config.refreshLookups) ? config.refreshLookups : []).map(fn => typeof fn === 'function' ? fn() : null)
+            ]);
+            if (dropdownObj && config.state && config.lookupKey) {
+                dropdownObj.dataSource = config.state[config.lookupKey] ?? [];
+                dropdownObj.dataBind?.();
+            }
+        });
 
         let productGroups = [];
         let warehouses = [];
@@ -768,13 +818,13 @@ const QuickAddHelper = (() => {
         const whOptions = warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
 
         const result = await Swal.fire({
-            title: 'Quick Add Product',
+            title: 'Thêm nhanh sản phẩm',
             width: '700px',
             html: `
                 <div class="qa-form">
                     <div class="qa-section-title"><i class="fas fa-info-circle"></i> Main Information</div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Name <span class="text-danger">*</span></label><input id="qa-p-name" class="qa-input" placeholder="Product Name"></div>
+                        <div class="qa-field"><label class="qa-label">Tên <span class="text-danger">*</span></label><input id="qa-p-name" class="qa-input" placeholder="Tên sản phẩm"></div>
                         <div class="qa-field"><label class="qa-label">Reference Code</label><input id="qa-p-refcode" class="qa-input" placeholder="SKU Code"></div>
                     </div>
                     <div class="qa-row">
@@ -799,7 +849,7 @@ const QuickAddHelper = (() => {
                         </div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field"><label class="qa-label">Warranty Months</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field"><label class="qa-label">Thời hạn bảo hành (tháng)</label><input id="qa-p-warranty" class="qa-input" type="number" min="0" value="0"></div>
                         <div class="qa-field" style="display:flex;align-items:flex-end;">
                             <div class="qa-checkbox-wrapper">
                                 <input type="checkbox" id="qa-p-physical" checked>
@@ -828,8 +878,8 @@ const QuickAddHelper = (() => {
             focusConfirm: false,
             heightAuto: false,
             showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-check me-1"></i> Save',
-            cancelButtonText: 'Cancel',
+            confirmButtonText: '<i class="fas fa-check me-1"></i> Lưu',
+            cancelButtonText: 'Hủy',
             confirmButtonColor: '#198754',
             preConfirm: () => {
                 const name = document.getElementById('qa-p-name').value.trim();
@@ -875,6 +925,7 @@ const QuickAddHelper = (() => {
             }
         });
 
+        unregisterParentRefresh();
         if (!result.isConfirmed || !result.value) return null;
 
         try {
@@ -895,7 +946,9 @@ const QuickAddHelper = (() => {
         simpleQuickAdd,
         complexQuickAddVendor,
         complexQuickAddCustomer,
-        complexQuickAddProduct
+        complexQuickAddProduct,
+        registerRefresh,
+        notifyCreated: _notifyLookupCreated
     };
 
 })();

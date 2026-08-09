@@ -10,7 +10,7 @@ public class PurchaseOrderItem : BaseEntity
     public Product? Product { get; set; }
     public string? WarehouseId { get; set; }
     public Warehouse? Warehouse { get; set; }
-    public string? BatchNumber { get; set; } 
+    public string? ManufacturerSerialNumbersJson { get; set; }
     public int? SupplierWarrantyMonths { get; set; }
     public string? Summary { get; set; }
     public string? TaxId { get; set; }
@@ -21,4 +21,6 @@ public class PurchaseOrderItem : BaseEntity
     public double? TaxAmount { get; set; } = 0;
     public double? AfterTaxAmount { get; set; } = 0;
     public double? AllocatedQuantity { get; set; } = 0;
+    public ICollection<PurchaseOrderCostAllocation> CostAllocations { get; set; } = new List<PurchaseOrderCostAllocation>();
+    public double RemainingQuantity => Math.Max(0d, (Quantity ?? 0d) - (AllocatedQuantity ?? 0d));
 }

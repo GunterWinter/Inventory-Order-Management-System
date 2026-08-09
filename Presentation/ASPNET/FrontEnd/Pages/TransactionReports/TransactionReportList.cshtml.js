@@ -77,7 +77,6 @@ const App = {
                         { field: 'warehouseName', headerText: 'Warehouse', width: 100 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 120 },
                         { field: 'productName', headerText: 'Product', width: 100 },
-                        { field: 'batchNumber', headerText: 'Batch Number', width: 120 },
                         { field: 'movementDate', headerText: 'Movement Date', width: 100, format: 'yyyy-MM-dd' },
                         { field: 'number', headerText: 'Number', width: 100 },
                         { field: 'movement', headerText: 'Movement', width: 100, type: 'number', format: 'N0', textAlign: 'Right' },
@@ -109,7 +108,7 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.autoFitColumns(['warehouseName', 'productReferenceCode', 'productName', 'batchNumber', 'movementDate', 'number', 'movement', 'transTypeName', 'statusName', 'moduleName', 'moduleCode', 'moduleNumber', 'warehouseFromName', 'warehouseToName', 'createdAtUtc']);
+                        GridInteractionManager.collapseGroupsOnFirstLoad(mainGrid.obj);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {

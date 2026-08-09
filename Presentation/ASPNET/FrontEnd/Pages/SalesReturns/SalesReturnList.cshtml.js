@@ -500,7 +500,7 @@
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -619,21 +619,14 @@
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            state.deleteMode = true;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete Sales Return?';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.returnDate = selectedRecord.returnDate ? DateFormatManager.parseBusinessDate(selectedRecord.returnDate) : null;
-                                state.description = selectedRecord.description ?? '';
-                                state.salesOrderId = selectedRecord.salesOrderId ?? '';
-                                state.status = String(selectedRecord.status ?? '');
-                                await methods.populateSecondaryData(selectedRecord.id);
-                                secondaryGrid.refresh();
-                                state.showComplexDiv = false;
-                                mainModal.obj.show();
-                            }
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} phiếu trả hàng đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
+                            if (!result.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId());
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} phiếu trả hàng.`, heightAuto: false });
                         }
 
                         if (args.item.id === 'PrintPDFCustom') {
@@ -663,7 +656,7 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: !state.isViewMode },
+                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -962,7 +955,7 @@
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },

@@ -153,7 +153,6 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }
@@ -166,14 +165,13 @@ public class UpdateDeliveryOrderHandler : IRequestHandler<UpdateDeliveryOrderReq
                     item.Quantity,
                     entity.UpdatedById ?? entity.CreatedById,
                     item.Id,
-                    item.BatchNumber,
                     cancellationToken
                 );
             }
 
             if (entity.Status == DeliveryOrderStatus.Confirmed)
             {
-                await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
+                await _inventoryTransactionService.UpdateSalesOrderItemCostAsync(
                     item,
                     entity.UpdatedById ?? entity.CreatedById,
                     cancellationToken

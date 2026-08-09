@@ -5,6 +5,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace Application.Features.ProductSerialManager;
 
@@ -126,6 +127,21 @@ public class ProductSerialService
             .OrderBy(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        var manufacturerNumbers = new List<string>();
+        if (!string.IsNullOrWhiteSpace(item.ManufacturerSerialNumbersJson))
+        {
+            manufacturerNumbers = JsonSerializer.Deserialize<List<string>>(item.ManufacturerSerialNumbersJson) ?? new();
+            manufacturerNumbers = manufacturerNumbers
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial && manufacturerNumbers.Count != quantity)
+        {
+            throw new Exception("Manufacturer serial number count must match quantity.");
+        }
+
         if (existing.Count > quantity)
         {
             var removable = existing
@@ -152,20 +168,35 @@ public class ProductSerialService
         {
             var codes = await GenerateInternalSerialNumbersAsync(product.InternalSerialFixedCode ?? "SN", quantity - existing.Count, cancellationToken);
             var supplierWarrantyEndDate = item.PurchaseOrder?.OrderDate?.AddMonths(item.SupplierWarrantyMonths ?? 0);
-            foreach (var code in codes)
+            for (var i = 0; i < codes.Count; i++)
             {
                 await _productSerialRepository.CreateAsync(new ProductSerial
                 {
                     CreatedById = userId,
                     ProductId = item.ProductId,
-                    InternalSerialNumber = code,
+                    InternalSerialNumber = codes[i],
+                    ManufacturerSerialNumber = manufacturerNumbers.Count == quantity ? manufacturerNumbers[existing.Count + i] : null,
                     Status = ResolveIncomingStatus(transaction),
                     CurrentWarehouseId = transaction?.Status == InventoryTransactionStatus.Confirmed ? item.WarehouseId : null,
-                    BatchNumber = item.BatchNumber,
                     PurchaseOrderItemId = item.Id,
                     SupplierWarrantyEndDate = supplierWarrantyEndDate,
                     UnitCost = (item.AfterTaxAmount ?? 0) / (item.Quantity > 0 ? item.Quantity.Value : 1)
                 }, cancellationToken);
+            }
+            await _unitOfWork.SaveAsync(cancellationToken);
+        }
+
+        if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
+        {
+            existing = await _productSerialRepository.GetQuery().ApplyIsDeletedFilter(false)
+                .Where(x => x.PurchaseOrderItemId == item.Id)
+                .OrderBy(x => x.CreatedAtUtc)
+                .ToListAsync(cancellationToken);
+            for (var i = 0; i < existing.Count; i++)
+            {
+                existing[i].ManufacturerSerialNumber = manufacturerNumbers[i];
+                existing[i].UpdatedById = userId;
+                _productSerialRepository.Update(existing[i]);
             }
             await _unitOfWork.SaveAsync(cancellationToken);
         }
@@ -207,10 +238,9 @@ public class ProductSerialService
         {
             if (serial.ProductId != item.ProductId ||
                 serial.CurrentWarehouseId != item.WarehouseId ||
-                serial.BatchNumber != item.BatchNumber ||
                 ((serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.ReturnedByCustomer) && serial.SalesOrderItemId != item.Id))
             {
-                throw new Exception("Selected serial numbers are not valid for the selected product, warehouse, and batch.");
+                throw new Exception("Selected serial numbers are not valid for the selected product and warehouse.");
             }
         }
 
@@ -445,7 +475,6 @@ public class ProductSerialService
                 InternalSerialNumber = code,
                 Status = ResolveIncomingStatus(transaction),
                 CurrentWarehouseId = transaction.Status == InventoryTransactionStatus.Confirmed ? transaction.WarehouseId : null,
-                BatchNumber = transaction.BatchNumber
             };
 
             serialIds.Add(serial.Id);
@@ -531,7 +560,6 @@ public class ProductSerialService
             if (targetStatus == ProductSerialStatus.InStock || targetStatus == ProductSerialStatus.ReturnedByCustomer)
             {
                 serial.CurrentWarehouseId = ResolveInStockWarehouse(transaction) ?? transaction.WarehouseId;
-                serial.BatchNumber = transaction.BatchNumber ?? serial.BatchNumber;
             }
             else if (targetStatus is ProductSerialStatus.Sold or ProductSerialStatus.Exported or ProductSerialStatus.ReturnedToSupplier or ProductSerialStatus.Missing or ProductSerialStatus.Scrapped)
             {

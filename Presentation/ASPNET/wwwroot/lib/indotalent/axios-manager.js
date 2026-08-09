@@ -59,11 +59,54 @@
         );
     };
 
+    const isAuthEndpoint = (url) => /\/security\/(login|refreshtoken)\b/i.test(String(url || ''));
+    const decodeExpiry = (token) => {
+        try {
+            const payload = String(token || '').split('.')[1];
+            if (!payload) return 0;
+            const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+            return Number(JSON.parse(atob(normalized.padEnd(normalized.length + (4 - normalized.length % 4) % 4, '='))).exp || 0);
+        } catch (_) { return 0; }
+    };
+
+    const refreshAccessToken = async () => {
+        if (isRefreshing) {
+            return new Promise((resolve, reject) => retryQueue.push({ resolve, reject }));
+        }
+        isRefreshing = true;
+        try {
+            const refreshToken = StorageManager.getRefreshToken?.();
+            if (!refreshToken) throw new Error('Refresh token unavailable');
+            // Use the raw axios client to avoid recursively invoking auth interceptors.
+            const response = await axios.post('/api/Security/RefreshToken', { refreshToken });
+            if (response?.data?.code !== 200) throw new Error('Refresh token failed');
+            StorageManager.saveLoginResult(response.data);
+            retryQueue.splice(0).forEach(item => item.resolve(response.data));
+            return response.data;
+        } catch (error) {
+            retryQueue.splice(0).forEach(item => item.reject(error));
+            StorageManager.removeAccessToken?.();
+            StorageManager.removeRefreshToken?.();
+            console.error('Token refresh failed', error);
+            throw error;
+        } finally {
+            isRefreshing = false;
+        }
+    };
+
     axiosInstance.interceptors.request.use(
-        (config) => {
+        async (config) => {
             const token = StorageManager.getAccessToken(); 
-            if (token) {
-                config.headers['Authorization'] = `Bearer ${token}`;
+            if (token && !isAuthEndpoint(config.url) && decodeExpiry(token) * 1000 - Date.now() <= 5 * 60 * 1000) {
+                try {
+                    await refreshAccessToken();
+                } catch (_) {
+                    // Let the request proceed with the existing token; response interceptor handles 401/498.
+                }
+            }
+            const currentToken = StorageManager.getAccessToken();
+            if (currentToken) {
+                config.headers['Authorization'] = `Bearer ${currentToken}`;
             }
             return config;
         },
@@ -75,37 +118,13 @@
     axiosInstance.interceptors.response.use(
         (response) => response,
         async (error) => {
-            const originalRequest = error.config;
-            if (error.response && error.response.status === 498) {
-                if (!isRefreshing) {
-                    isRefreshing = true;
-
-                    try {
-                        const refreshToken = StorageManager.getRefreshToken();
-                        const response = await axiosInstance.post('/Security/RefreshToken', { refreshToken });
-
-                        if (response?.data?.code === 200) {
-                            StorageManager.saveLoginResult(response?.data);
-                            isRefreshing = false;
-                            retryQueue.forEach((cb) => cb());
-                            retryQueue = [];
-                            return axiosInstance(originalRequest);
-                        } else {
-                            throw new Error('Refresh token failed');
-                        }
-                    } catch (refreshError) {
-                        retryQueue.forEach((cb) => cb());
-                        retryQueue = [];
-                        isRefreshing = false;
-                        throw refreshError;
-                    }
-                }
-
-                return new Promise((resolve, reject) => {
-                    retryQueue.push(() => {
-                        resolve(axiosInstance(originalRequest));
-                    });
-                });
+            const originalRequest = error.config || {};
+            const endpoint = String(originalRequest.url || '').toLowerCase();
+            const tokenExpired = error.response && (error.response.status === 498 || error.response.status === 401);
+            if (tokenExpired && !originalRequest._retry && !isAuthEndpoint(endpoint)) {
+                originalRequest._retry = true;
+                await refreshAccessToken();
+                return axiosInstance(originalRequest);
             }
 
             return Promise.reject(error);

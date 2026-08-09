@@ -92,8 +92,7 @@ public class CreateGoodsReceiveHandler : IRequestHandler<CreateGoodsReceiveReque
                 item.ProductId,
                 item.Quantity,
                 entity.CreatedById,
-                item.Id,
-                item.BatchNumber,
+                    item.Id,
                 cancellationToken
             );
 

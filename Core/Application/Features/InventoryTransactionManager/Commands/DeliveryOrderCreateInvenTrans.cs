@@ -15,7 +15,6 @@ public class DeliveryOrderCreateInvenTransRequest : IRequest<DeliveryOrderCreate
     public string? WarehouseId { get; init; }
     public string? ProductId { get; init; }
     public string? ModuleItemId { get; init; }
-    public string? BatchNumber { get; init; }
     public double? Movement { get; init; }
     public string? CreatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
@@ -56,7 +55,6 @@ public class DeliveryOrderCreateInvenTransHandler
             request.Movement,
             request.CreatedById,
             request.ModuleItemId,
-            request.BatchNumber,
             cancellationToken,
             request.ProductSerialIds);
 

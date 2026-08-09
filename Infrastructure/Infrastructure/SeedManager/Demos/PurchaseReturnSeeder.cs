@@ -89,7 +89,6 @@ public class PurchaseReturnSeeder
                     Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
                     WarehouseId = warehouseId,
                     ProductId = item.ProductId,
-                    BatchNumber = item.BatchNumber,
                     ModuleItemId = item.ModuleItemId,
                     Movement = item.Movement
                 };

@@ -29,6 +29,13 @@ public record GetCashTransactionListDto
     public string? SourceModuleId { get; init; }
     public string? SourceModuleNumber { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
+    public List<CashTransactionAllocationDto> Allocations { get; init; } = new();
+}
+public class CashTransactionAllocationDto
+{
+    public string? CustomerId { get; init; }
+    public double Amount { get; init; }
+    public string? Description { get; init; }
 }
 
 public class GetCashTransactionListResult
@@ -85,6 +92,12 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
                 SourceModuleId = x.SourceModuleId,
                 SourceModuleNumber = x.SourceModuleNumber,
                 CreatedAtUtc = x.CreatedAtUtc
+                ,Allocations = x.CostAllocations.Where(a => !a.IsDeleted).Select(a => new CashTransactionAllocationDto
+                {
+                    CustomerId = a.CustomerId,
+                    Amount = a.Amount,
+                    Description = a.Description
+                }).ToList()
             })
             .ToListAsync(cancellationToken);
 

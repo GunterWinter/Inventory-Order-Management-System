@@ -77,14 +77,12 @@ public class SalesOrderSeeder
                     var total = (product.UnitPrice ?? 0d) * qty;
                     var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
                     var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
-                    var batchNumber = $"LOT-{transDate:yyyyMMdd}-{i + 1:00}";
                     var salesOrderItem = new SalesOrderItem
                     {
                         SalesOrderId = salesOrder.Id,
                         ProductId = product.Id,
                         WarehouseId = warehouseId,
-                        Summary = $"{product.Number} - {batchNumber}",
-                        BatchNumber = batchNumber,
+                        Summary = product.Number,
                         TaxId = tax.Id,
                         WarrantyMonths = product.DefaultWarrantyMonths ?? 3,
                         UnitPrice = product.UnitPrice,

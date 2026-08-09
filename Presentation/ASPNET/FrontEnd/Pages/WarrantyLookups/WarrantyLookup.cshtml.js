@@ -265,7 +265,6 @@ const App = {
                         { field: 'productName', headerText: 'Product', width: 220 },
                         { field: 'statusName', headerText: 'Status', width: 130 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 170 },
-                        { field: 'batchNumber', headerText: 'Batch', width: 140 },
                         { field: 'salesOrderNumber', headerText: 'SO Number', width: 160 },
                         { field: 'customerName', headerText: 'Customer', width: 190 },
                         { field: 'customerPhoneNumber', headerText: 'Phone', width: 150 },
@@ -319,7 +318,7 @@ const App = {
                     ],
                     sortSettings: { columns: [{ field: 'movementDate', direction: 'Descending' }] },
                     recordClick: (args) => {
-                        methods.openDocumentView(
+                        methods.openDocumentModal(
                             args.rowData.viewModuleName ?? args.rowData.moduleName,
                             args.rowData.viewModuleId ?? args.rowData.moduleId);
                     }

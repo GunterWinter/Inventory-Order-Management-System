@@ -24,6 +24,11 @@
     let localizedTitleWrites = 0;
 
     const exactTranslations = {
+        'Hàng hóa không theo dõi serial': 'Hàng hóa không theo dõi serial',
+        'Tên là bắt buộc.': 'Tên là bắt buộc.',
+        'Thêm nhanh nhà cung cấp': 'Thêm nhanh nhà cung cấp',
+        'Thêm nhanh khách hàng': 'Thêm nhanh khách hàng',
+        'Thêm nhanh sản phẩm': 'Thêm nhanh sản phẩm',
         'This field is required.': 'Trường này là bắt buộc.',
         'Dashboards': 'Bảng điều khiển',
         'Default Dashboard': 'Bảng điều khiển tổng quan',

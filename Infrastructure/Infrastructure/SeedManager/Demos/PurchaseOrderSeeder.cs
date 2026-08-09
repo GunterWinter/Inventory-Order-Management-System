@@ -1,9 +1,11 @@
 ﻿using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Application.Features.PurchaseOrderManager;
+using Application.Features.PurchaseOrderManager.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using MediatR;
 
 namespace Infrastructure.SeedManager.Demos;
 
@@ -18,6 +20,7 @@ public class PurchaseOrderSeeder
     private readonly ICommandRepository<Warehouse> _warehouseRepository;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISender _sender;
 
     public PurchaseOrderSeeder(
         PurchaseOrderService purchaseOrderService,
@@ -28,7 +31,8 @@ public class PurchaseOrderSeeder
         ICommandRepository<Product> productRepository,
         ICommandRepository<Warehouse> warehouseRepository,
         NumberSequenceService numberSequenceService,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        ISender sender
     )
     {
         _purchaseOrderService = purchaseOrderService;
@@ -40,6 +44,7 @@ public class PurchaseOrderSeeder
         _warehouseRepository = warehouseRepository;
         _numberSequenceService = numberSequenceService;
         _unitOfWork = unitOfWork;
+        _sender = sender;
     }
 
     public async Task GenerateDataAsync()
@@ -77,15 +82,13 @@ public class PurchaseOrderSeeder
                     var total = (product.UnitPrice ?? 0d) * quantity;
                     var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
                     var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
-                    var batchNumber = $"LOT-{transDate:yyyyMMdd}-{i + 1:00}";
                     var purchaseOrderItem = new PurchaseOrderItem
                     {
                         PurchaseOrderId = purchaseOrder.Id,
                         ProductId = product.Id,
                         WarehouseId = warehouseId,
-                        BatchNumber = batchNumber,
                         SupplierWarrantyMonths = product.DefaultWarrantyMonths ?? 6,
-                        Summary = $"{product.Number} - {batchNumber}",
+                        Summary = product.Number,
                         TaxId = tax.Id,
                         UnitPrice = product.UnitPrice,
                         Quantity = quantity,
@@ -99,6 +102,16 @@ public class PurchaseOrderSeeder
                 await _unitOfWork.SaveAsync();
 
                 _purchaseOrderService.Recalculate(purchaseOrder.Id);
+                await _purchaseOrderService.SynchronizeGoodsReceiveAsync(purchaseOrder.Id, null);
+                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
+                {
+                    await _sender.Send(new AllocatePurchaseOrderCostsRequest
+                    {
+                        PurchaseOrderId = purchaseOrder.Id,
+                        Items = [],
+                        CreatedById = "demo-seeder"
+                    });
+                }
             }
         }
     }

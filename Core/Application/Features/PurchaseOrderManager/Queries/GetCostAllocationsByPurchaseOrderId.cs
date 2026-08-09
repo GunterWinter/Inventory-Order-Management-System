@@ -31,6 +31,7 @@ public class GetCostAllocationsByPurchaseOrderIdHandler : IRequestHandler<GetCos
         var data = await _context.Set<PurchaseOrderCostAllocation>()
             .AsNoTracking()
             .Include(x => x.Customer)
+            .Include(x => x.Warehouse)
             .Include(x => x.PurchaseOrderItem)
                 .ThenInclude(poi => poi!.Product)
             .Include(x => x.PurchaseOrderItem)

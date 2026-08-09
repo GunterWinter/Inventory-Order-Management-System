@@ -12,7 +12,6 @@ public class ProductSerial : BaseEntity
     public ProductSerialStatus? Status { get; set; } = ProductSerialStatus.Pending;
     public string? CurrentWarehouseId { get; set; }
     public Warehouse? CurrentWarehouse { get; set; }
-    public string? BatchNumber { get; set; }
     public string? PurchaseOrderItemId { get; set; }
     public PurchaseOrderItem? PurchaseOrderItem { get; set; }
     public string? SalesOrderItemId { get; set; }

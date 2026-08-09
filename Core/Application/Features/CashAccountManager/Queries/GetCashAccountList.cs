@@ -79,7 +79,7 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
         var paymentBalances = await _context.Set<CashTransactionPayment>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.CashTransaction != null && !x.CashTransaction.IsDeleted)
+            .Where(x => x.CashAccountId != null && x.CashTransaction != null && !x.CashTransaction.IsDeleted)
             .GroupBy(x => x.CashAccountId)
             .Select(g => new
             {
@@ -87,7 +87,7 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
                 TotalDebit = g.Where(x => x.CashTransaction!.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount),
                 TotalCredit = g.Where(x => x.CashTransaction!.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount)
             })
-            .ToDictionaryAsync(x => x.CashAccountId, cancellationToken);
+            .ToDictionaryAsync(x => x.CashAccountId!, cancellationToken);
 
         var dtos = entities.Select(entity =>
         {

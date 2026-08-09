@@ -1,4 +1,5 @@
 using Application.Common.Repositories;
+using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
@@ -43,20 +44,26 @@ public class PayPurchaseOrderValidator : AbstractValidator<PayPurchaseOrderReque
 public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, PayPurchaseOrderResult>
 {
     private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
+    private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
     private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly ICommandRepository<CashAccount> _cashAccountRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly NumberSequenceService _numberSequenceService;
 
     public PayPurchaseOrderHandler(
         ICommandRepository<CashTransaction> cashTransactionRepository,
+        ICommandRepository<PurchaseOrder> purchaseOrderRepository,
         ICommandRepository<CashTransactionPayment> paymentRepository,
         ICommandRepository<CashAccount> cashAccountRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        NumberSequenceService numberSequenceService)
     {
         _cashTransactionRepository = cashTransactionRepository;
+        _purchaseOrderRepository = purchaseOrderRepository;
         _paymentRepository = paymentRepository;
         _cashAccountRepository = cashAccountRepository;
         _unitOfWork = unitOfWork;
+        _numberSequenceService = numberSequenceService;
     }
 
     public async Task<PayPurchaseOrderResult> Handle(
@@ -80,7 +87,38 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
 
             if (transaction == null)
             {
-                throw new InvalidOperationException("Purchase order cash transaction was not found. Allocate the purchase order before paying it.");
+                var purchaseOrder = await _purchaseOrderRepository.GetQuery()
+                    .Include(x => x.Vendor)
+                    .Include(x => x.PurchaseOrderItemList.Where(item => !item.IsDeleted))
+                    .SingleOrDefaultAsync(x => !x.IsDeleted && x.Id == request.PurchaseOrderId, ct);
+                if (purchaseOrder == null)
+                {
+                    throw new InvalidOperationException("Purchase order was not found.");
+                }
+                if (purchaseOrder.OrderStatus is not (PurchaseOrderStatus.Confirmed or PurchaseOrderStatus.Archived))
+                {
+                    throw new InvalidOperationException("Only a confirmed purchase order can be paid.");
+                }
+
+                var orderAmount = purchaseOrder.AfterTaxAmount
+                    ?? purchaseOrder.PurchaseOrderItemList.Sum(item => item.AfterTaxAmount ?? 0d);
+                transaction = new CashTransaction
+                {
+                    Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
+                    TransactionDate = purchaseOrder.OrderDate ?? DateTime.Today,
+                    TransactionType = CashTransactionType.Credit,
+                    Status = CashTransactionStatus.Unpaid,
+                    Amount = orderAmount,
+                    PaidAmount = 0d,
+                    Description = $"{purchaseOrder.Vendor?.Name} - {purchaseOrder.Number}".Trim(' ', '-'),
+                    VendorId = purchaseOrder.VendorId,
+                    SourceModule = nameof(PurchaseOrder),
+                    SourceModuleId = purchaseOrder.Id,
+                    SourceModuleNumber = purchaseOrder.Number,
+                    CreatedById = request.UpdatedById
+                };
+                await _cashTransactionRepository.CreateAsync(transaction, ct);
+                await _unitOfWork.SaveAsync(ct);
             }
 
             var cashAccount = await _cashAccountRepository.GetAsync(request.CashAccountId!, ct);

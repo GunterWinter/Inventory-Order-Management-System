@@ -25,4 +25,5 @@ public class CashTransaction : BaseEntity
     public string? SourceDetailId { get; set; }
     public string? SourceModuleNumber { get; set; }
     public ICollection<CashTransactionPayment> PaymentList { get; set; } = new List<CashTransactionPayment>();
+    public ICollection<CashTransactionCostAllocation> CostAllocations { get; set; } = new List<CashTransactionCostAllocation>();
 }

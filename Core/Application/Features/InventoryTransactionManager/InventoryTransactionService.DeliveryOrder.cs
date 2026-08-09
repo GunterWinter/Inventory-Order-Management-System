@@ -14,7 +14,6 @@ public partial class InventoryTransactionService
         double? movement,
         string? createdById,
         string? moduleItemId,
-        string? batchNumber,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
     )
@@ -43,7 +42,6 @@ public partial class InventoryTransactionService
 
         child.WarehouseId = warehouseId;
         child.ProductId = productId;
-        child.BatchNumber = batchNumber;
         child.Movement = movement;
 
         CalculateInvenTrans(child);
@@ -62,7 +60,6 @@ public partial class InventoryTransactionService
         double? movement,
         string? updatedById,
         string? moduleItemId,
-        string? batchNumber,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
     )
@@ -79,7 +76,6 @@ public partial class InventoryTransactionService
         child.WarehouseId = warehouseId;
         child.ProductId = productId;
         child.ModuleItemId = moduleItemId;
-        child.BatchNumber = batchNumber;
         child.Movement = movement;
 
         CalculateInvenTrans(child);

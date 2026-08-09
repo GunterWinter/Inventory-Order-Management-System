@@ -86,7 +86,6 @@ public class DeliveryOrderSeeder
                     Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
                     WarehouseId = warehouseId,
                     ProductId = item.ProductId,
-                    BatchNumber = item.BatchNumber,
                     ModuleItemId = item.Id,
                     Movement = item.Quantity!.Value
                 };

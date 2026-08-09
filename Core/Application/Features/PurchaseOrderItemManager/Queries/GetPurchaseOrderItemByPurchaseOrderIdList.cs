@@ -4,6 +4,7 @@ using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Features.PurchaseOrderItemManager.Queries;
 
@@ -19,7 +20,6 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public int? SerialTrackingMode { get; init; }
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
-    public string? BatchNumber { get; init; }
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
     public string? TaxName { get; init; }
@@ -30,6 +30,7 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public double? TaxAmount { get; init; }
     public double? AfterTaxAmount { get; init; }
     public double? AllocatedQuantity { get; init; }
+    public List<string> ManufacturerSerialNumbers { get; set; } = [];
     public double? StockQuantity { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
@@ -67,6 +68,7 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListProfile : Profile
                 dest => dest.TaxName,
                 opt => opt.MapFrom(src => src.Tax != null ? src.Tax.Name : string.Empty)
             )
+            .ForMember(dest => dest.ManufacturerSerialNumbers, opt => opt.Ignore())
             ;
 
     }
@@ -111,6 +113,15 @@ public class GetPurchaseOrderItemByPurchaseOrderIdListHandler : IRequestHandler<
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetPurchaseOrderItemByPurchaseOrderIdListDto>>(entities);
+
+        for (var index = 0; index < entities.Count; index++)
+        {
+            var json = entities[index].ManufacturerSerialNumbersJson;
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                dtos[index].ManufacturerSerialNumbers = JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            }
+        }
 
         // Get stock quantity for each product+warehouse from InventoryTransaction
         var productWarehousePairs = entities

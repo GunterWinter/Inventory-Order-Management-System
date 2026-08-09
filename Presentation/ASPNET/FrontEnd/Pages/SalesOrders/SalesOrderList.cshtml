@@ -116,7 +116,7 @@
                                     </div>
                                     <div class="card-body">
                                         <p class="text-muted mb-3">
-                                            When a product is selected, the system suggests the earliest available batch by FIFO. You can still choose a different batch, and each option shows its remaining stock.
+                                            Chọn hàng hóa và kho còn tồn; hệ thống sẽ tự điền đơn giá theo loại xuất đã chọn.
                                         </p>
                                         <div class="row">
                                             <div class="col-md-12">
@@ -178,5 +178,6 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/SalesOrders/SalesOrderList.cshtml.js"></script>
+    <script src="~/lib/indotalent/sales-order-item-editor.js" asp-append-version="true"></script>
+    <script src="~/FrontEnd/Pages/SalesOrders/SalesOrderList.cshtml.js" asp-append-version="true"></script>
 }

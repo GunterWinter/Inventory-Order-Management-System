@@ -34,7 +34,6 @@ window.ProductSerialPicker = (() => {
                                         <th>Mã thiết bị</th>
                                         <th>Sản phẩm</th>
                                         <th>Kho</th>
-                                        <th>Batch</th>
                                         <th>Trạng thái</th>
                                         <th>Hạn BH</th>
                                     </tr>
@@ -65,7 +64,7 @@ window.ProductSerialPicker = (() => {
 
     const buildUrl = (options) => {
         const params = new URLSearchParams();
-        ['productId', 'warehouseId', 'batchNumber', 'moduleName', 'moduleId', 'moduleItemId'].forEach(key => {
+        ['productId', 'warehouseId', 'moduleName', 'moduleId', 'moduleItemId'].forEach(key => {
             if (options[key]) {
                 params.append(key, options[key]);
             }
@@ -89,7 +88,6 @@ window.ProductSerialPicker = (() => {
                     <td>${item.internalSerialNumber ?? ''}</td>
                     <td>${item.productName ?? ''}</td>
                     <td>${item.warehouseName ?? ''}</td>
-                    <td>${item.batchNumber ?? ''}</td>
                     <td>${item.statusName ?? ''}</td>
                     <td>${formatDate(item.customerWarrantyEndDate ?? item.supplierWarrantyEndDate)}</td>
                 </tr>`;
@@ -142,6 +140,12 @@ window.ProductSerialPicker = (() => {
                 const label = args.element.querySelector('.serial-count');
                 const productList = options.productListGetter?.() ?? [];
                 const quantityField = options.quantityField ?? 'movement';
+                const serialEnabled = isSerialTrackedProduct(productList, args.rowData.productId);
+                if (!serialEnabled) {
+                    button.disabled = true;
+                    button.classList.add('disabled');
+                    button.setAttribute('title', 'Hàng hóa không theo dõi serial');
+                }
                 const refreshLabel = () => {
                     const count = args.rowData.productSerialIds?.length ?? 0;
                     label.textContent = count ? `${count} serials` : 'None';
@@ -149,7 +153,7 @@ window.ProductSerialPicker = (() => {
 
                 refreshLabel();
                 button.addEventListener('click', async () => {
-                    if (!isSerialTrackedProduct(productList, args.rowData.productId)) {
+                    if (!serialEnabled) {
                         Swal.fire({
                             icon: 'info',
                             title: 'No serial tracking',
@@ -173,7 +177,6 @@ window.ProductSerialPicker = (() => {
                     const selectedSerials = await open({
                         productId: args.rowData.productId,
                         warehouseId,
-                        batchNumber: options.batchNumberGetter?.(args.rowData),
                         moduleName: options.moduleName,
                         moduleId: options.moduleIdGetter?.(args.rowData),
                         moduleItemId: args.rowData.id,

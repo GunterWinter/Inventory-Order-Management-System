@@ -115,13 +115,12 @@ public class CreateDeliveryOrderHandler : IRequestHandler<CreateDeliveryOrderReq
                 item.Quantity,
                 entity.CreatedById,
                 item.Id,
-                item.BatchNumber,
                 cancellationToken
             );
 
             if (entity.Status == DeliveryOrderStatus.Confirmed)
             {
-                await _inventoryTransactionService.UpdateSalesOrderItemBatchCostAsync(
+                await _inventoryTransactionService.UpdateSalesOrderItemCostAsync(
                     item,
                     entity.CreatedById,
                     cancellationToken

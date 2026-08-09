@@ -17,7 +17,6 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.Property(x => x.ManufacturerSerialNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.Status).IsRequired(false);
         builder.Property(x => x.CurrentWarehouseId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
-        builder.Property(x => x.BatchNumber).HasMaxLength(CodeConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.PurchaseOrderItemId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SalesOrderItemId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SupplierWarrantyEndDate).IsRequired(false);
@@ -33,7 +32,6 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.CurrentWarehouseId);
-        builder.HasIndex(x => x.BatchNumber);
         builder.HasIndex(x => x.PurchaseOrderItemId);
         builder.HasIndex(x => x.SalesOrderItemId);
         builder.HasIndex(x => x.CostAllocationId);

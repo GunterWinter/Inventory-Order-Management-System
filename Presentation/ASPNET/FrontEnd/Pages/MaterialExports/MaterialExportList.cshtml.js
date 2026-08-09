@@ -519,6 +519,10 @@ const App = {
                 return await QuickAddHelper.complexQuickAddCustomer({
                     dropdownObj: CustomerListLookup.obj,
                     refreshLookup: methods.populateCustomerListLookupData,
+                    refreshLookups: [
+                        methods.populateWarehouseListLookupData,
+                        methods.populateProductListLookupData
+                    ],
                     state,
                     stateKey: 'customerId',
                     lookupKey: 'customerListLookupData'
@@ -582,7 +586,7 @@ const App = {
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
-                    selectionSettings: { persistSelection: true, type: 'Single' },
+                    selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
                     gridLines: 'Horizontal',
@@ -709,6 +713,15 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} phiếu xuất vật tư đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
+                            if (!result.isConfirmed) return;
+                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId());
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} phiếu xuất vật tư.`, heightAuto: false });
+                            return;
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
@@ -754,7 +767,7 @@ const App = {
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Normal', allowEditOnDblClick: true },
+                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: true },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -971,6 +984,7 @@ const App = {
                                     args.data.movement,
                                     StorageManager.getUserId(),
                                     args.data.productSerialIds ?? []);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to create material export item.');
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -995,6 +1009,7 @@ const App = {
                                     text: error.response?.data?.message ?? 'Vui lòng thử lại.',
                                     confirmButtonText: 'Đồng ý'
                                 });
+                                throw error;
                             }
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
@@ -1005,6 +1020,7 @@ const App = {
                                     args.data.movement,
                                     StorageManager.getUserId(),
                                     args.data.productSerialIds ?? []);
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to update material export item.');
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -1029,11 +1045,13 @@ const App = {
                                     text: error.response?.data?.message ?? 'Vui lòng thử lại.',
                                     confirmButtonText: 'Đồng ý'
                                 });
+                                throw error;
                             }
                         }
                         if (args.requestType === 'delete') {
                             try {
                                 const response = await services.deleteSecondaryData(args.data[0].id, StorageManager.getUserId());
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to delete material export item.');
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -1058,6 +1076,7 @@ const App = {
                                     text: error.response?.data?.message ?? 'Vui lòng thử lại.',
                                     confirmButtonText: 'Đồng ý'
                                 });
+                                throw error;
                             }
                         }
                         methods.refreshSummary();

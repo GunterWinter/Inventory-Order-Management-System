@@ -2,9 +2,11 @@ using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
 using Application.Features.PurchaseOrderManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Features.PurchaseOrderItemManager.Commands;
 
@@ -19,7 +21,7 @@ public class UpdatePurchaseOrderItemRequest : IRequest<UpdatePurchaseOrderItemRe
     public string? PurchaseOrderId { get; init; }
     public string? ProductId { get; init; }
     public string? WarehouseId { get; init; }
-    public string? BatchNumber { get; init; }
+    public IReadOnlyCollection<string>? ManufacturerSerialNumbers { get; init; }
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
     public int? SupplierWarrantyMonths { get; init; }
@@ -35,7 +37,6 @@ public class UpdatePurchaseOrderItemValidator : AbstractValidator<UpdatePurchase
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
-        RuleFor(x => x.BatchNumber).NotEmpty();
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.UnitPrice).NotEmpty();
         RuleFor(x => x.Quantity).NotEmpty();
@@ -79,17 +80,34 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
         entity.PurchaseOrderId = request.PurchaseOrderId;
         entity.ProductId = request.ProductId;
         entity.WarehouseId = await ResolveWarehouseIdAsync(request.WarehouseId, request.ProductId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(entity.WarehouseId))
-        {
-            throw new Exception("Warehouse is required.");
-        }
+        entity.ManufacturerSerialNumbersJson = request.ManufacturerSerialNumbers == null ? null : JsonSerializer.Serialize(request.ManufacturerSerialNumbers);
 
-        entity.BatchNumber = request.BatchNumber;
         entity.SupplierWarrantyMonths = request.SupplierWarrantyMonths ?? entity.SupplierWarrantyMonths ?? 6;
         entity.Summary = request.Summary;
         entity.TaxId = request.TaxId;
         entity.UnitPrice = request.UnitPrice;
-        entity.Quantity = request.Quantity;
+        var tracking = await _queryContext.Set<Product>().AsNoTracking()
+            .Where(x => x.Id == request.ProductId)
+            .Select(x => new { x.Physical, x.SerialTrackingMode })
+            .SingleAsync(cancellationToken);
+        if (tracking.Physical == true && tracking.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
+        {
+            if (request.ManufacturerSerialNumbers == null || request.ManufacturerSerialNumbers.Count == 0)
+                throw new InvalidOperationException("Manufacturer serial numbers are required.");
+            var manufacturerSerials = request.ManufacturerSerialNumbers.Select(x => x.Trim()).ToList();
+            if (manufacturerSerials.Any(string.IsNullOrWhiteSpace)
+                || manufacturerSerials.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manufacturerSerials.Count)
+                throw new InvalidOperationException("Manufacturer serial numbers must be non-empty and unique.");
+            if (Math.Abs((request.Quantity ?? 0d) - manufacturerSerials.Count) > 0.000001d)
+                throw new InvalidOperationException("Manufacturer serial number count must match quantity.");
+            entity.ManufacturerSerialNumbersJson = JsonSerializer.Serialize(manufacturerSerials);
+            entity.Quantity = manufacturerSerials.Count;
+        }
+        else
+        {
+            entity.Quantity = request.Quantity;
+            entity.ManufacturerSerialNumbersJson = null;
+        }
 
         entity.Total = (entity.UnitPrice ?? 0d) * (entity.Quantity ?? 0d);
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
@@ -119,6 +137,8 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             return warehouseId;
         }
 
+        var physical = await _queryContext.Set<Product>().AsNoTracking().Where(x => x.Id == productId).Select(x => x.Physical).FirstOrDefaultAsync(cancellationToken);
+        if (physical != true) return null;
         return await _queryContext
             .Set<Product>()
             .AsNoTracking()

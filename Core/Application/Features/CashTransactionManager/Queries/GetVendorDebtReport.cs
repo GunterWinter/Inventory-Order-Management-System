@@ -14,6 +14,20 @@ public class VendorDebtReportDto
     public double TotalPurchase { get; set; }
     public double TotalPaid { get; set; }
     public double RemainingDebt { get; set; }
+    public List<VendorDebtTransactionDto> Transactions { get; set; } = new();
+}
+public class VendorDebtTransactionDto
+{
+    public string? Id { get; set; }
+    public string? Number { get; set; }
+    public DateTime? TransactionDate { get; set; }
+    public string? Source { get; set; }
+    public string? SourceModuleId { get; set; }
+    public string? SourceModuleNumber { get; set; }
+    public string? Description { get; set; }
+    public double Amount { get; set; }
+    public double PaidAmount { get; set; }
+    public double Remaining { get; set; }
 }
 
 public class GetVendorDebtReportResult
@@ -71,6 +85,22 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
         var vendorIds = purchaseObligations.Select(x => x.VendorId)
             .Distinct()
             .ToList();
+        var transactionDetails = await _queryContext.Set<CashTransaction>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.VendorId != null && x.TransactionType == CashTransactionType.Credit)
+            .Select(x => new
+            {
+                x.VendorId,
+                x.Id,
+                x.Number,
+                x.TransactionDate,
+                x.SourceModule,
+                x.SourceModuleId,
+                x.SourceModuleNumber,
+                x.Description,
+                x.Amount,
+                x.PaidAmount
+            })
+            .ToListAsync(cancellationToken);
         var vendors = await _queryContext.Set<Vendor>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
@@ -94,7 +124,24 @@ public class GetVendorDebtReportHandler : IRequestHandler<GetVendorDebtReportReq
                         VendorName = vendors.GetValueOrDefault(vendorId) ?? "N/A",
                         TotalPurchase = purchaseAmount,
                         TotalPaid = purchasePaid,
-                        RemainingDebt = Math.Max(0d, purchaseAmount - purchasePaid)
+                        RemainingDebt = Math.Max(0d, purchaseAmount - purchasePaid),
+                        Transactions = transactionDetails
+                            .Where(t => t.VendorId == vendorId)
+                            .OrderByDescending(t => t.TransactionDate)
+                            .Select(t => new VendorDebtTransactionDto
+                            {
+                                Id = t.Id,
+                                Number = t.SourceModuleNumber ?? t.Number,
+                                TransactionDate = t.TransactionDate,
+                                Source = t.SourceModule,
+                                SourceModuleId = t.SourceModuleId,
+                                SourceModuleNumber = t.SourceModuleNumber,
+                                Description = t.Description,
+                                Amount = t.Amount ?? 0d,
+                                PaidAmount = t.PaidAmount ?? 0d,
+                                Remaining = Math.Max(0d, (t.Amount ?? 0d) - (t.PaidAmount ?? 0d))
+                            })
+                            .ToList()
                     };
                 })
                 .Where(x => x.TotalPurchase != 0d || x.RemainingDebt != 0d)
