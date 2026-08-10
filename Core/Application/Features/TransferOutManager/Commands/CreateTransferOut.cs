@@ -57,7 +57,7 @@ public class CreateTransferOutHandler : IRequestHandler<CreateTransferOutRequest
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(TransferOut), "", "OUT");
         entity.TransferReleaseDate = request.TransferReleaseDate;
-        entity.Status = (TransferStatus)int.Parse(request.Status!);
+        entity.Status = TransferStatus.Draft;
         entity.Description = request.Description;
         entity.WarehouseFromId = request.WarehouseFromId;
         entity.WarehouseToId = request.WarehouseToId;

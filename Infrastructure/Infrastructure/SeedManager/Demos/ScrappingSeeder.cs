@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
@@ -9,106 +9,41 @@ namespace Infrastructure.SeedManager.Demos;
 
 public class ScrappingSeeder
 {
-    private readonly ICommandRepository<Scrapping> _scrappingRepository;
-    private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
-    private readonly ICommandRepository<Product> _productRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
-    private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ICommandRepository<Scrapping> _documents;
+    private readonly ICommandRepository<InventoryTransaction> _transactions;
+    private readonly ICommandRepository<Product> _products;
+    private readonly ICommandRepository<Warehouse> _warehouses;
+    private readonly NumberSequenceService _numbers;
+    private readonly InventoryTransactionService _inventory;
     private readonly IUnitOfWork _unitOfWork;
 
-    public ScrappingSeeder(
-        ICommandRepository<Scrapping> scrappingRepository,
+    public ScrappingSeeder(ICommandRepository<Scrapping> scrappingRepository,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
-        ICommandRepository<Product> productRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
-        NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService,
-        IUnitOfWork unitOfWork
-    )
+        ICommandRepository<Product> productRepository, ICommandRepository<Warehouse> warehouseRepository,
+        NumberSequenceService numberSequenceService, InventoryTransactionService inventoryTransactionService,
+        IUnitOfWork unitOfWork)
     {
-        _scrappingRepository = scrappingRepository;
-        _inventoryTransactionRepository = inventoryTransactionRepository;
-        _productRepository = productRepository;
-        _warehouseRepository = warehouseRepository;
-        _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
-        _unitOfWork = unitOfWork;
+        _documents = scrappingRepository; _transactions = inventoryTransactionRepository;
+        _products = productRepository; _warehouses = warehouseRepository; _numbers = numberSequenceService;
+        _inventory = inventoryTransactionService; _unitOfWork = unitOfWork;
     }
 
     public async Task GenerateDataAsync()
     {
-        var random = new Random();
-        var scrappingStatusLength = Enum.GetNames(typeof(ScrappingStatus)).Length;
-
-        var products = await _productRepository
-            .GetQuery()
-            .Where(x => x.Physical == true)
-            .ToListAsync();
-
-        var warehouses = await _warehouseRepository
-            .GetQuery()
-            .Where(x => x.SystemWarehouse == false)
-            .Select(x => x.Id)
-            .ToListAsync();
-
-        var dateFinish = DateTime.Now;
-        var dateStart = new DateTime(dateFinish.AddMonths(-12).Year, dateFinish.AddMonths(-12).Month, 1);
-
-        for (DateTime date = dateStart; date < dateFinish; date = date.AddMonths(1))
-        {
-            DateTime[] transactionDates = GetRandomDays(date.Year, date.Month, 6);
-
-            foreach (var transDate in transactionDates)
-            {
-                var scrapping = new Scrapping
-                {
-                    Number = _numberSequenceService.GenerateNumber(nameof(Scrapping), "", "SCRP"),
-                    ScrappingDate = transDate,
-                    Status = (ScrappingStatus)random.Next(0, scrappingStatusLength),
-                    WarehouseId = GetRandomValue(warehouses, random),
-                };
-                await _scrappingRepository.CreateAsync(scrapping);
-
-                int numberOfProducts = random.Next(3, 6);
-                for (int i = 0; i < numberOfProducts; i++)
-                {
-                    var product = products[random.Next(products.Count)];
-
-                    var inventoryTransaction = new InventoryTransaction
-                    {
-                        ModuleId = scrapping.Id,
-                        ModuleName = nameof(Scrapping),
-                        ModuleCode = "SCRP",
-                        ModuleNumber = scrapping.Number,
-                        MovementDate = scrapping.ScrappingDate!.Value,
-                        Status = (InventoryTransactionStatus)scrapping.Status,
-                        Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
-                        WarehouseId = scrapping.WarehouseId,
-                        ProductId = product.Id,
-                        Movement = random.Next(1, 10)
-                    };
-
-                    _inventoryTransactionService.CalculateInvenTrans(inventoryTransaction);
-                    await _inventoryTransactionRepository.CreateAsync(inventoryTransaction);
-                }
-            }
-        }
-
+        if (await _documents.GetQuery().AnyAsync(x => !x.IsDeleted)) return;
+        var warehouse = await _warehouses.GetQuery().FirstOrDefaultAsync(x => !x.IsDeleted && x.Name == DemoSeedData.MainWarehouse);
+        var product = await _products.GetQuery().FirstOrDefaultAsync(x => !x.IsDeleted && x.ReferenceCode == "MAT-MDF-001");
+        if (warehouse == null || product == null) return;
+        var document = new Scrapping { Number = _numbers.GenerateNumber(nameof(Scrapping), "", "SCRP"),
+            ScrappingDate = DemoSeedData.BaseDate.AddDays(16), Status = ScrappingStatus.Draft,
+            WarehouseId = warehouse.Id, Description = "DEMO HỦY HÀNG NHÁP" };
+        await _documents.CreateAsync(document);
+        var line = new InventoryTransaction { Number = _numbers.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
+            ModuleId = document.Id, ModuleName = nameof(Scrapping), ModuleCode = "SCRP", ModuleNumber = document.Number,
+            MovementDate = document.ScrappingDate, Status = InventoryTransactionStatus.Draft,
+            WarehouseId = warehouse.Id, ProductId = product.Id, Movement = 1d };
+        _inventory.CalculateInvenTrans(line);
+        await _transactions.CreateAsync(line);
         await _unitOfWork.SaveAsync();
-    }
-
-    private static DateTime[] GetRandomDays(int year, int month, int count)
-    {
-        var random = new Random();
-        var daysInMonth = DateTime.DaysInMonth(year, month);
-        return Enumerable.Range(1, count)
-            .Select(_ => new DateTime(year, month, random.Next(1, daysInMonth + 1)))
-            .ToArray();
-    }
-
-    private static T GetRandomValue<T>(IList<T> list, Random random)
-    {
-        return list[random.Next(list.Count)];
     }
 }

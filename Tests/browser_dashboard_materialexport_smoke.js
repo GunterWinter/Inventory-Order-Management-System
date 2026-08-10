@@ -21,8 +21,8 @@ const { chromium } = require('playwright');
     await page.goto(`${baseUrl}/Accounts/Login`, { waitUntil: 'domcontentloaded' });
     await page.locator('#Email').fill('admin@root.com');
     await page.locator('#Password').fill('123456');
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL('**/Dashboards/DefaultDashboard', { timeout: 15000 });
+    await page.locator('button[type="submit"]').click({ noWaitAfter: true });
+    await page.waitForURL('**/Dashboards/DefaultDashboard', { waitUntil: 'commit', timeout: 15000 });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('.dashboard-hero');
     await page.waitForSelector('.e-grid');
@@ -49,31 +49,97 @@ const { chromium } = require('playwright');
     await page.waitForTimeout(800);
     if (await page.locator('text=Injected purchase panel failure').count()) throw new Error('Dashboard Retry did not recover the failed panel.');
 
+    await page.goto(`${baseUrl}/SalesOrders/SalesOrderList`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
+    await page.waitForSelector('#MainGrid.e-grid');
+    await page.waitForSelector('#SecondaryGrid.e-grid', { state: 'attached' });
+
     await page.goto(`${baseUrl}/CashTransactions/CashTransactionList`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('#MainGrid.e-grid');
     if (await page.locator('#app > .row.mb-3 .card').count()) throw new Error('Cash Transaction summary cards are still present.');
 
+    await page.goto(`${baseUrl}/WarrantyLookups/WarrantyLookup`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
+    await page.waitForSelector('#MainGrid.e-grid');
+    const warrantySerial = await page.evaluate(async () => {
+        const response = await AxiosManager.get('/ProductSerial/GetWarrantyLookup?search=&page=1&pageSize=20', {});
+        const content = response?.data?.content;
+        if (!content || content.totalCount < 1 || !Array.isArray(content.data)) return '';
+        const first = content.data[0];
+        return first?.manufacturerSerialNumber || first?.internalSerialNumber || '';
+    });
+    if (!warrantySerial) throw new Error('No seeded serial was available for Warranty Lookup.');
+    await page.locator('#app .card-body input.e-input').fill(warrantySerial);
+    const [searchResponse] = await Promise.all([
+        page.waitForResponse(response => response.url().includes('/ProductSerial/GetWarrantyLookup?search=')),
+        page.getByRole('button', { name: /^Search$/ }).click()
+    ]);
+    const searchPayload = await searchResponse.json();
+    if (searchPayload?.content?.totalCount !== 1) {
+        throw new Error(`Warranty server search returned ${searchPayload?.content?.totalCount ?? 'unknown'} rows for ${warrantySerial}.`);
+    }
+    await page.waitForTimeout(1000);
+    const warrantyRows = await page.locator('#MainGrid .e-row').allTextContents();
+    if (!warrantyRows.some(row => row.includes(warrantySerial))) {
+        throw new Error(`Warranty grid did not render ${warrantySerial}. Rows: ${JSON.stringify(warrantyRows)}`);
+    }
+
     await page.goto(`${baseUrl}/CashTransactions/CustomerFinanceReport`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('#MainGrid.e-grid');
-    await page.waitForSelector('h3:text-is("Customer Profit Report")');
-    await page.waitForSelector('#CustomerDropDown.e-control');
+    await page.waitForSelector('h3:text-is("Project Finance Report")');
+    await page.waitForSelector('#CustomerDropDown.e-control', { state: 'attached' });
     const financeScriptUrl = await page.evaluate(() => performance.getEntriesByType('resource')
         .map(item => item.name)
         .find(url => url.includes('/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js')) || '');
     if (!/[?&]v=/.test(financeScriptUrl)) throw new Error(`Customer profit report script is not versioned: ${financeScriptUrl}`);
+    await page.waitForFunction(() => {
+        const values = [...document.querySelectorAll('.card h4')].slice(0, 3)
+            .map(node => Number(node.textContent.replace(/[^\d-]/g, '')));
+        return values.length === 3 && values[0] !== 0 && values[1] !== 0;
+    }, null, { timeout: 15000 });
     const summaryValues = await page.locator('.card h4').evaluateAll(nodes => nodes.slice(0, 3).map(node => node.textContent.trim()));
     if (summaryValues.length !== 3 || summaryValues.some(value => !value)) {
         throw new Error(`Customer profit summary did not render: ${JSON.stringify(summaryValues)}`);
     }
     if (summaryValues[0] === '0' || summaryValues[1] === '0') {
-        throw new Error(`Seeded actual received/project cost were not loaded: ${JSON.stringify(summaryValues)}`);
+        throw new Error(`Seeded revenue/project cost were not loaded: ${JSON.stringify(summaryValues)}`);
     }
+    const financePayload = await page.evaluate(async () => {
+        const response = await AxiosManager.get('/CashTransaction/GetCustomerProfitReport', {});
+        if (response?.status !== 200) throw new Error(`Finance report API returned ${response?.status}`);
+        return response.data;
+    });
+    const financeRows = financePayload?.content?.data ?? [];
+    const demoRevenue = financeRows.find(row => row.description === 'DEMO ACCRUAL PROJECT 2000000');
+    if (!demoRevenue?.customerId) throw new Error('The accrual project demo revenue row was not seeded.');
+    await page.evaluate(async customerId => {
+        const dropdown = document.querySelector('#CustomerDropDown')?.ej2_instances?.[0];
+        if (!dropdown) throw new Error('Customer finance filter was not initialized.');
+        dropdown.value = customerId;
+        dropdown.dataBind();
+        await dropdown.change({ value: customerId });
+    }, demoRevenue.customerId);
+    await page.waitForFunction(() => {
+        const values = [...document.querySelectorAll('.card h4')].slice(0, 3)
+            .map(node => Number(node.textContent.replace(/[^\d-]/g, '')));
+        return values[0] === 2000000 && values[1] === 500000 && values[2] === 1500000;
+    });
+    const demoSummaryValues = await page.locator('.card h4').evaluateAll(nodes =>
+        nodes.slice(0, 3).map(node => node.textContent.trim()));
     await page.locator('[data-language-switch="vi"]').click();
-    await page.waitForSelector('h3:text-is("Báo Cáo Lợi Nhuận Khách Hàng")');
+    await page.waitForSelector('h3:text-is("Báo Cáo Tài Chính Công Trình")');
     await page.locator('[data-language-switch="en"]').click();
-    await page.waitForSelector('h3:text-is("Customer Profit Report")');
+    await page.waitForSelector('h3:text-is("Project Finance Report")');
+
+    await page.goto(`${baseUrl}/VendorDebtReports/VendorDebtReportList`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
+    await page.waitForSelector('h3:text-is("Debt Report")');
+    await page.waitForSelector('#MainGrid.e-grid');
+    await page.locator('button', { hasText: 'Vendors' }).click();
+    await page.waitForTimeout(500);
+    if (await page.locator('#MainGrid .e-row').count() === 0) throw new Error('Vendor debt tab did not render data.');
 
     const unexpectedConsoleErrors = consoleErrors.filter(message =>
         !message.includes('Injected purchase panel failure') &&
@@ -88,6 +154,8 @@ const { chromium } = require('playwright');
         dashboardScriptUrl,
         financeScriptUrl,
         summaryValues,
+        demoCustomer: demoRevenue.customerName,
+        demoSummaryValues,
         apiResponses,
         expectedInjectedFailureObserved,
         cashTransactionSummaryCards: 0,

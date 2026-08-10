@@ -14,21 +14,18 @@ public sealed record CustomerProfitReportItemDto
     public string? CustomerName { get; init; }
     public string? Number { get; init; }
     public DateTime? TransactionDate { get; init; }
-    public DateTime? CreatedAtUtc { get; init; }
-    public CashTransactionType? TransactionType { get; init; }
-    public string? CashAccountName { get; init; }
-    public string? CashCategoryName { get; init; }
     public string? Description { get; init; }
-    public string? SourceModuleNumber { get; init; }
-    public double ActualReceived { get; init; }
+    public string? SourceType { get; init; }
+    public string? SourceModuleId { get; init; }
+    public double Revenue { get; init; }
     public double ProjectCost { get; init; }
-    public double Profit { get; init; }
+    public double Profit => Revenue - ProjectCost;
 }
 
 public sealed class GetCustomerProfitReportResult
 {
     public List<CustomerProfitReportItemDto> Data { get; init; } = [];
-    public double ActualReceived { get; init; }
+    public double Revenue { get; init; }
     public double ProjectCost { get; init; }
     public double Profit { get; init; }
 }
@@ -45,93 +42,165 @@ public sealed class GetCustomerProfitReportHandler
 {
     private readonly IQueryContext _queryContext;
 
-    public GetCustomerProfitReportHandler(IQueryContext queryContext)
-    {
-        _queryContext = queryContext;
-    }
+    public GetCustomerProfitReportHandler(IQueryContext queryContext) => _queryContext = queryContext;
 
     public async Task<GetCustomerProfitReportResult> Handle(
         GetCustomerProfitReportRequest request,
         CancellationToken cancellationToken)
     {
-        var query = _queryContext.Set<CashTransaction>()
-            .AsNoTracking()
+        var rows = new List<CustomerProfitReportItemDto>();
+
+        var sales = await _queryContext.Set<SalesOrder>().AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.CustomerId != null || x.CostAllocations.Any(a => a.CustomerId != null));
-
-        if (!string.IsNullOrWhiteSpace(request.CustomerId))
-        {
-            query = query.Where(x => x.CustomerId == request.CustomerId);
-        }
-
-        if (request.FromDate.HasValue)
-        {
-            var fromDate = request.FromDate.Value.Date;
-            query = query.Where(x => x.TransactionDate >= fromDate);
-        }
-
-        if (request.ToDate.HasValue)
-        {
-            var exclusiveToDate = request.ToDate.Value.Date.AddDays(1);
-            query = query.Where(x => x.TransactionDate < exclusiveToDate);
-        }
-
-        var data = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .ThenByDescending(x => x.Id)
+            .Where(x => (x.OrderStatus == SalesOrderStatus.Confirmed || x.OrderStatus == SalesOrderStatus.Archived)
+                && x.CustomerId != null)
             .Select(x => new CustomerProfitReportItemDto
             {
                 Id = x.Id,
                 CustomerId = x.CustomerId,
                 CustomerName = x.Customer != null ? x.Customer.Name : null,
                 Number = x.Number,
-                TransactionDate = x.TransactionDate,
-                CreatedAtUtc = x.CreatedAtUtc,
-                TransactionType = x.TransactionType,
-                CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
-                CashCategoryName = x.CashCategory != null ? x.CashCategory.Name : null,
+                TransactionDate = x.OrderDate,
                 Description = x.Description,
-                SourceModuleNumber = x.SourceModuleNumber,
-                ActualReceived = x.TransactionType == CashTransactionType.Debit
-                    ? x.PaidAmount ?? 0d
-                    : 0d,
-                ProjectCost = x.TransactionType == CashTransactionType.Credit
-                    ? x.PaidAmount ?? 0d
-                    : 0d,
-                Profit = x.TransactionType == CashTransactionType.Debit
-                    ? x.PaidAmount ?? 0d
-                    : x.TransactionType == CashTransactionType.Credit
-                        ? -(x.PaidAmount ?? 0d)
-                        : 0d
+                SourceType = nameof(SalesOrder),
+                SourceModuleId = x.Id,
+                Revenue = x.BeforeTaxAmount ?? 0d
             })
             .ToListAsync(cancellationToken);
+        rows.AddRange(sales);
 
-        // Include customer allocations from manually classified transactions.
-        var txIds = data.Select(x => x.Id).ToList();
-        var allocations = await _queryContext.Set<CashTransactionCostAllocation>().AsNoTracking()
-            .Where(a => !a.IsDeleted && txIds.Contains(a.CashTransactionId!) && a.CustomerId != null)
-            .Include(a => a.Customer).ToListAsync(cancellationToken);
-        foreach (var allocation in allocations)
+        var salesReturnLines = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleName == nameof(SalesReturn)
+                && x.ModuleId != null
+                && x.ProductId != null
+                && (x.Status == InventoryTransactionStatus.Confirmed
+                    || x.Status == InventoryTransactionStatus.Archived))
+            .Select(x => new
+            {
+                x.Id,
+                ReturnId = x.ModuleId!,
+                ProductId = x.ProductId!,
+                x.ModuleNumber,
+                x.MovementDate,
+                Quantity = x.Movement ?? 0d
+            })
+            .ToListAsync(cancellationToken);
+        var salesReturnIds = salesReturnLines.Select(x => x.ReturnId).Distinct().ToList();
+        var salesReturnSources = await _queryContext.Set<SalesReturn>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.SalesOrder).ThenInclude(x => x!.Customer)
+            .Include(x => x.SalesOrder).ThenInclude(x => x!.SalesOrderItemList)
+            .Where(x => salesReturnIds.Contains(x.Id)
+                && (x.Status == SalesReturnStatus.Confirmed || x.Status == SalesReturnStatus.Archived))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        foreach (var line in salesReturnLines)
         {
-            var source = data.FirstOrDefault(x => x.Id == allocation.CashTransactionId);
-            if (source == null) continue;
-            var amount = allocation.Amount;
-            var item = source with { CustomerId = allocation.CustomerId, CustomerName = allocation.Customer?.Name,
-                ActualReceived = source.TransactionType == CashTransactionType.Debit ? amount : 0d,
-                ProjectCost = source.TransactionType == CashTransactionType.Credit ? amount : 0d,
-                Profit = source.TransactionType == CashTransactionType.Debit ? amount : source.TransactionType == CashTransactionType.Credit ? -amount : 0d };
-            data.Add(item);
+            if (!salesReturnSources.TryGetValue(line.ReturnId, out var salesReturn)
+                || salesReturn.SalesOrder?.CustomerId == null)
+                continue;
+            var unitPrice = salesReturn.SalesOrder.SalesOrderItemList
+                .FirstOrDefault(x => !x.IsDeleted && x.ProductId == line.ProductId)?.UnitPrice ?? 0d;
+            rows.Add(new CustomerProfitReportItemDto
+            {
+                Id = line.Id,
+                CustomerId = salesReturn.SalesOrder.CustomerId,
+                CustomerName = salesReturn.SalesOrder.Customer?.Name,
+                Number = salesReturn.Number ?? line.ModuleNumber,
+                TransactionDate = salesReturn.ReturnDate ?? line.MovementDate,
+                Description = salesReturn.Description,
+                SourceType = nameof(SalesReturn),
+                SourceModuleId = salesReturn.Id,
+                Revenue = -Math.Abs(line.Quantity * unitPrice)
+            });
         }
 
-        var actualReceived = data.Sum(x => x.ActualReceived);
-        var projectCost = data.Sum(x => x.ProjectCost);
+        var purchaseAllocations = await _queryContext.Set<PurchaseOrderCostAllocation>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.CustomerId != null
+                && x.PurchaseOrder != null
+                && (x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed
+                    || x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Archived))
+            .Select(x => new CustomerProfitReportItemDto
+            {
+                Id = x.Id,
+                CustomerId = x.CustomerId,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
+                Number = x.PurchaseOrder != null ? x.PurchaseOrder.Number : null,
+                TransactionDate = x.PurchaseOrder != null ? x.PurchaseOrder.OrderDate : null,
+                Description = x.PurchaseOrderItem != null ? x.PurchaseOrderItem.Summary : null,
+                SourceType = "PurchaseOrderAllocation",
+                SourceModuleId = x.PurchaseOrderId,
+                ProjectCost = (x.Quantity ?? 0d) * (x.PurchaseOrderItem != null
+                    ? x.PurchaseOrderItem.UnitPrice ?? 0d
+                    : x.UnitPrice ?? 0d)
+            })
+            .ToListAsync(cancellationToken);
+        rows.AddRange(purchaseAllocations);
 
+        // Material exports are accounting cost records. Their full amount is recognized
+        // on confirmation, independently from PaidAmount.
+        var materialCosts = await _queryContext.Set<CashTransaction>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.TransactionType == CashTransactionType.Credit
+                && x.SourceModule == nameof(MaterialExport)
+                && x.CustomerId != null)
+            .Select(x => new CustomerProfitReportItemDto
+            {
+                Id = x.Id,
+                CustomerId = x.CustomerId,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
+                Number = x.SourceModuleNumber ?? x.Number,
+                TransactionDate = x.TransactionDate,
+                Description = x.Description,
+                SourceType = nameof(MaterialExport),
+                SourceModuleId = x.SourceModuleId,
+                ProjectCost = x.Amount ?? 0d
+            })
+            .ToListAsync(cancellationToken);
+        rows.AddRange(materialCosts);
+
+        // A manual cost transaction with allocation rows is represented only by those
+        // rows, never by both the parent and children.
+        var manualAllocations = await _queryContext.Set<CashTransactionCostAllocation>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.CustomerId != null
+                && x.CashTransaction != null
+                && !x.CashTransaction.IsDeleted
+                && x.CashTransaction.TransactionType == CashTransactionType.Credit
+                && x.CashTransaction.SourceModule != nameof(MaterialExport)
+                && x.CashTransaction.SourceModule != nameof(PurchaseOrder))
+            .Select(x => new CustomerProfitReportItemDto
+            {
+                Id = x.Id,
+                CustomerId = x.CustomerId,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
+                Number = x.CashTransaction != null ? x.CashTransaction.Number : null,
+                TransactionDate = x.CashTransaction != null ? x.CashTransaction.TransactionDate : null,
+                Description = x.Description ?? (x.CashTransaction != null ? x.CashTransaction.Description : null),
+                SourceType = "CashCostAllocation",
+                SourceModuleId = x.CashTransactionId,
+                ProjectCost = x.Amount
+            })
+            .ToListAsync(cancellationToken);
+        rows.AddRange(manualAllocations);
+
+        if (!string.IsNullOrWhiteSpace(request.CustomerId))
+            rows = rows.Where(x => x.CustomerId == request.CustomerId).ToList();
+        if (request.FromDate.HasValue)
+            rows = rows.Where(x => x.TransactionDate >= request.FromDate.Value.Date).ToList();
+        if (request.ToDate.HasValue)
+            rows = rows.Where(x => x.TransactionDate < request.ToDate.Value.Date.AddDays(1)).ToList();
+
+        rows = rows.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id).ToList();
+        var revenue = rows.Sum(x => x.Revenue);
+        var projectCost = rows.Sum(x => x.ProjectCost);
         return new GetCustomerProfitReportResult
         {
-            Data = data,
-            ActualReceived = actualReceived,
+            Data = rows,
+            Revenue = revenue,
             ProjectCost = projectCost,
-            Profit = actualReceived - projectCost
+            Profit = revenue - projectCost
         };
     }
 }

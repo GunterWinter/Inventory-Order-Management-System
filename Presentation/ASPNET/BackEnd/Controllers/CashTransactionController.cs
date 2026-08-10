@@ -107,22 +107,20 @@ public class CashTransactionController : BaseApiController
         });
     }
 
-    [Authorize]
-    [HttpGet("GetVendorDebtReport")]
-    public async Task<ActionResult<ApiSuccessResult<GetVendorDebtReportResult>>> GetVendorDebtReportAsync(
-        CancellationToken cancellationToken
-        )
-    {
-        var request = new GetVendorDebtReportRequest();
-        var response = await _sender.Send(request, cancellationToken);
-
-        return Ok(new ApiSuccessResult<GetVendorDebtReportResult>
-        {
-            Code = StatusCodes.Status200OK,
-            Message = $"Success executing {nameof(GetVendorDebtReportAsync)}",
-            Content = response
-        });
-    }
+      [Authorize]
+      [HttpGet("GetDebtReport")]
+      public async Task<ActionResult<ApiSuccessResult<GetDebtReportResult>>> GetDebtReportAsync(
+          CancellationToken cancellationToken,
+          [FromQuery] string? partyType = "Customer")
+      {
+          var response = await _sender.Send(new GetDebtReportRequest { PartyType = partyType }, cancellationToken);
+          return Ok(new ApiSuccessResult<GetDebtReportResult>
+          {
+              Code = StatusCodes.Status200OK,
+              Message = $"Success executing {nameof(GetDebtReportAsync)}",
+              Content = response
+          });
+      }
 
     [Authorize]
     [HttpGet("GetCustomerProfitReport")]
@@ -143,6 +141,25 @@ public class CashTransactionController : BaseApiController
         {
             Code = StatusCodes.Status200OK,
             Message = $"Success executing {nameof(GetCustomerProfitReportAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
+    [HttpGet("GetCashTransactionSourceItems")]
+    public async Task<ActionResult<ApiSuccessResult<GetCashTransactionSourceItemsResult>>> GetCashTransactionSourceItemsAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] string cashTransactionId)
+    {
+        var response = await _sender.Send(new GetCashTransactionSourceItemsRequest
+        {
+            CashTransactionId = cashTransactionId
+        }, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetCashTransactionSourceItemsResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetCashTransactionSourceItemsAsync)}",
             Content = response
         });
     }

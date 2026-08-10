@@ -285,7 +285,8 @@ public class AllocatePurchaseOrderCostsHandler
                     }
 
                     IReadOnlyCollection<string>? serialIds = null;
-                    if (purchaseOrderItem.Product?.SerialTrackingMode != SerialTrackingMode.None)
+                    if (purchaseOrderItem.Product?.Physical == true
+                        && (purchaseOrderItem.Product.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.None)
                     {
                         var allocationQuantity = allocation.Quantity ?? 0d;
                         if (Math.Abs(allocationQuantity - Math.Round(allocationQuantity)) > 0.000001d)
@@ -309,12 +310,9 @@ public class AllocatePurchaseOrderCostsHandler
 
                         if (selected.Count < required)
                         {
-                            // Older/demo confirmed POs could have a valid GoodsReceive stock
-                            // transaction without the corresponding internal serial rows. Repair
-                            // that source data before deciding that stock is unavailable.
                             var incomingTransaction = await _inventoryTransactionRepository.GetQuery()
                                 .Where(x => !x.IsDeleted
-                                    && x.ModuleName == nameof(GoodsReceive)
+                                    && x.ModuleName == nameof(PurchaseOrder)
                                     && x.ModuleItemId == purchaseOrderItem.Id
                                     && x.Status == InventoryTransactionStatus.Confirmed)
                                 .OrderByDescending(x => x.CreatedAtUtc)
@@ -358,15 +356,18 @@ public class AllocatePurchaseOrderCostsHandler
                         serialIds = selected.Select(x => x.Id).ToList();
                     }
 
-                    await _inventoryTransactionService.CostAllocationCreateInvenTrans(
-                        allocation.Id,
-                        purchaseOrderItem.ProductId,
-                        allocation.Quantity,
-                        purchaseOrderItem.WarehouseId,
-                        purchaseOrder.Number,
-                        request.CreatedById,
-                        ct,
-                        serialIds);
+                    if (purchaseOrderItem.Product?.Physical == true)
+                    {
+                        await _inventoryTransactionService.CostAllocationCreateInvenTrans(
+                            allocation.Id,
+                            purchaseOrderItem.ProductId,
+                            allocation.Quantity,
+                            purchaseOrderItem.WarehouseId,
+                            purchaseOrder.Number,
+                            request.CreatedById,
+                            ct,
+                            serialIds);
+                    }
                 }
             }
 
@@ -418,7 +419,6 @@ public class AllocatePurchaseOrderCostsHandler
 
     private static double ResolveUnitPrice(PurchaseOrderItem item)
     {
-        var quantity = item.Quantity ?? 0d;
-        return quantity > 0d ? (item.AfterTaxAmount ?? 0d) / quantity : 0d;
+        return item.UnitPrice ?? 0d;
     }
 }

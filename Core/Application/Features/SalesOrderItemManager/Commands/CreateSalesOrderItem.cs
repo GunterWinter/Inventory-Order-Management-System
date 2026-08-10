@@ -77,6 +77,13 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
 
     public async Task<CreateSalesOrderItemResult> Handle(CreateSalesOrderItemRequest request, CancellationToken cancellationToken = default)
     {
+        var orderStatus = await _queryContext.Set<SalesOrder>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == request.SalesOrderId)
+            .Select(x => x.OrderStatus)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (orderStatus != SalesOrderStatus.Draft)
+            throw new InvalidOperationException("Only draft sales orders can be edited.");
+
         await ValidateProductNotDuplicatedAsync(request.SalesOrderId, request.ProductId, null, cancellationToken);
 
         var isPhysical = await _queryContext.Set<Product>().AsNoTracking()
@@ -108,10 +115,10 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
 
         entity.SalesOrderId = request.SalesOrderId;
         entity.ProductId = request.ProductId;
-        entity.WarehouseId = request.WarehouseId;
+        entity.WarehouseId = isPhysical ? request.WarehouseId : null;
         entity.Summary = request.Summary;
         entity.TaxId = request.TaxId;
-        entity.WarrantyMonths = request.WarrantyMonths;
+        entity.WarrantyMonths = isPhysical ? request.WarrantyMonths : 0;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = quantity;
 
@@ -133,7 +140,7 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
         );
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+        await _salesOrderService.SynchronizeInventoryAsync(
             entity.SalesOrderId ?? "",
             entity.CreatedById,
             cancellationToken

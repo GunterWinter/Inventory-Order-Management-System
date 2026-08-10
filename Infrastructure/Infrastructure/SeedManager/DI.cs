@@ -74,14 +74,10 @@ public static class DI
         services.AddScoped<WarehouseSeeder>();
         services.AddScoped<SalesOrderSeeder>();
         services.AddScoped<PurchaseOrderSeeder>();
-        services.AddScoped<DeliveryOrderSeeder>();
         services.AddScoped<SalesReturnSeeder>();
-        services.AddScoped<GoodsReceiveSeeder>();
         services.AddScoped<PurchaseReturnSeeder>();
         services.AddScoped<TransferOutSeeder>();
         services.AddScoped<TransferInSeeder>();
-        services.AddScoped<PositiveAdjustmentSeeder>();
-        services.AddScoped<NegativeAdjustmentSeeder>();
         services.AddScoped<ScrappingSeeder>();
         services.AddScoped<StockCountSeeder>();
         services.AddScoped<ProjectAllocationDemoSeeder>();
@@ -137,10 +133,6 @@ public static class DI
             var productGroupSeeder = serviceProvider.GetRequiredService<ProductGroupSeeder>();
             productGroupSeeder.GenerateDataAsync().Wait();
 
-            var productSeeder = serviceProvider.GetRequiredService<ProductSeeder>();
-            productSeeder.GenerateDataAsync().Wait();
-
-
             var customerSeeder = serviceProvider.GetRequiredService<CustomerSeeder>();
             customerSeeder.GenerateDataAsync().Wait();
 
@@ -150,22 +142,21 @@ public static class DI
             var warehouseSeeder = serviceProvider.GetRequiredService<WarehouseSeeder>();
             warehouseSeeder.GenerateDataAsync().Wait();
 
+            var productSeeder = serviceProvider.GetRequiredService<ProductSeeder>();
+            productSeeder.GenerateDataAsync().Wait();
+
             var customerContactSeeder = serviceProvider.GetRequiredService<CustomerContactSeeder>();
             customerContactSeeder.GenerateDataAsync().Wait();
 
             var vendorContactSeeder = serviceProvider.GetRequiredService<VendorContactSeeder>();
             vendorContactSeeder.GenerateDataAsync().Wait();
 
-            serviceProvider.GetRequiredService<SalesOrderSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<PurchaseOrderSeeder>().GenerateDataAsync().Wait();
-            serviceProvider.GetRequiredService<DeliveryOrderSeeder>().GenerateDataAsync().Wait();
+            serviceProvider.GetRequiredService<SalesOrderSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<SalesReturnSeeder>().GenerateDataAsync().Wait();
-            serviceProvider.GetRequiredService<GoodsReceiveSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<PurchaseReturnSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<TransferOutSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<TransferInSeeder>().GenerateDataAsync().Wait();
-            serviceProvider.GetRequiredService<PositiveAdjustmentSeeder>().GenerateDataAsync().Wait();
-            serviceProvider.GetRequiredService<NegativeAdjustmentSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<ScrappingSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<StockCountSeeder>().GenerateDataAsync().Wait();
             serviceProvider.GetRequiredService<ProjectAllocationDemoSeeder>().GenerateDataAsync().Wait();

@@ -46,9 +46,16 @@ public class ProductSerialController : BaseApiController
     [HttpGet("GetWarrantyLookup")]
     public async Task<ActionResult<ApiSuccessResult<GetWarrantyLookupResult>>> GetWarrantyLookupAsync(
         CancellationToken cancellationToken,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
-        var response = await _sender.Send(new GetWarrantyLookupRequest { Search = search }, cancellationToken);
+        var response = await _sender.Send(new GetWarrantyLookupRequest
+        {
+            Search = search,
+            Page = page,
+            PageSize = pageSize
+        }, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetWarrantyLookupResult>
         {

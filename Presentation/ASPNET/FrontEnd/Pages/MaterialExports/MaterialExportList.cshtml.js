@@ -596,11 +596,11 @@ const App = {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
                         { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
-                        { field: 'MaterialExportDate', headerText: 'Ngày xuất', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'warehouseName', headerText: 'Kho', width: 150, minWidth: 150 },
-                        { field: 'customerName', headerText: 'Khách hàng', width: 150, minWidth: 150 },
-                        { field: 'statusName', headerText: 'Trạng thái', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Ngày tạo', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'MaterialExportDate', headerText: 'Delivery Date', width: 150, format: 'yyyy-MM-dd' },
+                        { field: 'warehouseName', headerText: 'Warehouse', width: 150, minWidth: 150 },
+                        { field: 'customerName', headerText: 'Customer', width: 150, minWidth: 150 },
+                        { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
                         'ExcelExport', 'Search',
@@ -790,7 +790,7 @@ const App = {
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Mã Tham Khảo',
+                            headerText: 'Reference Code',
                             width: 140,
                             allowEditing: false,
                             disableHtmlEncode: false,
@@ -801,7 +801,7 @@ const App = {
                         },
                         {
                             field: 'productId',
-                            headerText: 'Sản phẩm',
+                            headerText: 'Product',
                             width: 250,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
@@ -869,7 +869,7 @@ const App = {
                                     return args['value'] > 0;
                                 }, 'Must be a positive number and not zero']
                             },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', format: 'N2', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     movementElem = document.createElement('input');
@@ -884,8 +884,8 @@ const App = {
                                 write: function (args) {
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
-                                        format: 'n0',
-                                        decimals: 0,
+                                        format: 'n2',
+                                        decimals: 2,
                                         validateDecimalOnType: true,
                                     });
                                     movementObj.appendTo(movementElem);
@@ -894,7 +894,7 @@ const App = {
                         },
                         {
                             field: 'remainingDisplay',
-                            headerText: 'Tồn kho',
+                            headerText: 'Inventory',
                             width: 120,
                             allowEditing: false,
                             type: 'number', format: 'N0', textAlign: 'Right',

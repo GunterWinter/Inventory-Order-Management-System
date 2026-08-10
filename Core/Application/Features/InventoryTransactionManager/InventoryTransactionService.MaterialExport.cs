@@ -210,15 +210,52 @@ public partial class InventoryTransactionService
             .SingleOrDefaultAsync(x => x.Id == productId && !x.IsDeleted, cancellationToken)
             ?? throw new InvalidOperationException($"Product was not found: {productId}");
 
-        if ((product.SerialTrackingMode ?? SerialTrackingMode.None) == SerialTrackingMode.None)
+        if (product.Physical != true)
         {
-            throw new InvalidOperationException("Material export currently requires a serial-tracked product.");
+            throw new InvalidOperationException("Only physical products can be exported from a warehouse.");
         }
 
         var requestedQuantity = movement ?? 0d;
-        if (requestedQuantity <= 0d || Math.Abs(requestedQuantity - Math.Round(requestedQuantity)) > 0.000001d)
+        if (requestedQuantity <= 0d)
         {
-            throw new InvalidOperationException("Material export quantity must be a positive whole number.");
+            throw new InvalidOperationException("Material export quantity must be greater than zero.");
+        }
+
+        var trackingMode = product.SerialTrackingMode ?? SerialTrackingMode.None;
+        if (trackingMode == SerialTrackingMode.None)
+        {
+            if (productSerialIds?.Count > 0)
+            {
+                throw new InvalidOperationException("Products without serial tracking cannot contain selected serials.");
+            }
+
+            var confirmedStock = await _queryContext.Set<InventoryTransaction>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.ProductId == productId
+                    && x.WarehouseId == parent.WarehouseId
+                    && x.Status == InventoryTransactionStatus.Confirmed)
+                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+            var otherDraftQuantity = await _queryContext.Set<InventoryTransaction>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.ModuleName == nameof(MaterialExport)
+                    && x.ModuleId == parent.Id
+                    && x.ProductId == productId
+                    && x.Id != currentLineId
+                    && x.Status == InventoryTransactionStatus.Draft)
+                .SumAsync(x => x.Movement ?? 0d, cancellationToken);
+            if (otherDraftQuantity + requestedQuantity > confirmedStock + 0.000001d)
+            {
+                throw new InvalidOperationException(
+                    $"The total material export quantity for {product.Name ?? productId} exceeds available stock ({confirmedStock}).");
+            }
+            return;
+        }
+
+        if (Math.Abs(requestedQuantity - Math.Round(requestedQuantity)) > 0.000001d)
+        {
+            throw new InvalidOperationException("Serial-tracked products require a positive whole-number quantity.");
         }
 
         var manualSerialIds = (productSerialIds ?? Array.Empty<string>())

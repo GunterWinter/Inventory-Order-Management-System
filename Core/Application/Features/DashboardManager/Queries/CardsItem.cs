@@ -6,8 +6,6 @@ public class CardsItem
     public double? SalesReturnTotal { get; init; }
     public double? PurchaseTotal { get; init; }
     public double? PurchaseReturnTotal { get; init; }
-    public double? DeliveryOrderTotal { get; init; }
-    public double? GoodsReceiveTotal { get; init; }
     public double? TransferOutTotal { get; init; }
     public double? TransferInTotal { get; init; }
     public double ConfirmedSalesAmount { get; init; }

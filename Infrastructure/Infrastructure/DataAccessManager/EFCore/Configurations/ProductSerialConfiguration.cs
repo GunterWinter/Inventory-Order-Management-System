@@ -29,11 +29,16 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(x => x.InternalSerialNumber).IsUnique();
+        builder.HasIndex(x => x.ManufacturerSerialNumber)
+            .IsUnique()
+            .HasFilter("[ManufacturerSerialNumber] IS NOT NULL AND [IsDeleted] = 0");
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.CurrentWarehouseId);
         builder.HasIndex(x => x.PurchaseOrderItemId);
         builder.HasIndex(x => x.SalesOrderItemId);
         builder.HasIndex(x => x.CostAllocationId);
+        builder.HasIndex(x => new { x.IsDeleted, x.Status, x.ProductId, x.CurrentWarehouseId })
+            .HasDatabaseName("IX_ProductSerial_StockLookup");
     }
 }

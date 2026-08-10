@@ -48,7 +48,7 @@ public class DeleteCashCategoryHandler : IRequestHandler<DeleteCashCategoryReque
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
 
         var hasTransactions = await _cashTransactionRepository
@@ -57,7 +57,7 @@ public class DeleteCashCategoryHandler : IRequestHandler<DeleteCashCategoryReque
 
         if (hasTransactions)
         {
-            throw new Exception("Cannot delete cash category because it has cash transactions.");
+            throw new InvalidOperationException("Không thể xóa danh mục thu chi vì danh mục đang được sử dụng trong giao dịch thu chi.");
         }
 
         entity.UpdatedById = request.DeletedById;

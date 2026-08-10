@@ -124,6 +124,15 @@
                                                     <div class="form-check">
                                                         <input class="form-check-input"
                                                                type="radio"
+                                                               id="SerialTrackingNone"
+                                                               name="SerialTrackingMode"
+                                                               v-model.number="state.serialTrackingMode"
+                                                               v-bind:value="0">
+                                                        <label class="form-check-label" for="SerialTrackingNone">Không theo dõi serial</label>
+                                                    </div>
+                                                    <div class="form-check mt-3">
+                                                        <input class="form-check-input"
+                                                               type="radio"
                                                                id="SerialTrackingInternalAuto"
                                                                name="SerialTrackingMode"
                                                                v-model.number="state.serialTrackingMode"
@@ -146,10 +155,11 @@
                                                                type="radio"
                                                                id="SerialTrackingManufacturer"
                                                                name="SerialTrackingMode"
+                                                               v-model.number="state.serialTrackingMode"
                                                                v-bind:value="2"
-                                                               disabled>
+                                                               >
                                                         <label class="form-check-label" for="SerialTrackingManufacturer">
-                                                            Manufacturer Serial Entry <span class="badge bg-secondary">In Development</span>
+                                                            Manufacturer Serial Entry
                                                         </label>
                                                     </div>
                                                 </div>
@@ -187,5 +197,5 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/Products/ProductList.cshtml.js"></script>
+    <script src="~/FrontEnd/Pages/Products/ProductList.cshtml.js" asp-append-version="true"></script>
 }

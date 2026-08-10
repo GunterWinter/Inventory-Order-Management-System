@@ -9,101 +9,47 @@ namespace Infrastructure.SeedManager.Demos;
 
 public class PurchaseReturnSeeder
 {
-    private readonly ICommandRepository<PurchaseReturn> _purchaseReturnRepository;
-    private readonly ICommandRepository<GoodsReceive> _goodsReceiveRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
-    private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
-    private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ICommandRepository<PurchaseReturn> _returns;
+    private readonly ICommandRepository<PurchaseOrder> _orders;
+    private readonly ICommandRepository<InventoryTransaction> _transactions;
+    private readonly NumberSequenceService _numbers;
+    private readonly InventoryTransactionService _inventory;
     private readonly IUnitOfWork _unitOfWork;
 
-    public PurchaseReturnSeeder(
-        ICommandRepository<PurchaseReturn> purchaseReturnRepository,
-        ICommandRepository<GoodsReceive> goodsReceiveRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
+    public PurchaseReturnSeeder(ICommandRepository<PurchaseReturn> purchaseReturnRepository,
+        ICommandRepository<PurchaseOrder> purchaseOrderRepository, ICommandRepository<Warehouse> warehouseRepository,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
-        NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService,
-        IUnitOfWork unitOfWork
-    )
+        NumberSequenceService numberSequenceService, InventoryTransactionService inventoryTransactionService,
+        IUnitOfWork unitOfWork)
     {
-        _purchaseReturnRepository = purchaseReturnRepository;
-        _goodsReceiveRepository = goodsReceiveRepository;
-        _warehouseRepository = warehouseRepository;
-        _inventoryTransactionRepository = inventoryTransactionRepository;
-        _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
-        _unitOfWork = unitOfWork;
+        _returns = purchaseReturnRepository; _orders = purchaseOrderRepository;
+        _transactions = inventoryTransactionRepository; _numbers = numberSequenceService;
+        _inventory = inventoryTransactionService; _unitOfWork = unitOfWork;
     }
 
     public async Task GenerateDataAsync()
     {
-        var random = new Random();
-        var purchaseReturnStatusLength = Enum.GetNames(typeof(PurchaseReturnStatus)).Length;
+        if (await _returns.GetQuery().AnyAsync(x => !x.IsDeleted)) return;
+        var order = await _orders.GetQuery().Where(x => !x.IsDeleted
+                && x.OrderStatus == PurchaseOrderStatus.Confirmed
+                && x.Description == "DEMO PO VẬT TƯ GIÁ VỐN THỰC TẾ")
+            .FirstOrDefaultAsync();
+        if (order == null) return;
+        var sourceLine = await _transactions.GetQuery().Where(x => !x.IsDeleted
+                && x.ModuleName == nameof(PurchaseOrder) && x.ModuleId == order.Id)
+            .FirstOrDefaultAsync();
+        if (sourceLine == null) return;
 
-        var goodsReceives = await _goodsReceiveRepository
-            .GetQuery()
-            .Where(x => x.Status >= GoodsReceiveStatus.Confirmed)
-            .ToListAsync();
-
-        var warehouses = await _warehouseRepository
-            .GetQuery()
-            .Where(x => x.SystemWarehouse == false)
-            .Select(x => x.Id)
-            .ToListAsync();
-
-        foreach (var goodsReceive in goodsReceives)
-        {
-            bool process = random.Next(2) == 0;
-
-            if (process)
-            {
-                continue;
-            }
-
-            var purchaseReturn = new PurchaseReturn
-            {
-                Number = _numberSequenceService.GenerateNumber(nameof(PurchaseReturn), "", "PRN"),
-                ReturnDate = goodsReceive.ReceiveDate?.AddDays(random.Next(1, 5)),
-                Status = (PurchaseReturnStatus)random.Next(0, purchaseReturnStatusLength),
-                PurchaseOrderId = goodsReceive.PurchaseOrderId,
-            };
-            await _purchaseReturnRepository.CreateAsync(purchaseReturn);
-
-            var items = await _inventoryTransactionRepository
-                .GetQuery()
-                .Where(x => x.ModuleId == goodsReceive.Id && x.ModuleName == nameof(GoodsReceive))
-                .ToListAsync();
-
-            foreach (var item in items)
-            {
-                var warehouseId = item.WarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
-                var inventoryTransaction = new InventoryTransaction
-                {
-                    ModuleId = purchaseReturn.Id,
-                    ModuleName = nameof(PurchaseReturn),
-                    ModuleCode = "PRN",
-                    ModuleNumber = purchaseReturn.Number,
-                    MovementDate = purchaseReturn.ReturnDate!.Value,
-                    Status = (InventoryTransactionStatus)purchaseReturn.Status,
-                    Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
-                    WarehouseId = warehouseId,
-                    ProductId = item.ProductId,
-                    ModuleItemId = item.ModuleItemId,
-                    Movement = item.Movement
-                };
-
-                _inventoryTransactionService.CalculateInvenTrans(inventoryTransaction);
-
-                await _inventoryTransactionRepository.CreateAsync(inventoryTransaction);
-            }
-
-            await _unitOfWork.SaveAsync();
-        }
-    }
-
-    private static T GetRandomValue<T>(List<T> list, Random random)
-    {
-        return list[random.Next(list.Count)];
+        var result = new PurchaseReturn { Number = _numbers.GenerateNumber(nameof(PurchaseReturn), "", "PRN"),
+            ReturnDate = DemoSeedData.BaseDate.AddDays(13), Status = PurchaseReturnStatus.Draft,
+            PurchaseOrderId = order.Id, Description = "DEMO TRẢ HÀNG MUA NHÁP" };
+        await _returns.CreateAsync(result);
+        var line = new InventoryTransaction { Number = _numbers.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
+            ModuleId = result.Id, ModuleName = nameof(PurchaseReturn), ModuleCode = "PRN", ModuleNumber = result.Number,
+            ModuleItemId = sourceLine.ModuleItemId, MovementDate = result.ReturnDate, Status = InventoryTransactionStatus.Draft,
+            WarehouseId = sourceLine.WarehouseId, ProductId = sourceLine.ProductId, Movement = 1d };
+        _inventory.CalculateInvenTrans(line);
+        await _transactions.CreateAsync(line);
+        await _unitOfWork.SaveAsync();
     }
 }

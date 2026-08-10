@@ -11,7 +11,7 @@ const App = {
                 toDate: null
             },
             summary: {
-                actualReceivedText: '0',
+                revenueText: '0',
                 projectCostText: '0',
                 profitText: '0'
             }
@@ -33,6 +33,18 @@ const App = {
                 return await AxiosManager.get(`/CashTransaction/GetCustomerProfitReport${suffix}`, {});
             },
             getCustomerList: async () => await AxiosManager.get('/Customer/GetCustomerList', {})
+        };
+
+        const sourceTypeLabels = {
+            SalesOrder: 'Đơn bán hàng',
+            PurchaseOrderCostAllocation: 'Phân bổ vật tư từ đơn mua',
+            PurchaseOrderAllocation: 'Phân bổ vật tư từ đơn mua',
+            MaterialExport: 'Xuất vật tư',
+            CashTransactionCostAllocation: 'Phân bổ chi phí tiền',
+            CashCostAllocation: 'Phân bổ chi phí tiền',
+            CashTransaction: 'Chi phí tiền',
+            SalesReturn: 'Trả hàng bán',
+            PurchaseReturn: 'Trả hàng mua'
         };
 
         const methods = {
@@ -57,17 +69,16 @@ const App = {
                     state.mainData = (content.data ?? []).map(item => ({
                         ...item,
                         transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
-                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                        transactionTypeName: item.transactionType === 0 ? 'Debit' : item.transactionType === 1 ? 'Credit' : ''
+                        sourceTypeName: sourceTypeLabels[item.sourceType] ?? 'Chứng từ nghiệp vụ'
                     }));
-                    state.summary.actualReceivedText = NumberFormatManager.formatToLocale(content.actualReceived ?? 0);
+                    state.summary.revenueText = NumberFormatManager.formatToLocale(content.revenue ?? 0);
                     state.summary.projectCostText = NumberFormatManager.formatToLocale(content.projectCost ?? 0);
                     state.summary.profitText = NumberFormatManager.formatToLocale(content.profit ?? 0);
                     mainGrid.refresh();
                 } catch (error) {
                     if (requestNumber !== currentRequest) return;
                     state.mainData = [];
-                    state.summary.actualReceivedText = '0';
+                    state.summary.revenueText = '0';
                     state.summary.projectCostText = '0';
                     state.summary.profitText = '0';
                     state.error = error?.response?.data?.message || error?.message || 'Unable to load the customer profit report.';
@@ -146,7 +157,7 @@ const App = {
             obj: null,
             create: () => {
                 mainGrid.obj = new ej.grids.Grid({
-                    height: '340px',
+                    height: 'auto',
                     dataSource: state.mainData,
                     allowFiltering: true,
                     allowSorting: true,
@@ -158,7 +169,7 @@ const App = {
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
-                    sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
+                    sortSettings: { columns: [{ field: 'transactionDate', direction: 'Descending' }] },
                     pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ['10', '20', '50', '100', '200', 'All'] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true,
@@ -170,21 +181,17 @@ const App = {
                         { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
                         { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
                         { field: 'transactionDate', headerText: 'Date', width: 130, format: 'yyyy-MM-dd' },
-                        { field: 'transactionTypeName', headerText: 'Type', width: 100, minWidth: 100 },
-                        { field: 'cashAccountName', headerText: 'Account', width: 160, minWidth: 160 },
-                        { field: 'cashCategoryName', headerText: 'Category', width: 170, minWidth: 170 },
-                        { field: 'actualReceived', headerText: 'Actual Received', width: 160, minWidth: 160, textAlign: 'Right', format: 'N0' },
+                        { field: 'sourceTypeName', headerText: 'Source Type', width: 190, minWidth: 190 },
+                        { field: 'revenue', headerText: 'Revenue', width: 160, minWidth: 160, textAlign: 'Right', format: 'N0' },
                         { field: 'projectCost', headerText: 'Project Cost', width: 160, minWidth: 160, textAlign: 'Right', format: 'N0' },
                         { field: 'profit', headerText: 'Profit', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'description', headerText: 'Description', width: 260, minWidth: 260 },
-                        { field: 'sourceModuleNumber', headerText: 'Source', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 170, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [{
                         columns: [
-                            { type: 'Sum', field: 'actualReceived', groupCaptionTemplate: 'Actual Received: ${Sum}', footerTemplate: 'Actual Received: ${Sum}', format: 'N0' },
-                            { type: 'Sum', field: 'projectCost', groupCaptionTemplate: 'Project Cost: ${Sum}', footerTemplate: 'Project Cost: ${Sum}', format: 'N0' },
-                            { type: 'Sum', field: 'profit', groupCaptionTemplate: 'Profit: ${Sum}', footerTemplate: 'Profit: ${Sum}', format: 'N0' }
+                            { type: 'Sum', field: 'revenue', groupCaptionTemplate: 'Doanh thu: ${Sum}', footerTemplate: 'Doanh thu: ${Sum}', format: 'N0' },
+                            { type: 'Sum', field: 'projectCost', groupCaptionTemplate: 'Chi phí công trình: ${Sum}', footerTemplate: 'Chi phí công trình: ${Sum}', format: 'N0' },
+                            { type: 'Sum', field: 'profit', groupCaptionTemplate: 'Lợi nhuận: ${Sum}', footerTemplate: 'Lợi nhuận: ${Sum}', format: 'N0' }
                         ]
                     }],
                     toolbar: ['ExcelExport', 'Search', { type: 'Separator' }],

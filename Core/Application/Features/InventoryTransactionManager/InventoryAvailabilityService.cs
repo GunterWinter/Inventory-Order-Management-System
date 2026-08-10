@@ -59,7 +59,7 @@ public class InventoryAvailabilityService
                 .ApplyIsDeletedFilter(false)
                 .Where(x =>
                     x.Status == InventoryTransactionStatus.Confirmed &&
-                    x.ModuleName == nameof(DeliveryOrder) &&
+                    x.ModuleName == nameof(SalesOrder) &&
                     x.ModuleItemId == currentSalesOrderItemId &&
                     x.ProductId == productId &&
                     x.WarehouseId == warehouseId)

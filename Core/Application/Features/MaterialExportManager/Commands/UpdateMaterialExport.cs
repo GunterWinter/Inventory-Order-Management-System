@@ -1,4 +1,5 @@
 using Application.Common.Extensions;
+using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
@@ -52,6 +53,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
     private readonly InventoryTransactionService _inventoryTransactionService;
     private readonly ProductSerialService _productSerialService;
     private readonly NumberSequenceService _numberSequenceService;
+    private readonly IQueryContext _queryContext;
 
     public UpdateMaterialExportHandler(
         ICommandRepository<MaterialExport> materialExportRepository,
@@ -64,7 +66,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         IUnitOfWork unitOfWork,
         InventoryTransactionService inventoryTransactionService,
         ProductSerialService productSerialService,
-        NumberSequenceService numberSequenceService)
+        NumberSequenceService numberSequenceService,
+        IQueryContext queryContext)
     {
         _materialExportRepository = materialExportRepository;
         _inventoryTransactionRepository = inventoryTransactionRepository;
@@ -77,6 +80,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         _inventoryTransactionService = inventoryTransactionService;
         _productSerialService = productSerialService;
         _numberSequenceService = numberSequenceService;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdateMaterialExportResult> Handle(
@@ -90,11 +94,6 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         }
 
         var requestedStatus = (MaterialExportStatus)statusValue;
-        if (requestedStatus is not MaterialExportStatus.Draft and not MaterialExportStatus.Confirmed)
-        {
-            throw new InvalidOperationException("Material exports can only be saved as Draft or Confirmed.");
-        }
-
         MaterialExport? entity = null;
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -106,9 +105,66 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             {
                 throw new InvalidOperationException($"Material export was not found: {request.Id}");
             }
+            if (entity.Status == MaterialExportStatus.Confirmed
+                && requestedStatus is MaterialExportStatus.Cancelled or MaterialExportStatus.Archived)
+            {
+                var headerChanged = entity.ExportDate != request.MaterialExportDate
+                    || entity.WarehouseId != request.WarehouseId
+                    || entity.CustomerId != request.CustomerId
+                    || entity.Description != request.Description;
+                if (headerChanged)
+                    throw new InvalidOperationException("Phiếu xuất vật tư đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+
+                if (requestedStatus == MaterialExportStatus.Archived)
+                {
+                    entity.Status = MaterialExportStatus.Archived;
+                    entity.UpdatedById = request.UpdatedById;
+                    _materialExportRepository.Update(entity);
+                    await _unitOfWork.SaveAsync(ct);
+                    return;
+                }
+
+                var sourceTransactions = await _cashTransactionRepository.GetQuery()
+                    .ApplyIsDeletedFilter(false)
+                    .Where(x => x.SourceModule == nameof(MaterialExport) && x.SourceModuleId == entity.Id)
+                    .ToListAsync(ct);
+                var sourceTransactionIds = sourceTransactions.Select(x => x.Id).ToList();
+                var hasPayment = sourceTransactions.Any(x => (x.PaidAmount ?? 0d) > 0d)
+                    || await _queryContext.Set<CashTransactionPayment>().AsNoTracking()
+                        .AnyAsync(x => !x.IsDeleted && sourceTransactionIds.Contains(x.CashTransactionId) && x.Amount != 0d, ct);
+                if (hasPayment)
+                    throw new InvalidOperationException($"Không thể hủy phiếu xuất vật tư {entity.Number} vì chi phí nguồn đã có thanh toán. Hãy hoàn tác thanh toán trước.");
+
+                var confirmedLines = await _inventoryTransactionRepository.GetQuery()
+                    .ApplyIsDeletedFilter(false)
+                    .Where(x => x.ModuleName == nameof(MaterialExport) && x.ModuleId == entity.Id)
+                    .ToListAsync(ct);
+                foreach (var line in confirmedLines)
+                {
+                    await _productSerialService.ReleaseInventoryTransactionSerialsAsync(line.Id, request.UpdatedById, ct);
+                    line.Status = InventoryTransactionStatus.Cancelled;
+                    line.UpdatedById = request.UpdatedById;
+                    _inventoryTransactionRepository.Update(line);
+                }
+                foreach (var sourceTransaction in sourceTransactions)
+                {
+                    sourceTransaction.UpdatedById = request.UpdatedById;
+                    _cashTransactionRepository.Delete(sourceTransaction);
+                }
+                entity.Status = MaterialExportStatus.Cancelled;
+                entity.UpdatedById = request.UpdatedById;
+                _materialExportRepository.Update(entity);
+                await _unitOfWork.SaveAsync(ct);
+                return;
+            }
+
             if (entity.Status != MaterialExportStatus.Draft)
             {
-                throw new InvalidOperationException("Only draft material exports can be updated or confirmed.");
+                throw new InvalidOperationException("Phiếu xuất vật tư đã Hủy/Lưu trữ không thể thay đổi trạng thái hoặc nội dung.");
+            }
+            if (requestedStatus is MaterialExportStatus.Cancelled or MaterialExportStatus.Archived)
+            {
+                throw new InvalidOperationException("Phiếu xuất vật tư Nháp phải được xóa hoặc xác nhận; không thể chuyển thẳng sang Hủy/Lưu trữ.");
             }
 
             var lines = await _inventoryTransactionRepository.GetQuery()
@@ -122,7 +178,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             if (lines.Count > 0
                 && !string.Equals(entity.WarehouseId, request.WarehouseId, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Remove all material export lines before changing the warehouse.");
+                throw new InvalidOperationException("Hãy xóa hết dòng hàng trước khi đổi kho của phiếu xuất vật tư.");
             }
 
             entity.ExportDate = request.MaterialExportDate;
@@ -140,7 +196,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
 
             if (lines.Count == 0)
             {
-                throw new InvalidOperationException("Add at least one product before confirming the material export.");
+                throw new InvalidOperationException("Cần thêm ít nhất một hàng hóa trước khi xác nhận phiếu xuất vật tư.");
             }
             var selectedCustomer = await _customerRepository.GetQuery()
                 .ApplyIsDeletedFilter(false)
@@ -168,13 +224,53 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 {
                     throw new InvalidOperationException("All material export lines must be Draft before confirmation.");
                 }
-                if (line.Product?.SerialTrackingMode == SerialTrackingMode.None)
+                var movement = line.Movement ?? 0d;
+                if (line.Product?.Physical != true || movement <= 0d)
                 {
-                    throw new InvalidOperationException("Material exports require serial-tracked products.");
+                    throw new InvalidOperationException("Material exports require a physical product and a positive quantity.");
                 }
 
-                var movement = line.Movement ?? 0d;
-                if (movement <= 0d || Math.Abs(movement - Math.Round(movement)) > 0.000001d)
+                if ((line.Product.SerialTrackingMode ?? SerialTrackingMode.None) == SerialTrackingMode.None)
+                {
+                    var availableStock = await _inventoryTransactionRepository.GetQuery()
+                        .Where(x => !x.IsDeleted
+                            && x.ProductId == line.ProductId
+                            && x.WarehouseId == entity.WarehouseId
+                            && x.Status == InventoryTransactionStatus.Confirmed)
+                        .SumAsync(x => x.Stock ?? 0d, ct);
+                    if (movement > availableStock + 0.000001d)
+                        throw new InvalidOperationException($"Not enough stock for {line.Product.Name}. Available: {availableStock}.");
+
+                    var receiptCosts = await (
+                        from transaction in _inventoryTransactionRepository.GetQuery()
+                        join purchaseItem in _queryContext.Set<PurchaseOrderItem>()
+                            on transaction.ModuleItemId equals purchaseItem.Id
+                        where !transaction.IsDeleted
+                            && !purchaseItem.IsDeleted
+                            && transaction.ModuleName == nameof(PurchaseOrder)
+                            && transaction.Status == InventoryTransactionStatus.Confirmed
+                            && transaction.ProductId == line.ProductId
+                            && transaction.WarehouseId == entity.WarehouseId
+                            && (transaction.Stock ?? 0d) > 0d
+                        select new { Quantity = transaction.Stock ?? 0d, UnitCost = purchaseItem.UnitPrice ?? 0d })
+                        .ToListAsync(ct);
+                    var received = receiptCosts.Sum(x => x.Quantity);
+                    var unitCost = received > 0d
+                        ? receiptCosts.Sum(x => x.Quantity * x.UnitCost) / received
+                        : line.Product.CostPrice ?? 0d;
+                    purchaseOrderCosts[$"WEIGHTED:{line.Id}"] = unitCost * movement;
+
+                    line.Status = InventoryTransactionStatus.Confirmed;
+                    line.WarehouseId = entity.WarehouseId;
+                    line.MovementDate = entity.ExportDate;
+                    line.UpdatedById = request.UpdatedById;
+                    _inventoryTransactionService.CalculateInvenTrans(line);
+                    _inventoryTransactionRepository.Update(line);
+                    await _unitOfWork.SaveAsync(ct);
+                    continue;
+                }
+
+                if (Math.Abs(movement - Math.Round(movement)) > 0.000001d)
                 {
                     throw new InvalidOperationException("Material export quantity must be a positive whole number.");
                 }
@@ -316,9 +412,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
             TransactionDate = materialExport.ExportDate ?? DateTime.Today,
             TransactionType = CashTransactionType.Credit,
-            Status = CashTransactionStatus.Paid,
+            Status = CashTransactionStatus.Unpaid,
             Amount = amount,
-            PaidAmount = amount,
+            PaidAmount = 0d,
             Description = description,
             CashAccountId = null,
             CashCategoryId = cashCategoryId,

@@ -19,19 +19,6 @@ public class JsonStructureItem
 public static class NavigationTreeStructure
 {
 
-    /* 
-    Unused modules:
-    {
-        "URL": "/PositiveAdjustments/PositiveAdjustmentList",
-        "Name": "Positive Adjustment",
-        "IsModule": false
-    },
-    {
-        "URL": "/NegativeAdjustments/NegativeAdjustmentList",
-        "Name": "Negative Adjustment",
-        "IsModule": false
-    }
-    */
     public static readonly string JsonStructure = """
     [
         {
@@ -88,6 +75,16 @@ public static class NavigationTreeStructure
                 {
                     "URL": "/Products/ProductList",
                     "Name": "Product",
+                    "IsModule": false
+                },
+                {
+                    "URL": "/ProductGroups/ProductGroupList",
+                    "Name": "Product Group",
+                    "IsModule": false
+                },
+                {
+                    "URL": "/Warehouses/WarehouseList",
+                    "Name": "Warehouse",
                     "IsModule": false
                 },
                 {
@@ -175,7 +172,7 @@ public static class NavigationTreeStructure
                 },
                 {
                     "URL": "/VendorDebtReports/VendorDebtReportList",
-                    "Name": "Vendor Debt Report",
+                    "Name": "Debt Report",
                     "IsModule": false
                 }
             ]

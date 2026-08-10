@@ -81,8 +81,15 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
+
+        var orderStatus = await _queryContext.Set<SalesOrder>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == entity.SalesOrderId)
+            .Select(x => x.OrderStatus)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (orderStatus != SalesOrderStatus.Draft)
+            throw new InvalidOperationException("Only draft sales orders can be edited.");
 
         await ValidateProductNotDuplicatedAsync(request.SalesOrderId, request.ProductId, entity.Id, cancellationToken);
 
@@ -114,10 +121,10 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
 
         entity.SalesOrderId = request.SalesOrderId;
         entity.ProductId = request.ProductId;
-        entity.WarehouseId = request.WarehouseId;
+        entity.WarehouseId = isPhysical ? request.WarehouseId : null;
         entity.Summary = request.Summary;
         entity.TaxId = request.TaxId;
-        entity.WarrantyMonths = request.WarrantyMonths;
+        entity.WarrantyMonths = isPhysical ? request.WarrantyMonths : 0;
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = quantity;
 
@@ -137,7 +144,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         );
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+        await _salesOrderService.SynchronizeInventoryAsync(
             entity.SalesOrderId ?? "",
             entity.UpdatedById,
             cancellationToken

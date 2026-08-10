@@ -1,9 +1,11 @@
 ﻿using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
+using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.TransferOutManager.Commands;
 
@@ -40,49 +42,75 @@ public class UpdateTransferOutHandler : IRequestHandler<UpdateTransferOutRequest
     private readonly ICommandRepository<TransferOut> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public UpdateTransferOutHandler(
         ICommandRepository<TransferOut> repository,
         IUnitOfWork unitOfWork,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdateTransferOutResult> Handle(UpdateTransferOutRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        TransferOut? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
-
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.TransferReleaseDate = request.TransferReleaseDate;
-        entity.Status = (TransferStatus)int.Parse(request.Status!);
-        entity.Description = request.Description;
-        entity.WarehouseFromId = request.WarehouseFromId;
-        entity.WarehouseToId = request.WarehouseToId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(TransferOut),
-            entity.TransferReleaseDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            entity.WarehouseFromId,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Không tìm thấy phiếu chuyển kho đi cần cập nhật.");
+            if (!int.TryParse(request.Status, out var statusValue)
+                || !Enum.IsDefined(typeof(TransferStatus), statusValue))
+                throw new InvalidOperationException("Trạng thái phiếu chuyển kho không hợp lệ.");
+            var requestedStatus = (TransferStatus)statusValue;
+            if (entity.Status == TransferStatus.Draft)
+            {
+                if (requestedStatus is TransferStatus.Cancelled or TransferStatus.Archived)
+                    throw new InvalidOperationException("Phiếu chuyển kho Nháp phải được xóa hoặc xác nhận.");
+            }
+            else
+            {
+                var headerChanged = entity.TransferReleaseDate != request.TransferReleaseDate
+                    || entity.WarehouseFromId != request.WarehouseFromId
+                    || entity.WarehouseToId != request.WarehouseToId
+                    || entity.Description != request.Description;
+                if (entity.Status != TransferStatus.Confirmed
+                    || requestedStatus is not (TransferStatus.Cancelled or TransferStatus.Archived)
+                    || headerChanged)
+                    throw new InvalidOperationException("Phiếu chuyển kho đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+                if (requestedStatus == TransferStatus.Cancelled)
+                {
+                    var transferInNumber = await _queryContext.Set<TransferIn>().AsNoTracking()
+                        .Where(x => !x.IsDeleted && x.TransferOutId == entity.Id && x.Status != TransferStatus.Cancelled)
+                        .Select(x => x.Number)
+                        .FirstOrDefaultAsync(ct);
+                    if (transferInNumber != null)
+                        throw new InvalidOperationException($"Không thể hủy phiếu chuyển kho {entity.Number} vì phiếu nhận kho {transferInNumber} còn hiệu lực. Hãy hủy phiếu nhận kho trước.");
+                }
+            }
+            entity.UpdatedById = request.UpdatedById;
+            entity.TransferReleaseDate = request.TransferReleaseDate;
+            entity.Status = requestedStatus;
+            entity.Description = request.Description;
+            entity.WarehouseFromId = request.WarehouseFromId;
+            entity.WarehouseToId = request.WarehouseToId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id,
+                nameof(TransferOut),
+                entity.TransferReleaseDate,
+                (InventoryTransactionStatus?)entity.Status,
+                entity.IsDeleted,
+                entity.UpdatedById,
+                entity.WarehouseFromId,
+                ct);
+        }, cancellationToken);
 
         return new UpdateTransferOutResult
         {

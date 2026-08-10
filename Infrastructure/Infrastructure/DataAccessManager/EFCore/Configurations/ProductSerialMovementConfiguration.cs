@@ -20,11 +20,19 @@ public class ProductSerialMovementConfiguration : BaseEntityConfiguration<Produc
         builder.Property(x => x.ToWarehouseId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.MovementDate).IsRequired(false);
         builder.Property(x => x.Status).IsRequired(false);
+        builder.Property(x => x.PreviousStatus).IsRequired(false);
+        builder.Property(x => x.PreviousWarehouseId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.PreviousSalesOrderItemId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.PreviousCustomerWarrantyEndDate).IsRequired(false);
+        builder.Property(x => x.PreviousCostAllocationId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.ReversedAtUtc).IsRequired(false);
+        builder.Property(x => x.ReversedById).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
 
         builder.HasIndex(x => x.ProductSerialId);
         builder.HasIndex(x => x.InventoryTransactionId);
         builder.HasIndex(x => x.ModuleName);
         builder.HasIndex(x => x.ModuleId);
         builder.HasIndex(x => x.ModuleItemId);
+        builder.HasIndex(x => new { x.ProductSerialId, x.ReversedAtUtc, x.MovementDate });
     }
 }

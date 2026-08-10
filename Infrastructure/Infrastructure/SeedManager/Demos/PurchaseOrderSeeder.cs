@@ -1,139 +1,110 @@
-﻿using Application.Common.Repositories;
+using System.Text.Json;
+using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Application.Features.PurchaseOrderManager;
-using Application.Features.PurchaseOrderManager.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using MediatR;
 
 namespace Infrastructure.SeedManager.Demos;
 
 public class PurchaseOrderSeeder
 {
-    private readonly PurchaseOrderService _purchaseOrderService;
-    private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
-    private readonly ICommandRepository<PurchaseOrderItem> _purchaseOrderItemRepository;
-    private readonly ICommandRepository<Vendor> _vendorRepository;
-    private readonly ICommandRepository<Tax> _taxRepository;
-    private readonly ICommandRepository<Product> _productRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
-    private readonly NumberSequenceService _numberSequenceService;
+    private readonly PurchaseOrderService _service;
+    private readonly ICommandRepository<PurchaseOrder> _orders;
+    private readonly ICommandRepository<PurchaseOrderItem> _items;
+    private readonly ICommandRepository<Vendor> _vendors;
+    private readonly ICommandRepository<Tax> _taxes;
+    private readonly ICommandRepository<Product> _products;
+    private readonly ICommandRepository<Warehouse> _warehouses;
+    private readonly NumberSequenceService _numbers;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ISender _sender;
 
     public PurchaseOrderSeeder(
-        PurchaseOrderService purchaseOrderService,
-        ICommandRepository<PurchaseOrder> purchaseOrderRepository,
-        ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
-        ICommandRepository<Vendor> vendorRepository,
-        ICommandRepository<Tax> taxRepository,
-        ICommandRepository<Product> productRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
-        NumberSequenceService numberSequenceService,
-        IUnitOfWork unitOfWork,
-        ISender sender
-    )
+        PurchaseOrderService service,
+        ICommandRepository<PurchaseOrder> orders,
+        ICommandRepository<PurchaseOrderItem> items,
+        ICommandRepository<Vendor> vendors,
+        ICommandRepository<Tax> taxes,
+        ICommandRepository<Product> products,
+        ICommandRepository<Warehouse> warehouses,
+        NumberSequenceService numbers,
+        IUnitOfWork unitOfWork)
     {
-        _purchaseOrderService = purchaseOrderService;
-        _purchaseOrderRepository = purchaseOrderRepository;
-        _purchaseOrderItemRepository = purchaseOrderItemRepository;
-        _vendorRepository = vendorRepository;
-        _taxRepository = taxRepository;
-        _productRepository = productRepository;
-        _warehouseRepository = warehouseRepository;
-        _numberSequenceService = numberSequenceService;
+        _service = service;
+        _orders = orders;
+        _items = items;
+        _vendors = vendors;
+        _taxes = taxes;
+        _products = products;
+        _warehouses = warehouses;
+        _numbers = numbers;
         _unitOfWork = unitOfWork;
-        _sender = sender;
     }
 
     public async Task GenerateDataAsync()
     {
-        var random = new Random();
-        var vendors = await _vendorRepository.GetQuery().Select(x => x.Id).ToListAsync();
-        var taxes = await _taxRepository.GetQuery().ToListAsync();
-        var products = await _productRepository.GetQuery().ToListAsync();
-        var warehouses = await _warehouseRepository.GetQuery().Where(x => x.SystemWarehouse == false).Select(x => x.Id).ToListAsync();
+        if (await _orders.GetQuery().AnyAsync(x => !x.IsDeleted)) return;
 
-        var dateFinish = DateTime.Now;
-        var dateStart = new DateTime(dateFinish.AddMonths(-12).Year, dateFinish.AddMonths(-12).Month, 1);
+        var vendors = await _vendors.GetQuery().Where(x => !x.IsDeleted).OrderBy(x => x.Name).ToListAsync();
+        var tax = await _taxes.GetQuery().Where(x => !x.IsDeleted).OrderBy(x => x.Percentage).FirstOrDefaultAsync();
+        var products = await _products.GetQuery().Where(x => !x.IsDeleted).ToDictionaryAsync(x => x.ReferenceCode!);
+        var warehouse = await _warehouses.GetQuery().Where(x => !x.IsDeleted && x.SystemWarehouse != true)
+            .OrderBy(x => x.Name == DemoSeedData.MainWarehouse ? 0 : 1).FirstOrDefaultAsync();
+        if (vendors.Count == 0 || tax == null || warehouse == null) return;
 
-        for (DateTime date = dateStart; date < dateFinish; date = date.AddMonths(1))
+        var definitions = new[]
         {
-            DateTime[] transactionDates = GetRandomDays(date.Year, date.Month, 6);
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 0, Description = "DEMO PO VẬT TƯ GIÁ VỐN THỰC TẾ", Lines = new[] { ("MAT-LED-001", 20d, 400_000d), ("ELEC-TV-001", 2d, 10_500_000d) } },
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 1, Description = "DEMO PO SERIAL NHÀ SẢN XUẤT", Lines = new[] { ("ELEC-WM-001", 2d, 7_200_000d), ("SM-CAM-001", 3d, 470_000d) } },
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 2, Description = "DEMO PO VÁN VÀ NỘI THẤT", Lines = new[] { ("MAT-MDF-001", 10d, 620_000d), ("FURN-CHR-001", 4d, 870_000d) } },
+            new { Status = PurchaseOrderStatus.Draft, Vendor = 0, Description = "DEMO PO NHÁP", Lines = new[] { ("SM-SW-001", 2d, 230_000d) } }
+        };
 
-            foreach (DateTime transDate in transactionDates)
+        for (var orderIndex = 0; orderIndex < definitions.Length; orderIndex++)
+        {
+            var definition = definitions[orderIndex];
+            var order = new PurchaseOrder
             {
-                var purchaseOrder = new PurchaseOrder
-                {
-                    Number = _numberSequenceService.GenerateNumber(nameof(PurchaseOrder), "", "PO"),
-                    OrderDate = transDate,
-                    OrderStatus = (PurchaseOrderStatus)random.Next(0, Enum.GetNames(typeof(PurchaseOrderStatus)).Length),
-                    VendorId = GetRandomValue(vendors, random),
-                };
-                await _purchaseOrderRepository.CreateAsync(purchaseOrder);
+                Number = _numbers.GenerateNumber(nameof(PurchaseOrder), "", "PO"),
+                OrderDate = DemoSeedData.BaseDate.AddDays(orderIndex),
+                OrderStatus = definition.Status,
+                VendorId = vendors[definition.Vendor % vendors.Count].Id,
+                Description = definition.Description
+            };
+            await _orders.CreateAsync(order);
 
-                int numberOfProducts = random.Next(3, 6);
-                for (int i = 0; i < numberOfProducts; i++)
+            foreach (var (reference, quantity, unitPrice) in definition.Lines)
+            {
+                if (!products.TryGetValue(reference, out var product)) continue;
+                var total = quantity * unitPrice;
+                var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
+                var manufacturerSerials = product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial
+                    ? Enumerable.Range(1, Convert.ToInt32(quantity))
+                        .Select(index => $"MFG-{reference}-{orderIndex + 1}-{index}").ToList()
+                    : null;
+                await _items.CreateAsync(new PurchaseOrderItem
                 {
-                    var product = products[random.Next(products.Count)];
-                    var tax = GetRandomValue(taxes, random);
-                    var quantity = random.Next(20, 50);
-                    var total = (product.UnitPrice ?? 0d) * quantity;
-                    var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
-                    var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
-                    var purchaseOrderItem = new PurchaseOrderItem
-                    {
-                        PurchaseOrderId = purchaseOrder.Id,
-                        ProductId = product.Id,
-                        WarehouseId = warehouseId,
-                        SupplierWarrantyMonths = product.DefaultWarrantyMonths ?? 6,
-                        Summary = product.Number,
-                        TaxId = tax.Id,
-                        UnitPrice = product.UnitPrice,
-                        Quantity = quantity,
-                        Total = total,
-                        TaxAmount = taxAmount,
-                        AfterTaxAmount = total + taxAmount
-                    };
-                    await _purchaseOrderItemRepository.CreateAsync(purchaseOrderItem);
-                }
-
-                await _unitOfWork.SaveAsync();
-
-                _purchaseOrderService.Recalculate(purchaseOrder.Id);
-                await _purchaseOrderService.SynchronizeGoodsReceiveAsync(purchaseOrder.Id, null);
-                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
-                {
-                    await _sender.Send(new AllocatePurchaseOrderCostsRequest
-                    {
-                        PurchaseOrderId = purchaseOrder.Id,
-                        Items = [],
-                        CreatedById = "demo-seeder"
-                    });
-                }
+                    PurchaseOrderId = order.Id,
+                    ProductId = product.Id,
+                    WarehouseId = product.Physical == true ? warehouse.Id : null,
+                    SupplierWarrantyMonths = product.Physical == true ? product.DefaultWarrantyMonths ?? 0 : 0,
+                    Summary = product.Name,
+                    TaxId = tax.Id,
+                    UnitPrice = unitPrice,
+                    Quantity = quantity,
+                    ManufacturerSerialNumbersJson = manufacturerSerials == null ? null : JsonSerializer.Serialize(manufacturerSerials),
+                    Total = total,
+                    TaxAmount = taxAmount,
+                    AfterTaxAmount = total + taxAmount
+                });
             }
+
+            await _unitOfWork.SaveAsync();
+            _service.Recalculate(order.Id);
+            await _service.SynchronizeInventoryAsync(order.Id, "demo-seeder");
+            if (order.OrderStatus == PurchaseOrderStatus.Confirmed)
+                await _service.EnsureVendorObligationAsync(order.Id, "demo-seeder");
         }
-    }
-
-    private static T GetRandomValue<T>(List<T> list, Random random)
-    {
-        return list[random.Next(list.Count)];
-    }
-
-    private static DateTime[] GetRandomDays(int year, int month, int count)
-    {
-        var random = new Random();
-        var daysInMonth = Enumerable.Range(1, DateTime.DaysInMonth(year, month)).ToList();
-        var selectedDays = new List<int>();
-
-        for (int i = 0; i < count; i++)
-        {
-            int day = daysInMonth[random.Next(daysInMonth.Count)];
-            selectedDays.Add(day);
-            daysInMonth.Remove(day);
-        }
-
-        return selectedDays.Select(day => new DateTime(year, month, day)).ToArray();
     }
 }

@@ -11,15 +11,16 @@ const App = {
 
             items.forEach(item => {
                 const soldQty = Number(item.quantity ?? 0);
-                const totalCost = Number(item.cogsAmount ?? 0);
-                const totalSales = Number(item.total ?? 0);
-                const unitCost = soldQty > 0 ? totalCost / soldQty : 0;
-                const salesUnitPrice = Number(item.unitPrice ?? 0);
-                const soldDate = item.createdAtUtc ? DateFormatManager.parseServerDate(item.createdAtUtc) : null;
+                const totalCost = Number(item.totalCost ?? 0);
+                const totalSales = Number(item.totalSales ?? 0);
+                const unitCost = Number(item.unitCost ?? 0);
+                const salesUnitPrice = Number(item.salesUnitPrice ?? 0);
+                const soldDate = item.soldDate ? DateFormatManager.parseServerDate(item.soldDate) : null;
                 const key = [
                     item.productId ?? '',
                     unitCost.toFixed(4),
-                    salesUnitPrice.toFixed(4)
+                    salesUnitPrice.toFixed(4),
+                    item.costSource ?? ''
                 ].join('|');
 
                 const current = rows.get(key) ?? {
@@ -33,13 +34,15 @@ const App = {
                         totalCost: 0,
                         totalSales: 0,
                         totalProfit: 0,
+                    costSource: item.costSource ?? '',
+                    isFallbackCost: item.isFallbackCost === true,
                     lastSoldDate: soldDate
                 };
 
                 current.soldQty += soldQty;
                 current.totalCost += totalCost;
                 current.totalSales += totalSales;
-                current.totalProfit += Number(item.profitAmount ?? 0);
+                current.totalProfit += Number(item.profit ?? 0);
 
                 if (soldDate && (!current.lastSoldDate || soldDate > current.lastSoldDate)) {
                     current.lastSoldDate = soldDate;
@@ -58,7 +61,7 @@ const App = {
         const services = {
             getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/SalesOrderItem/GetSalesOrderItemList', {});
+                    const response = await AxiosManager.get('/SalesOrderItem/GetInventoryProfitReport', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -117,6 +120,7 @@ const App = {
                         { field: 'totalCost', headerText: 'Total Cost', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'totalSales', headerText: 'Total Sales', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
                         { field: 'totalProfit', headerText: 'Profit', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
+                        { field: 'costSource', headerText: 'Cost Source', width: 210 },
                         { field: 'lastSoldDate', headerText: 'Last Sold', width: 150, format: 'yyyy-MM-dd' }
                     ],
                     toolbar: ['ExcelExport', 'Search'],

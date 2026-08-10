@@ -39,75 +39,56 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
     private readonly ICommandRepository<PurchaseOrder> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PurchaseOrderService _purchaseOrderService;
-    private readonly ISender _sender;
-    private readonly IQueryContext _queryContext;
 
     public UpdatePurchaseOrderHandler(
         ICommandRepository<PurchaseOrder> repository,
         IUnitOfWork unitOfWork,
-        PurchaseOrderService purchaseOrderService,
-        ISender sender,
-        IQueryContext queryContext
+        PurchaseOrderService purchaseOrderService
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _purchaseOrderService = purchaseOrderService;
-        _sender = sender;
-        _queryContext = queryContext;
     }
 
     public async Task<UpdatePurchaseOrderResult> Handle(UpdatePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        PurchaseOrder? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
-
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = (PurchaseOrderStatus)int.Parse(request.OrderStatus!);
-        entity.Description = request.Description;
-        entity.VendorId = request.VendorId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        _purchaseOrderService.Recalculate(entity.Id);
-        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
-            entity.Id,
-            entity.UpdatedById,
-            cancellationToken
-        );
-
-        // Auto-allocate all items to Kho (customerId = null) when PO is Confirmed.
-        // Empty items list = handler defaults everything to Kho and creates CashTransaction.
-        if (entity.OrderStatus == PurchaseOrderStatus.Confirmed)
-        {
-            var hasActiveAllocations = await _queryContext.Set<PurchaseOrderCostAllocation>()
-                .AsNoTracking()
-                .AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == entity.Id, cancellationToken);
-            if (!hasActiveAllocations)
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException($"Purchase order was not found: {request.Id}");
+            if (!int.TryParse(request.OrderStatus, out var statusValue)
+                || !Enum.IsDefined(typeof(PurchaseOrderStatus), statusValue))
+                throw new InvalidOperationException("Invalid purchase order status.");
+            var requestedStatus = (PurchaseOrderStatus)statusValue;
+            if (entity.OrderStatus == PurchaseOrderStatus.Draft
+                && requestedStatus is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Archived)
+                throw new InvalidOperationException("Đơn mua hàng Nháp phải được xóa hoặc xác nhận; không thể chuyển thẳng sang Hủy/Lưu trữ.");
+            if (entity.OrderStatus != PurchaseOrderStatus.Draft)
             {
-                await _sender.Send(new AllocatePurchaseOrderCostsRequest
-                {
-                    PurchaseOrderId = entity.Id,
-                    Items = new List<AllocatePurchaseOrderCostsItem>(),
-                    CreatedById = request.UpdatedById
-                }, cancellationToken);
+                var allowedStatusChange = entity.OrderStatus == PurchaseOrderStatus.Confirmed
+                    && requestedStatus is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Archived;
+                var headerChanged = entity.OrderDate != request.OrderDate
+                    || entity.VendorId != request.VendorId
+                    || entity.Description != request.Description;
+                if (!allowedStatusChange || headerChanged)
+                    throw new InvalidOperationException("Đơn mua hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
             }
-            else
-            {
-                await _purchaseOrderService.EnsureVendorObligationAsync(
-                    entity.Id,
-                    request.UpdatedById,
-                    cancellationToken);
-            }
-        }
+
+            entity.UpdatedById = request.UpdatedById;
+            entity.OrderDate = request.OrderDate;
+            entity.OrderStatus = requestedStatus;
+            entity.Description = request.Description;
+            entity.VendorId = request.VendorId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            _purchaseOrderService.Recalculate(entity.Id);
+            await _purchaseOrderService.SynchronizeInventoryAsync(entity.Id, entity.UpdatedById, ct);
+            if (entity.OrderStatus == PurchaseOrderStatus.Confirmed)
+                await _purchaseOrderService.EnsureVendorObligationAsync(entity.Id, request.UpdatedById, ct);
+        }, cancellationToken);
 
         return new UpdatePurchaseOrderResult
         {

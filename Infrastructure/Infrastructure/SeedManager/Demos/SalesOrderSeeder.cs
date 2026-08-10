@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
@@ -9,117 +9,124 @@ namespace Infrastructure.SeedManager.Demos;
 
 public class SalesOrderSeeder
 {
-    private readonly SalesOrderService _salesOrderService;
-    private readonly ICommandRepository<SalesOrder> _salesOrderRepository;
-    private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
-    private readonly ICommandRepository<Customer> _customerRepository;
-    private readonly ICommandRepository<Tax> _taxRepository;
-    private readonly ICommandRepository<Product> _productRepository;
-    private readonly ICommandRepository<Warehouse> _warehouseRepository;
-    private readonly NumberSequenceService _numberSequenceService;
+    private readonly SalesOrderService _service;
+    private readonly ICommandRepository<SalesOrder> _orders;
+    private readonly ICommandRepository<SalesOrderItem> _items;
+    private readonly ICommandRepository<Customer> _customers;
+    private readonly ICommandRepository<Tax> _taxes;
+    private readonly ICommandRepository<Product> _products;
+    private readonly ICommandRepository<ProductSerial> _serials;
+    private readonly NumberSequenceService _numbers;
     private readonly IUnitOfWork _unitOfWork;
 
     public SalesOrderSeeder(
-        SalesOrderService salesOrderService,
-        ICommandRepository<SalesOrder> salesOrderRepository,
-        ICommandRepository<SalesOrderItem> salesOrderItemRepository,
-        ICommandRepository<Customer> customerRepository,
-        ICommandRepository<Tax> taxRepository,
-        ICommandRepository<Product> productRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
-        NumberSequenceService numberSequenceService,
-        IUnitOfWork unitOfWork
-    )
+        SalesOrderService service,
+        ICommandRepository<SalesOrder> orders,
+        ICommandRepository<SalesOrderItem> items,
+        ICommandRepository<Customer> customers,
+        ICommandRepository<Tax> taxes,
+        ICommandRepository<Product> products,
+        ICommandRepository<Warehouse> warehouses,
+        ICommandRepository<InventoryTransaction> inventoryTransactions,
+        NumberSequenceService numbers,
+        IUnitOfWork unitOfWork,
+        ICommandRepository<ProductSerial> serials)
     {
-        _salesOrderService = salesOrderService;
-        _salesOrderRepository = salesOrderRepository;
-        _salesOrderItemRepository = salesOrderItemRepository;
-        _customerRepository = customerRepository;
-        _taxRepository = taxRepository;
-        _productRepository = productRepository;
-        _warehouseRepository = warehouseRepository;
-        _numberSequenceService = numberSequenceService;
+        _service = service;
+        _orders = orders;
+        _items = items;
+        _customers = customers;
+        _taxes = taxes;
+        _products = products;
+        _serials = serials;
+        _numbers = numbers;
         _unitOfWork = unitOfWork;
     }
 
     public async Task GenerateDataAsync()
     {
-        var random = new Random();
-        var customers = await _customerRepository.GetQuery().Select(x => x.Id).ToListAsync();
-        var taxes = await _taxRepository.GetQuery().ToListAsync();
-        var products = await _productRepository.GetQuery().ToListAsync();
-        var warehouses = await _warehouseRepository.GetQuery().Where(x => x.SystemWarehouse == false).Select(x => x.Id).ToListAsync();
+        if (await _orders.GetQuery().AnyAsync(x => !x.IsDeleted)) return;
 
-        var dateFinish = DateTime.Now;
-        var dateStart = new DateTime(dateFinish.AddMonths(-12).Year, dateFinish.AddMonths(-12).Month, 1);
+        var customers = await _customers.GetQuery().Where(x => !x.IsDeleted).ToDictionaryAsync(x => x.Name!);
+        var products = await _products.GetQuery().Where(x => !x.IsDeleted).ToDictionaryAsync(x => x.ReferenceCode!);
+        var tax = await _taxes.GetQuery().Where(x => !x.IsDeleted).OrderBy(x => x.Percentage).FirstOrDefaultAsync();
+        if (tax == null) return;
 
-        for (DateTime date = dateStart; date < dateFinish; date = date.AddMonths(1))
+        await CreateOrderAsync(customers, products, tax, DemoSeedData.ProjectA, "SERVICE-DESK-001",
+            1d, 2_000_000d, SalesOrderStatus.Confirmed, DemoSeedData.AccrualRevenueDescription, 4);
+        await CreateOrderAsync(customers, products, tax, DemoSeedData.ProjectB, "MAT-LED-001",
+            2d, 500_000d, SalesOrderStatus.Confirmed, DemoSeedData.PhysicalSaleDescription, 5);
+        await CreateOrderAsync(customers, products, tax, DemoSeedData.CustomerShowroom, "ELEC-TV-001",
+            1d, 12_500_000d, SalesOrderStatus.Confirmed, DemoSeedData.SerialSaleDescription, 6);
+        await CreateOrderAsync(customers, products, tax, DemoSeedData.CustomerRetail, "SERVICE-VOUCHER-001",
+            1d, 500_000d, SalesOrderStatus.Draft, "DEMO SO NHÁP", 7);
+    }
+
+    private async Task CreateOrderAsync(
+        IReadOnlyDictionary<string, Customer> customers,
+        IReadOnlyDictionary<string, Product> products,
+        Tax tax,
+        string customerName,
+        string productReference,
+        double quantity,
+        double unitPrice,
+        SalesOrderStatus status,
+        string description,
+        int dayOffset)
+    {
+        if (!customers.TryGetValue(customerName, out var customer)
+            || !products.TryGetValue(productReference, out var product)) return;
+
+        var order = new SalesOrder
         {
-            DateTime[] transactionDates = GetRandomDays(date.Year, date.Month, 6);
+            Number = _numbers.GenerateNumber(nameof(SalesOrder), "", "SO"),
+            OrderDate = DemoSeedData.BaseDate.AddDays(dayOffset),
+            OrderStatus = status,
+            CustomerId = customer.Id,
+            Description = description
+        };
+        await _orders.CreateAsync(order);
+        var total = quantity * unitPrice;
+        var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
+        var item = new SalesOrderItem
+        {
+            SalesOrderId = order.Id,
+            ProductId = product.Id,
+            WarehouseId = product.Physical == true ? product.DefaultWarehouseId : null,
+            Summary = product.Name,
+            TaxId = tax.Id,
+            WarrantyMonths = product.Physical == true ? product.DefaultWarrantyMonths ?? 0 : 0,
+            UnitPrice = unitPrice,
+            Quantity = quantity,
+            Total = total,
+            TaxAmount = taxAmount,
+            AfterTaxAmount = total + taxAmount
+        };
+        await _items.CreateAsync(item);
+        await _unitOfWork.SaveAsync();
 
-            foreach (DateTime transDate in transactionDates)
+        if (status == SalesOrderStatus.Confirmed && product.Physical == true
+            && product.SerialTrackingMode != SerialTrackingMode.None)
+        {
+            var selected = await _serials.GetQuery()
+                .Where(x => !x.IsDeleted && x.ProductId == product.Id
+                    && x.CurrentWarehouseId == product.DefaultWarehouseId
+                    && x.Status == ProductSerialStatus.InStock)
+                .OrderBy(x => x.CreatedAtUtc)
+                .Take(Convert.ToInt32(quantity))
+                .ToListAsync();
+            if (selected.Count != Convert.ToInt32(quantity))
+                throw new InvalidOperationException($"Dữ liệu demo thiếu serial tồn kho cho {product.Name}.");
+            foreach (var serial in selected)
             {
-                var salesOrder = new SalesOrder
-                {
-                    Number = _numberSequenceService.GenerateNumber(nameof(SalesOrder), "", "SO"),
-                    OrderDate = transDate,
-                    OrderStatus = (SalesOrderStatus)random.Next(0, Enum.GetNames(typeof(SalesOrderStatus)).Length),
-                    CustomerId = GetRandomValue(customers, random),
-                };
-                await _salesOrderRepository.CreateAsync(salesOrder);
-
-                int numberOfProducts = random.Next(3, 6);
-                for (int i = 0; i < numberOfProducts; i++)
-                {
-                    var qty = random.Next(2, 5);
-                    var product = products[random.Next(products.Count)];
-                    var tax = GetRandomValue(taxes, random);
-                    var total = (product.UnitPrice ?? 0d) * qty;
-                    var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
-                    var warehouseId = product.DefaultWarehouseId ?? (warehouses.Count > 0 ? GetRandomValue(warehouses, random) : null);
-                    var salesOrderItem = new SalesOrderItem
-                    {
-                        SalesOrderId = salesOrder.Id,
-                        ProductId = product.Id,
-                        WarehouseId = warehouseId,
-                        Summary = product.Number,
-                        TaxId = tax.Id,
-                        WarrantyMonths = product.DefaultWarrantyMonths ?? 3,
-                        UnitPrice = product.UnitPrice,
-                        Quantity = qty,
-                        Total = total,
-                        TaxAmount = taxAmount,
-                        AfterTaxAmount = total + taxAmount
-                    };
-                    await _salesOrderItemRepository.CreateAsync(salesOrderItem);
-                }
-
-                await _unitOfWork.SaveAsync();
-
-                _salesOrderService.Recalculate(salesOrder.Id);
+                serial.SalesOrderItemId = item.Id;
+                serial.UpdatedById = "demo-seeder";
+                _serials.Update(serial);
             }
+            await _unitOfWork.SaveAsync();
         }
 
-    }
-
-    private static T GetRandomValue<T>(List<T> list, Random random)
-    {
-        return list[random.Next(list.Count)];
-    }
-
-    private static DateTime[] GetRandomDays(int year, int month, int count)
-    {
-        var random = new Random();
-        var daysInMonth = Enumerable.Range(1, DateTime.DaysInMonth(year, month)).ToList();
-        var selectedDays = new List<int>();
-
-        for (int i = 0; i < count; i++)
-        {
-            int day = daysInMonth[random.Next(daysInMonth.Count)];
-            selectedDays.Add(day);
-            daysInMonth.Remove(day);
-        }
-
-        return selectedDays.Select(day => new DateTime(year, month, day)).ToArray();
+        _service.Recalculate(order.Id);
+        await _service.SynchronizeInventoryAsync(order.Id, "demo-seeder");
     }
 }

@@ -1,8 +1,11 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Common.Repositories;
+using Application.Features.CashTransactionManager;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
+using Application.Features.ProductSerialManager;
+using Application.Features.WarehouseManager;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -13,270 +16,242 @@ public class SalesOrderService
 {
     private readonly ICommandRepository<SalesOrder> _salesOrderRepository;
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
-    private readonly ICommandRepository<DeliveryOrder> _deliveryOrderRepository;
+    private readonly ICommandRepository<InventoryTransaction> _inventoryRepository;
+    private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
+    private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly InventoryTransactionService _inventoryService;
+    private readonly ProductSerialService _serialService;
+    private readonly WarehouseService _warehouseService;
+    private readonly CashBalanceService _cashBalanceService;
 
     public SalesOrderService(
         ICommandRepository<SalesOrder> salesOrderRepository,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
-        ICommandRepository<DeliveryOrder> deliveryOrderRepository,
+        ICommandRepository<InventoryTransaction> inventoryRepository,
+        ICommandRepository<CashTransaction> cashTransactionRepository,
+        ICommandRepository<CashTransactionPayment> paymentRepository,
         IQueryContext queryContext,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
-        )
+        InventoryTransactionService inventoryService,
+        ProductSerialService serialService,
+        WarehouseService warehouseService,
+        CashBalanceService cashBalanceService)
     {
         _salesOrderRepository = salesOrderRepository;
         _salesOrderItemRepository = salesOrderItemRepository;
-        _deliveryOrderRepository = deliveryOrderRepository;
+        _inventoryRepository = inventoryRepository;
+        _cashTransactionRepository = cashTransactionRepository;
+        _paymentRepository = paymentRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
+        _inventoryService = inventoryService;
+        _serialService = serialService;
+        _warehouseService = warehouseService;
+        _cashBalanceService = cashBalanceService;
     }
 
     public void Recalculate(string salesOrderId)
     {
-        var salesOrder = _salesOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter()
-            .Where(x => x.Id == salesOrderId)
-            .SingleOrDefault();
+        var order = _salesOrderRepository.GetQuery().ApplyIsDeletedFilter()
+            .SingleOrDefault(x => x.Id == salesOrderId);
+        if (order == null) return;
 
-        if (salesOrder == null)
-            return;
-
-        var salesOrderItems = _salesOrderItemRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter()
-            .Where(x => x.SalesOrderId == salesOrderId)
-            .ToList();
-
-        salesOrder.BeforeTaxAmount = salesOrderItems.Sum(x => x.Total ?? 0);
-        salesOrder.TaxAmount = salesOrderItems.Sum(x => x.TaxAmount ?? 0);
-        salesOrder.AfterTaxAmount = salesOrderItems.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0) + (x.TaxAmount ?? 0)));
-
-        _salesOrderRepository.Update(salesOrder);
+        var items = _salesOrderItemRepository.GetQuery().ApplyIsDeletedFilter()
+            .Where(x => x.SalesOrderId == salesOrderId).ToList();
+        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0d);
+        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0d);
+        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0d) + (x.TaxAmount ?? 0d)));
+        _salesOrderRepository.Update(order);
         _unitOfWork.Save();
     }
 
-    public async Task SynchronizeDeliveryOrderAsync(
-        string salesOrderId,
-        string? userId,
-        CancellationToken cancellationToken = default)
+    public async Task SynchronizeInventoryAsync(string salesOrderId, string? userId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(salesOrderId))
+        if (string.IsNullOrWhiteSpace(salesOrderId)) return;
+
+        var order = await _salesOrderRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Include(x => x.Customer)
+            .Include(x => x.SalesOrderItemList.Where(i => !i.IsDeleted)).ThenInclude(x => x.Product)
+            .SingleOrDefaultAsync(x => x.Id == salesOrderId, ct);
+        if (order == null) return;
+
+        var physicalItems = order.SalesOrderItemList.Where(IsPhysicalInventoryItem).ToList();
+        var transactions = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleName == nameof(SalesOrder) && x.ModuleId == order.Id)
+            .ToListAsync(ct);
+
+        if (order.OrderStatus == SalesOrderStatus.Cancelled)
         {
-            return;
-        }
-
-        var salesOrder = await _salesOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.Id == salesOrderId)
-            .Include(x => x.SalesOrderItemList.Where(item => !item.IsDeleted))
-                .ThenInclude(x => x.Product)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (salesOrder == null)
-        {
-            return;
-        }
-
-        var deliverableItems = salesOrder.SalesOrderItemList
-            .Where(x =>
-                x.Product?.Physical == true &&
-                !string.IsNullOrWhiteSpace(x.WarehouseId) &&
-                !string.IsNullOrWhiteSpace(x.ProductId) &&
-                x.WarrantyMonths.HasValue &&
-                (x.Quantity ?? 0) > 0)
-            .ToList();
-
-        var deliveryOrder = await _deliveryOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SalesOrderId == salesOrder.Id)
-            .OrderBy(x => x.CreatedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (deliveryOrder == null && deliverableItems.Count == 0)
-        {
-            return;
-        }
-
-        var isNewDeliveryOrder = deliveryOrder == null;
-
-        if (isNewDeliveryOrder)
-        {
-            deliveryOrder = new DeliveryOrder
+            await ValidateCancellationAsync(order, transactions, ct);
+            foreach (var transaction in transactions)
             {
-                CreatedById = userId,
-                Number = _numberSequenceService.GenerateNumber(nameof(DeliveryOrder), "", "DO"),
-                SalesOrderId = salesOrder.Id
-            };
-        }
-        else
-        {
-            deliveryOrder.UpdatedById = userId;
-        }
-
-        deliveryOrder.DeliveryDate = salesOrder.OrderDate;
-        deliveryOrder.Status = ToDeliveryOrderStatus(salesOrder.OrderStatus);
-        deliveryOrder.Description = salesOrder.Description;
-
-        if (deliveryOrder.Id == null)
-        {
-            throw new Exception("Delivery order id not generated.");
+                transaction.Status = InventoryTransactionStatus.Cancelled;
+                transaction.UpdatedById = userId;
+                _inventoryRepository.Update(transaction);
+                await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+            }
+            await DeleteUnpaidReceivableAsync(order.Id, userId, ct);
+            await _unitOfWork.SaveAsync(ct);
+            return;
         }
 
-        if (isNewDeliveryOrder)
+        var validItemIds = physicalItems.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var obsolete in transactions.Where(x => !validItemIds.Contains(x.ModuleItemId ?? string.Empty)))
         {
-            await _deliveryOrderRepository.CreateAsync(deliveryOrder, cancellationToken);
-        }
-        else
-        {
-            _deliveryOrderRepository.Update(deliveryOrder);
-        }
-
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        var inventoryTransactions = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == deliveryOrder.Id && x.ModuleName == nameof(DeliveryOrder))
-            .ToListAsync(cancellationToken);
-
-        var validModuleItemIds = deliverableItems
-            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-            .Select(x => x.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var obsoleteTransaction in inventoryTransactions.Where(x => !validModuleItemIds.Contains(x.ModuleItemId ?? string.Empty)))
-        {
-            await _inventoryTransactionService.DeliveryOrderDeleteInvenTrans(
-                obsoleteTransaction.Id,
-                userId,
-                cancellationToken
-            );
+            if (obsolete.Status == InventoryTransactionStatus.Confirmed)
+                throw new InvalidOperationException("Confirmed sales-order inventory lines cannot be removed.");
+            await _serialService.ReleaseInventoryTransactionSerialsAsync(obsolete.Id, userId, ct);
+            _inventoryRepository.Delete(obsolete);
         }
 
-        foreach (var item in deliverableItems)
+        foreach (var item in physicalItems)
         {
-            var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-            await ValidateDeliverableStockAsync(item, existingTransaction, cancellationToken);
-
-            if (existingTransaction == null)
+            var transaction = transactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
+            if (transaction == null)
             {
-                await _inventoryTransactionService.DeliveryOrderCreateInvenTrans(
-                    deliveryOrder.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    item.Quantity,
-                    userId,
-                    item.Id,
-                    cancellationToken
-                );
+                transaction = new InventoryTransaction
+                {
+                    CreatedById = userId,
+                    Number = _numberSequenceService.GenerateNumber(nameof(InventoryTransaction), string.Empty, "IVT"),
+                    ModuleId = order.Id,
+                    ModuleName = nameof(SalesOrder),
+                    ModuleCode = "SO-",
+                    ModuleNumber = order.Number,
+                    ModuleItemId = item.Id
+                };
+                await _inventoryRepository.CreateAsync(transaction, ct);
             }
             else
             {
-                await _inventoryTransactionService.DeliveryOrderUpdateInvenTrans(
-                    existingTransaction.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    item.Quantity,
-                    userId,
-                    item.Id,
-                    cancellationToken
-                );
+                transaction.UpdatedById = userId;
+                _inventoryRepository.Update(transaction);
+            }
+
+            transaction.MovementDate = order.OrderDate;
+            transaction.Status = ToInventoryStatus(order.OrderStatus);
+            transaction.WarehouseId = item.WarehouseId;
+            transaction.ProductId = item.ProductId;
+            transaction.Movement = item.Quantity;
+            _inventoryService.CalculateInvenTrans(transaction);
+
+            if (order.OrderStatus == SalesOrderStatus.Confirmed)
+            {
+                await ValidateStockAsync(item, transaction, ct);
             }
         }
+        await _unitOfWork.SaveAsync(ct);
 
-        await _inventoryTransactionService.PropagateParentUpdate(
-            deliveryOrder.Id,
-            nameof(DeliveryOrder),
-            deliveryOrder.DeliveryDate,
-            (InventoryTransactionStatus?)deliveryOrder.Status,
-            deliveryOrder.IsDeleted,
-            userId,
-            null,
-            cancellationToken
-        );
-    }
-
-    public async Task DeleteSynchronizedDeliveryOrdersAsync(
-        string salesOrderId,
-        string? userId,
-        CancellationToken cancellationToken = default)
-    {
-        var deliveryOrders = await _deliveryOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SalesOrderId == salesOrderId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var deliveryOrder in deliveryOrders)
+        if (order.OrderStatus == SalesOrderStatus.Confirmed)
         {
-            deliveryOrder.UpdatedById = userId;
-            _deliveryOrderRepository.Delete(deliveryOrder);
-        }
-
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        foreach (var deliveryOrder in deliveryOrders)
-        {
-            await _inventoryTransactionService.PropagateParentUpdate(
-                deliveryOrder.Id,
-                nameof(DeliveryOrder),
-                deliveryOrder.DeliveryDate,
-                (InventoryTransactionStatus?)deliveryOrder.Status,
-                true,
-                userId,
-                null,
-                cancellationToken
-            );
+            foreach (var transaction in transactions.Concat(await _inventoryRepository.GetQuery()
+                .Where(x => !x.IsDeleted && x.ModuleName == nameof(SalesOrder) && x.ModuleId == order.Id)
+                .ToListAsync(ct)).GroupBy(x => x.Id).Select(x => x.First()))
+            {
+                if (transaction.Status == InventoryTransactionStatus.Confirmed)
+                    await _serialService.ApplyInventoryTransactionSerialsAsync(transaction, null, userId, ct);
+            }
+            await EnsureCustomerReceivableAsync(order, userId, ct);
         }
     }
 
-    private static DeliveryOrderStatus ToDeliveryOrderStatus(SalesOrderStatus? status)
+    public async Task DeleteSynchronizedInventoryAsync(string salesOrderId, string? userId, CancellationToken ct = default)
     {
-        return status switch
+        var transactions = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleName == nameof(SalesOrder) && x.ModuleId == salesOrderId).ToListAsync(ct);
+        if (transactions.Any(x => x.Status == InventoryTransactionStatus.Confirmed))
+            throw new InvalidOperationException("A confirmed sales order cannot be deleted.");
+        foreach (var transaction in transactions)
         {
-            SalesOrderStatus.Cancelled => DeliveryOrderStatus.Cancelled,
-            SalesOrderStatus.Confirmed => DeliveryOrderStatus.Confirmed,
-            SalesOrderStatus.Archived => DeliveryOrderStatus.Archived,
-            _ => DeliveryOrderStatus.Draft
+            await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+            _inventoryRepository.Delete(transaction);
+        }
+        await DeleteUnpaidReceivableAsync(salesOrderId, userId, ct);
+        await _unitOfWork.SaveAsync(ct);
+    }
+
+    private async Task EnsureCustomerReceivableAsync(SalesOrder order, string? userId, CancellationToken ct)
+    {
+        var existing = await _cashTransactionRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .SingleOrDefaultAsync(x => x.SourceModule == nameof(SalesOrder)
+                && x.SourceModuleId == order.Id && x.TransactionType == CashTransactionType.Debit, ct);
+        var isNew = existing == null;
+        existing ??= new CashTransaction
+        {
+            CreatedById = userId,
+            Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
+            SourceModule = nameof(SalesOrder),
+            SourceModuleId = order.Id,
+            TransactionType = CashTransactionType.Debit,
+            PaidAmount = 0d
         };
+        var amount = order.AfterTaxAmount ?? 0d;
+        var paid = existing.PaidAmount ?? 0d;
+        if (paid > amount + 0.000001d)
+            throw new InvalidOperationException("Sales-order total cannot be lower than the amount already collected.");
+        existing.TransactionDate = order.OrderDate;
+        existing.Amount = amount;
+        existing.Status = PaymentStatus(paid, amount);
+        existing.Description = $"{order.Customer?.Name} - {order.Number}".Trim(' ', '-');
+        existing.CustomerId = order.CustomerId;
+        existing.VendorId = null;
+        existing.SourceModuleNumber = order.Number;
+        if (isNew) await _cashTransactionRepository.CreateAsync(existing, ct);
+        else { existing.UpdatedById = userId; _cashTransactionRepository.Update(existing); }
+        await _unitOfWork.SaveAsync(ct);
     }
 
-    private async Task ValidateDeliverableStockAsync(
-        SalesOrderItem item,
-        InventoryTransaction? existingTransaction,
-        CancellationToken cancellationToken)
+    private async Task DeleteUnpaidReceivableAsync(string orderId, string? userId, CancellationToken ct)
     {
-        var availableStock = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x =>
-                x.Status == InventoryTransactionStatus.Confirmed &&
-                x.ProductId == item.ProductId &&
-                x.WarehouseId == item.WarehouseId)
-            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
-
-        if (existingTransaction?.Status == InventoryTransactionStatus.Confirmed &&
-            existingTransaction.ProductId == item.ProductId &&
-            existingTransaction.WarehouseId == item.WarehouseId)
+        var receivables = await _cashTransactionRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(SalesOrder) && x.SourceModuleId == orderId).ToListAsync(ct);
+        foreach (var receivable in receivables)
         {
-            availableStock -= existingTransaction.Stock ?? 0d;
-        }
-
-        if ((item.Quantity ?? 0d) > availableStock)
-        {
-            throw new Exception($"Not enough stock for the selected warehouse. Available: {availableStock}.");
+            if ((receivable.PaidAmount ?? 0d) > 0d)
+                throw new InvalidOperationException("A sales order with collected payments cannot be cancelled or deleted.");
+            receivable.UpdatedById = userId;
+            _cashTransactionRepository.Delete(receivable);
         }
     }
+
+    private async Task ValidateCancellationAsync(SalesOrder order, List<InventoryTransaction> transactions, CancellationToken ct)
+    {
+        if (await _paymentRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.CashTransaction != null
+            && !x.CashTransaction.IsDeleted && x.CashTransaction.SourceModule == nameof(SalesOrder)
+            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0d, ct))
+            throw new InvalidOperationException($"Không thể hủy SO {order.Number} vì đã có lịch sử thu tiền. Hãy hoàn tác các lần thanh toán trước.");
+        if (await _queryContext.Set<SalesReturn>().AsNoTracking().AnyAsync(x => !x.IsDeleted
+            && x.SalesOrderId == order.Id && x.Status != SalesReturnStatus.Cancelled, ct))
+            throw new InvalidOperationException($"Không thể hủy SO {order.Number} vì còn phiếu trả hàng bán đang hiệu lực. Hãy hủy phiếu trả hàng trước để tránh cộng tồn hai lần.");
+
+        // ProductSerialService validates the latest active movement for each serial
+        // while reversing each inventory line. Earlier PO receipt movements must not
+        // be mistaken for downstream dependencies of this SO.
+    }
+
+    private async Task ValidateStockAsync(SalesOrderItem item, InventoryTransaction current, CancellationToken ct)
+    {
+        var stock = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Status == InventoryTransactionStatus.Confirmed
+                && x.ProductId == item.ProductId && x.WarehouseId == item.WarehouseId && x.Id != current.Id)
+            .SumAsync(x => x.Stock ?? 0d, ct);
+        if ((item.Quantity ?? 0d) > stock + 0.000001d)
+            throw new InvalidOperationException($"Không đủ tồn trong kho đã chọn. Tồn khả dụng: {stock}.");
+    }
+
+    private static bool IsPhysicalInventoryItem(SalesOrderItem item) => item.Product?.Physical == true
+        && !string.IsNullOrWhiteSpace(item.ProductId) && !string.IsNullOrWhiteSpace(item.WarehouseId)
+        && (item.Quantity ?? 0d) > 0d;
+    private static InventoryTransactionStatus ToInventoryStatus(SalesOrderStatus? status) => status switch
+    {
+        SalesOrderStatus.Confirmed or SalesOrderStatus.Archived => InventoryTransactionStatus.Confirmed,
+        SalesOrderStatus.Cancelled => InventoryTransactionStatus.Cancelled,
+        _ => InventoryTransactionStatus.Draft
+    };
+    private static CashTransactionStatus PaymentStatus(double paid, double amount) => amount <= 0d || paid >= amount
+        ? CashTransactionStatus.Paid : paid > 0d ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid;
 }

@@ -18,4 +18,11 @@ public class ProductSerialMovement : BaseEntity
     public Warehouse? ToWarehouse { get; set; }
     public DateTime? MovementDate { get; set; }
     public ProductSerialStatus? Status { get; set; }
+    public ProductSerialStatus? PreviousStatus { get; set; }
+    public string? PreviousWarehouseId { get; set; }
+    public string? PreviousSalesOrderItemId { get; set; }
+    public DateTime? PreviousCustomerWarrantyEndDate { get; set; }
+    public string? PreviousCostAllocationId { get; set; }
+    public DateTime? ReversedAtUtc { get; set; }
+    public string? ReversedById { get; set; }
 }

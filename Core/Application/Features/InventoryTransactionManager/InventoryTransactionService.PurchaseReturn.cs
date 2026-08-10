@@ -26,6 +26,7 @@ public partial class InventoryTransactionService
         {
             throw new Exception($"Parent entity not found: {moduleId}");
         }
+        await EnsureOutboundParentIsDraftAsync(nameof(PurchaseReturn), parent.Id, cancellationToken);
 
         var child = new InventoryTransaction();
         child.CreatedById = createdById;
@@ -67,6 +68,7 @@ public partial class InventoryTransactionService
         {
             throw new Exception($"Child entity not found: {id}");
         }
+        await EnsureOutboundParentIsDraftAsync(nameof(PurchaseReturn), child.ModuleId, cancellationToken);
 
         child.UpdatedById = updatedById;
 
@@ -95,6 +97,7 @@ public partial class InventoryTransactionService
         {
             throw new Exception($"Child entity not found: {id}");
         }
+        await EnsureOutboundParentIsDraftAsync(nameof(PurchaseReturn), child.ModuleId, cancellationToken);
 
         child.UpdatedById = updatedById;
 

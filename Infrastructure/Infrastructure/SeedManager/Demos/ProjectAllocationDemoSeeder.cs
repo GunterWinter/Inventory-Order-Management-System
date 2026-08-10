@@ -1,4 +1,5 @@
 using Application.Common.CQS.Queries;
+using Application.Features.CashTransactionManager.Commands;
 using Application.Features.InventoryTransactionManager.Commands;
 using Application.Features.MaterialExportManager.Commands;
 using Domain.Entities;
@@ -22,11 +23,8 @@ public class ProjectAllocationDemoSeeder
 
     public async Task GenerateDataAsync()
     {
-        if (await _context.Set<MaterialExport>().AsNoTracking()
-            .AnyAsync(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(DemoPrefix)))
-        {
-            return;
-        }
+        var hasMaterialDemo = await _context.Set<MaterialExport>().AsNoTracking()
+            .AnyAsync(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(DemoPrefix));
 
         var customers = await _context.Set<Customer>().AsNoTracking()
             .Where(x => !x.IsDeleted)
@@ -34,6 +32,53 @@ public class ProjectAllocationDemoSeeder
             .Take(4)
             .ToListAsync();
         if (customers.Count == 0) return;
+        var contractorVendorId = await _context.Set<Vendor>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Name == DemoSeedData.ContractorVendor)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        const string accrualPrefix = "DEMO PROJECT COST";
+        if (!await _context.Set<CashTransaction>().AsNoTracking()
+            .AnyAsync(x => !x.IsDeleted && x.Description != null && x.Description.StartsWith(accrualPrefix)))
+        {
+            if (customers.Count < 2) return;
+            var demoCosts = new[]
+            {
+                (Description: "Công thợ", Amount: 800_000d, ProjectA: 250_000d, ProjectB: 550_000d),
+                (Description: "Gia công ván", Amount: 600_000d, ProjectA: 150_000d, ProjectB: 450_000d),
+                (Description: "Vận chuyển", Amount: 100_000d, ProjectA: 100_000d, ProjectB: 0d)
+            };
+            foreach (var cost in demoCosts)
+            {
+                await _sender.Send(new CreateCashTransactionRequest
+                {
+                    TransactionDate = DemoSeedData.BaseDate.AddDays(8),
+                    TransactionType = (int)CashTransactionType.Credit,
+                    Amount = cost.Amount,
+                    PaidAmount = 0d,
+                    Description = $"{accrualPrefix} - {cost.Description}",
+                    VendorId = contractorVendorId,
+                    CreatedById = "demo-seeder",
+                    Allocations = new[]
+                    {
+                        new CashTransactionAllocationInput
+                        {
+                            CustomerId = customers[0].Id,
+                            Amount = cost.ProjectA,
+                            Description = $"{cost.Description} công trình A"
+                        },
+                        new CashTransactionAllocationInput
+                        {
+                            CustomerId = customers[1].Id,
+                            Amount = cost.ProjectB,
+                            Description = $"{cost.Description} công trình B"
+                        }
+                    }.Where(x => x.Amount > 0d).ToList()
+                });
+            }
+        }
+
+        if (hasMaterialDemo) return;
 
         var candidates = await _context.Set<ProductSerial>().AsNoTracking()
             .Where(x => !x.IsDeleted
@@ -53,11 +98,13 @@ public class ProjectAllocationDemoSeeder
             .ThenBy(x => x.ProductId)
             .Take(4)
             .ToListAsync();
+        var materialCustomers = customers.Skip(1).ToList();
+        if (materialCustomers.Count == 0) materialCustomers.Add(customers[0]);
 
         for (var index = 0; index < candidates.Count; index++)
         {
             var candidate = candidates[index];
-            var customer = customers[index % customers.Count];
+            var customer = materialCustomers[index % materialCustomers.Count];
             var serialIds = await _context.Set<ProductSerial>().AsNoTracking()
                 .Where(x => !x.IsDeleted
                     && x.ProductId == candidate.ProductId

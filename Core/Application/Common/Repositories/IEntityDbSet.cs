@@ -34,15 +34,11 @@ public interface IEntityDbSet
     public DbSet<PurchaseOrder> PurchaseOrder { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItem { get; set; }
     public DbSet<InventoryTransaction> InventoryTransaction { get; set; }
-    public DbSet<DeliveryOrder> DeliveryOrder { get; set; }
-    public DbSet<GoodsReceive> GoodsReceive { get; set; }
     public DbSet<SalesReturn> SalesReturn { get; set; }
     public DbSet<PurchaseReturn> PurchaseReturn { get; set; }
     public DbSet<TransferIn> TransferIn { get; set; }
     public DbSet<TransferOut> TransferOut { get; set; }
     public DbSet<StockCount> StockCount { get; set; }
-    public DbSet<NegativeAdjustment> NegativeAdjustment { get; set; }
-    public DbSet<PositiveAdjustment> PositiveAdjustment { get; set; }
     public DbSet<Scrapping> Scrapping { get; set; }
     public DbSet<CashAccount> CashAccount { get; set; }
     public DbSet<CashCategory> CashCategory { get; set; }

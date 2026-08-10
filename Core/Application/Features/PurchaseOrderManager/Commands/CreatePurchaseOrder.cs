@@ -58,7 +58,7 @@ public class CreatePurchaseOrderHandler : IRequestHandler<CreatePurchaseOrderReq
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(PurchaseOrder), "", "PO");
         entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = (PurchaseOrderStatus)int.Parse(request.OrderStatus!);
+        entity.OrderStatus = PurchaseOrderStatus.Draft;
         entity.Description = request.Description;
         entity.VendorId = request.VendorId;
 
@@ -66,7 +66,7 @@ public class CreatePurchaseOrderHandler : IRequestHandler<CreatePurchaseOrderReq
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _purchaseOrderService.Recalculate(entity.Id);
-        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
+        await _purchaseOrderService.SynchronizeInventoryAsync(
             entity.Id,
             entity.CreatedById,
             cancellationToken

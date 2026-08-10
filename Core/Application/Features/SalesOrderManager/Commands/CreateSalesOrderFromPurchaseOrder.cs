@@ -157,7 +157,7 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(salesOrder.Id);
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(salesOrder.Id, request.CreatedById, cancellationToken);
+        await _salesOrderService.SynchronizeInventoryAsync(salesOrder.Id, request.CreatedById, cancellationToken);
 
         return new CreateSalesOrderFromPurchaseOrderResult
         {

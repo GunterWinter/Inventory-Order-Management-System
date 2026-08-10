@@ -141,6 +141,17 @@ public class ProductSerialService
         {
             throw new Exception("Manufacturer serial number count must match quantity.");
         }
+        if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
+        {
+            var duplicateExists = await _queryContext.Set<ProductSerial>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .AnyAsync(x => x.PurchaseOrderItemId != item.Id
+                    && x.ManufacturerSerialNumber != null
+                    && manufacturerNumbers.Contains(x.ManufacturerSerialNumber), cancellationToken);
+            if (duplicateExists)
+                throw new InvalidOperationException("Manufacturer serial numbers must be unique across all products.");
+        }
 
         if (existing.Count > quantity)
         {
@@ -180,29 +191,47 @@ public class ProductSerialService
                     CurrentWarehouseId = transaction?.Status == InventoryTransactionStatus.Confirmed ? item.WarehouseId : null,
                     PurchaseOrderItemId = item.Id,
                     SupplierWarrantyEndDate = supplierWarrantyEndDate,
-                    UnitCost = (item.AfterTaxAmount ?? 0) / (item.Quantity > 0 ? item.Quantity.Value : 1)
+                    UnitCost = item.UnitPrice ?? 0d
                 }, cancellationToken);
             }
             await _unitOfWork.SaveAsync(cancellationToken);
         }
 
-        if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
+        existing = await _productSerialRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.PurchaseOrderItemId == item.Id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        for (var i = 0; i < existing.Count; i++)
         {
-            existing = await _productSerialRepository.GetQuery().ApplyIsDeletedFilter(false)
-                .Where(x => x.PurchaseOrderItemId == item.Id)
-                .OrderBy(x => x.CreatedAtUtc)
-                .ToListAsync(cancellationToken);
-            for (var i = 0; i < existing.Count; i++)
+            existing[i].UnitCost = item.UnitPrice ?? 0d;
+            if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
             {
                 existing[i].ManufacturerSerialNumber = manufacturerNumbers[i];
-                existing[i].UpdatedById = userId;
-                _productSerialRepository.Update(existing[i]);
             }
-            await _unitOfWork.SaveAsync(cancellationToken);
+            existing[i].UpdatedById = userId;
+            _productSerialRepository.Update(existing[i]);
         }
+        await _unitOfWork.SaveAsync(cancellationToken);
 
         if (transaction != null)
         {
+            var alreadyApplied = await _queryContext
+                .Set<ProductSerialMovement>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .AnyAsync(x => x.InventoryTransactionId == transaction.Id
+                    && x.ReversedAtUtc == null
+                    && x.Status == ProductSerialStatus.InStock,
+                    cancellationToken);
+
+            // Archiving a confirmed PO must not replay its receipt. Replaying it
+            // would incorrectly bring serials that were subsequently sold or
+            // exported back into stock.
+            if (transaction.Status == InventoryTransactionStatus.Confirmed && alreadyApplied)
+            {
+                return;
+            }
+
             var serialIds = await _queryContext
                 .Set<ProductSerial>()
                 .AsNoTracking()
@@ -326,11 +355,6 @@ public class ProductSerialService
         var serialIds = productSerialIds?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
             ?? await ResolveSerialIdsForTransactionAsync(transaction, cancellationToken);
 
-        if (serialIds.Count == 0 && transaction.ModuleName == nameof(PositiveAdjustment))
-        {
-            serialIds = await GeneratePositiveAdjustmentSerialsAsync(transaction, userId, cancellationToken);
-        }
-
         var quantity = ResolveTransactionQuantity(transaction);
         if (serialIds.Count == 0)
         {
@@ -368,61 +392,140 @@ public class ProductSerialService
             return;
         }
 
-        var movementData = await _queryContext
-            .Set<ProductSerialMovement>()
+        var transaction = await _queryContext
+            .Set<InventoryTransaction>()
             .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == inventoryTransactionId, cancellationToken);
+
+        var movements = await _productSerialMovementRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.InventoryTransactionId == inventoryTransactionId)
-            .Select(x => new { x.Id, x.ProductSerialId, x.FromWarehouseId })
+            .Where(x => x.InventoryTransactionId == inventoryTransactionId && x.ReversedAtUtc == null)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        var serialIds = movementData.Select(x => x.ProductSerialId).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        if (movements.Count == 0)
+        {
+            return;
+        }
+
+        var serialIds = movements.Select(x => x.ProductSerialId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var serials = await _productSerialRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => serialIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
 
-        var fromWarehouseMap = movementData
-            .Where(x => !string.IsNullOrWhiteSpace(x.ProductSerialId))
-            .GroupBy(x => x.ProductSerialId)
-            .ToDictionary(g => g.Key!, g => g.First().FromWarehouseId, StringComparer.OrdinalIgnoreCase);
-
         foreach (var serial in serials)
         {
-            if (serial.Status == ProductSerialStatus.Reserved ||
-                serial.Status == ProductSerialStatus.Pending ||
-                serial.Status == ProductSerialStatus.InTransfer)
+            var movement = movements.Last(x => string.Equals(
+                x.ProductSerialId,
+                serial.Id,
+                StringComparison.OrdinalIgnoreCase));
+
+            if (transaction?.ModuleName != nameof(PurchaseOrder))
             {
-                if (serial.Status == ProductSerialStatus.InTransfer && fromWarehouseMap.TryGetValue(serial.Id, out var fromWarehouseId) && !string.IsNullOrWhiteSpace(fromWarehouseId))
-                {
-                    serial.CurrentWarehouseId = fromWarehouseId;
-                }
-                
-                // If it was reserved for a SalesOrder, we revert to InStock.
-                // Wait, if it was Reserved, we just set InStock.
-                serial.Status = ProductSerialStatus.InStock; 
-                serial.UpdatedById = userId;
-                _productSerialRepository.Update(serial);
+                await EnsureMovementIsLatestAsync(movement, transaction, cancellationToken);
             }
+
+            RestoreSerialFromMovement(serial, movement, transaction?.ModuleName);
+            serial.UpdatedById = userId;
+            _productSerialRepository.Update(serial);
         }
 
-        foreach (var md in movementData)
+        foreach (var movement in movements)
         {
-            var movement = await _productSerialMovementRepository.GetAsync(md.Id ?? string.Empty, cancellationToken);
-            if (movement != null)
-            {
-                movement.UpdatedById = userId;
-                _productSerialMovementRepository.Delete(movement);
-            }
+            movement.ReversedAtUtc = DateTime.UtcNow;
+            movement.ReversedById = userId;
+            movement.UpdatedById = userId;
+            _productSerialMovementRepository.Update(movement);
         }
 
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 
+    private async Task EnsureMovementIsLatestAsync(
+        ProductSerialMovement movement,
+        InventoryTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(movement.ProductSerialId))
+        {
+            return;
+        }
+
+        var latest = await _queryContext.Set<ProductSerialMovement>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.ProductSerialId == movement.ProductSerialId && x.ReversedAtUtc == null)
+            .OrderByDescending(x => x.MovementDate)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.InventoryTransactionId,
+                x.ModuleName,
+                x.ModuleId,
+                DocumentNumber = x.InventoryTransaction != null
+                    ? x.InventoryTransaction.ModuleNumber ?? x.InventoryTransaction.Number
+                    : null
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latest == null || latest.Id == movement.Id || latest.InventoryTransactionId == transaction?.Id)
+        {
+            return;
+        }
+
+        var serial = await _queryContext.Set<ProductSerial>()
+            .AsNoTracking()
+            .Include(x => x.Product)
+            .SingleOrDefaultAsync(x => x.Id == movement.ProductSerialId, cancellationToken);
+        var serialNumber = serial?.InternalSerialNumber ?? movement.ProductSerialId;
+        var productName = serial?.Product?.Name ?? "hàng hóa không xác định";
+        var dependency = latest.DocumentNumber ?? latest.ModuleName ?? latest.ModuleId ?? "chứng từ phát sinh sau";
+        throw new InvalidOperationException(
+            $"Không thể hoàn tác: serial {serialNumber} của {productName} còn được sử dụng tại {dependency}. " +
+            "Hãy hủy hoặc hoàn tác chứng từ phát sinh sau trước.");
+    }
+
+    private static void RestoreSerialFromMovement(
+        ProductSerial serial,
+        ProductSerialMovement movement,
+        string? moduleName)
+    {
+        if (moduleName == nameof(PurchaseOrder))
+        {
+            // A cancelled receipt must never leave an available serial in stock.
+            // The serial row and its movement history remain for audit/warranty lookup.
+            serial.Status = ProductSerialStatus.Voided;
+            serial.CurrentWarehouseId = null;
+            serial.CustomerWarrantyEndDate = null;
+            serial.CostAllocationId = null;
+            return;
+        }
+
+        var previousStatus = movement.PreviousStatus ?? ProductSerialStatus.InStock;
+        if (moduleName == nameof(SalesOrder) && previousStatus == ProductSerialStatus.Reserved)
+        {
+            previousStatus = ProductSerialStatus.InStock;
+        }
+
+        serial.Status = previousStatus;
+        serial.CurrentWarehouseId = movement.PreviousWarehouseId;
+        serial.SalesOrderItemId = movement.PreviousSalesOrderItemId;
+        serial.CustomerWarrantyEndDate = movement.PreviousCustomerWarrantyEndDate;
+        serial.CostAllocationId = movement.PreviousCostAllocationId;
+    }
+
     private async Task<List<string>> ResolveSerialIdsForTransactionAsync(InventoryTransaction transaction, CancellationToken cancellationToken)
     {
-        if (transaction.ModuleName == nameof(DeliveryOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
+        if (transaction.ModuleName == nameof(SalesOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
         {
             return await _queryContext
                 .Set<ProductSerial>()
@@ -433,7 +536,7 @@ public class ProductSerialService
                 .ToListAsync(cancellationToken);
         }
 
-        if (transaction.ModuleName == nameof(GoodsReceive) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
+        if (transaction.ModuleName == nameof(PurchaseOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
         {
             return await _queryContext
                 .Set<ProductSerial>()
@@ -448,41 +551,9 @@ public class ProductSerialService
             .Set<ProductSerialMovement>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.InventoryTransactionId == transaction.Id)
+            .Where(x => x.InventoryTransactionId == transaction.Id && x.ReversedAtUtc == null)
             .Select(x => x.ProductSerialId!)
             .ToListAsync(cancellationToken);
-    }
-
-    private async Task<List<string>> GeneratePositiveAdjustmentSerialsAsync(
-        InventoryTransaction transaction,
-        string? userId,
-        CancellationToken cancellationToken)
-    {
-        var quantity = ResolveTransactionQuantity(transaction);
-        var product = await _queryContext
-            .Set<Product>()
-            .AsNoTracking()
-            .SingleAsync(x => x.Id == transaction.ProductId, cancellationToken);
-        var codes = await GenerateInternalSerialNumbersAsync(product.InternalSerialFixedCode ?? "SN", quantity, cancellationToken);
-        var serialIds = new List<string>();
-
-        foreach (var code in codes)
-        {
-            var serial = new ProductSerial
-            {
-                CreatedById = userId,
-                ProductId = transaction.ProductId,
-                InternalSerialNumber = code,
-                Status = ResolveIncomingStatus(transaction),
-                CurrentWarehouseId = transaction.Status == InventoryTransactionStatus.Confirmed ? transaction.WarehouseId : null,
-            };
-
-            serialIds.Add(serial.Id);
-            await _productSerialRepository.CreateAsync(serial, cancellationToken);
-        }
-
-        await _unitOfWork.SaveAsync(cancellationToken);
-        return serialIds;
     }
 
     private async Task<List<ProductSerial>> GetSerialsByIdsAsync(IReadOnlyCollection<string> serialIds, CancellationToken cancellationToken)
@@ -508,26 +579,28 @@ public class ProductSerialService
         string? userId,
         CancellationToken cancellationToken)
     {
-        var existingMovementIds = await _queryContext
-            .Set<ProductSerialMovement>()
-            .AsNoTracking()
+        var existingMovements = await _productSerialMovementRepository
+            .GetQuery()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.InventoryTransactionId == transaction.Id)
-            .Select(x => x.Id)
+            .Where(x => x.InventoryTransactionId == transaction.Id && x.ReversedAtUtc == null)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var movementId in existingMovementIds)
+        var previousState = existingMovements
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProductSerialId))
+            .GroupBy(x => x.ProductSerialId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.Last(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var movement in existingMovements)
         {
-            var movement = await _productSerialMovementRepository.GetAsync(movementId ?? string.Empty, cancellationToken);
-            if (movement != null)
-            {
-                movement.UpdatedById = userId;
-                _productSerialMovementRepository.Delete(movement);
-            }
+            movement.UpdatedById = userId;
+            _productSerialMovementRepository.Delete(movement);
         }
 
         foreach (var serial in serials)
         {
+            previousState.TryGetValue(serial.Id, out var priorDraftMovement);
             await _productSerialMovementRepository.CreateAsync(new ProductSerialMovement
             {
                 CreatedById = userId,
@@ -539,7 +612,12 @@ public class ProductSerialService
                 FromWarehouseId = ResolveFromWarehouse(transaction),
                 ToWarehouseId = ResolveInStockWarehouse(transaction),
                 MovementDate = transaction.MovementDate,
-                Status = ResolveTargetStatus(transaction)
+                Status = ResolveTargetStatus(transaction),
+                PreviousStatus = priorDraftMovement?.PreviousStatus ?? serial.Status,
+                PreviousWarehouseId = priorDraftMovement?.PreviousWarehouseId ?? serial.CurrentWarehouseId,
+                PreviousSalesOrderItemId = priorDraftMovement?.PreviousSalesOrderItemId ?? serial.SalesOrderItemId,
+                PreviousCustomerWarrantyEndDate = priorDraftMovement?.PreviousCustomerWarrantyEndDate ?? serial.CustomerWarrantyEndDate,
+                PreviousCostAllocationId = priorDraftMovement?.PreviousCostAllocationId ?? serial.CostAllocationId
             }, cancellationToken);
         }
     }
@@ -570,7 +648,7 @@ public class ProductSerialService
                 serial.CurrentWarehouseId = ResolveToWarehouse(transaction);
             }
 
-            if (transaction.ModuleName == nameof(DeliveryOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
+            if (transaction.ModuleName == nameof(SalesOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
             {
                 serial.SalesOrderItemId = transaction.ModuleItemId;
                 var salesOrderItem = await _queryContext
@@ -626,7 +704,7 @@ public class ProductSerialService
             throw new Exception("Selected serial number does not match transaction product.");
         }
 
-        if (transaction.ModuleName is nameof(GoodsReceive) or nameof(PositiveAdjustment))
+        if (transaction.ModuleName == nameof(PurchaseOrder))
         {
             return;
         }
@@ -673,21 +751,19 @@ public class ProductSerialService
     {
         if (transaction.Status != InventoryTransactionStatus.Confirmed)
         {
-            return transaction.ModuleName is nameof(GoodsReceive) or nameof(PositiveAdjustment)
+            return transaction.ModuleName == nameof(PurchaseOrder)
                 ? ProductSerialStatus.Pending
                 : ProductSerialStatus.Reserved;
         }
 
         return transaction.ModuleName switch
         {
-            nameof(DeliveryOrder) => ProductSerialStatus.Sold,
-            nameof(GoodsReceive) => ProductSerialStatus.InStock,
+            nameof(SalesOrder) => ProductSerialStatus.Sold,
+            nameof(PurchaseOrder) => ProductSerialStatus.InStock,
             nameof(SalesReturn) => ProductSerialStatus.ReturnedByCustomer,
             nameof(PurchaseReturn) => ProductSerialStatus.ReturnedToSupplier,
             nameof(TransferOut) => ProductSerialStatus.InTransfer,
             nameof(TransferIn) => ProductSerialStatus.InStock,
-            nameof(PositiveAdjustment) => ProductSerialStatus.InStock,
-            nameof(NegativeAdjustment) => ProductSerialStatus.Missing,
             nameof(Scrapping) => ProductSerialStatus.Scrapped,
             nameof(StockCount) => ProductSerialStatus.InStock,
             nameof(MaterialExport) => ProductSerialStatus.Exported,

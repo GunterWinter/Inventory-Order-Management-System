@@ -1,8 +1,11 @@
 ﻿using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
 using Application.Features.PurchaseOrderManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.PurchaseOrderItemManager.Commands;
 
@@ -30,16 +33,19 @@ public class DeletePurchaseOrderItemHandler : IRequestHandler<DeletePurchaseOrde
     private readonly ICommandRepository<PurchaseOrderItem> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PurchaseOrderService _purchaseOrderService;
+    private readonly IQueryContext _queryContext;
 
     public DeletePurchaseOrderItemHandler(
         ICommandRepository<PurchaseOrderItem> repository,
         IUnitOfWork unitOfWork,
-        PurchaseOrderService purchaseOrderService
+        PurchaseOrderService purchaseOrderService,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _purchaseOrderService = purchaseOrderService;
+        _queryContext = queryContext;
     }
 
     public async Task<DeletePurchaseOrderItemResult> Handle(DeletePurchaseOrderItemRequest request, CancellationToken cancellationToken)
@@ -49,8 +55,15 @@ public class DeletePurchaseOrderItemHandler : IRequestHandler<DeletePurchaseOrde
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Không tìm thấy dòng hàng hóa cần xóa. Dòng tạm chưa lưu phải được xóa trực tiếp trên màn hình.");
         }
+
+        var orderStatus = await _queryContext.Set<PurchaseOrder>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == entity.PurchaseOrderId)
+            .Select(x => x.OrderStatus)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (orderStatus != PurchaseOrderStatus.Draft)
+            throw new InvalidOperationException("Chỉ đơn mua hàng ở trạng thái Nháp mới được xóa dòng hàng hóa.");
 
         entity.UpdatedById = request.DeletedById;
 
@@ -58,7 +71,7 @@ public class DeletePurchaseOrderItemHandler : IRequestHandler<DeletePurchaseOrde
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _purchaseOrderService.Recalculate(entity.PurchaseOrderId ?? "");
-        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
+        await _purchaseOrderService.SynchronizeInventoryAsync(
             entity.PurchaseOrderId ?? "",
             entity.UpdatedById,
             cancellationToken

@@ -84,8 +84,8 @@ public class CreateProductHandler : IRequestHandler<CreateProductRequest, Create
         entity.InternalSerialFixedCode = entity.SerialTrackingMode == SerialTrackingMode.InternalAuto
             ? NormalizeInternalSerialFixedCode(request.InternalSerialFixedCode)
             : null;
-        entity.DefaultWarehouseId = request.DefaultWarehouseId;
-        entity.DefaultWarrantyMonths = request.DefaultWarrantyMonths;
+        entity.DefaultWarehouseId = entity.Physical == true ? request.DefaultWarehouseId : null;
+        entity.DefaultWarrantyMonths = entity.Physical == true ? request.DefaultWarrantyMonths : null;
         entity.ReferenceCode = request.ReferenceCode;
         entity.Description = request.Description;
         entity.UnitMeasureName = request.UnitMeasureName;

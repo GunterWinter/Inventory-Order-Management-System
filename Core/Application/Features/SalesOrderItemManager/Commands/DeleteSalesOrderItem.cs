@@ -59,21 +59,19 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
 
-        var isConfirmedSalesOrder = await _queryContext
+        var salesOrderStatus = await _queryContext
             .Set<SalesOrder>()
             .AsNoTracking()
-            .AnyAsync(x =>
-                !x.IsDeleted &&
-                x.Id == entity.SalesOrderId &&
-                x.OrderStatus == SalesOrderStatus.Confirmed,
-                cancellationToken);
+            .Where(x => !x.IsDeleted && x.Id == entity.SalesOrderId)
+            .Select(x => x.OrderStatus)
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (isConfirmedSalesOrder)
+        if (salesOrderStatus != SalesOrderStatus.Draft)
         {
-            throw new Exception("Cannot delete items from a confirmed sales order. You can adjust quantity, warranty months, or add a new item.");
+            throw new InvalidOperationException("Only draft sales orders can be edited.");
         }
 
         entity.UpdatedById = request.DeletedById;
@@ -83,7 +81,7 @@ public class DeleteSalesOrderItemHandler : IRequestHandler<DeleteSalesOrderItemR
         await _productSerialService.ReleaseSalesOrderItemSerialsAsync(entity.Id, entity.UpdatedById, cancellationToken);
 
         _salesOrderService.Recalculate(entity.SalesOrderId ?? "");
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+        await _salesOrderService.SynchronizeInventoryAsync(
             entity.SalesOrderId ?? "",
             entity.UpdatedById,
             cancellationToken

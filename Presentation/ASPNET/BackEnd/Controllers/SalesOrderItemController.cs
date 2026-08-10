@@ -76,6 +76,20 @@ public class SalesOrderItemController : BaseApiController
     }
 
     [Authorize]
+    [HttpGet("GetInventoryProfitReport")]
+    public async Task<ActionResult<ApiSuccessResult<GetInventoryProfitReportResult>>> GetInventoryProfitReportAsync(
+        CancellationToken cancellationToken)
+    {
+        var response = await _sender.Send(new GetInventoryProfitReportRequest(), cancellationToken);
+        return Ok(new ApiSuccessResult<GetInventoryProfitReportResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetInventoryProfitReportAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
     [HttpGet("GetSalesOrderItemBySalesOrderIdList")]
     public async Task<ActionResult<ApiSuccessResult<GetSalesOrderItemBySalesOrderIdListResult>>> GetSalesOrderItemBySalesOrderIdListAsync(
     CancellationToken cancellationToken,

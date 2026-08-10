@@ -344,13 +344,13 @@ public class CashBalanceServiceTests
             });
         await commandContext.SaveChangesAsync();
 
-        var handler = new GetVendorDebtReportHandler(queryContext);
-        var result = await handler.Handle(new GetVendorDebtReportRequest(), CancellationToken.None);
-        var debt = Assert.Single(result.Data!);
+        var handler = new GetDebtReportHandler(queryContext);
+        var result = await handler.Handle(new GetDebtReportRequest { PartyType = "Vendor" }, CancellationToken.None);
+        var debt = Assert.Single(result.Data);
 
-        Assert.Equal(100d, debt.TotalPurchase);
-        Assert.Equal(30d, debt.TotalPaid);
-        Assert.Equal(70d, debt.RemainingDebt);
+        Assert.Equal(100d, debt.TotalAmount);
+        Assert.Equal(30d, debt.PaidAmount);
+        Assert.Equal(70d, debt.Remaining);
     }
 
     [Fact]
@@ -573,7 +573,7 @@ public class CashBalanceServiceTests
     }
 
     [Fact]
-    public async Task SourceCashTransaction_DeleteSoftDeletesPaymentsAndAllocations()
+    public async Task SourceCashTransaction_CannotBeDeletedOutsideSourceDocument()
     {
         var options = new DbContextOptionsBuilder<DataContext>()
             .UseInMemoryDatabase($"source-cash-delete-{Guid.NewGuid()}")
@@ -605,15 +605,17 @@ public class CashBalanceServiceTests
             unitOfWork,
             new CashBalanceService(queryContext, new CommandRepository<CashAccount>(commandContext), unitOfWork));
 
-        await handler.Handle(new DeleteCashTransactionRequest { Id = transaction.Id }, CancellationToken.None);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new DeleteCashTransactionRequest { Id = transaction.Id }, CancellationToken.None));
 
-        Assert.True(transaction.IsDeleted);
-        Assert.All(await commandContext.Set<CashTransactionPayment>().ToListAsync(), item => Assert.True(item.IsDeleted));
-        Assert.All(await commandContext.Set<CashTransactionCostAllocation>().ToListAsync(), item => Assert.True(item.IsDeleted));
+        Assert.Contains("chứng từ nguồn", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(transaction.IsDeleted);
+        Assert.All(await commandContext.Set<CashTransactionPayment>().ToListAsync(), item => Assert.False(item.IsDeleted));
+        Assert.All(await commandContext.Set<CashTransactionCostAllocation>().ToListAsync(), item => Assert.False(item.IsDeleted));
     }
 
     [Fact]
-    public async Task CustomerProfitReport_UsesPaidCustomerTransactionsAndExcludesSameNameVendorDebt()
+    public async Task CustomerProfitReport_UsesAccrualRevenueAndExcludesSameNameVendorDebt()
     {
         var options = new DbContextOptionsBuilder<DataContext>()
             .UseInMemoryDatabase($"customer-profit-{Guid.NewGuid()}")
@@ -626,13 +628,13 @@ public class CashBalanceServiceTests
         commandContext.AddRange(
             customer,
             vendor,
-            new CashTransaction
+            new SalesOrder
             {
                 CustomerId = customer.Id,
-                TransactionType = CashTransactionType.Debit,
-                Amount = 50d,
-                PaidAmount = 40d,
-                TransactionDate = new DateTime(2026, 8, 1),
+                Number = "SO-ACCRUAL",
+                OrderStatus = SalesOrderStatus.Confirmed,
+                BeforeTaxAmount = 50d,
+                OrderDate = new DateTime(2026, 8, 1),
                 CreatedAtUtc = new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc)
             },
             new CashTransaction
@@ -666,9 +668,9 @@ public class CashBalanceServiceTests
         }, CancellationToken.None);
 
         Assert.Equal(2, result.Data.Count);
-        Assert.Equal(40d, result.ActualReceived);
+        Assert.Equal(50d, result.Revenue);
         Assert.Equal(30d, result.ProjectCost);
-        Assert.Equal(10d, result.Profit);
+        Assert.Equal(20d, result.Profit);
         Assert.DoesNotContain(result.Data, x => x.CustomerId == null);
     }
 
@@ -759,7 +761,8 @@ public class CashBalanceServiceTests
             unitOfWork,
             inventoryService,
             serialService,
-            numberSequenceService);
+            numberSequenceService,
+            queryContext);
 
         var request = new UpdateMaterialExportRequest
         {
@@ -776,7 +779,8 @@ public class CashBalanceServiceTests
             .ToListAsync());
         Assert.Equal(CashTransactionType.Credit, transaction.TransactionType);
         Assert.Equal(30d, transaction.Amount);
-        Assert.Equal(30d, transaction.PaidAmount);
+        Assert.Equal(0d, transaction.PaidAmount);
+        Assert.Equal(CashTransactionStatus.Unpaid, transaction.Status);
         Assert.Equal(customer.Id, transaction.CustomerId);
         Assert.Equal(purchaseOrder.Id, transaction.SourceDetailId);
         Assert.Null(transaction.VendorId);

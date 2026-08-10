@@ -52,39 +52,52 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
 
     public async Task<UpdateSalesReturnResult> Handle(UpdateSalesReturnRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        SalesReturn? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Không tìm thấy phiếu trả hàng bán cần cập nhật.");
+            if (!int.TryParse(request.Status, out var statusValue)
+                || !Enum.IsDefined(typeof(SalesReturnStatus), statusValue))
+                throw new InvalidOperationException("Trạng thái phiếu trả hàng bán không hợp lệ.");
+            var requestedStatus = (SalesReturnStatus)statusValue;
+            ValidateTransition(entity, requestedStatus, request);
 
-        entity.UpdatedById = request.UpdatedById;
+            entity.UpdatedById = request.UpdatedById;
+            entity.ReturnDate = request.ReturnDate;
+            entity.Status = requestedStatus;
+            entity.Description = request.Description;
+            entity.SalesOrderId = request.SalesOrderId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
 
-        entity.ReturnDate = request.ReturnDate;
-        entity.Status = (SalesReturnStatus)int.Parse(request.Status!);
-        entity.Description = request.Description;
-        entity.SalesOrderId = request.SalesOrderId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(SalesReturn),
-            entity.ReturnDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id, nameof(SalesReturn), entity.ReturnDate,
+                (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
+                entity.UpdatedById, null, ct);
+        }, cancellationToken);
 
         return new UpdateSalesReturnResult
         {
             Data = entity
         };
+    }
+
+    private static void ValidateTransition(SalesReturn entity, SalesReturnStatus requested, UpdateSalesReturnRequest request)
+    {
+        if (entity.Status == SalesReturnStatus.Draft)
+        {
+            if (requested is SalesReturnStatus.Cancelled or SalesReturnStatus.Archived)
+                throw new InvalidOperationException("Phiếu trả hàng bán Nháp phải được xóa hoặc xác nhận.");
+            return;
+        }
+        var headerChanged = entity.ReturnDate != request.ReturnDate
+            || entity.SalesOrderId != request.SalesOrderId
+            || entity.Description != request.Description;
+        if (entity.Status != SalesReturnStatus.Confirmed
+            || requested is not (SalesReturnStatus.Cancelled or SalesReturnStatus.Archived)
+            || headerChanged)
+            throw new InvalidOperationException("Phiếu trả hàng bán đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
     }
 }
 

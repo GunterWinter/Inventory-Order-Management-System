@@ -78,6 +78,14 @@ const App = {
             { value: 2, text: 'Paid' }
         ];
 
+        const sourceModulesWithItems = new Set([
+            'purchaseorder',
+            'salesorder',
+            'materialexport',
+            'salesreturn',
+            'purchasereturn'
+        ]);
+
         const validateForm = function () {
             state.errors.transactionDate = '';
             state.errors.transactionType = '';
@@ -177,9 +185,9 @@ const App = {
             deleteMainData: async (id, deletedById) => {
                 return await AxiosManager.post('/CashTransaction/DeleteCashTransaction', { id, deletedById });
             },
-            getAllocationDetails: async (purchaseOrderId) => {
+            getSourceItems: async (cashTransactionId) => {
                 return await AxiosManager.get(
-                    `/CashTransaction/GetCashTransactionCostAllocations?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`,
+                    `/CashTransaction/GetCashTransactionSourceItems?cashTransactionId=${encodeURIComponent(cashTransactionId)}`,
                     {});
             },
             getPaymentHistory: async (cashTransactionId) => {
@@ -229,20 +237,21 @@ const App = {
                 state.partnerList = [...customers, ...vendors];
             },
             loadSourceDetails: async () => {
-                    state.allocationDetails = [];
+                state.allocationDetails = [];
                 state.paymentHistory = [];
                 state.sourceDetailsError = '';
                 if (!state.id) return;
 
                 state.sourceDetailsLoading = true;
                 try {
-                    const isPurchaseOrder = (state.sourceModule ?? '').toLowerCase() === 'purchaseorder' && !!state.sourceModuleId;
+                    const hasSupportedSource = sourceModulesWithItems.has(
+                        (state.sourceModule ?? '').toLowerCase()) && !!state.sourceModuleId;
                     const [allocationResponse, paymentResponse] = await Promise.all([
-                        isPurchaseOrder ? services.getAllocationDetails(state.sourceModuleId) : Promise.resolve(null),
+                        hasSupportedSource ? services.getSourceItems(state.id) : Promise.resolve(null),
                         services.getPaymentHistory(state.id)
                     ]);
                     if ((allocationResponse && allocationResponse?.data?.code !== 200) || paymentResponse?.data?.code !== 200) {
-                        throw new Error('The source transaction details could not be loaded.');
+                        throw new Error('Không thể tải chi tiết chứng từ nguồn.');
                     }
                     state.allocationDetails = Array.isArray(allocationResponse?.data?.content?.data)
                         ? allocationResponse.data.content.data
@@ -254,29 +263,36 @@ const App = {
                 } catch (error) {
                     state.sourceDetailsError = error.response?.data?.message
                         ?? error.message
-                        ?? 'The source transaction details could not be loaded.';
+                        ?? 'Không thể tải chi tiết chứng từ nguồn.';
                 } finally {
                     state.sourceDetailsLoading = false;
                 }
             },
             isEditableSource: () => !!state.sourceModule,
+            isSourceTransaction: () => !!state.sourceModule && !!state.sourceModuleId,
+            hasSupportedSourceItems: () => sourceModulesWithItems.has((state.sourceModule ?? '').toLowerCase()),
+            isManualExpense: () => !methods.isSourceTransaction() && Number(state.transactionType) === 1,
+            canShowAllocationToggle: () => methods.isManualExpense() && !state.viewMode && !state.deleteMode,
+            shouldShowAllocationPanel: () => methods.isManualExpense()
+                && (state.allocationRows.length > 0 || (!state.viewMode && !state.deleteMode && state.showAllocationDetails)),
+            shouldShowGoodsPanel: () => methods.isSourceTransaction() && methods.hasSupportedSourceItems(),
             isFormReadOnly: () => state.viewMode || state.deleteMode,
             canEditPrimaryFields: () => !state.viewMode && !state.deleteMode && !state.sourceModule,
             canEditRestrictedFields: () => !state.viewMode && !state.deleteMode,
             canEditPaidAmount: () => !state.viewMode && !state.deleteMode
             ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
             ,validateAllocations: () => {
-                if (!state.showAllocationDetails || !methods.canEditPrimaryFields()) return true;
+                if (!methods.shouldShowAllocationPanel() || !methods.canEditPrimaryFields()) return true;
                 return Math.abs(methods.allocationTotal() - (Number(state.amount) || 0)) <= 0.000001;
             }
             ,syncAmountFromAllocations: () => {
-                if (!state.showAllocationDetails || !methods.canEditPrimaryFields()) return;
+                if (!methods.shouldShowAllocationPanel() || !methods.canEditPrimaryFields()) return;
                 state.amount = methods.allocationTotal();
             }
             ,onAllocationAmountInput: () => {
                 Vue.nextTick(() => methods.syncAmountFromAllocations());
             }
-            ,partnerOptions: () => state.showAllocationDetails
+            ,partnerOptions: () => methods.shouldShowAllocationPanel()
                 ? state.partnerList.filter(partner => !!partner.vendorId)
                 : state.partnerList
             ,toggleAllocationDetails: () => {
@@ -518,9 +534,7 @@ const App = {
         Vue.watch(() => state.cashCategoryId, () => { cashCategoryDropDown.refresh(); });
         Vue.watch(() => state.partnerId, () => { partnerDropDown.refresh(); });
         Vue.watch(() => state.sourceModule, (sourceModule) => {
-            if (['PurchaseOrder', 'MaterialExport'].includes(sourceModule)) {
-                state.showAllocationDetails = true;
-            }
+            if (sourceModule) state.showAllocationDetails = false;
             partnerDropDown.refresh();
         });
         Vue.watch(() => state.amount, () => {

@@ -145,7 +145,7 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
             return new List<string>();
         }
 
-        if (request.ModuleName == nameof(DeliveryOrder))
+        if (request.ModuleName == nameof(SalesOrder))
         {
             return await _context
                 .Set<ProductSerial>()

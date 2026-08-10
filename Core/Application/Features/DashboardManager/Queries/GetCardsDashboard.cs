@@ -55,18 +55,6 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .Where(x => x.ModuleName == nameof(PurchaseReturn) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
             .SumAsync(x => (double?)x.Movement, cancellationToken);
 
-        var deliveryOrderTotal = await _context.InventoryTransaction
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleName == nameof(DeliveryOrder) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
-
-        var goodsReceiveTotal = await _context.InventoryTransaction
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleName == nameof(GoodsReceive) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
-
         var transferOutTotal = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
@@ -83,9 +71,21 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
+            .SumAsync(x => x.BeforeTaxAmount ?? 0d, cancellationToken);
+
+        var customerObligationAmount = await _context.Set<SalesOrder>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
             .SumAsync(x => x.AfterTaxAmount ?? 0d, cancellationToken);
 
         var confirmedPurchaseAmount = await _context.Set<PurchaseOrder>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
+            .SumAsync(x => x.BeforeTaxAmount ?? 0d, cancellationToken);
+
+        var vendorObligationAmount = await _context.Set<PurchaseOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
@@ -137,15 +137,13 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             SalesReturnTotal = salesReturnTotal,
             PurchaseTotal = purchaseTotal,
             PurchaseReturnTotal = purchaseReturnTotal,
-            DeliveryOrderTotal = deliveryOrderTotal,
-            GoodsReceiveTotal = goodsReceiveTotal,
             TransferOutTotal = transferOutTotal,
             TransferInTotal = transferInTotal,
             ConfirmedSalesAmount = confirmedSalesAmount,
             ConfirmedPurchaseAmount = confirmedPurchaseAmount,
             CashBalance = cashBalance,
-            CustomerReceivable = Math.Max(0d, confirmedSalesAmount - salesPaidAmount),
-            VendorDebt = Math.Max(0d, confirmedPurchaseAmount - purchasePaidAmount),
+            CustomerReceivable = Math.Max(0d, customerObligationAmount - salesPaidAmount),
+            VendorDebt = Math.Max(0d, vendorObligationAmount - purchasePaidAmount),
             InventoryQuantity = inventoryQuantity,
             MaterialExportCount = materialExportCount
         };

@@ -52,34 +52,47 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
 
     public async Task<UpdatePurchaseReturnResult> Handle(UpdatePurchaseReturnRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        PurchaseReturn? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
-
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.ReturnDate = request.ReturnDate;
-        entity.Status = (PurchaseReturnStatus)int.Parse(request.Status!);
-        entity.Description = request.Description;
-        entity.PurchaseOrderId = request.PurchaseOrderId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(PurchaseReturn),
-            entity.ReturnDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Không tìm thấy phiếu trả hàng mua cần cập nhật.");
+            if (!int.TryParse(request.Status, out var statusValue)
+                || !Enum.IsDefined(typeof(PurchaseReturnStatus), statusValue))
+                throw new InvalidOperationException("Trạng thái phiếu trả hàng mua không hợp lệ.");
+            var requestedStatus = (PurchaseReturnStatus)statusValue;
+            if (entity.Status == PurchaseReturnStatus.Draft)
+            {
+                if (requestedStatus is PurchaseReturnStatus.Cancelled or PurchaseReturnStatus.Archived)
+                    throw new InvalidOperationException("Phiếu trả hàng mua Nháp phải được xóa hoặc xác nhận.");
+            }
+            else
+            {
+                var headerChanged = entity.ReturnDate != request.ReturnDate
+                    || entity.PurchaseOrderId != request.PurchaseOrderId
+                    || entity.Description != request.Description;
+                if (entity.Status != PurchaseReturnStatus.Confirmed
+                    || requestedStatus is not (PurchaseReturnStatus.Cancelled or PurchaseReturnStatus.Archived)
+                    || headerChanged)
+                    throw new InvalidOperationException("Phiếu trả hàng mua đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+            }
+            entity.UpdatedById = request.UpdatedById;
+            entity.ReturnDate = request.ReturnDate;
+            entity.Status = requestedStatus;
+            entity.Description = request.Description;
+            entity.PurchaseOrderId = request.PurchaseOrderId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id,
+                nameof(PurchaseReturn),
+                entity.ReturnDate,
+                (InventoryTransactionStatus?)entity.Status,
+                entity.IsDeleted,
+                entity.UpdatedById,
+                null,
+                ct);
+        }, cancellationToken);
 
         return new UpdatePurchaseReturnResult
         {

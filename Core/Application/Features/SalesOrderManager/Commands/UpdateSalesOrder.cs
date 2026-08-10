@@ -53,32 +53,41 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
     public async Task<UpdateSalesOrderResult> Handle(UpdateSalesOrderRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        SalesOrder? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException($"Sales order was not found: {request.Id}");
+            if (!int.TryParse(request.OrderStatus, out var statusValue)
+                || !Enum.IsDefined(typeof(SalesOrderStatus), statusValue))
+                throw new InvalidOperationException("Invalid sales order status.");
+            var requestedStatus = (SalesOrderStatus)statusValue;
+            if (entity.OrderStatus == SalesOrderStatus.Draft
+                && requestedStatus is SalesOrderStatus.Cancelled or SalesOrderStatus.Archived)
+                throw new InvalidOperationException("Đơn bán hàng Nháp phải được xóa hoặc xác nhận; không thể chuyển thẳng sang Hủy/Lưu trữ.");
+            if (entity.OrderStatus != SalesOrderStatus.Draft)
+            {
+                var allowedStatusChange = entity.OrderStatus == SalesOrderStatus.Confirmed
+                    && requestedStatus is SalesOrderStatus.Cancelled or SalesOrderStatus.Archived;
+                var headerChanged = entity.OrderDate != request.OrderDate
+                    || entity.CustomerId != request.CustomerId
+                    || entity.Description != request.Description
+                    || entity.SalesType != (request.SalesType ?? SalesType.Retail);
+                if (!allowedStatusChange || headerChanged)
+                    throw new InvalidOperationException("Đơn bán hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
+            }
 
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = !string.IsNullOrEmpty(request.OrderStatus) && int.TryParse(request.OrderStatus, out var status)
-            ? (SalesOrderStatus)status
-            : entity.OrderStatus;
-        entity.Description = request.Description;
-        entity.CustomerId = request.CustomerId;
-        entity.SalesType = request.SalesType ?? SalesType.Retail;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        _salesOrderService.Recalculate(entity.Id);
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(
-            entity.Id,
-            entity.UpdatedById,
-            cancellationToken
-        );
+            entity.UpdatedById = request.UpdatedById;
+            entity.OrderDate = request.OrderDate;
+            entity.OrderStatus = requestedStatus;
+            entity.Description = request.Description;
+            entity.CustomerId = request.CustomerId;
+            entity.SalesType = request.SalesType ?? SalesType.Retail;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            _salesOrderService.Recalculate(entity.Id);
+            await _salesOrderService.SynchronizeInventoryAsync(entity.Id, entity.UpdatedById, ct);
+        }, cancellationToken);
 
         return new UpdateSalesOrderResult
         {

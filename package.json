@@ -1,0 +1,11 @@
+{
+  "name": "inventory-order-management-system-tests",
+  "private": true,
+  "scripts": {
+    "test:js": "node --test Tests/JavaScript/*.test.js",
+    "test:browser": "node Tests/browser_dashboard_materialexport_smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.2"
+  }
+}

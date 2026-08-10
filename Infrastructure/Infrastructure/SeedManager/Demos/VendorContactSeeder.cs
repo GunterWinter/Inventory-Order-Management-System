@@ -68,7 +68,7 @@ public class VendorContactSeeder
 
         foreach (var vendorId in vendorIds)
         {
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 1; i++)
             {
                 var firstName = GetRandomString(firstNames, random);
                 var lastName = GetRandomString(lastNames, random);

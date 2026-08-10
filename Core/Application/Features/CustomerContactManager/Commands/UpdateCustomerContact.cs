@@ -55,7 +55,7 @@ public class UpdateCustomerContactHandler : IRequestHandler<UpdateCustomerContac
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
 
         entity.UpdatedById = request.UpdatedById;

@@ -3,6 +3,10 @@ const App = {
         const state = Vue.reactive({
             search: '',
             mainData: [],
+            totalCount: 0,
+            page: 1,
+            pageSize: 20,
+            loading: false,
             movementData: [],
             selectedSerialNumber: '',
             docTitle: 'Document Detail',
@@ -28,9 +32,9 @@ const App = {
         };
 
         const services = {
-            lookupWarranty: async (search) => {
+            lookupWarranty: async (search, page, pageSize) => {
                 const encodedSearch = encodeURIComponent(search ?? '');
-                return await AxiosManager.get(`/ProductSerial/GetWarrantyLookup?search=${encodedSearch}`, {});
+                return await AxiosManager.get(`/ProductSerial/GetWarrantyLookup?search=${encodedSearch}&page=${page}&pageSize=${pageSize}`, {});
             }
         };
 
@@ -54,12 +58,19 @@ const App = {
         };
 
         const methods = {
-            lookupWarranty: async () => {
+            lookupWarranty: async (page = 1, pageSize = state.pageSize) => {
                 if (searchText.obj) {
                     state.search = searchText.obj.value;
                 }
-                const response = await services.lookupWarranty(state.search);
-                state.mainData = (response?.data?.content?.data ?? []).map(item => ({
+                state.search = String(state.search ?? '').trim();
+                state.loading = true;
+                try {
+                    const response = await services.lookupWarranty(state.search, page, pageSize);
+                    const content = response?.data?.content ?? {};
+                    state.page = content.page ?? page;
+                    state.pageSize = content.pageSize ?? pageSize;
+                    state.totalCount = content.totalCount ?? 0;
+                    state.mainData = (content.data ?? []).map(item => ({
                     ...item,
                     salesOrderDate: item.salesOrderDate ? DateFormatManager.parseServerDate(item.salesOrderDate) : null,
                     salesOrderDateText: methods.formatDate(item.salesOrderDate),
@@ -72,20 +83,19 @@ const App = {
                         : (window.UiLocalization?.translateText ? window.UiLocalization.translateText('N/A') : 'N/A'),
                     statusName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.statusName) : item.statusName,
                     warehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.warehouseName) : item.warehouseName
-                }));
-                state.movementData = [];
-                state.selectedSerialNumber = '';
-                mainGrid.refresh();
-                movementGrid.refresh();
+                    }));
+                    state.movementData = [];
+                    state.selectedSerialNumber = '';
+                    mainGrid.refresh();
+                    movementGrid.refresh();
+                } finally {
+                    state.loading = false;
+                }
             },
-            clearSearch: () => {
+            clearSearch: async () => {
                 state.search = '';
-                state.mainData = [];
-                state.movementData = [];
-                state.selectedSerialNumber = '';
                 searchText.refresh();
-                mainGrid.refresh();
-                movementGrid.refresh();
+                await methods.lookupWarranty(1, state.pageSize);
             },
             showMovements: (rowData) => {
                 state.selectedSerialNumber = rowData.internalSerialNumber;
@@ -135,13 +145,23 @@ const App = {
                 };
                 return statuses[statusValue] || statusValue;
             },
-            openDocumentModal: async (moduleName, moduleId) => {
+            openDocumentModal: async (moduleName, moduleId, movementData = null) => {
                 if (!moduleName || !moduleId) return;
 
-                let targetModule = moduleName;
-                let targetId = moduleId;
-                
-                state.docTitle = moduleName === 'GoodsReceive' || moduleName === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
+                if (moduleName === 'CostAllocation') {
+                    state.docTitle = 'Chi tiết phân bổ công trình';
+                    state.docType = 'CostAllocation';
+                    state.docData = movementData;
+                    state.docItems = [];
+                    state.docLoading = false;
+                    documentModal.obj?.show();
+                    return;
+                }
+
+                const targetModule = moduleName;
+                const targetId = moduleId;
+
+                state.docTitle = moduleName === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
                 state.docType = null;
                 state.docData = null;
                 state.docItems = [];
@@ -149,30 +169,6 @@ const App = {
                 
                 if (documentModal.obj) {
                     documentModal.obj.show();
-                }
-
-                if (moduleName === 'GoodsReceive') {
-                    try {
-                        const res = await AxiosManager.get('/GoodsReceive/GetGoodsReceiveSingle?id=' + moduleId, {});
-                        const poId = res?.data?.content?.data?.purchaseOrderId;
-                        if (poId) {
-                            targetModule = 'PurchaseOrder';
-                            targetId = poId;
-                        }
-                    } catch (e) {
-                        console.error('Failed to get parent order', e);
-                    }
-                } else if (moduleName === 'DeliveryOrder') {
-                    try {
-                        const res = await AxiosManager.get('/DeliveryOrder/GetDeliveryOrderSingle?id=' + moduleId, {});
-                        const soId = res?.data?.content?.data?.salesOrderId;
-                        if (soId) {
-                            targetModule = 'SalesOrder';
-                            targetId = soId;
-                        }
-                    } catch (e) {
-                        console.error('Failed to get parent order', e);
-                    }
                 }
 
                 try {
@@ -197,16 +193,12 @@ const App = {
             openDocumentView: (moduleName, moduleId) => {
                 const routes = {
                     PurchaseOrder: '/PurchaseOrders/PurchaseOrderList',
-                    GoodsReceive: '/GoodsReceives/GoodsReceiveList',
                     SalesOrder: '/SalesOrders/SalesOrderList',
-                    DeliveryOrder: '/DeliveryOrders/DeliveryOrderList',
                     MaterialExport: '/MaterialExports/MaterialExportList',
                     PurchaseReturn: '/PurchaseReturns/PurchaseReturnList',
                     SalesReturn: '/SalesReturns/SalesReturnList',
                     TransferIn: '/TransferIns/TransferInList',
                     TransferOut: '/TransferOuts/TransferOutList',
-                    PositiveAdjustment: '/PositiveAdjustments/PositiveAdjustmentList',
-                    NegativeAdjustment: '/NegativeAdjustments/NegativeAdjustmentList',
                     StockCount: '/StockCounts/StockCountList',
                     Scrapping: '/Scrappings/ScrappingList'
                 };
@@ -215,7 +207,10 @@ const App = {
                     Swal.fire({ icon: 'info', title: 'Document View Unavailable' });
                     return;
                 }
-                window.open(`${route}?viewId=${encodeURIComponent(moduleId)}`, '_blank', 'noopener');
+                const query = ['PurchaseOrder', 'SalesOrder'].includes(moduleName)
+                    ? `?viewMode=true&id=${encodeURIComponent(moduleId)}`
+                    : `?viewId=${encodeURIComponent(moduleId)}`;
+                window.open(`${route}${query}`, '_blank', 'noopener');
             },
             closeDocumentModal: () => {
                 state.documentIframeSrc = null;
@@ -236,6 +231,7 @@ const App = {
                 await mainGrid.create([]);
                 await movementGrid.create([]);
                 documentModal.create();
+                await methods.lookupWarranty(1, state.pageSize);
             } catch (e) {
                 console.error('page init error:', e);
             }
@@ -246,7 +242,7 @@ const App = {
             create: async (dataSource) => {
                 mainGrid.obj = new ej.grids.Grid({
                     height: '420px',
-                    dataSource,
+                    dataSource: { result: dataSource, count: 0 },
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
@@ -262,6 +258,7 @@ const App = {
                     gridLines: 'Horizontal',
                     columns: [
                         { field: 'internalSerialNumber', headerText: 'Device Serial', width: 170 },
+                        { field: 'manufacturerSerialNumber', headerText: 'Manufacturer Serial', width: 190 },
                         { field: 'productName', headerText: 'Product', width: 220 },
                         { field: 'statusName', headerText: 'Status', width: 130 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 170 },
@@ -281,6 +278,13 @@ const App = {
                         if (args.item.id === 'MainGrid_excelexport') {
                             mainGrid.obj.excelExport();
                         }
+                    },
+                    actionBegin: (args) => {
+                        if (args.requestType !== 'paging') return;
+                        args.cancel = true;
+                        const nextPage = args.currentPage ?? args.pageSettings?.currentPage ?? 1;
+                        const nextSize = args.pageSize ?? args.pageSettings?.pageSize ?? state.pageSize;
+                        methods.lookupWarranty(nextPage, nextSize);
                     }
                 });
 
@@ -288,7 +292,10 @@ const App = {
             },
             refresh: () => {
                 if (mainGrid.obj) {
-                    mainGrid.obj.setProperties({ dataSource: state.mainData });
+                    mainGrid.obj.dataSource = { result: state.mainData, count: state.totalCount };
+                    mainGrid.obj.pageSettings.currentPage = state.page;
+                    mainGrid.obj.pageSettings.pageSize = state.pageSize;
+                    mainGrid.obj.dataBind();
                 }
             }
         };
@@ -320,7 +327,8 @@ const App = {
                     recordClick: (args) => {
                         methods.openDocumentModal(
                             args.rowData.viewModuleName ?? args.rowData.moduleName,
-                            args.rowData.viewModuleId ?? args.rowData.moduleId);
+                            args.rowData.viewModuleId ?? args.rowData.moduleId,
+                            args.rowData);
                     }
                 });
 

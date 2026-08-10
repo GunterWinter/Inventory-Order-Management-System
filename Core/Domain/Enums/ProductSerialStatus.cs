@@ -23,5 +23,7 @@ public enum ProductSerialStatus
     [Description("Returned By Customer")]
     ReturnedByCustomer = 8,
     [Description("Exported")]
-    Exported = 9
+    Exported = 9,
+    [Description("Voided")]
+    Voided = 10
 }

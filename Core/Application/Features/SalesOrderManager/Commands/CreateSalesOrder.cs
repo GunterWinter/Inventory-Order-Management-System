@@ -59,9 +59,7 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderRequest, 
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(SalesOrder), "", "SO");
         entity.OrderDate = request.OrderDate;
-        entity.OrderStatus = !string.IsNullOrEmpty(request.OrderStatus) && int.TryParse(request.OrderStatus, out var status)
-            ? (SalesOrderStatus)status
-            : SalesOrderStatus.Draft;
+        entity.OrderStatus = SalesOrderStatus.Draft;
         entity.Description = request.Description;
         entity.CustomerId = request.CustomerId;
         entity.SalesType = request.SalesType ?? SalesType.Retail;
@@ -70,7 +68,7 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderRequest, 
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _salesOrderService.Recalculate(entity.Id);
-        await _salesOrderService.SynchronizeDeliveryOrderAsync(
+        await _salesOrderService.SynchronizeInventoryAsync(
             entity.Id,
             entity.CreatedById,
             cancellationToken

@@ -54,20 +54,13 @@ public class PurchaseOrderCostAllocationTests
             Total = 40d,
             AfterTaxAmount = 40d
         };
-        var goodsReceive = new GoodsReceive
-        {
-            Number = "GR-ALLOCATE",
-            PurchaseOrderId = purchaseOrder.Id,
-            ReceiveDate = purchaseOrder.OrderDate,
-            Status = GoodsReceiveStatus.Confirmed
-        };
         var inbound = new InventoryTransaction
         {
-            ModuleId = goodsReceive.Id,
-            ModuleName = nameof(GoodsReceive),
+            ModuleId = purchaseOrder.Id,
+            ModuleName = nameof(PurchaseOrder),
             ModuleItemId = item.Id,
-            ModuleNumber = goodsReceive.Number,
-            MovementDate = goodsReceive.ReceiveDate,
+            ModuleNumber = purchaseOrder.Number,
+            MovementDate = purchaseOrder.OrderDate,
             Status = InventoryTransactionStatus.Confirmed,
             ProductId = product.Id,
             WarehouseId = warehouse.Id,
@@ -75,7 +68,7 @@ public class PurchaseOrderCostAllocationTests
             Stock = 4d,
             TransType = InventoryTransType.In
         };
-        commandContext.AddRange(vendor, customer, warehouse, customerWarehouse, vendorWarehouse, product, purchaseOrder, item, goodsReceive, inbound);
+        commandContext.AddRange(vendor, customer, warehouse, customerWarehouse, vendorWarehouse, product, purchaseOrder, item, inbound);
         await commandContext.SaveChangesAsync();
 
         var unitOfWork = new UnitOfWork(commandContext);
@@ -157,24 +150,24 @@ public class PurchaseOrderCostAllocationTests
         var purchaseOrderService = new PurchaseOrderService(
             new CommandRepository<PurchaseOrder>(commandContext),
             new CommandRepository<PurchaseOrderItem>(commandContext),
-            new CommandRepository<GoodsReceive>(commandContext),
+            new CommandRepository<InventoryTransaction>(commandContext),
+            new CommandRepository<ProductSerial>(commandContext),
+            new CommandRepository<PurchaseOrderCostAllocation>(commandContext),
+            new CommandRepository<CashTransaction>(commandContext),
+            new CommandRepository<CashTransactionPayment>(commandContext),
             queryContext,
             unitOfWork,
             numberSequenceService,
             inventoryService,
             serialService,
-            new CommandRepository<ProductSerial>(commandContext),
-            new CommandRepository<CashTransaction>(commandContext),
-            new CommandRepository<CashTransactionPayment>(commandContext),
-            new CommandRepository<CashTransactionCostAllocation>(commandContext),
             new CashBalanceService(queryContext, new CommandRepository<CashAccount>(commandContext), unitOfWork));
 
         // Saving the confirmed PO again must keep the full inbound receipt even
         // after AllocatedQuantity equals the purchased quantity.
-        await purchaseOrderService.SynchronizeGoodsReceiveAsync(purchaseOrder.Id, null);
+        await purchaseOrderService.SynchronizeInventoryAsync(purchaseOrder.Id, null);
         var activeInbound = Assert.Single(await commandContext.Set<InventoryTransaction>()
             .Where(x => !x.IsDeleted
-                && x.ModuleName == nameof(GoodsReceive)
+                && x.ModuleName == nameof(PurchaseOrder)
                 && x.ModuleItemId == item.Id)
             .ToListAsync());
         Assert.Equal(4d, activeInbound.Movement);

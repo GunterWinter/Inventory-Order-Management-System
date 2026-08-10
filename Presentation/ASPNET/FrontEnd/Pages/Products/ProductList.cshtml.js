@@ -52,7 +52,7 @@ const App = {
             return '/api/FileImage/GetImage?imageName=' + encodeURIComponent(name);
         };
         const normalizeInternalSerialFixedCode = (value) => (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
-        const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode || 1) : 0;
+        const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode ?? 1) : 0;
         const getEffectiveInternalSerialFixedCode = () => getEffectiveSerialTrackingMode() === 1 ? normalizeInternalSerialFixedCode(state.internalSerialFixedCode) : null;
         const getInternalSerialPreview = () => {
             const fixedCode = getEffectiveInternalSerialFixedCode() || 'CAM';
@@ -499,9 +499,6 @@ const App = {
                     state.serialTrackingMode = 0;
                     state.internalSerialFixedCode = '';
                     state.errors.internalSerialFixedCode = '';
-                } else if (state.serialTrackingMode === 0) {
-                    state.serialTrackingMode = 1;
-                    state.internalSerialFixedCode = state.internalSerialFixedCode || 'CAM';
                 }
             }
         );
@@ -818,7 +815,7 @@ const App = {
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
                                 state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
-                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
+                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? 0;
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
                                 mainModal.obj.show();
                             }
@@ -843,7 +840,7 @@ const App = {
                                 state.productGroupId = selectedRecord.productGroupId ?? '';
                                 state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
-                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? (state.physical ? 1 : 0);
+                                state.serialTrackingMode = selectedRecord.serialTrackingMode ?? 0;
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
                                 mainModal.obj.show();
                             }

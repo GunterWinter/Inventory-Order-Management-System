@@ -63,6 +63,13 @@ public class CreatePurchaseOrderItemHandler : IRequestHandler<CreatePurchaseOrde
 
     public async Task<CreatePurchaseOrderItemResult> Handle(CreatePurchaseOrderItemRequest request, CancellationToken cancellationToken = default)
     {
+        var orderStatus = await _queryContext.Set<PurchaseOrder>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id == request.PurchaseOrderId)
+            .Select(x => x.OrderStatus)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (orderStatus != PurchaseOrderStatus.Draft)
+            throw new InvalidOperationException("Only draft purchase orders can be edited.");
+
         await ValidateProductNotDuplicatedAsync(request.PurchaseOrderId, request.ProductId, null, cancellationToken);
 
         var entity = new PurchaseOrderItem();
@@ -70,16 +77,22 @@ public class CreatePurchaseOrderItemHandler : IRequestHandler<CreatePurchaseOrde
 
         entity.PurchaseOrderId = request.PurchaseOrderId;
         entity.ProductId = request.ProductId;
-        entity.WarehouseId = await ResolveWarehouseIdAsync(request.WarehouseId, request.ProductId, cancellationToken);
-        entity.ManufacturerSerialNumbersJson = request.ManufacturerSerialNumbers == null ? null : JsonSerializer.Serialize(request.ManufacturerSerialNumbers);
-        entity.SupplierWarrantyMonths = request.SupplierWarrantyMonths ?? 6;
-        entity.Summary = request.Summary;
-        entity.TaxId = request.TaxId;
-        entity.UnitPrice = request.UnitPrice;
         var tracking = await _queryContext.Set<Product>().AsNoTracking()
             .Where(x => x.Id == request.ProductId)
             .Select(x => new { x.Physical, x.SerialTrackingMode })
             .SingleAsync(cancellationToken);
+        entity.WarehouseId = await ResolveWarehouseIdAsync(request.WarehouseId, request.ProductId, cancellationToken);
+        if (tracking.Physical == true && string.IsNullOrWhiteSpace(entity.WarehouseId))
+            throw new InvalidOperationException("Warehouse is required for physical products.");
+        entity.ManufacturerSerialNumbersJson = request.ManufacturerSerialNumbers == null ? null : JsonSerializer.Serialize(request.ManufacturerSerialNumbers);
+        entity.SupplierWarrantyMonths = tracking.Physical == true ? request.SupplierWarrantyMonths ?? 6 : 0;
+        entity.Summary = request.Summary;
+        entity.TaxId = request.TaxId;
+        entity.UnitPrice = request.UnitPrice;
+        if (tracking.Physical == true
+            && tracking.SerialTrackingMode != SerialTrackingMode.None
+            && Math.Abs((request.Quantity ?? 0d) - Math.Round(request.Quantity ?? 0d)) > 0.000001d)
+            throw new InvalidOperationException("Serial-tracked products require a whole-number quantity.");
         if (tracking.Physical == true && tracking.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
         {
             if (request.ManufacturerSerialNumbers == null || request.ManufacturerSerialNumbers.Count == 0)
@@ -108,7 +121,7 @@ public class CreatePurchaseOrderItemHandler : IRequestHandler<CreatePurchaseOrde
         await _unitOfWork.SaveAsync(cancellationToken);
 
         _purchaseOrderService.Recalculate(entity.PurchaseOrderId ?? "");
-        await _purchaseOrderService.SynchronizeGoodsReceiveAsync(
+        await _purchaseOrderService.SynchronizeInventoryAsync(
             entity.PurchaseOrderId ?? "",
             entity.CreatedById,
             cancellationToken
@@ -122,13 +135,9 @@ public class CreatePurchaseOrderItemHandler : IRequestHandler<CreatePurchaseOrde
 
     private async Task<string?> ResolveWarehouseIdAsync(string? warehouseId, string? productId, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(warehouseId))
-        {
-            return warehouseId;
-        }
-
         var physical = await _queryContext.Set<Product>().AsNoTracking().Where(x => x.Id == productId).Select(x => x.Physical).FirstOrDefaultAsync(cancellationToken);
         if (physical != true) return null;
+        if (!string.IsNullOrWhiteSpace(warehouseId)) return warehouseId;
         return await _queryContext
             .Set<Product>()
             .AsNoTracking()

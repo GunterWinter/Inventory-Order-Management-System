@@ -1,6 +1,7 @@
 using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore;
 using static Domain.Common.Constants;
 
 namespace Infrastructure.DataAccessManager.EFCore.Configurations;
@@ -23,6 +24,10 @@ public class PurchaseOrderItemConfiguration : BaseEntityConfiguration<PurchaseOr
         builder.Property(x => x.TaxAmount).IsRequired(false);
         builder.Property(x => x.AfterTaxAmount).IsRequired(false);
         builder.Property(x => x.AllocatedQuantity).IsRequired(false);
+
+        builder.HasIndex(x => new { x.PurchaseOrderId, x.ProductId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL");
 
     }
 }

@@ -10,6 +10,7 @@ const App = {
             productListLookupData: [],
             warehouseListLookupData: [],
             inventoryStockData: [],
+            inventoryAvailabilityReady: false,
             paymentStatusLookupData: [],
             cashAccountListData: [],
             cashCategoryListData: [],
@@ -452,6 +453,7 @@ const App = {
             populateInventoryStockData: async () => {
                 const response = await services.getInventoryStockData();
                 state.inventoryStockData = response?.data?.content?.data ?? [];
+                state.inventoryAvailabilityReady = true;
                 syncSecondaryAvailability();
             },
             populateCashAccountList: async () => {
@@ -474,6 +476,23 @@ const App = {
             },
             refreshInventoryAvailability: async () => {
                 await methods.populateInventoryStockData();
+            },
+            ensureInventoryAvailability: async () => {
+                try {
+                    await methods.refreshInventoryAvailability();
+                    return true;
+                } catch (error) {
+                    state.inventoryAvailabilityReady = false;
+                    secondaryGrid.refresh();
+                    console.error('Unable to load inventory availability:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Không thể tải tồn kho',
+                        text: 'Chưa thể sửa chi tiết đơn bán hàng. Vui lòng thử lại sau.',
+                        confirmButtonText: 'Đồng ý'
+                    });
+                    return false;
+                }
             },
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
@@ -826,16 +845,16 @@ const App = {
                         {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
-                        { field: 'number', headerText: 'Số đơn', width: 150, minWidth: 150 },
-                        { field: 'orderDate', headerText: 'Ngày đặt', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'customerName', headerText: 'Khách hàng', width: 200, minWidth: 200 },
-                        { field: 'salesTypeName', headerText: 'Loại xuất', width: 140, minWidth: 140 },
-                        { field: 'orderStatusName', headerText: 'Trạng thái', width: 150, minWidth: 150 },
-                        { field: 'afterTaxAmount', headerText: 'Tổng tiền', width: 150, minWidth: 150, format: 'N0' },
-                        { field: 'createdAtUtc', headerText: 'Thời điểm tạo', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
+                        { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
+                        { field: 'orderDate', headerText: 'Order Date', width: 150, format: 'yyyy-MM-dd' },
+                        { field: 'customerName', headerText: 'Customer', width: 200, minWidth: 200 },
+                        { field: 'salesTypeName', headerText: 'Sales Type', width: 140, minWidth: 140 },
+                        { field: 'orderStatusName', headerText: 'Status', width: 150, minWidth: 150 },
+                        { field: 'afterTaxAmount', headerText: 'Total Amount', width: 150, minWidth: 150, format: 'N0' },
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, minWidth: 150, format: 'yyyy-MM-dd HH:mm' },
                         {
                             field: 'paymentStatusText',
-                            headerText: 'Thanh toán',
+                            headerText: 'Payment',
                             width: 150,
                             minWidth: 150,
                             textAlign: 'Center',
@@ -923,6 +942,7 @@ const App = {
                         }
 
                         if (args.item.id === 'AddCustom') {
+                            if (!(await methods.ensureInventoryAvailability())) return;
                             state.deleteMode = false;
                             state.isViewMode = false;
                             state.mainTitle = 'Thêm đơn bán hàng';
@@ -937,7 +957,7 @@ const App = {
                             state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                await methods.refreshInventoryAvailability();
+                                if (!(await methods.ensureInventoryAvailability())) return;
                                 state.mainTitle = 'Sửa đơn bán hàng';
                                 state.id = selectedRecord.id ?? '';
                                 state.number = selectedRecord.number ?? '';
@@ -1039,8 +1059,62 @@ const App = {
 
         const secondaryGrid = {
             obj: null,
+            syncSerialPickerRows: () => {
+                if (!secondaryGrid.obj?.element) return;
+                secondaryGrid.obj.getRows().forEach(row => {
+                    const rowData = secondaryGrid.obj.getRowInfo(row).rowData;
+                    const button = row.querySelector('.so-serial-picker');
+                    const label = row.querySelector('.so-serial-picker-label');
+                    if (!rowData || !button || !label) return;
+                    const serialEnabled = isSerialTrackedProduct(normalizeLookupId(rowData.productId));
+                    button.disabled = state.isViewMode || !state.inventoryAvailabilityReady || !serialEnabled;
+                    button.title = serialEnabled ? '' : 'Sản phẩm không theo dõi serial';
+                    const count = Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds.length : 0;
+                    label.textContent = count > 0 ? `${count} mã đã chọn` : '';
+                    label.title = typeof rowData.productSerialNumbers === 'string' ? rowData.productSerialNumbers : '';
+                });
+            },
+            handleSerialPickerClick: async (event) => {
+                const button = event.target.closest('.so-serial-picker');
+                if (!button || button.disabled) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const row = button.closest('tr');
+                const rowData = row ? secondaryGrid.obj.getRowInfo(row).rowData : null;
+                if (!rowData) return;
+
+                const productId = normalizeLookupId(rowData.productId);
+                const warehouseId = normalizeLookupId(rowData.warehouseId);
+                if (!productId || !warehouseId) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Thiếu thông tin',
+                        text: 'Vui lòng chọn sản phẩm và kho trước khi chọn mã thiết bị.',
+                        confirmButtonText: 'Đồng ý'
+                    });
+                    return;
+                }
+
+                const selectedSerials = await ProductSerialPicker.open({
+                    productId,
+                    warehouseId,
+                    moduleName: 'SalesOrder',
+                    moduleId: state.id,
+                    moduleItemId: normalizeLookupId(rowData.id),
+                    selectedIds: Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds : []
+                });
+                if (!applySerialSelection(rowData, selectedSerials)) return;
+
+                const rowIndex = secondaryGrid.obj.getRows().indexOf(row);
+                if (rowIndex >= 0) {
+                    secondaryGrid.obj.updateCell(rowIndex, 'productSerialNumbers', rowData.productSerialNumbers);
+                    secondaryGrid.obj.updateCell(rowIndex, 'quantity', rowData.quantity);
+                    secondaryGrid.obj.updateCell(rowIndex, 'total', rowData.total);
+                }
+                secondaryGrid.syncSerialPickerRows();
+            },
             create: async (dataSource) => {
-                const allowEdit = !state.isViewMode;
+                const allowEdit = !state.isViewMode && state.inventoryAvailabilityReady;
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
@@ -1067,7 +1141,7 @@ const App = {
                         },
                         {
                             field: 'productId',
-                            headerText: 'Sản phẩm',
+                            headerText: 'Product',
                             width: 250,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
@@ -1178,7 +1252,7 @@ const App = {
                         },
                         {
                             field: 'warehouseId',
-                            headerText: 'Kho',
+                            headerText: 'Warehouse',
                             width: 180,
                             validationRules: { required: false },
                             valueAccessor: (field, data, column) => {
@@ -1239,7 +1313,7 @@ const App = {
                         },
                         {
                             field: 'warrantyMonths',
-                            headerText: 'BH (Tháng)',
+                            headerText: 'Warranty Months',
                             width: 180,
                             type: 'number',
                             format: 'N0',
@@ -1274,7 +1348,7 @@ const App = {
                         },
                         {
                             field: 'unitPrice',
-                            headerText: 'Đơn giá',
+                            headerText: 'Unit Price',
                             width: 200, validationRules: { required: true }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1318,80 +1392,17 @@ const App = {
                         },
                         {
                             field: 'productSerialNumbers',
-                            headerText: 'Mã thiết bị',
+                            headerText: 'Serial Numbers',
                             width: 220,
                             allowEditing: false,
                             valueAccessor: (field, data) => typeof data.productSerialNumbers === 'string'
                                 ? data.productSerialNumbers
                                 : '',
-                            template: (rowData) => {
-                                const wrapper = document.createElement('div');
-                                wrapper.className = 'd-flex gap-2 align-items-center';
-
-                                const button = document.createElement('button');
-                                button.type = 'button';
-                                button.className = 'btn btn-outline-primary btn-sm so-serial-picker';
-                                button.textContent = 'Chọn mã thiết bị';
-
-                                const label = document.createElement('span');
-                                label.className = 'text-muted small text-truncate';
-                                label.style.maxWidth = '120px';
-
-                                const refreshLabel = () => {
-                                    const count = Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds.length : 0;
-                                    label.textContent = count > 0 ? `${count} mã đã chọn` : '';
-                                    label.title = typeof rowData.productSerialNumbers === 'string' ? rowData.productSerialNumbers : '';
-                                };
-
-                                const serialEnabled = isSerialTrackedProduct(normalizeLookupId(rowData.productId));
-                                button.disabled = !serialEnabled;
-                                if (!serialEnabled) button.title = 'Sản phẩm không theo dõi serial';
-                                refreshLabel();
-
-                                button.addEventListener('click', async (event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-
-                                    const productId = normalizeLookupId(rowData.productId);
-                                    const warehouseId = normalizeLookupId(rowData.warehouseId);
-                                    if (!productId || !warehouseId) {
-                                        Swal.fire({
-                                            icon: 'warning',
-                                            title: 'Thiếu thông tin',
-                                            text: 'Vui lòng chọn sản phẩm và kho trước khi chọn mã thiết bị.',
-                                            confirmButtonText: 'Đồng ý'
-                                        });
-                                        return;
-                                    }
-
-                                    const selectedSerials = await ProductSerialPicker.open({
-                                        productId,
-                                        warehouseId,
-                                        moduleName: 'DeliveryOrder',
-                                        moduleId: state.id,
-                                        moduleItemId: normalizeLookupId(rowData.id),
-                                        selectedIds: Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds : []
-                                    });
-
-                                    if (!applySerialSelection(rowData, selectedSerials)) return;
-
-                                    const row = wrapper.closest('tr');
-                                    const rowIndex = row ? secondaryGrid.obj.getRows().indexOf(row) : -1;
-                                    if (rowIndex >= 0) {
-                                        secondaryGrid.obj.updateCell(rowIndex, 'productSerialNumbers', rowData.productSerialNumbers);
-                                        secondaryGrid.obj.updateCell(rowIndex, 'quantity', rowData.quantity);
-                                        secondaryGrid.obj.updateCell(rowIndex, 'total', rowData.total);
-                                    }
-                                    refreshLabel();
-                                });
-
-                                wrapper.append(button, label);
-                                return wrapper;
-                            }
+                            template: '<div class="d-flex gap-2 align-items-center"><button type="button" class="btn btn-outline-primary btn-sm so-serial-picker">Chọn mã thiết bị</button><span class="text-muted small text-truncate so-serial-picker-label" style="max-width:120px"></span></div>'
                         },
                         {
                             field: 'quantity',
-                            headerText: 'Số lượng',
+                            headerText: 'Quantity',
                             width: 200,
                             // Validate the completed row in actionBegin. Cell-level validation
                             // fires too early while the user is still choosing product/warehouse.
@@ -1435,7 +1446,7 @@ const App = {
                         },
                         {
                             field: 'total',
-                            headerText: 'Thành tiền',
+                            headerText: 'Total',
                             width: 200, validationRules: { required: false }, type: 'number', format: 'N0', textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -1461,7 +1472,7 @@ const App = {
                         },
                         {
                             field: 'taxId',
-                            headerText: 'Thuế',
+                            headerText: 'Tax',
                             width: 180,
                             validationRules: { required: true },
                             valueAccessor: (field, data, column) => {
@@ -1510,7 +1521,7 @@ const App = {
                         },
                         {
                             field: 'taxAmount',
-                            headerText: 'Tiền thuế',
+                            headerText: 'Tax Amount',
                             allowEditing: true,
                             width: 160,
                             type: 'number',
@@ -1543,7 +1554,7 @@ const App = {
                         },
                         {
                             field: 'afterTaxAmount',
-                            headerText: 'Tổng tiền',
+                            headerText: 'Total Amount',
                             allowEditing: true,
                             width: 170,
                             type: 'number',
@@ -1576,7 +1587,7 @@ const App = {
                         },
                         {
                             field: 'productNumber',
-                            headerText: 'Mã sản phẩm',
+                            headerText: 'Product Number',
                             allowEditing: false,
                             width: 180,
                             edit: {
@@ -1600,7 +1611,7 @@ const App = {
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Mã tham chiếu',
+                            headerText: 'Reference Code',
                             allowEditing: false,
                             width: 160,
                             valueAccessor: (field, data, column) => {
@@ -1610,7 +1621,7 @@ const App = {
                         },
                         {
                             field: 'summary',
-                            headerText: 'Ghi chú',
+                            headerText: 'Summary',
                             width: 200,
                             edit: {
                                 create: () => {
@@ -1632,7 +1643,7 @@ const App = {
                         },
                         {
                             field: 'cogsAmount',
-                            headerText: 'Giá vốn',
+                            headerText: 'COGS',
                             allowEditing: true,
                             width: 160,
                             type: 'number',
@@ -1665,7 +1676,7 @@ const App = {
                         },
                         {
                             field: 'profitAmount',
-                            headerText: 'Lợi nhuận',
+                            headerText: 'Profit',
                             allowEditing: true,
                             width: 160,
                             type: 'number',
@@ -1703,7 +1714,7 @@ const App = {
                         'Add', 'Delete', 'Update', 'Cancel'
                     ],
                     beforeDataBound: () => { },
-                    dataBound: function () { },
+                    dataBound: () => secondaryGrid.syncSerialPickerRows(),
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
@@ -2002,19 +2013,21 @@ const App = {
                     }
                 });
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
+                secondaryGrid.obj.element.addEventListener('click', secondaryGrid.handleSerialPickerClick);
                 secondaryGrid.obj.element.dataset.batchManaged = 'true';
                 GridInteractionManager.track(secondaryGrid.obj);
             },
             refresh: () => {
-                const allowEdit = !state.isViewMode;
+                if (!secondaryGrid.obj) return;
+                const allowEdit = !state.isViewMode && state.inventoryAvailabilityReady;
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: allowEdit ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Delete', 'Update', 'Cancel'
-                    ]
+                    ] : ['ExcelExport']
                 });
             }
         };
@@ -2156,8 +2169,14 @@ const App = {
                 numberText.create();
                 await methods.populateProductListLookupData();
                 await methods.populateWarehouseListLookupData();
-                await methods.populateInventoryStockData();
                 await secondaryGrid.create(state.secondaryData);
+                try {
+                    await methods.populateInventoryStockData();
+                } catch (inventoryError) {
+                    state.inventoryAvailabilityReady = false;
+                    console.error('Unable to initialize inventory availability:', inventoryError);
+                    secondaryGrid.refresh();
+                }
             } catch (e) {
                 console.error('page init error:', e);
             } finally {

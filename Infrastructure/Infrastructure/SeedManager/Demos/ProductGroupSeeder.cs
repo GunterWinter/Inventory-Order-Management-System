@@ -5,38 +5,29 @@ namespace Infrastructure.SeedManager.Demos;
 
 public class ProductGroupSeeder
 {
-    private readonly ICommandRepository<ProductGroup> _productGroupRepository;
+    private readonly ICommandRepository<ProductGroup> _repository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public ProductGroupSeeder(
-        ICommandRepository<ProductGroup> productGroupRepository,
-        IUnitOfWork unitOfWork
-    )
+    public ProductGroupSeeder(ICommandRepository<ProductGroup> repository, IUnitOfWork unitOfWork)
     {
-        _productGroupRepository = productGroupRepository;
+        _repository = repository;
         _unitOfWork = unitOfWork;
     }
 
     public async Task GenerateDataAsync()
     {
-        var productGroups = new List<ProductGroup>
+        var names = new[]
         {
-            new ProductGroup { Name = "Thiết bị điện" },
-            new ProductGroup { Name = "Điện máy gia dụng" },
-            new ProductGroup { Name = "Nội thất văn phòng" },
-            new ProductGroup { Name = "Nội thất gia đình" },
-            new ProductGroup { Name = "Thiết bị nhà thông minh" },
-            new ProductGroup { Name = "Camera an ninh" },
-            new ProductGroup { Name = "Công tắc và ổ cắm" },
-            new ProductGroup { Name = "Phụ kiện lắp đặt" }
+            "Vật tư điện",
+            "Thiết bị có serial",
+            "Nội thất",
+            "Dịch vụ"
         };
 
-        foreach (var productGroup in productGroups)
+        foreach (var name in names)
         {
-            if (!_productGroupRepository.GetQuery().Any(x => !x.IsDeleted && x.Name == productGroup.Name))
-            {
-                await _productGroupRepository.CreateAsync(productGroup);
-            }
+            if (!_repository.GetQuery().Any(x => !x.IsDeleted && x.Name == name))
+                await _repository.CreateAsync(new ProductGroup { Name = name });
         }
 
         await _unitOfWork.SaveAsync();

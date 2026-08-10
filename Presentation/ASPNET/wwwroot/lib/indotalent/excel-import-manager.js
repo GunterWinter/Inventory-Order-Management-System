@@ -24,8 +24,6 @@
         warehouses: { endpoint: '/Warehouse/GetWarehouseList', sheetName: 'Warehouses' },
         salesOrders: { endpoint: '/SalesOrder/GetSalesOrderList', sheetName: 'SalesOrders' },
         purchaseOrders: { endpoint: '/PurchaseOrder/GetPurchaseOrderList', sheetName: 'PurchaseOrders' },
-        deliveryOrders: { endpoint: '/DeliveryOrder/GetDeliveryOrderList', sheetName: 'DeliveryOrders' },
-        goodsReceives: { endpoint: '/GoodsReceive/GetGoodsReceiveList', sheetName: 'GoodsReceives' },
         transferOuts: { endpoint: '/TransferOut/GetTransferOutList', sheetName: 'TransferOuts' },
         todos: { endpoint: '/Todo/GetTodoList', sheetName: 'Todos' },
         cashAccounts: { endpoint: '/CashAccount/GetCashAccountList', sheetName: 'CashAccounts' },
@@ -248,28 +246,6 @@
                 descriptionColumn
             ]
         },
-        deliveryorders: {
-            title: 'Delivery Order',
-            endpoint: '/DeliveryOrder/CreateDeliveryOrder',
-            fileName: 'delivery-orders-template.xlsx',
-            columns: [
-                { header: 'Delivery Date', key: 'deliveryDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
-                { header: 'Sales Order', key: 'salesOrderId', required: true, lookup: 'salesOrders', example: 'SO-0001' },
-                descriptionColumn
-            ]
-        },
-        goodsreceives: {
-            title: 'Goods Receive',
-            endpoint: '/GoodsReceive/CreateGoodsReceive',
-            fileName: 'goods-receives-template.xlsx',
-            columns: [
-                { header: 'Receive Date', key: 'receiveDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
-                { header: 'Purchase Order', key: 'purchaseOrderId', required: true, lookup: 'purchaseOrders', example: 'PO-0001' },
-                descriptionColumn
-            ]
-        },
         purchasereturns: {
             title: 'Purchase Return',
             endpoint: '/PurchaseReturn/CreatePurchaseReturn',
@@ -277,7 +253,7 @@
             columns: [
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
-                { header: 'Goods Receive', key: 'goodsReceiveId', required: true, lookup: 'goodsReceives', example: 'GR-0001' },
+                { header: 'Purchase Order', key: 'purchaseOrderId', required: true, lookup: 'purchaseOrders', example: 'PO-0001' },
                 descriptionColumn
             ]
         },
@@ -288,7 +264,7 @@
             columns: [
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
-                { header: 'Delivery Order', key: 'deliveryOrderId', required: true, lookup: 'deliveryOrders', example: 'DO-0001' },
+                { header: 'Sales Order', key: 'salesOrderId', required: true, lookup: 'salesOrders', example: 'SO-0001' },
                 descriptionColumn
             ]
         },
@@ -312,26 +288,6 @@
                 { header: 'Receive Date', key: 'transferReceiveDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Transfer Out', key: 'transferOutId', required: true, lookup: 'transferOuts', example: 'OUT-0001' },
-                descriptionColumn
-            ]
-        },
-        positiveadjustments: {
-            title: 'Positive Adjustment',
-            endpoint: '/PositiveAdjustment/CreatePositiveAdjustment',
-            fileName: 'positive-adjustments-template.xlsx',
-            columns: [
-                { header: 'Adjustment Date', key: 'adjustmentDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
-                descriptionColumn
-            ]
-        },
-        negativeadjustments: {
-            title: 'Negative Adjustment',
-            endpoint: '/NegativeAdjustment/CreateNegativeAdjustment',
-            fileName: 'negative-adjustments-template.xlsx',
-            columns: [
-                { header: 'Adjustment Date', key: 'adjustmentDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 descriptionColumn
             ]
         },

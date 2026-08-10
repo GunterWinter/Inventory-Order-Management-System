@@ -100,6 +100,23 @@ public static class DI
             return;
         }
 
+        var duplicatePurchaseOrderProducts = dataContext.PurchaseOrderItem
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.PurchaseOrderId != null && x.ProductId != null)
+            .GroupBy(x => new { x.PurchaseOrderId, x.ProductId })
+            .Where(x => x.Count() > 1)
+            .Select(x => new { x.Key.PurchaseOrderId, x.Key.ProductId, Count = x.Count() })
+            .Take(10)
+            .ToList();
+
+        if (duplicatePurchaseOrderProducts.Count > 0)
+        {
+            Log.Warning(
+                "Không thể tạo unique index dòng PO vì database hiện hữu có {Count} nhóm hàng trùng (chỉ hiển thị tối đa 10). Dữ liệu không bị tự động xóa; validation ứng dụng vẫn chặn phát sinh trùng mới. Ví dụ: {@Duplicates}",
+                duplicatePurchaseOrderProducts.Count,
+                duplicatePurchaseOrderProducts);
+        }
+
         var commands = new[]
         {
             "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'DefaultWarehouseId') IS NULL ALTER TABLE [dbo].[Product] ADD [DefaultWarehouseId] nvarchar(50) NULL;",
@@ -118,6 +135,10 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[SalesReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesReturn', N'SalesOrderId') IS NULL ALTER TABLE [dbo].[SalesReturn] ADD [SalesOrderId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[PurchaseReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseReturn', N'PurchaseOrderId') IS NULL ALTER TABLE [dbo].[PurchaseReturn] ADD [PurchaseOrderId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_StockLookup] ON [dbo].[InventoryTransaction] ([IsDeleted], [Status], [ProductId], [WarehouseId]) INCLUDE ([Stock], [CreatedAtUtc]);",
+            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) CREATE INDEX [IX_ProductSerial_StockLookup] ON [dbo].[ProductSerial] ([IsDeleted], [Status], [ProductId], [CurrentWarehouseId]) INCLUDE ([CreatedAtUtc]);",
+            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_ManufacturerSerialNumber' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[ProductSerial] WHERE [IsDeleted] = 0 AND [ManufacturerSerialNumber] IS NOT NULL GROUP BY [ManufacturerSerialNumber] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_ProductSerial_ManufacturerSerialNumber] ON [dbo].[ProductSerial] ([ManufacturerSerialNumber]) WHERE [ManufacturerSerialNumber] IS NOT NULL AND [IsDeleted] = 0;",
+            "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_PurchaseOrderItem_PurchaseOrderId_ProductId' AND [object_id] = OBJECT_ID(N'[dbo].[PurchaseOrderItem]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[PurchaseOrderItem] WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL GROUP BY [PurchaseOrderId], [ProductId] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_PurchaseOrderItem_PurchaseOrderId_ProductId] ON [dbo].[PurchaseOrderItem] ([PurchaseOrderId], [ProductId]) WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExport', N'WarehouseId') IS NULL ALTER TABLE [dbo].[MaterialExport] ADD [WarehouseId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NULL BEGIN CREATE TABLE [dbo].[CashTransactionPayment] ([Id] nvarchar(50) NOT NULL, [IsDeleted] bit NOT NULL CONSTRAINT [DF_CashTransactionPayment_IsDeleted] DEFAULT 0, [CreatedAtUtc] datetime2 NULL, [CreatedById] nvarchar(450) NULL, [UpdatedAtUtc] datetime2 NULL, [UpdatedById] nvarchar(450) NULL, [CashTransactionId] nvarchar(50) NOT NULL, [CashAccountId] nvarchar(50) NULL, [PaymentDate] datetime2 NOT NULL, [Amount] float NOT NULL, [Description] nvarchar(4000) NULL, CONSTRAINT [PK_CashTransactionPayment] PRIMARY KEY ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashTransaction_CashTransactionId] FOREIGN KEY ([CashTransactionId]) REFERENCES [dbo].[CashTransaction] ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashAccount_CashAccountId] FOREIGN KEY ([CashAccountId]) REFERENCES [dbo].[CashAccount] ([Id])); CREATE INDEX [IX_CashTransactionPayment_CashTransactionId] ON [dbo].[CashTransactionPayment] ([CashTransactionId]); CREATE INDEX [IX_CashTransactionPayment_CashAccountId] ON [dbo].[CashTransactionPayment] ([CashAccountId]); CREATE INDEX [IX_CashTransactionPayment_PaymentDate] ON [dbo].[CashTransactionPayment] ([PaymentDate]); END;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL ALTER TABLE [dbo].[CashTransactionPayment] ALTER COLUMN [CashAccountId] nvarchar(50) NULL;",

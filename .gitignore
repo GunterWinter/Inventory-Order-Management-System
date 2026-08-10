@@ -399,4 +399,6 @@ FodyWeavers.xsd
 /Presentation/ASPNET/ASPNET.csproj.user
 /Presentation/ASPNET/appsettings.json
 *.json
+!package.json
+!package-lock.json
 /Presentation/ASPNET/appsettings.json

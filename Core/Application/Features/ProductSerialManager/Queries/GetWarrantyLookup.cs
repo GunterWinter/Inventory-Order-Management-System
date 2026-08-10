@@ -1,6 +1,7 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,12 +18,21 @@ public record WarrantyLookupMovementDto
     public string? ToWarehouseName { get; init; }
     public DateTime? MovementDate { get; init; }
     public string? StatusName { get; init; }
+    public string? PurchaseOrderId { get; init; }
+    public string? PurchaseOrderNumber { get; init; }
+    public string? AllocationCustomerName { get; init; }
+    public string? AllocationProductName { get; init; }
+    public string? AllocationWarehouseName { get; init; }
+    public double? AllocationQuantity { get; init; }
+    public double? AllocationUnitPrice { get; init; }
+    public double? AllocationTotal { get; init; }
 }
 
 public record WarrantyLookupDto
 {
     public string? ProductSerialId { get; init; }
     public string? InternalSerialNumber { get; init; }
+    public string? ManufacturerSerialNumber { get; init; }
     public string? ProductName { get; init; }
     public string? StatusName { get; init; }
     public string? WarehouseName { get; init; }
@@ -39,11 +49,16 @@ public record WarrantyLookupDto
 public class GetWarrantyLookupResult
 {
     public List<WarrantyLookupDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
 public class GetWarrantyLookupRequest : IRequest<GetWarrantyLookupResult>
 {
     public string? Search { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
 }
 
 public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest, GetWarrantyLookupResult>
@@ -58,11 +73,14 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
     public async Task<GetWarrantyLookupResult> Handle(GetWarrantyLookupRequest request, CancellationToken cancellationToken)
     {
         var search = request.Search?.Trim() ?? string.Empty;
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
 
         IQueryable<ProductSerial> serialQuery = _context
             .Set<ProductSerial>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
+            .Where(x => x.Status != ProductSerialStatus.Voided)
             .Include(x => x.Product)
             .Include(x => x.CurrentWarehouse)
             .Include(x => x.SalesOrderItem)
@@ -73,13 +91,18 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
         {
             serialQuery = serialQuery.Where(x =>
                 (x.InternalSerialNumber != null && x.InternalSerialNumber.Contains(search)) ||
+                (x.ManufacturerSerialNumber != null && x.ManufacturerSerialNumber.Contains(search)) ||
                 (x.SalesOrderItem != null && x.SalesOrderItem.SalesOrder != null && x.SalesOrderItem.SalesOrder.Number != null && x.SalesOrderItem.SalesOrder.Number.Contains(search)) ||
+                (x.SalesOrderItem != null && x.SalesOrderItem.SalesOrder != null && x.SalesOrderItem.SalesOrder.Customer != null && x.SalesOrderItem.SalesOrder.Customer.Name != null && x.SalesOrderItem.SalesOrder.Customer.Name.Contains(search)) ||
                 (x.SalesOrderItem != null && x.SalesOrderItem.SalesOrder != null && x.SalesOrderItem.SalesOrder.Customer != null && x.SalesOrderItem.SalesOrder.Customer.PhoneNumber != null && x.SalesOrderItem.SalesOrder.Customer.PhoneNumber.Contains(search))
             );
         }
 
+        var totalCount = await serialQuery.CountAsync(cancellationToken);
         var serials = await serialQuery
             .OrderBy(x => x.InternalSerialNumber)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         var serialIds = serials.Select(x => x.Id).ToList();
@@ -109,19 +132,34 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .Select(x => x.ModuleId!)
             .Distinct()
             .ToList();
-        var allocationPurchaseOrders = await _context.Set<PurchaseOrderCostAllocation>()
+        var allocationDetails = await _context.Set<PurchaseOrderCostAllocation>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => allocationIds.Contains(x.Id))
-            .ToDictionaryAsync(x => x.Id, x => x.PurchaseOrderId, cancellationToken);
+            .Select(x => new
+            {
+                x.Id,
+                x.PurchaseOrderId,
+                PurchaseOrderNumber = x.PurchaseOrder != null ? x.PurchaseOrder.Number : null,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
+                ProductName = x.PurchaseOrderItem != null && x.PurchaseOrderItem.Product != null
+                    ? x.PurchaseOrderItem.Product.Name : null,
+                WarehouseName = x.Warehouse != null
+                    ? x.Warehouse.Name
+                    : x.PurchaseOrderItem != null && x.PurchaseOrderItem.Warehouse != null
+                        ? x.PurchaseOrderItem.Warehouse.Name : null,
+                x.Quantity,
+                x.UnitPrice,
+                Total = x.Amount ?? (x.Quantity ?? 0d) * (x.UnitPrice ?? 0d)
+            })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
 
         var movements = rawMovements.Select(x =>
         {
             var isAllocation = x.ModuleName == "CostAllocation";
-            var viewModuleId = isAllocation && x.ModuleId != null
-                && allocationPurchaseOrders.TryGetValue(x.ModuleId, out var purchaseOrderId)
-                    ? purchaseOrderId
-                    : x.ModuleId;
+            var allocation = isAllocation && x.ModuleId != null
+                ? allocationDetails.GetValueOrDefault(x.ModuleId)
+                : null;
             return new
             {
                 x.ProductSerialId,
@@ -130,12 +168,20 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
                     ModuleName = x.ModuleName,
                     ModuleId = x.ModuleId,
                     ModuleItemId = x.ModuleItemId,
-                    ViewModuleName = isAllocation ? nameof(PurchaseOrder) : x.ModuleName,
-                    ViewModuleId = viewModuleId,
+                    ViewModuleName = x.ModuleName,
+                    ViewModuleId = x.ModuleId,
                     FromWarehouseName = x.FromWarehouseName,
                     ToWarehouseName = x.ToWarehouseName,
                     MovementDate = x.MovementDate,
-                    StatusName = x.StatusName
+                    StatusName = x.StatusName,
+                    PurchaseOrderId = allocation?.PurchaseOrderId,
+                    PurchaseOrderNumber = allocation?.PurchaseOrderNumber,
+                    AllocationCustomerName = allocation?.CustomerName,
+                    AllocationProductName = allocation?.ProductName,
+                    AllocationWarehouseName = allocation?.WarehouseName,
+                    AllocationQuantity = allocation?.Quantity,
+                    AllocationUnitPrice = allocation?.UnitPrice,
+                    AllocationTotal = allocation?.Total
                 }
             };
         }).ToList();
@@ -150,6 +196,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
         {
             ProductSerialId = x.Id,
             InternalSerialNumber = x.InternalSerialNumber,
+            ManufacturerSerialNumber = x.ManufacturerSerialNumber,
             ProductName = x.Product?.Name,
             StatusName = x.Status.ToString(),
             WarehouseName = x.CurrentWarehouse?.Name,
@@ -163,6 +210,12 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             Movements = movementLookup.TryGetValue(x.Id, out var itemMovements) ? itemMovements : new List<WarrantyLookupMovementDto>()
         }).ToList();
 
-        return new GetWarrantyLookupResult { Data = data };
+        return new GetWarrantyLookupResult
+        {
+            Data = data,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 }

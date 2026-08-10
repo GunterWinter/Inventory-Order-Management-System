@@ -1,8 +1,10 @@
 using Application.Common.Repositories;
+using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ProductManager.Commands;
 
@@ -54,14 +56,17 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
 {
     private readonly ICommandRepository<Product> _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IQueryContext _queryContext;
 
     public UpdateProductHandler(
         ICommandRepository<Product> repository,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdateProductResult> Handle(UpdateProductRequest request, CancellationToken cancellationToken)
@@ -71,7 +76,30 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+        }
+
+        var requestedPhysical = request.Physical == true;
+        var requestedTrackingMode = requestedPhysical
+            ? request.SerialTrackingMode ?? SerialTrackingMode.InternalAuto
+            : SerialTrackingMode.None;
+        var currentTrackingMode = entity.Physical == true
+            ? entity.SerialTrackingMode ?? SerialTrackingMode.None
+            : SerialTrackingMode.None;
+        var trackingModeChanged = entity.Physical != requestedPhysical || currentTrackingMode != requestedTrackingMode;
+        if (trackingModeChanged)
+        {
+            var hasInventoryHistory = await _queryContext.Set<InventoryTransaction>()
+                .AsNoTracking()
+                .AnyAsync(x => x.ProductId == entity.Id, cancellationToken);
+            var hasSerialHistory = await _queryContext.Set<ProductSerial>()
+                .AsNoTracking()
+                .AnyAsync(x => x.ProductId == entity.Id, cancellationToken);
+            if (hasInventoryHistory || hasSerialHistory)
+            {
+                throw new InvalidOperationException(
+                    "Không thể đổi chế độ serial của hàng hóa đã có tồn kho hoặc lịch sử giao dịch.");
+            }
         }
 
         entity.UpdatedById = request.UpdatedById;
@@ -80,15 +108,13 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
         entity.UnitPrice = request.UnitPrice;
         entity.CostPrice = request.CostPrice;
         entity.ImageUrl = request.ImageUrl;
-        entity.Physical = request.Physical;
-        entity.SerialTrackingMode = request.Physical == true
-            ? request.SerialTrackingMode ?? SerialTrackingMode.InternalAuto
-            : SerialTrackingMode.None;
+        entity.Physical = requestedPhysical;
+        entity.SerialTrackingMode = requestedTrackingMode;
         entity.InternalSerialFixedCode = entity.SerialTrackingMode == SerialTrackingMode.InternalAuto
             ? NormalizeInternalSerialFixedCode(request.InternalSerialFixedCode)
             : null;
-        entity.DefaultWarehouseId = request.DefaultWarehouseId;
-        entity.DefaultWarrantyMonths = request.DefaultWarrantyMonths;
+        entity.DefaultWarehouseId = requestedPhysical ? request.DefaultWarehouseId : null;
+        entity.DefaultWarrantyMonths = requestedPhysical ? request.DefaultWarrantyMonths : null;
         entity.ReferenceCode = request.ReferenceCode;
         entity.Description = request.Description;
         entity.UnitMeasureName = request.UnitMeasureName;

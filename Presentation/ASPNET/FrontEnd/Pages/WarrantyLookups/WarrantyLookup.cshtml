@@ -13,8 +13,8 @@
                 <div class="card-body">
                     <div class="row g-2 align-items-end">
                         <div class="col-md-8">
-                            <label class="form-label">Serial number, SO number, or customer phone</label>
-                            <div ref="searchTextRef"></div>
+                            <label class="form-label">Serial nội bộ, serial nhà sản xuất, số đơn bán, khách hàng hoặc số điện thoại</label>
+                            <input ref="searchTextRef" type="text">
                         </div>
                         <div class="col-md-4">
                             <button type="button" class="btn btn-primary" v-on:click="methods.lookupWarranty">
@@ -55,7 +55,27 @@
                         </div>
                     </div>
                     
-                    <div v-if="!state.docLoading && state.docData" class="container-fluid py-2">
+                    <div v-if="!state.docLoading && state.docData && state.docType === 'CostAllocation'" class="container-fluid py-2">
+                        <div class="card shadow-sm border-0">
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-4"><label class="form-label text-muted small">Đơn mua hàng</label><div class="fw-bold">{{ state.docData.purchaseOrderNumber || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Công trình / Khách hàng</label><div class="fw-bold">{{ state.docData.allocationCustomerName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Ngày giao dịch</label><div class="fw-bold">{{ methods.formatDateTime(state.docData.movementDate) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Hàng hóa</label><div>{{ state.docData.allocationProductName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Kho</label><div>{{ state.docData.allocationWarehouseName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Số lượng</label><div>{{ methods.formatNumber(state.docData.allocationQuantity) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Đơn giá</label><div>{{ methods.formatNumber(state.docData.allocationUnitPrice) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Thành tiền</label><div class="fw-bold">{{ methods.formatNumber(state.docData.allocationTotal) }}</div></div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-white text-end" v-if="state.docData.purchaseOrderId">
+                                <button type="button" class="btn btn-outline-primary" v-on:click="methods.openDocumentView('PurchaseOrder', state.docData.purchaseOrderId)">Xem đơn mua hàng</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else-if="!state.docLoading && state.docData" class="container-fluid py-2">
                         <div class="card mb-3 shadow-sm border-0">
                             <div class="card-body">
                                 <div class="row g-3">
@@ -146,5 +166,5 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/WarrantyLookups/WarrantyLookup.cshtml.js"></script>
+    <script src="~/FrontEnd/Pages/WarrantyLookups/WarrantyLookup.cshtml.js" asp-append-version="true"></script>
 }

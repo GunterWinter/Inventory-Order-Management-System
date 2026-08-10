@@ -1,6 +1,5 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
-using AutoMapper;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -26,13 +25,6 @@ public record GetInventoryStockListDto
 }
 
 
-public class GetInventoryStockListProfile : Profile
-{
-    public GetInventoryStockListProfile()
-    {
-    }
-}
-
 public class GetInventoryStockListResult
 {
     public List<GetInventoryStockListDto>? Data { get; init; }
@@ -46,12 +38,10 @@ public class GetInventoryStockListRequest : IRequest<GetInventoryStockListResult
 
 public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockListRequest, GetInventoryStockListResult>
 {
-    private readonly IMapper _mapper;
     private readonly IQueryContext _context;
 
-    public GetInventoryStockListHandler(IMapper mapper, IQueryContext context)
+    public GetInventoryStockListHandler(IQueryContext context)
     {
-        _mapper = mapper;
         _context = context;
     }
 
@@ -69,17 +59,25 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.Warehouse!.SystemWarehouse == false &&
                 x.Status == Domain.Enums.InventoryTransactionStatus.Confirmed
             )
-            .GroupBy(x => new { x.WarehouseId, x.ProductId })
+            .GroupBy(x => new
+            {
+                x.WarehouseId,
+                WarehouseName = x.Warehouse!.Name,
+                x.ProductId,
+                ProductName = x.Product!.Name,
+                ProductNumber = x.Product.Number,
+                ProductReferenceCode = x.Product.ReferenceCode
+            })
             .Select(group => new GetInventoryStockListDto
             {
                 WarehouseId = group.Key.WarehouseId,
                 ProductId = group.Key.ProductId,
-                WarehouseName = group.Max(x => x.Warehouse!.Name),
-                ProductName = group.Max(x => x.Product!.Name),
-                ProductNumber = group.Max(x => x.Product!.Number),
-                ProductReferenceCode = group.Max(x => x.Product!.ReferenceCode),
+                WarehouseName = group.Key.WarehouseName,
+                ProductName = group.Key.ProductName,
+                ProductNumber = group.Key.ProductNumber,
+                ProductReferenceCode = group.Key.ProductReferenceCode,
                 Stock = group.Sum(x => x.Stock),
-                StatusName = group.Max(x => x.Status.ToString()),
+                StatusName = nameof(InventoryTransactionStatus.Confirmed),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
             })
             .AsQueryable();
@@ -96,24 +94,54 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.CurrentWarehouse != null &&
                 x.CurrentWarehouse.SystemWarehouse == false &&
                 (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer))
-            .GroupBy(x => new { x.CurrentWarehouseId, x.ProductId })
+            .GroupBy(x => new
+            {
+                x.CurrentWarehouseId,
+                WarehouseName = x.CurrentWarehouse!.Name,
+                x.ProductId,
+                ProductName = x.Product!.Name,
+                ProductNumber = x.Product.Number,
+                ProductReferenceCode = x.Product.ReferenceCode
+            })
             .Select(group => new GetInventoryStockListDto
             {
                 WarehouseId = group.Key.CurrentWarehouseId,
                 ProductId = group.Key.ProductId,
-                WarehouseName = group.Max(x => x.CurrentWarehouse!.Name),
-                ProductName = group.Max(x => x.Product!.Name),
-                ProductNumber = group.Max(x => x.Product!.Number),
-                ProductReferenceCode = group.Max(x => x.Product!.ReferenceCode),
+                WarehouseName = group.Key.WarehouseName,
+                ProductName = group.Key.ProductName,
+                ProductNumber = group.Key.ProductNumber,
+                ProductReferenceCode = group.Key.ProductReferenceCode,
                 Stock = group.Count(),
                 StatusName = nameof(InventoryTransactionStatus.Confirmed),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
             })
             .ToListAsync(cancellationToken);
 
-        entities.AddRange(serialStock);
+        entities = entities
+            .Concat(serialStock)
+            .GroupBy(x => new { x.WarehouseId, x.ProductId })
+            .Select(group =>
+            {
+                var first = group.First();
+                return new GetInventoryStockListDto
+                {
+                    WarehouseId = group.Key.WarehouseId,
+                    WarehouseName = first.WarehouseName,
+                    ProductId = group.Key.ProductId,
+                    ProductName = first.ProductName,
+                    ProductNumber = first.ProductNumber,
+                    ProductReferenceCode = first.ProductReferenceCode,
+                    Stock = group.Sum(x => x.Stock ?? 0d),
+                    StatusName = nameof(InventoryTransactionStatus.Confirmed),
+                    CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
+                };
+            })
+            .ToList();
 
         // Lookup supplier warranty from PurchaseOrderItem (latest PO date wins)
+        var productIds = entities.Select(x => x.ProductId).Where(x => x != null).Distinct().ToList();
+        var warehouseIds = entities.Select(x => x.WarehouseId).Where(x => x != null).Distinct().ToList();
+
         var warrantyLookup = await _context
             .Set<PurchaseOrderItem>()
             .AsNoTracking()
@@ -122,7 +150,9 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
             .Where(x =>
                 x.SupplierWarrantyMonths != null &&
                 x.PurchaseOrder != null &&
-                x.PurchaseOrder.OrderDate != null
+                x.PurchaseOrder.OrderDate != null &&
+                productIds.Contains(x.ProductId) &&
+                warehouseIds.Contains(x.WarehouseId)
             )
             .Select(x => new
             {

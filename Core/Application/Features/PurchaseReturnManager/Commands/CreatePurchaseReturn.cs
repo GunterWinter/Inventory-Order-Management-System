@@ -65,7 +65,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(PurchaseReturn), "", "PRN");
         entity.ReturnDate = request.ReturnDate;
-        entity.Status = (PurchaseReturnStatus)int.Parse(request.Status!);
+        entity.Status = PurchaseReturnStatus.Draft;
         entity.Description = request.Description;
         entity.PurchaseOrderId = request.PurchaseOrderId;
 

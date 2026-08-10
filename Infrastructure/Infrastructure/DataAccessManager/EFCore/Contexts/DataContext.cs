@@ -44,15 +44,11 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<PurchaseOrderItem> PurchaseOrderItem { get; set; }
     public DbSet<PurchaseOrderCostAllocation> PurchaseOrderCostAllocation { get; set; }
     public DbSet<InventoryTransaction> InventoryTransaction { get; set; }
-    public DbSet<DeliveryOrder> DeliveryOrder { get; set; }
-    public DbSet<GoodsReceive> GoodsReceive { get; set; }
     public DbSet<SalesReturn> SalesReturn { get; set; }
     public DbSet<PurchaseReturn> PurchaseReturn { get; set; }
     public DbSet<TransferIn> TransferIn { get; set; }
     public DbSet<TransferOut> TransferOut { get; set; }
     public DbSet<StockCount> StockCount { get; set; }
-    public DbSet<NegativeAdjustment> NegativeAdjustment { get; set; }
-    public DbSet<PositiveAdjustment> PositiveAdjustment { get; set; }
     public DbSet<Scrapping> Scrapping { get; set; }
     public DbSet<CashAccount> CashAccount { get; set; }
     public DbSet<CashCategory> CashCategory { get; set; }
@@ -96,15 +92,11 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
         modelBuilder.ApplyConfiguration(new PurchaseOrderConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseOrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new InventoryTransactionConfiguration());
-        modelBuilder.ApplyConfiguration(new DeliveryOrderConfiguration());
-        modelBuilder.ApplyConfiguration(new GoodsReceiveConfiguration());
         modelBuilder.ApplyConfiguration(new SalesReturnConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseReturnConfiguration());
         modelBuilder.ApplyConfiguration(new TransferInConfiguration());
         modelBuilder.ApplyConfiguration(new TransferOutConfiguration());
         modelBuilder.ApplyConfiguration(new StockCountConfiguration());
-        modelBuilder.ApplyConfiguration(new NegativeAdjustmentConfiguration());
-        modelBuilder.ApplyConfiguration(new PositiveAdjustmentConfiguration());
         modelBuilder.ApplyConfiguration(new ScrappingConfiguration());
         modelBuilder.ApplyConfiguration(new PurchaseOrderCostAllocationConfiguration());
         modelBuilder.ApplyConfiguration(new CashAccountConfiguration());

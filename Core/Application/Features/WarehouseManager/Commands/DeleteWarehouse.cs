@@ -1,4 +1,5 @@
 ﻿using Application.Common.Repositories;
+using Application.Features.MasterDataManager;
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
@@ -28,14 +29,17 @@ public class DeleteWarehouseHandler : IRequestHandler<DeleteWarehouseRequest, De
 {
     private readonly ICommandRepository<Warehouse> _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly MasterDataDeletionGuard _deletionGuard;
 
     public DeleteWarehouseHandler(
         ICommandRepository<Warehouse> repository,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        MasterDataDeletionGuard deletionGuard
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _deletionGuard = deletionGuard;
     }
 
     public async Task<DeleteWarehouseResult> Handle(DeleteWarehouseRequest request, CancellationToken cancellationToken)
@@ -45,13 +49,15 @@ public class DeleteWarehouseHandler : IRequestHandler<DeleteWarehouseRequest, De
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
 
         if (entity.SystemWarehouse == true)
         {
             throw new Exception($"Updating system warehouse is not allowed.");
         }
+
+        await _deletionGuard.EnsureWarehouseCanBeDeletedAsync(entity.Id, entity.Name, cancellationToken);
 
         entity.UpdatedById = request.DeletedById;
 

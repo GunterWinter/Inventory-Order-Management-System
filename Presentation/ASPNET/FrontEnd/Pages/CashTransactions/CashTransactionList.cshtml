@@ -91,12 +91,12 @@
                                                           v-bind:disabled="!methods.canEditRestrictedFields()"></textarea>
                                             </div>
                                         </div>
-                                        <div class="d-flex justify-content-end mb-2">
+                                        <div v-if="methods.canShowAllocationToggle()" class="d-flex justify-content-end mb-2">
                                             <button type="button" class="btn btn-sm btn-outline-secondary" v-on:click="methods.toggleAllocationDetails()">
                                                 {{ state.showAllocationDetails ? 'Ẩn Chi tiết' : 'Chi tiết' }}
                                             </button>
                                         </div>
-                                        <div v-if="state.showAllocationDetails" class="card card-body bg-light mb-2">
+                                        <div v-if="methods.shouldShowAllocationPanel()" class="card card-body bg-light mb-2">
                                             <div class="d-flex justify-content-between align-items-center mb-2">
                                                 <strong>Phân bổ</strong>
                                                 <button type="button" class="btn btn-sm btn-outline-primary" v-on:click="methods.addAllocation()" v-bind:disabled="!methods.canEditPrimaryFields()">Thêm dòng</button>
@@ -117,35 +117,32 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="card mt-3" v-if="state.sourceModule === 'PurchaseOrder'">
-                                    <div class="card-header"><h5>Cost Allocation Details</h5></div>
+                                <div class="card mt-3" v-if="methods.shouldShowGoodsPanel()">
+                                    <div class="card-header"><h5>Hàng hóa</h5></div>
                                     <div class="card-body table-responsive">
-                                        <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Loading source details...</div>
+                                        <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Đang tải chi tiết hàng hóa...</div>
                                         <div v-else-if="state.sourceDetailsError" class="alert alert-danger mb-2">{{ state.sourceDetailsError }}</div>
-                                        <table class="table table-sm table-bordered">
-                                            <thead><tr><th>Hàng hóa</th><th>Khách hàng</th><th>Kho</th><th class="text-end">Số lượng</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th></tr></thead>
+                                        <table v-else class="table table-sm table-bordered mb-0">
+                                            <thead><tr><th>Hàng hóa</th><th>Khách hàng</th><th>Kho</th><th class="text-end">Số lượng</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th>Serial</th></tr></thead>
                                             <tbody>
                                                 <tr v-for="item in state.allocationDetails" v-bind:key="`${item.productName}-${item.customerName}-${item.warehouseName}`">
                                                     <td>{{ item.productName }}</td><td>{{ item.customerName || '—' }}</td><td>{{ item.warehouseName || '—' }}</td>
-                                                    <td class="text-end">{{ methods.formatNumber(item.quantity) }}</td><td class="text-end">{{ methods.formatMoney(item.unitPrice) }}</td><td class="text-end">{{ methods.formatMoney(item.total) }}</td>
+                                                    <td class="text-end">{{ methods.formatNumber(item.quantity) }}</td><td class="text-end">{{ methods.formatMoney(item.unitPrice) }}</td><td class="text-end">{{ methods.formatMoney(item.total) }}</td><td>{{ item.productSerialNumbers || '—' }}</td>
                                                 </tr>
-                                                <tr v-if="!state.sourceDetailsLoading && state.allocationDetails.length === 0"><td colspan="6" class="text-center text-muted">Không có chi tiết phân bổ</td></tr>
+                                                <tr v-if="state.allocationDetails.length === 0"><td colspan="7" class="text-center text-danger">Dữ liệu chứng từ nguồn không có dòng hàng hóa. Vui lòng kiểm tra lại chứng từ nguồn.</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
-                                <div class="card mt-3" v-if="state.id">
-                                    <div class="card-header"><h5>Payment History</h5></div>
+                                <div class="card mt-3" v-if="state.paymentHistory.length > 0">
+                                    <div class="card-header"><h5>Lịch sử thanh toán</h5></div>
                                     <div class="card-body table-responsive">
-                                        <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Loading source details...</div>
-                                        <div v-else-if="state.sourceDetailsError" class="alert alert-danger mb-2">{{ state.sourceDetailsError }}</div>
-                                        <table class="table table-sm table-bordered">
-                                            <thead><tr><th>Payment Date</th><th>Cash Account</th><th class="text-end">Amount</th><th>Description</th></tr></thead>
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead><tr><th>Ngày thanh toán</th><th>Tài khoản quỹ</th><th class="text-end">Số tiền</th><th>Diễn giải</th></tr></thead>
                                             <tbody>
                                                 <tr v-for="payment in state.paymentHistory" v-bind:key="payment.id">
                                                     <td>{{ methods.formatDate(payment.paymentDate) }}</td><td>{{ payment.cashAccountName }}</td><td class="text-end">{{ methods.formatMoney(payment.amount) }}</td><td>{{ payment.description }}</td>
                                                 </tr>
-                                                <tr v-if="!state.sourceDetailsLoading && state.paymentHistory.length === 0"><td colspan="4" class="text-center text-muted">No payments</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
@@ -241,5 +238,5 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/CashTransactions/CashTransactionList.cshtml.js"></script>
+    <script src="~/FrontEnd/Pages/CashTransactions/CashTransactionList.cshtml.js" asp-append-version="true"></script>
 }

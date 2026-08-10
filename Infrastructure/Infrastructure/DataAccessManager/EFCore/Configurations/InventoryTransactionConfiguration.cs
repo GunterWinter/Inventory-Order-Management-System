@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
 
@@ -31,6 +32,8 @@ public class InventoryTransactionConfiguration : BaseEntityConfiguration<Invento
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.ModuleName);
         builder.HasIndex(e => e.ModuleCode);
+        builder.HasIndex(e => new { e.IsDeleted, e.Status, e.ProductId, e.WarehouseId })
+            .HasDatabaseName("IX_InventoryTransaction_StockLookup");
     }
 }
 

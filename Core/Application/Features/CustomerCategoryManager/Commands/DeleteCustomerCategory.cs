@@ -1,4 +1,5 @@
 ﻿using Application.Common.Repositories;
+using Application.Features.MasterDataManager;
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
@@ -28,14 +29,17 @@ public class DeleteCustomerCategoryHandler : IRequestHandler<DeleteCustomerCateg
 {
     private readonly ICommandRepository<CustomerCategory> _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly MasterDataDeletionGuard _deletionGuard;
 
     public DeleteCustomerCategoryHandler(
         ICommandRepository<CustomerCategory> repository,
-        IUnitOfWork unitOfWork
+        IUnitOfWork unitOfWork,
+        MasterDataDeletionGuard deletionGuard
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _deletionGuard = deletionGuard;
     }
 
     public async Task<DeleteCustomerCategoryResult> Handle(DeleteCustomerCategoryRequest request, CancellationToken cancellationToken)
@@ -45,8 +49,10 @@ public class DeleteCustomerCategoryHandler : IRequestHandler<DeleteCustomerCateg
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
         }
+
+        await _deletionGuard.EnsureCustomerCategoryCanBeDeletedAsync(entity.Id, entity.Name, cancellationToken);
 
         entity.UpdatedById = request.DeletedById;
 

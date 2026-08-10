@@ -1,27 +1,27 @@
 @page
 @{
-    ViewData["Title"] = "Finance Report";
+    ViewData["Title"] = "Báo Cáo Tài Chính";
 }
 
 <div id="app" v-cloak>
     <div class="row mb-3">
         <div class="col-12">
-            <h3 class="mb-0">Customer Profit Report</h3>
+            <h3 class="mb-0">Báo Cáo Tài Chính Công Trình</h3>
         </div>
     </div>
     <div class="row mb-3">
         <div class="col-md-4 mb-2">
             <div class="card">
                 <div class="card-body">
-                    <div class="text-muted">Actual Received</div>
-                    <h4 class="mb-0">{{ state.summary.actualReceivedText }}</h4>
+                    <div class="text-muted">Doanh Thu</div>
+                    <h4 class="mb-0">{{ state.summary.revenueText }}</h4>
                 </div>
             </div>
         </div>
         <div class="col-md-4 mb-2">
             <div class="card">
                 <div class="card-body">
-                    <div class="text-muted">Project Cost</div>
+                    <div class="text-muted">Chi Phí Công Trình</div>
                     <h4 class="mb-0">{{ state.summary.projectCostText }}</h4>
                 </div>
             </div>
@@ -29,7 +29,7 @@
         <div class="col-md-4 mb-2">
             <div class="card">
                 <div class="card-body">
-                    <div class="text-muted">Profit</div>
+                    <div class="text-muted">Lợi Nhuận</div>
                     <h4 class="mb-0">{{ state.summary.profitText }}</h4>
                 </div>
             </div>
@@ -42,25 +42,25 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4 mb-2">
-                            <label for="Customer">Partner</label>
+                            <label for="Customer">Khách Hàng / Công Trình</label>
                             <div id="CustomerDropDown" ref="customerRef"></div>
                         </div>
                         <div class="col-md-3 mb-2">
-                            <label for="FromDate">From Date</label>
+                            <label for="FromDate">Từ Ngày</label>
                             <input id="FromDatePicker" ref="fromDateRef" />
                         </div>
                         <div class="col-md-3 mb-2">
-                            <label for="ToDate">To Date</label>
+                            <label for="ToDate">Đến Ngày</label>
                             <input id="ToDatePicker" ref="toDateRef" />
                         </div>
                         <div class="col-md-2 mb-2 d-flex align-items-end">
-                            <button type="button" class="btn btn-secondary w-100" v-on:click="handler.handleClearFilters">Clear Filters</button>
+                            <button type="button" class="btn btn-secondary w-100" v-on:click="handler.handleClearFilters">Xóa Bộ Lọc</button>
                         </div>
                     </div>
-                    <div class="text-muted small">Only paid amounts from customer-linked transactions are included. Vendor obligations are excluded.</div>
+                    <div class="text-muted small">Doanh thu bán hàng đã xác nhận và chi phí phân bổ được ghi nhận không phụ thuộc trạng thái thanh toán.</div>
                     <div v-if="state.error" class="alert alert-warning mt-3 mb-0">
                         <span>{{ state.error }}</span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" v-on:click="handler.handleRetry">Retry</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" v-on:click="handler.handleRetry">Thử lại</button>
                     </div>
                 </div>
             </div>
@@ -77,5 +77,5 @@
 </div>
 
 @section scripts {
-    <script src="~/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js?v=20260806-2"></script>
+    <script src="~/FrontEnd/Pages/CashTransactions/CustomerFinanceReport.cshtml.js?v=20260810-1"></script>
 }

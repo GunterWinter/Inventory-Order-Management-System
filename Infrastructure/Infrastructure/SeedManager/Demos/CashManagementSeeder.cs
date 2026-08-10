@@ -129,8 +129,35 @@ public class CashManagementSeeder
                 vendorId: demoPurchaseOrder.VendorId);
         }
 
+        var serialSaleId = await _queryContext.Set<SalesOrder>().AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Description == DemoSeedData.SerialSaleDescription)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+        var partialReceivable = await _cashTransactionRepository.GetQuery()
+            .FirstOrDefaultAsync(x => !x.IsDeleted && x.SourceModule == nameof(SalesOrder)
+                && x.SourceModuleId == serialSaleId);
+        if (partialReceivable != null && (partialReceivable.PaidAmount ?? 0d) == 0d)
+        {
+            var partialAmount = Math.Min(1_000_000d, (partialReceivable.Amount ?? 0d) / 2d);
+            partialReceivable.CashAccountId = companyAccount.Id;
+            partialReceivable.PaidAmount = partialAmount;
+            partialReceivable.Status = CashTransactionStatus.PartiallyPaid;
+            partialReceivable.UpdatedById = "demo-seeder";
+            _cashTransactionRepository.Update(partialReceivable);
+            await _cashTransactionPaymentRepository.CreateAsync(new CashTransactionPayment
+            {
+                CashTransactionId = partialReceivable.Id,
+                CashAccountId = companyAccount.Id,
+                PaymentDate = DemoSeedData.BaseDate.AddDays(9),
+                Amount = partialAmount,
+                Description = "DEMO THANH TOÁN MỘT PHẦN SO SERIAL",
+                CreatedById = "demo-seeder"
+            });
+            await _unitOfWork.SaveAsync();
+        }
+
         await CreateTransactionAsync(
-            date: new DateTime(2026, 4, 7),
+            date: DemoSeedData.BaseDate.AddDays(20),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Paid,
             amount: 50_000d,
@@ -139,7 +166,7 @@ public class CashManagementSeeder
             cashCategoryId: categories["Xăng xe"].Id);
 
         await CreateTransactionAsync(
-            date: new DateTime(2026, 4, 8),
+            date: DemoSeedData.BaseDate.AddDays(21),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Paid,
             amount: 2_500_000d,
@@ -148,7 +175,7 @@ public class CashManagementSeeder
             cashCategoryId: categories["Gia công"].Id);
 
         await CreateTransactionAsync(
-            date: new DateTime(2026, 4, 9),
+            date: DemoSeedData.BaseDate.AddDays(22),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Unpaid,
             amount: 8_000_000d,
@@ -157,7 +184,7 @@ public class CashManagementSeeder
             cashCategoryId: categories["Lương nhân viên"].Id);
 
         await CreateTransactionAsync(
-            date: new DateTime(2026, 4, 10),
+            date: DemoSeedData.BaseDate.AddDays(23),
             type: CashTransactionType.Debit,
             status: CashTransactionStatus.Paid,
             amount: 5_000_000d,

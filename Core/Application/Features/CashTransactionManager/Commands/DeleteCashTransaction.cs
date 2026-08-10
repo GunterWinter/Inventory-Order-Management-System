@@ -56,75 +56,99 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
 
     public async Task<DeleteCashTransactionResult> Handle(DeleteCashTransactionRequest request, CancellationToken cancellationToken)
     {
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
+        CashTransaction? entity = null;
+        var affectedAccountIds = new List<string?>();
 
-        if (entity == null)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct);
 
-        var affectedAccountIds = new List<string?> { entity.CashAccountId };
-        var transactionIds = new List<string> { entity.Id };
-
-        entity.UpdatedById = request.DeletedById;
-
-        // Deleting one leg of a cash transfer removes the paired leg as well
-        string? siblingAccountId = null;
-        if (entity.SourceModule == "CashTransfer" && !string.IsNullOrEmpty(entity.SourceModuleId))
-        {
-            var siblingId = await _queryContext
-                .CashTransaction
-                .AsNoTracking()
-                .Where(x => !x.IsDeleted
-                    && x.SourceModule == "CashTransfer"
-                    && x.SourceModuleId == entity.SourceModuleId
-                    && x.Id != entity.Id)
-                .Select(x => x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (!string.IsNullOrEmpty(siblingId))
+            if (entity == null)
             {
-                var sibling = await _repository.GetAsync(siblingId, cancellationToken);
-                if (sibling != null)
+                throw new InvalidOperationException("Không tìm thấy giao dịch thu chi cần xóa.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(entity.SourceModule)
+                && !string.Equals(entity.SourceModule, "CashTransfer", StringComparison.OrdinalIgnoreCase))
+            {
+                var sourceName = GetSourceName(entity.SourceModule);
+                var sourceNumber = string.IsNullOrWhiteSpace(entity.SourceModuleNumber)
+                    ? entity.SourceModuleId
+                    : entity.SourceModuleNumber;
+                throw new InvalidOperationException(
+                    $"Không thể xóa giao dịch tự sinh từ {sourceName} {sourceNumber}. " +
+                    "Hãy hủy hoặc hoàn tác chứng từ nguồn để tồn kho, công nợ và số dư được cập nhật đồng bộ.");
+            }
+
+            affectedAccountIds.Add(entity.CashAccountId);
+            var transactionIds = new List<string> { entity.Id };
+            entity.UpdatedById = request.DeletedById;
+
+            // Xóa một vế chuyển quỹ phải xóa cả vế đối ứng trong cùng transaction.
+            if (entity.SourceModule == "CashTransfer" && !string.IsNullOrEmpty(entity.SourceModuleId))
+            {
+                var siblingId = await _queryContext
+                    .CashTransaction
+                    .AsNoTracking()
+                    .Where(x => !x.IsDeleted
+                        && x.SourceModule == "CashTransfer"
+                        && x.SourceModuleId == entity.SourceModuleId
+                        && x.Id != entity.Id)
+                    .Select(x => x.Id)
+                    .FirstOrDefaultAsync(ct);
+
+                if (!string.IsNullOrEmpty(siblingId))
                 {
-                    siblingAccountId = sibling.CashAccountId;
-                    affectedAccountIds.Add(siblingAccountId);
-                    transactionIds.Add(sibling.Id);
-                    sibling.UpdatedById = request.DeletedById;
-                    _repository.Delete(sibling);
+                    var sibling = await _repository.GetAsync(siblingId, ct);
+                    if (sibling != null)
+                    {
+                        affectedAccountIds.Add(sibling.CashAccountId);
+                        transactionIds.Add(sibling.Id);
+                        sibling.UpdatedById = request.DeletedById;
+                        _repository.Delete(sibling);
+                    }
                 }
             }
-        }
 
-        var payments = await _paymentRepository.GetQuery()
-            .Where(x => !x.IsDeleted && transactionIds.Contains(x.CashTransactionId))
-            .ToListAsync(cancellationToken);
-        var allocations = await _allocationRepository.GetQuery()
-            .Where(x => !x.IsDeleted && x.CashTransactionId != null && transactionIds.Contains(x.CashTransactionId))
-            .ToListAsync(cancellationToken);
-        foreach (var payment in payments)
-        {
-            payment.UpdatedById = request.DeletedById;
-            affectedAccountIds.Add(payment.CashAccountId);
-            _paymentRepository.Delete(payment);
-        }
-        foreach (var allocation in allocations)
-        {
-            allocation.UpdatedById = request.DeletedById;
-            _allocationRepository.Delete(allocation);
-        }
+            var payments = await _paymentRepository.GetQuery()
+                .Where(x => !x.IsDeleted && transactionIds.Contains(x.CashTransactionId))
+                .ToListAsync(ct);
+            var allocations = await _allocationRepository.GetQuery()
+                .Where(x => !x.IsDeleted && x.CashTransactionId != null && transactionIds.Contains(x.CashTransactionId))
+                .ToListAsync(ct);
+            foreach (var payment in payments)
+            {
+                payment.UpdatedById = request.DeletedById;
+                affectedAccountIds.Add(payment.CashAccountId);
+                _paymentRepository.Delete(payment);
+            }
+            foreach (var allocation in allocations)
+            {
+                allocation.UpdatedById = request.DeletedById;
+                _allocationRepository.Delete(allocation);
+            }
 
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
 
-        await _cashBalanceService.RecalculateManyAsync(
-            affectedAccountIds.Where(x => !string.IsNullOrWhiteSpace(x)),
-            cancellationToken);
+            await _cashBalanceService.RecalculateManyAsync(
+                affectedAccountIds.Where(x => !string.IsNullOrWhiteSpace(x)), ct);
+        }, cancellationToken);
 
         return new DeleteCashTransactionResult
         {
-            Data = entity
+            Data = entity!
         };
     }
+
+    private static string GetSourceName(string? module) => module?.ToLowerInvariant() switch
+    {
+        "purchaseorder" => "đơn mua hàng",
+        "salesorder" => "đơn bán hàng",
+        "materialexport" => "phiếu xuất vật tư",
+        "salesreturn" => "phiếu trả hàng bán",
+        "purchasereturn" => "phiếu trả hàng mua",
+        _ => "chứng từ nguồn"
+    };
 
 }

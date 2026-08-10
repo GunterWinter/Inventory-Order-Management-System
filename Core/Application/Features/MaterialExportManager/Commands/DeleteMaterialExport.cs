@@ -54,12 +54,12 @@ public class DeleteMaterialExportHandler : IRequestHandler<DeleteMaterialExportR
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Không tìm thấy phiếu xuất vật tư cần xóa.");
         }
 
         if (entity.Status != MaterialExportStatus.Draft)
         {
-            throw new InvalidOperationException("Only draft material exports can be deleted.");
+            throw new InvalidOperationException("Chỉ phiếu xuất vật tư Nháp mới được xóa. Phiếu đã xác nhận phải dùng chức năng Hủy.");
         }
 
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>

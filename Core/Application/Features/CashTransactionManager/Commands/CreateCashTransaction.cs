@@ -43,8 +43,9 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
     public CreateCashTransactionValidator()
     {
         RuleFor(x => x.Amount).GreaterThan(0);
-        RuleFor(x => x.Allocations).Must((r, a) => (a?.Sum(x => x.Amount) ?? 0d) <= (r.Amount ?? 0d) + 0.000001d)
-            .WithMessage("Allocation total cannot exceed transaction amount.");
+        RuleFor(x => x.Allocations).Must((r, a) => a == null || a.Count == 0
+                || Math.Abs(a.Where(x => x.Amount > 0d).Sum(x => x.Amount) - (r.Amount ?? 0d)) <= 0.000001d)
+            .WithMessage("Allocation total must equal transaction amount.");
         RuleFor(x => x.PaidAmount)
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)
@@ -80,6 +81,10 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
 
     public async Task<CreateCashTransactionResult> Handle(CreateCashTransactionRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.Allocations?.Count > 0
+            && Math.Abs(request.Allocations.Where(x => x.Amount > 0d).Sum(x => x.Amount) - (request.Amount ?? 0d)) > 0.000001d)
+            throw new InvalidOperationException("Allocation total must equal transaction amount.");
+
         var entity = new CashTransaction();
         entity.CreatedById = request.CreatedById;
 

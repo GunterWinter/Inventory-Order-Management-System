@@ -1,9 +1,11 @@
 ﻿using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
+using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.StockCountManager.Commands;
 
@@ -38,48 +40,80 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
     private readonly ICommandRepository<StockCount> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IQueryContext _queryContext;
 
     public UpdateStockCountHandler(
         ICommandRepository<StockCount> repository,
         IUnitOfWork unitOfWork,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IQueryContext queryContext
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _queryContext = queryContext;
     }
 
     public async Task<UpdateStockCountResult> Handle(UpdateStockCountRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        StockCount? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Không tìm thấy phiếu kiểm kê cần cập nhật.");
+            if (!int.TryParse(request.Status, out var statusValue)
+                || !Enum.IsDefined(typeof(StockCountStatus), statusValue))
+                throw new InvalidOperationException("Trạng thái phiếu kiểm kê không hợp lệ.");
+            var requestedStatus = (StockCountStatus)statusValue;
+            if (entity.Status == StockCountStatus.Draft)
+            {
+                if (requestedStatus is StockCountStatus.Cancelled or StockCountStatus.Archived)
+                    throw new InvalidOperationException("Phiếu kiểm kê Nháp phải được xóa hoặc xác nhận.");
+            }
+            else
+            {
+                var headerChanged = entity.CountDate != request.CountDate
+                    || entity.WarehouseId != request.WarehouseId
+                    || entity.Description != request.Description;
+                if (entity.Status != StockCountStatus.Confirmed
+                    || requestedStatus is not (StockCountStatus.Cancelled or StockCountStatus.Archived)
+                    || headerChanged)
+                    throw new InvalidOperationException("Phiếu kiểm kê đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+                if (requestedStatus == StockCountStatus.Cancelled)
+                {
+                    var lines = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+                        .Where(x => !x.IsDeleted && x.ModuleName == nameof(StockCount) && x.ModuleId == entity.Id)
+                        .Select(x => new { x.ProductId, x.WarehouseId, x.MovementDate })
+                        .ToListAsync(ct);
+                    foreach (var line in lines)
+                    {
+                        var newerDocument = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+                            .Where(x => !x.IsDeleted && x.Status == InventoryTransactionStatus.Confirmed
+                                && x.ProductId == line.ProductId && x.WarehouseId == line.WarehouseId
+                                && !(x.ModuleName == nameof(StockCount) && x.ModuleId == entity.Id)
+                                && x.MovementDate > line.MovementDate)
+                            .Select(x => x.ModuleNumber ?? x.Number)
+                            .FirstOrDefaultAsync(ct);
+                        if (newerDocument != null)
+                            throw new InvalidOperationException($"Không thể hủy phiếu kiểm kê {entity.Number}: hàng hóa đã có giao dịch mới hơn tại {newerDocument}. Hãy hoàn tác giao dịch mới hơn trước.");
+                    }
+                }
+            }
 
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.CountDate = request.CountDate;
-        entity.Status = (StockCountStatus)int.Parse(request.Status!);
-        entity.Description = request.Description;
-        entity.WarehouseId = request.WarehouseId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(StockCount),
-            entity.CountDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            entity.WarehouseId,
-            cancellationToken
-            );
+            entity.UpdatedById = request.UpdatedById;
+            entity.CountDate = request.CountDate;
+            entity.Status = requestedStatus;
+            entity.Description = request.Description;
+            entity.WarehouseId = request.WarehouseId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id, nameof(StockCount), entity.CountDate,
+                (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
+                entity.UpdatedById, entity.WarehouseId, ct);
+        }, cancellationToken);
 
         return new UpdateStockCountResult
         {

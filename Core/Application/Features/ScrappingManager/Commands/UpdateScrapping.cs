@@ -52,34 +52,47 @@ public class UpdateScrappingHandler : IRequestHandler<UpdateScrappingRequest, Up
 
     public async Task<UpdateScrappingResult> Handle(UpdateScrappingRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        Scrapping? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new Exception($"Entity not found: {request.Id}");
-        }
-
-        entity.UpdatedById = request.UpdatedById;
-
-        entity.ScrappingDate = request.ScrappingDate;
-        entity.Status = (ScrappingStatus)int.Parse(request.Status!);
-        entity.Description = request.Description;
-        entity.WarehouseId = request.WarehouseId;
-
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(Scrapping),
-            entity.ScrappingDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            entity.WarehouseId,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Không tìm thấy phiếu hủy hàng cần cập nhật.");
+            if (!int.TryParse(request.Status, out var statusValue)
+                || !Enum.IsDefined(typeof(ScrappingStatus), statusValue))
+                throw new InvalidOperationException("Trạng thái phiếu hủy hàng không hợp lệ.");
+            var requestedStatus = (ScrappingStatus)statusValue;
+            if (entity.Status == ScrappingStatus.Draft)
+            {
+                if (requestedStatus is ScrappingStatus.Cancelled or ScrappingStatus.Archived)
+                    throw new InvalidOperationException("Phiếu hủy hàng Nháp phải được xóa hoặc xác nhận.");
+            }
+            else
+            {
+                var headerChanged = entity.ScrappingDate != request.ScrappingDate
+                    || entity.WarehouseId != request.WarehouseId
+                    || entity.Description != request.Description;
+                if (entity.Status != ScrappingStatus.Confirmed
+                    || requestedStatus is not (ScrappingStatus.Cancelled or ScrappingStatus.Archived)
+                    || headerChanged)
+                    throw new InvalidOperationException("Phiếu hủy hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+            }
+            entity.UpdatedById = request.UpdatedById;
+            entity.ScrappingDate = request.ScrappingDate;
+            entity.Status = requestedStatus;
+            entity.Description = request.Description;
+            entity.WarehouseId = request.WarehouseId;
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id,
+                nameof(Scrapping),
+                entity.ScrappingDate,
+                (InventoryTransactionStatus?)entity.Status,
+                entity.IsDeleted,
+                entity.UpdatedById,
+                entity.WarehouseId,
+                ct);
+        }, cancellationToken);
 
         return new UpdateScrappingResult
         {

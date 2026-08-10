@@ -1,10 +1,10 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Common.Repositories;
+using Application.Features.CashTransactionManager;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
-using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -13,415 +13,286 @@ namespace Application.Features.PurchaseOrderManager;
 
 public class PurchaseOrderService
 {
-    private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
-    private readonly ICommandRepository<PurchaseOrderItem> _purchaseOrderItemRepository;
-    private readonly ICommandRepository<GoodsReceive> _goodsReceiveRepository;
+    private readonly ICommandRepository<PurchaseOrder> _orderRepository;
+    private readonly ICommandRepository<PurchaseOrderItem> _itemRepository;
+    private readonly ICommandRepository<InventoryTransaction> _inventoryRepository;
+    private readonly ICommandRepository<ProductSerial> _serialRepository;
+    private readonly ICommandRepository<PurchaseOrderCostAllocation> _costAllocationRepository;
+    private readonly ICommandRepository<CashTransaction> _cashRepository;
+    private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
-    private readonly ProductSerialService _productSerialService;
-    private readonly ICommandRepository<ProductSerial> _productSerialRepository;
-    private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
-    private readonly ICommandRepository<CashTransactionPayment> _cashTransactionPaymentRepository;
-    private readonly ICommandRepository<CashTransactionCostAllocation> _cashTransactionCostAllocationRepository;
+    private readonly NumberSequenceService _numberSequence;
+    private readonly InventoryTransactionService _inventoryService;
+    private readonly ProductSerialService _serialService;
     private readonly CashBalanceService _cashBalanceService;
 
     public PurchaseOrderService(
-        ICommandRepository<PurchaseOrder> purchaseOrderRepository,
-        ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
-        ICommandRepository<GoodsReceive> goodsReceiveRepository,
+        ICommandRepository<PurchaseOrder> orderRepository,
+        ICommandRepository<PurchaseOrderItem> itemRepository,
+        ICommandRepository<InventoryTransaction> inventoryRepository,
+        ICommandRepository<ProductSerial> serialRepository,
+        ICommandRepository<PurchaseOrderCostAllocation> costAllocationRepository,
+        ICommandRepository<CashTransaction> cashRepository,
+        ICommandRepository<CashTransactionPayment> paymentRepository,
         IQueryContext queryContext,
         IUnitOfWork unitOfWork,
-        NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService,
-        ProductSerialService productSerialService,
-        ICommandRepository<ProductSerial> productSerialRepository,
-        ICommandRepository<CashTransaction> cashTransactionRepository,
-        ICommandRepository<CashTransactionPayment> cashTransactionPaymentRepository,
-        ICommandRepository<CashTransactionCostAllocation> cashTransactionCostAllocationRepository,
-        CashBalanceService cashBalanceService
-        )
+        NumberSequenceService numberSequence,
+        InventoryTransactionService inventoryService,
+        ProductSerialService serialService,
+        CashBalanceService cashBalanceService)
     {
-        _purchaseOrderRepository = purchaseOrderRepository;
-        _purchaseOrderItemRepository = purchaseOrderItemRepository;
-        _goodsReceiveRepository = goodsReceiveRepository;
+        _orderRepository = orderRepository;
+        _itemRepository = itemRepository;
+        _inventoryRepository = inventoryRepository;
+        _serialRepository = serialRepository;
+        _costAllocationRepository = costAllocationRepository;
+        _cashRepository = cashRepository;
+        _paymentRepository = paymentRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
-        _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
-        _productSerialService = productSerialService;
-        _productSerialRepository = productSerialRepository;
-        _cashTransactionRepository = cashTransactionRepository;
-        _cashTransactionPaymentRepository = cashTransactionPaymentRepository;
-        _cashTransactionCostAllocationRepository = cashTransactionCostAllocationRepository;
+        _numberSequence = numberSequence;
+        _inventoryService = inventoryService;
+        _serialService = serialService;
         _cashBalanceService = cashBalanceService;
     }
 
-    public void Recalculate(string purchaseOrderId)
+    public void Recalculate(string orderId)
     {
-        var purchaseOrder = _purchaseOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter()
-            .Where(x => x.Id == purchaseOrderId)
-            .SingleOrDefault();
-
-        if (purchaseOrder == null)
-            return;
-
-        var purchaseOrderItems = _purchaseOrderItemRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter()
-            .Where(x => x.PurchaseOrderId == purchaseOrderId)
-            .ToList();
-
-        purchaseOrder.BeforeTaxAmount = purchaseOrderItems.Sum(x => x.Total ?? 0);
-        purchaseOrder.TaxAmount = purchaseOrderItems.Sum(x => x.TaxAmount ?? 0);
-        purchaseOrder.AfterTaxAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0) + (x.TaxAmount ?? 0)));
-
-        _purchaseOrderRepository.Update(purchaseOrder);
+        var order = _orderRepository.GetQuery().ApplyIsDeletedFilter().SingleOrDefault(x => x.Id == orderId);
+        if (order == null) return;
+        var items = _itemRepository.GetQuery().ApplyIsDeletedFilter().Where(x => x.PurchaseOrderId == orderId).ToList();
+        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0d);
+        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0d);
+        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0d) + (x.TaxAmount ?? 0d)));
+        _orderRepository.Update(order);
         _unitOfWork.Save();
     }
 
-    public async Task<CashTransaction> EnsureVendorObligationAsync(
-        string purchaseOrderId,
-        string? userId,
-        CancellationToken cancellationToken = default)
+    public async Task<CashTransaction> EnsureVendorObligationAsync(string orderId, string? userId, CancellationToken ct = default)
     {
-        var purchaseOrder = await _purchaseOrderRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.Vendor)
-            .Include(x => x.PurchaseOrderItemList.Where(item => !item.IsDeleted))
-            .SingleOrDefaultAsync(x => x.Id == purchaseOrderId, cancellationToken)
-            ?? throw new InvalidOperationException("Purchase order was not found.");
-
-        var obligations = await _cashTransactionRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SourceModule == nameof(PurchaseOrder)
-                && x.SourceModuleId == purchaseOrder.Id
-                && x.TransactionType == CashTransactionType.Credit)
-            .ToListAsync(cancellationToken);
-        if (obligations.Count > 1)
-        {
-            throw new InvalidOperationException("More than one vendor obligation exists for this purchase order.");
-        }
-
-        var obligation = obligations.SingleOrDefault();
+        var order = await _orderRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Include(x => x.Vendor).Include(x => x.PurchaseOrderItemList.Where(i => !i.IsDeleted))
+            .SingleAsync(x => x.Id == orderId, ct);
+        var obligation = await _cashRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .SingleOrDefaultAsync(x => x.SourceModule == nameof(PurchaseOrder) && x.SourceModuleId == order.Id
+                && x.TransactionType == CashTransactionType.Credit, ct);
         var isNew = obligation == null;
         obligation ??= new CashTransaction
         {
-            Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
             CreatedById = userId,
-            SourceModule = nameof(PurchaseOrder),
-            SourceModuleId = purchaseOrder.Id
+            Number = _numberSequence.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
+            SourceModule = nameof(PurchaseOrder), SourceModuleId = order.Id,
+            TransactionType = CashTransactionType.Credit, PaidAmount = 0d
         };
-
-        var amount = purchaseOrder.AfterTaxAmount
-            ?? purchaseOrder.PurchaseOrderItemList.Sum(item => item.AfterTaxAmount ?? 0d);
-        var paidAmount = obligation.PaidAmount ?? 0d;
-        obligation.TransactionDate = purchaseOrder.OrderDate ?? DateTime.Today;
-        obligation.TransactionType = CashTransactionType.Credit;
+        var amount = order.AfterTaxAmount ?? order.PurchaseOrderItemList.Sum(x => x.AfterTaxAmount ?? 0d);
+        var paid = obligation.PaidAmount ?? 0d;
+        if (paid > amount + 0.000001d)
+            throw new InvalidOperationException("Purchase-order total cannot be lower than the amount already paid.");
+        obligation.TransactionDate = order.OrderDate;
         obligation.Amount = amount;
-        obligation.PaidAmount = paidAmount;
-        obligation.Status = paidAmount >= amount && amount > 0d
-            ? CashTransactionStatus.Paid
-            : paidAmount > 0d
-                ? CashTransactionStatus.PartiallyPaid
-                : CashTransactionStatus.Unpaid;
-        obligation.Description = $"{purchaseOrder.Vendor?.Name} - {purchaseOrder.Number}".Trim(' ', '-');
-        obligation.VendorId = purchaseOrder.VendorId;
+        obligation.Status = PaymentStatus(paid, amount);
+        obligation.Description = $"{order.Vendor?.Name} - {order.Number}".Trim(' ', '-');
         obligation.CustomerId = null;
-        obligation.SourceModuleNumber = purchaseOrder.Number;
-
-        if (isNew)
-        {
-            await _cashTransactionRepository.CreateAsync(obligation, cancellationToken);
-        }
-        else
-        {
-            obligation.UpdatedById = userId;
-            _cashTransactionRepository.Update(obligation);
-        }
-        await _unitOfWork.SaveAsync(cancellationToken);
+        obligation.VendorId = order.VendorId;
+        obligation.SourceModuleNumber = order.Number;
+        if (isNew) await _cashRepository.CreateAsync(obligation, ct);
+        else { obligation.UpdatedById = userId; _cashRepository.Update(obligation); }
+        await _unitOfWork.SaveAsync(ct);
         return obligation;
     }
 
-    public async Task SynchronizeGoodsReceiveAsync(
-        string purchaseOrderId,
-        string? userId,
-        CancellationToken cancellationToken = default)
+    public async Task SynchronizeInventoryAsync(string orderId, string? userId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(purchaseOrderId))
+        if (string.IsNullOrWhiteSpace(orderId)) return;
+        var order = await _orderRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Include(x => x.PurchaseOrderItemList.Where(i => !i.IsDeleted)).ThenInclude(x => x.Product)
+            .SingleOrDefaultAsync(x => x.Id == orderId, ct);
+        if (order == null) return;
+
+        var physicalItems = order.PurchaseOrderItemList.Where(IsPhysicalInventoryItem).ToList();
+        var transactions = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleId == order.Id).ToListAsync(ct);
+
+        if (order.OrderStatus == PurchaseOrderStatus.Cancelled)
         {
-            return;
-        }
-
-        var purchaseOrder = await _purchaseOrderRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.Id == purchaseOrderId)
-            .Include(x => x.PurchaseOrderItemList.Where(item => !item.IsDeleted))
-                .ThenInclude(x => x.Product)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (purchaseOrder == null)
-        {
-            return;
-        }
-
-        var receivableItems = purchaseOrder.PurchaseOrderItemList
-            .Where(x =>
-                x.Product?.Physical == true &&
-                !string.IsNullOrWhiteSpace(x.WarehouseId) &&
-                !string.IsNullOrWhiteSpace(x.ProductId) &&
-                (x.Quantity ?? 0) > 0)
-            .ToList();
-
-        var goodsReceive = await _goodsReceiveRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.PurchaseOrderId == purchaseOrder.Id)
-            .OrderBy(x => x.CreatedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (goodsReceive == null && receivableItems.Count == 0)
-        {
-            return;
-        }
-
-        var isNewGoodsReceive = goodsReceive == null;
-
-        if (isNewGoodsReceive)
-        {
-            goodsReceive = new GoodsReceive
+            await ValidateCancellationAsync(order, transactions, ct);
+            foreach (var transaction in transactions)
             {
-                CreatedById = userId,
-                Number = _numberSequenceService.GenerateNumber(nameof(GoodsReceive), "", "GR"),
-                PurchaseOrderId = purchaseOrder.Id
-            };
-        }
-        else
-        {
-            goodsReceive.UpdatedById = userId;
-        }
-
-        goodsReceive.ReceiveDate = purchaseOrder.OrderDate;
-        goodsReceive.Status = ToGoodsReceiveStatus(purchaseOrder.OrderStatus);
-        goodsReceive.Description = purchaseOrder.Description;
-
-        if (goodsReceive.Id == null)
-        {
-            throw new Exception("Goods receive id not generated.");
+                transaction.Status = InventoryTransactionStatus.Cancelled;
+                transaction.UpdatedById = userId;
+                _inventoryRepository.Update(transaction);
+                await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+            }
+            await DeleteUnpaidObligationAsync(order.Id, userId, ct);
+            await _unitOfWork.SaveAsync(ct);
+            return;
         }
 
-        if (isNewGoodsReceive)
+        var validIds = physicalItems.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var obsolete in transactions.Where(x => !validIds.Contains(x.ModuleItemId ?? string.Empty)))
         {
-            await _goodsReceiveRepository.CreateAsync(goodsReceive, cancellationToken);
-        }
-        else
-        {
-            _goodsReceiveRepository.Update(goodsReceive);
-        }
-
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        var inventoryTransactions = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == goodsReceive.Id && x.ModuleName == nameof(GoodsReceive))
-            .ToListAsync(cancellationToken);
-
-        var validModuleItemIds = receivableItems
-            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-            .Select(x => x.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var obsoleteTransaction in inventoryTransactions.Where(x => !validModuleItemIds.Contains(x.ModuleItemId ?? string.Empty)))
-        {
-            await _inventoryTransactionService.GoodsReceiveDeleteInvenTrans(
-                obsoleteTransaction.Id,
-                userId,
-                cancellationToken
-            );
+            if (obsolete.Status == InventoryTransactionStatus.Confirmed)
+                throw new InvalidOperationException("Confirmed purchase-order inventory lines cannot be removed.");
+            await _serialService.ReleaseInventoryTransactionSerialsAsync(obsolete.Id, userId, ct);
+            _inventoryRepository.Delete(obsolete);
         }
 
-        foreach (var item in receivableItems)
+        foreach (var item in physicalItems)
         {
-            // Every physical PO item is received into its warehouse in full. Cost
-            // allocation is a later outbound movement for the customer portion;
-            // it must never reduce or remove the original goods receipt.
-            var receivableQuantity = item.Quantity ?? 0d;
-            var existingTransaction = inventoryTransactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
-
-            if (existingTransaction == null)
+            var transaction = transactions.FirstOrDefault(x => x.ModuleItemId == item.Id);
+            if (transaction == null)
             {
-                var transaction = await _inventoryTransactionService.GoodsReceiveCreateInvenTrans(
-                    goodsReceive.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    receivableQuantity,
-                    userId,
-                    item.Id,
-                    cancellationToken
-                );
-                item.PurchaseOrder = purchaseOrder;
-                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
+                transaction = new InventoryTransaction
                 {
-                    await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
-                }
+                    CreatedById = userId,
+                    Number = _numberSequence.GenerateNumber(nameof(InventoryTransaction), string.Empty, "IVT"),
+                    ModuleId = order.Id, ModuleName = nameof(PurchaseOrder), ModuleCode = "PO-",
+                    ModuleNumber = order.Number, ModuleItemId = item.Id
+                };
+                await _inventoryRepository.CreateAsync(transaction, ct);
             }
-            else
-            {
-                var transaction = await _inventoryTransactionService.GoodsReceiveUpdateInvenTrans(
-                    existingTransaction.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    receivableQuantity,
-                    userId,
-                    item.Id,
-                    cancellationToken
-                );
-                item.PurchaseOrder = purchaseOrder;
-                if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
-                {
-                    await _productSerialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, cancellationToken);
-                }
-            }
+            else { transaction.UpdatedById = userId; _inventoryRepository.Update(transaction); }
+            transaction.MovementDate = order.OrderDate;
+            transaction.Status = ToInventoryStatus(order.OrderStatus);
+            transaction.WarehouseId = item.WarehouseId;
+            transaction.ProductId = item.ProductId;
+            transaction.Movement = item.Quantity;
+            _inventoryService.CalculateInvenTrans(transaction);
         }
+        await _unitOfWork.SaveAsync(ct);
 
-        await _inventoryTransactionService.PropagateParentUpdate(
-            goodsReceive.Id,
-            nameof(GoodsReceive),
-            goodsReceive.ReceiveDate,
-            (InventoryTransactionStatus?)goodsReceive.Status,
-            goodsReceive.IsDeleted,
-            userId,
-            null,
-            cancellationToken
-        );
-
-        if (purchaseOrder.OrderStatus == PurchaseOrderStatus.Cancelled)
+        foreach (var item in physicalItems)
         {
-            var itemIds = purchaseOrder.PurchaseOrderItemList.Select(x => x.Id).ToList();
-            var serials = await _productSerialRepository.GetQuery().ApplyIsDeletedFilter(false)
-                .Where(x => x.PurchaseOrderItemId != null && itemIds.Contains(x.PurchaseOrderItemId))
-                .ToListAsync(cancellationToken);
-            foreach (var serial in serials)
-            {
-                serial.UpdatedById = userId;
-                _productSerialRepository.Delete(serial);
-            }
-            if (serials.Count > 0) await _unitOfWork.SaveAsync(cancellationToken);
-            await RollbackCashTransactionsAsync(purchaseOrder.Id, userId, cancellationToken);
+            var transaction = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
+                .SingleAsync(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleId == order.Id && x.ModuleItemId == item.Id, ct);
+            item.PurchaseOrder = order;
+            await _serialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, ct);
         }
     }
 
-    public async Task DeleteSynchronizedGoodsReceivesAsync(
-        string purchaseOrderId,
-        string? userId,
-        CancellationToken cancellationToken = default)
+    public async Task DeleteSynchronizedInventoryAsync(string orderId, string? userId, CancellationToken ct = default)
     {
-        var goodsReceives = await _goodsReceiveRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.PurchaseOrderId == purchaseOrderId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var goodsReceive in goodsReceives)
-        {
-            goodsReceive.UpdatedById = userId;
-            _goodsReceiveRepository.Delete(goodsReceive);
-        }
-
-        var itemIds = await _queryContext.Set<PurchaseOrderItem>().AsNoTracking()
-            .Where(x => x.PurchaseOrderId == purchaseOrderId).Select(x => x.Id).ToListAsync(cancellationToken);
-        var serials = await _productSerialRepository.GetQuery().ApplyIsDeletedFilter(false)
-            .Where(x => x.PurchaseOrderItemId != null && itemIds.Contains(x.PurchaseOrderItemId))
-            .ToListAsync(cancellationToken);
-        foreach (var serial in serials)
-        {
-            serial.UpdatedById = userId;
-            _productSerialRepository.Delete(serial);
-        }
-        if (serials.Count > 0) await _unitOfWork.SaveAsync(cancellationToken);
-
-        await RollbackCashTransactionsAsync(purchaseOrderId, userId, cancellationToken);
-
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        foreach (var goodsReceive in goodsReceives)
-        {
-            await _inventoryTransactionService.PropagateParentUpdate(
-                goodsReceive.Id,
-                nameof(GoodsReceive),
-                goodsReceive.ReceiveDate,
-                (InventoryTransactionStatus?)goodsReceive.Status,
-                true,
-                userId,
-                null,
-                cancellationToken
-            );
-        }
-    }
-
-    private async Task RollbackCashTransactionsAsync(
-        string purchaseOrderId,
-        string? userId,
-        CancellationToken cancellationToken)
-    {
-        var transactions = await _cashTransactionRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SourceModule == nameof(PurchaseOrder) && x.SourceModuleId == purchaseOrderId)
-            .ToListAsync(cancellationToken);
-        if (transactions.Count == 0)
-        {
-            return;
-        }
-
-        var transactionIds = transactions.Select(x => x.Id).ToList();
-        var payments = await _cashTransactionPaymentRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.CashTransactionId != null && transactionIds.Contains(x.CashTransactionId))
-            .ToListAsync(cancellationToken);
-        var allocations = await _cashTransactionCostAllocationRepository.GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.CashTransactionId != null && transactionIds.Contains(x.CashTransactionId))
-            .ToListAsync(cancellationToken);
-        var cashAccountIds = transactions.Select(x => x.CashAccountId)
-            .Concat(payments.Select(x => x.CashAccountId))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct()
-            .ToList();
-
-        foreach (var payment in payments)
-        {
-            payment.UpdatedById = userId;
-            _cashTransactionPaymentRepository.Delete(payment);
-        }
-        foreach (var allocation in allocations)
-        {
-            allocation.UpdatedById = userId;
-            _cashTransactionCostAllocationRepository.Delete(allocation);
-        }
+        var transactions = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleId == orderId).ToListAsync(ct);
+        if (transactions.Any(x => x.Status == InventoryTransactionStatus.Confirmed))
+            throw new InvalidOperationException("A confirmed purchase order cannot be deleted.");
         foreach (var transaction in transactions)
         {
-            transaction.UpdatedById = userId;
-            _cashTransactionRepository.Delete(transaction);
+            await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+            _inventoryRepository.Delete(transaction);
+        }
+        var itemIds = await _queryContext.Set<PurchaseOrderItem>().Where(x => x.PurchaseOrderId == orderId).Select(x => x.Id).ToListAsync(ct);
+        var serials = await _serialRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.PurchaseOrderItemId != null && itemIds.Contains(x.PurchaseOrderItemId)).ToListAsync(ct);
+        foreach (var serial in serials) _serialRepository.Delete(serial);
+        await DeleteUnpaidObligationAsync(orderId, userId, ct);
+        await _unitOfWork.SaveAsync(ct);
+    }
+
+    private async Task ValidateCancellationAsync(PurchaseOrder order, List<InventoryTransaction> transactions, CancellationToken ct)
+    {
+        if (await _paymentRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.CashTransaction != null
+            && !x.CashTransaction.IsDeleted && x.CashTransaction.SourceModule == nameof(PurchaseOrder)
+            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0d, ct))
+            throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì đã có lịch sử thanh toán. Hãy hoàn tác các lần thanh toán trước.");
+        if (await _queryContext.Set<PurchaseReturn>().AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == order.Id
+            && x.Status != PurchaseReturnStatus.Cancelled, ct))
+            throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì còn phiếu trả hàng mua đang hiệu lực. Hãy hủy phiếu trả hàng trước.");
+        if (await _costAllocationRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == order.Id
+            && x.CustomerId != null && (x.Quantity ?? 0d) > 0d, ct))
+            throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì vật tư đã được phân bổ cho công trình. Hãy hoàn tác phân bổ trước.");
+
+        var itemIds = order.PurchaseOrderItemList.Select(x => x.Id).ToList();
+        var serials = await _serialRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Include(x => x.CurrentWarehouse)
+            .Include(x => x.PurchaseOrderItem).ThenInclude(x => x!.Warehouse)
+            .Include(x => x.SalesOrderItem).ThenInclude(x => x!.SalesOrder)
+            .Where(x => x.PurchaseOrderItemId != null && itemIds.Contains(x.PurchaseOrderItemId))
+            .ToListAsync(ct);
+
+        foreach (var serial in serials)
+        {
+            var originalWarehouseId = serial.PurchaseOrderItem?.WarehouseId;
+            var originalWarehouseName = serial.PurchaseOrderItem?.Warehouse?.Name ?? "kho nhập ban đầu";
+            var serialNumber = serial.ManufacturerSerialNumber ?? serial.InternalSerialNumber ?? serial.Id;
+            var productName = serial.Product?.Name ?? "hàng hóa";
+            var isBackInStock = serial.Status is ProductSerialStatus.InStock or ProductSerialStatus.ReturnedByCustomer;
+            var isAtOriginalWarehouse = string.Equals(
+                serial.CurrentWarehouseId,
+                originalWarehouseId,
+                StringComparison.OrdinalIgnoreCase);
+            if (isBackInStock && isAtOriginalWarehouse)
+            {
+                continue;
+            }
+
+            var dependentDocument = serial.Status == ProductSerialStatus.Sold
+                ? $"SO {serial.SalesOrderItem?.SalesOrder?.Number ?? "không xác định"}"
+                : await _queryContext.Set<ProductSerialMovement>()
+                    .AsNoTracking()
+                    .ApplyIsDeletedFilter(false)
+                    .Where(x => x.ProductSerialId == serial.Id && x.ReversedAtUtc == null)
+                    .OrderByDescending(x => x.MovementDate)
+                    .ThenByDescending(x => x.CreatedAtUtc)
+                    .Select(x => x.InventoryTransaction != null
+                        ? (x.InventoryTransaction.ModuleNumber ?? x.InventoryTransaction.Number)
+                        : (x.ModuleName ?? x.ModuleId))
+                    .FirstOrDefaultAsync(ct) ?? "chứng từ phát sinh sau";
+
+            var currentLocation = serial.CurrentWarehouse?.Name ?? "ngoài kho";
+            throw new InvalidOperationException(
+                $"Không thể hủy PO {order.Number}: serial {serialNumber} của {productName} " +
+                $"đang ở trạng thái {serial.Status} tại {currentLocation}, liên quan {dependentDocument}. " +
+                $"Cần trả serial về đúng {originalWarehouseName} trước khi hủy.");
         }
 
-        await _unitOfWork.SaveAsync(cancellationToken);
-        await _cashBalanceService.RecalculateManyAsync(cashAccountIds, cancellationToken);
+        foreach (var transaction in transactions.Where(x => x.Status == InventoryTransactionStatus.Confirmed))
+        {
+            var balanceWithoutReceipt = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+                .Where(x => !x.IsDeleted && x.Status == InventoryTransactionStatus.Confirmed
+                    && x.ProductId == transaction.ProductId && x.WarehouseId == transaction.WarehouseId && x.Id != transaction.Id)
+                .SumAsync(x => x.Stock ?? 0d, ct);
+            if (balanceWithoutReceipt < -0.000001d)
+            {
+                var product = order.PurchaseOrderItemList.FirstOrDefault(x => x.Id == transaction.ModuleItemId)?.Product;
+                var warehouse = order.PurchaseOrderItemList.FirstOrDefault(x => x.Id == transaction.ModuleItemId)?.Warehouse;
+                throw new InvalidOperationException(
+                    $"Không thể hủy PO {order.Number}: tồn của {product?.Name ?? "hàng hóa"} tại " +
+                    $"{warehouse?.Name ?? "kho nhập"} không đủ để hoàn tác số lượng {transaction.Movement ?? 0d}. " +
+                    "Hàng đã được xuất dùng hoặc chuyển đi; cần hoàn tác chứng từ phụ thuộc trước.");
+            }
+        }
     }
 
-    private static GoodsReceiveStatus ToGoodsReceiveStatus(PurchaseOrderStatus? status)
+    private async Task DeleteUnpaidObligationAsync(string orderId, string? userId, CancellationToken ct)
     {
-        return status switch
+        var transactions = await _cashRepository.GetQuery().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(PurchaseOrder) && x.SourceModuleId == orderId).ToListAsync(ct);
+        var accounts = transactions.Select(x => x.CashAccountId).ToList();
+        foreach (var transaction in transactions)
         {
-            PurchaseOrderStatus.Cancelled => GoodsReceiveStatus.Cancelled,
-            PurchaseOrderStatus.Confirmed => GoodsReceiveStatus.Confirmed,
-            PurchaseOrderStatus.Archived => GoodsReceiveStatus.Archived,
-            _ => GoodsReceiveStatus.Draft
-        };
+            if ((transaction.PaidAmount ?? 0d) > 0d)
+                throw new InvalidOperationException("Không thể hủy đơn mua hàng đã phát sinh thanh toán. Hãy hoàn tác thanh toán trước.");
+            transaction.UpdatedById = userId;
+            _cashRepository.Delete(transaction);
+        }
+        await _unitOfWork.SaveAsync(ct);
+        await _cashBalanceService.RecalculateManyAsync(accounts, ct);
     }
+
+    private static bool IsPhysicalInventoryItem(PurchaseOrderItem item) => item.Product?.Physical == true
+        && !string.IsNullOrWhiteSpace(item.ProductId) && !string.IsNullOrWhiteSpace(item.WarehouseId)
+        && (item.Quantity ?? 0d) > 0d;
+    private static InventoryTransactionStatus ToInventoryStatus(PurchaseOrderStatus? status) => status switch
+    {
+        PurchaseOrderStatus.Confirmed or PurchaseOrderStatus.Archived => InventoryTransactionStatus.Confirmed,
+        PurchaseOrderStatus.Cancelled => InventoryTransactionStatus.Cancelled,
+        _ => InventoryTransactionStatus.Draft
+    };
+    private static CashTransactionStatus PaymentStatus(double paid, double amount) => amount <= 0d || paid >= amount
+        ? CashTransactionStatus.Paid : paid > 0d ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid;
 }

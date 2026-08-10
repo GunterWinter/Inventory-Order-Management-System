@@ -23,6 +23,7 @@ public partial class InventoryTransactionService
         }
 
         var unitCost = await GetUnitCostAsync(
+            salesOrderItem.Id,
             salesOrderItem.ProductId,
             salesOrderItem.WarehouseId,
             cancellationToken
@@ -40,6 +41,7 @@ public partial class InventoryTransactionService
     }
 
     private async Task<double> GetUnitCostAsync(
+        string? salesOrderItemId,
         string? productId,
         string? warehouseId,
         CancellationToken cancellationToken)
@@ -49,38 +51,49 @@ public partial class InventoryTransactionService
             return 0d;
         }
 
-        var receivedPurchaseOrderIds = await _queryContext
-            .Set<GoodsReceive>()
-            .AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.Status == GoodsReceiveStatus.Confirmed && x.PurchaseOrderId != null)
-            .Select(x => x.PurchaseOrderId!)
-            .Distinct()
+        if (!string.IsNullOrWhiteSpace(salesOrderItemId))
+        {
+            var serialCosts = await _queryContext.Set<ProductSerial>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.SalesOrderItemId == salesOrderItemId && x.PurchaseOrderItem != null)
+                .Select(x => x.PurchaseOrderItem!.UnitPrice ?? 0d)
+                .ToListAsync(cancellationToken);
+            if (serialCosts.Count > 0)
+            {
+                return serialCosts.Average();
+            }
+        }
+
+        var receiptCosts = await (
+            from transaction in _queryContext.Set<InventoryTransaction>().AsNoTracking()
+            join purchaseItem in _queryContext.Set<PurchaseOrderItem>().AsNoTracking()
+                on transaction.ModuleItemId equals purchaseItem.Id
+            where !transaction.IsDeleted
+                && !purchaseItem.IsDeleted
+                && transaction.Status == InventoryTransactionStatus.Confirmed
+                && transaction.ModuleName == nameof(PurchaseOrder)
+                && transaction.ProductId == productId
+                && (string.IsNullOrWhiteSpace(warehouseId) || transaction.WarehouseId == warehouseId)
+                && (transaction.Stock ?? transaction.Movement ?? 0d) > 0d
+            select new
+            {
+                Quantity = transaction.Stock ?? transaction.Movement ?? 0d,
+                UnitCost = purchaseItem.UnitPrice ?? 0d
+            })
             .ToListAsync(cancellationToken);
 
-        if (!receivedPurchaseOrderIds.Any())
+        var receivedQuantity = receiptCosts.Sum(x => x.Quantity);
+        if (receivedQuantity > 0d)
         {
-            return 0d;
+            return receiptCosts.Sum(x => x.Quantity * x.UnitCost) / receivedQuantity;
         }
 
-        var query = _queryContext
-            .Set<PurchaseOrderItem>()
+        return await _queryContext.Set<Product>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => receivedPurchaseOrderIds.Contains(x.PurchaseOrderId!) && x.ProductId == productId);
-
-        if (!string.IsNullOrWhiteSpace(warehouseId))
-        {
-            query = query.Where(x => x.WarehouseId == warehouseId);
-        }
-
-        var purchaseItems = await query.ToListAsync(cancellationToken);
-        var totalQty = purchaseItems.Sum(x => x.Quantity ?? 0d);
-        if (totalQty <= 0d)
-        {
-            return 0d;
-        }
-
-        return purchaseItems.Sum(x => (x.UnitPrice ?? 0d) * (x.Quantity ?? 0d)) / totalQty;
+            .Where(x => x.Id == productId)
+            .Select(x => x.CostPrice ?? 0d)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 }

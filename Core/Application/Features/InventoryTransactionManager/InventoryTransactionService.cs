@@ -72,6 +72,11 @@ public partial class InventoryTransactionService
         CancellationToken cancellationToken = default
         )
     {
+        if (status == InventoryTransactionStatus.Confirmed && IsOutboundStockModule(moduleName))
+        {
+            await ValidateOutboundStockAsync(moduleId, moduleName, warehouseId, cancellationToken);
+        }
+
         var childIds = await _queryContext
             .Set<InventoryTransaction>()
             .AsNoTracking()
@@ -90,7 +95,11 @@ public partial class InventoryTransactionService
             }
 
             item.MovementDate = movementDate;
-            item.Status = status;
+            // Archived documents keep the same inventory effect as Confirmed.
+            // Archiving is a visibility/workflow state, never an inventory reversal.
+            item.Status = status == InventoryTransactionStatus.Archived
+                ? InventoryTransactionStatus.Confirmed
+                : status;
             item.IsDeleted = isDeleted ?? false;
             item.UpdatedById = updatedId;
             item.UpdatedAtUtc = AppDateTime.VietnamNow();
@@ -123,6 +132,93 @@ public partial class InventoryTransactionService
         }
     }
 
+    public async Task ValidateOutboundStockAsync(
+        string? moduleId,
+        string? moduleName,
+        string? warehouseOverrideId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(moduleId) || string.IsNullOrWhiteSpace(moduleName))
+        {
+            throw new InvalidOperationException("Outbound inventory source is required.");
+        }
+
+        var requestedLines = await _queryContext.Set<InventoryTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.ModuleId == moduleId
+                && x.ModuleName == moduleName
+                && x.ProductId != null
+                && x.Product != null
+                && x.Product.Physical == true
+                && (x.Product.SerialTrackingMode == null
+                    || x.Product.SerialTrackingMode == SerialTrackingMode.None))
+            .Select(x => new
+            {
+                ProductId = x.ProductId!,
+                WarehouseId = warehouseOverrideId ?? x.WarehouseId,
+                ProductName = x.Product!.Name,
+                Quantity = x.Movement ?? 0d
+            })
+            .ToListAsync(cancellationToken);
+
+        var requestedGroups = requestedLines
+            .Where(x => !string.IsNullOrWhiteSpace(x.WarehouseId) && x.Quantity > 0d)
+            .GroupBy(x => new { x.ProductId, x.WarehouseId, x.ProductName })
+            .Select(group => new
+            {
+                group.Key.ProductId,
+                WarehouseId = group.Key.WarehouseId!,
+                group.Key.ProductName,
+                Quantity = group.Sum(x => x.Quantity)
+            })
+            .ToList();
+
+        foreach (var requested in requestedGroups)
+        {
+            var availableStock = await _queryContext.Set<InventoryTransaction>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.Status == InventoryTransactionStatus.Confirmed
+                    && x.ProductId == requested.ProductId
+                    && x.WarehouseId == requested.WarehouseId
+                    && !(x.ModuleId == moduleId && x.ModuleName == moduleName))
+                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+
+            if (requested.Quantity > availableStock + 0.000001d)
+            {
+                throw new InvalidOperationException(
+                    $"Không đủ tồn kho cho {requested.ProductName ?? requested.ProductId}. " +
+                    $"Khả dụng: {availableStock}; yêu cầu: {requested.Quantity}.");
+            }
+        }
+    }
+
+    private static bool IsOutboundStockModule(string? moduleName)
+        => moduleName is nameof(PurchaseReturn) or nameof(TransferOut) or nameof(Scrapping);
+
+    private async Task EnsureOutboundParentIsDraftAsync(
+        string moduleName,
+        string? moduleId,
+        CancellationToken cancellationToken)
+    {
+        var isDraft = moduleName switch
+        {
+            nameof(PurchaseReturn) => await _queryContext.Set<PurchaseReturn>().AsNoTracking()
+                .AnyAsync(x => x.Id == moduleId && !x.IsDeleted && x.Status == PurchaseReturnStatus.Draft, cancellationToken),
+            nameof(TransferOut) => await _queryContext.Set<TransferOut>().AsNoTracking()
+                .AnyAsync(x => x.Id == moduleId && !x.IsDeleted && x.Status == TransferStatus.Draft, cancellationToken),
+            nameof(Scrapping) => await _queryContext.Set<Scrapping>().AsNoTracking()
+                .AnyAsync(x => x.Id == moduleId && !x.IsDeleted && x.Status == ScrappingStatus.Draft, cancellationToken),
+            _ => false
+        };
+
+        if (!isDraft)
+        {
+            throw new InvalidOperationException("Chỉ được thay đổi dòng hàng khi chứng từ còn ở trạng thái Nháp.");
+        }
+    }
+
 
     public InventoryTransaction CalculateInvenTrans(InventoryTransaction? transaction)
     {
@@ -145,11 +241,11 @@ public partial class InventoryTransactionService
 
         switch (moduleName)
         {
-            case nameof(DeliveryOrder):
-                DeliveryOrderProcessing(transaction);
+            case nameof(SalesOrder):
+                SalesOrderProcessing(transaction);
                 break;
-            case nameof(GoodsReceive):
-                GoodsReceiveProcessing(transaction);
+            case nameof(PurchaseOrder):
+                PurchaseOrderProcessing(transaction);
                 break;
             case nameof(SalesReturn):
                 SalesReturnProcessing(transaction);
@@ -165,12 +261,6 @@ public partial class InventoryTransactionService
                 break;
             case nameof(StockCount):
                 StockCountProcessing(transaction);
-                break;
-            case nameof(NegativeAdjustment):
-                AdjustmentMinusProcessing(transaction);
-                break;
-            case nameof(PositiveAdjustment):
-                AdjustmentPlusProcessing(transaction);
                 break;
             case nameof(Scrapping):
                 ScrappingProcessing(transaction);
@@ -237,7 +327,7 @@ public partial class InventoryTransactionService
         transaction.Stock = transaction.Movement * (int)(transaction.TransType ?? 0.0);
     }
 
-    private InventoryTransaction DeliveryOrderProcessing(InventoryTransaction transaction)
+    private InventoryTransaction SalesOrderProcessing(InventoryTransaction transaction)
     {
         if (transaction == null)
         {
@@ -252,7 +342,7 @@ public partial class InventoryTransactionService
         return transaction;
     }
 
-    private InventoryTransaction GoodsReceiveProcessing(InventoryTransaction transaction)
+    private InventoryTransaction PurchaseOrderProcessing(InventoryTransaction transaction)
     {
         if (transaction == null)
         {
@@ -356,36 +446,6 @@ public partial class InventoryTransactionService
             transaction.WarehouseToId = _warehouseService.GetStockCountWarehouse()!.Id;
 
         }
-
-        return transaction;
-    }
-
-    private InventoryTransaction AdjustmentMinusProcessing(InventoryTransaction transaction)
-    {
-        if (transaction == null)
-        {
-            throw new Exception("Inventory transaction is null");
-        }
-
-        transaction.TransType = InventoryTransType.Out;
-        CalculateStock(transaction);
-        transaction.WarehouseFromId = transaction.WarehouseId;
-        transaction.WarehouseToId = _warehouseService.GetAdjustmentWarehouse()!.Id;
-
-        return transaction;
-    }
-
-    private InventoryTransaction AdjustmentPlusProcessing(InventoryTransaction transaction)
-    {
-        if (transaction == null)
-        {
-            throw new Exception("Inventory transaction is null");
-        }
-
-        transaction.TransType = InventoryTransType.In;
-        CalculateStock(transaction);
-        transaction.WarehouseFromId = _warehouseService.GetAdjustmentWarehouse()!.Id;
-        transaction.WarehouseToId = transaction.WarehouseId;
 
         return transaction;
     }

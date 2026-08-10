@@ -55,7 +55,7 @@ public class CreateScrappingHandler : IRequestHandler<CreateScrappingRequest, Cr
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(Scrapping), "", "SCRP");
         entity.ScrappingDate = request.ScrappingDate;
-        entity.Status = (ScrappingStatus)int.Parse(request.Status!);
+        entity.Status = ScrappingStatus.Draft;
         entity.Description = request.Description;
         entity.WarehouseId = request.WarehouseId;
 

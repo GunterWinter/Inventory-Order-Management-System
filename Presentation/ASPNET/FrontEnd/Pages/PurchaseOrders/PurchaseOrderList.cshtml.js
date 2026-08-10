@@ -55,8 +55,22 @@ const App = {
         const costAllocationPreviewGridRef = Vue.ref(null);
 
         const toDateTicks = (value) => value ? new Date(value).getTime() : 0;
+        const getAllSecondaryRows = () => {
+            const rowsById = new Map();
+            const addRows = rows => (rows ?? []).forEach((row, index) => {
+                const key = row?.id ?? `row-${index}-${row?.productId ?? ''}`;
+                rowsById.set(key, row);
+            });
+            addRows(state.secondaryData);
+            addRows(secondaryGrid?.obj?.getCurrentViewRecords?.());
+            const changes = secondaryGrid?.obj?.getBatchChanges?.();
+            addRows(changes?.addedRecords);
+            addRows(changes?.changedRecords);
+            (changes?.deletedRecords ?? []).forEach(row => rowsById.delete(row?.id));
+            return [...rowsById.values()];
+        };
         const getSelectedProductIds = (currentRowId = null) => new Set(
-            state.secondaryData
+            getAllSecondaryRows()
                 .filter(item => item.id !== currentRowId && item.productId)
                 .map(item => item.productId)
         );
@@ -1870,6 +1884,18 @@ const App = {
                             });
                             return;
                         }
+
+                        if (getSelectedProductIds(data.id ?? null).has(data.productId)) {
+                            args.cancel = true;
+                            const productName = state.productListLookupData?.find(p => p.id === data.productId)?.name ?? 'Hàng hóa này';
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Hàng hóa bị trùng',
+                                text: `${productName} đã có trong đơn mua hàng. Mỗi hàng hóa chỉ được xuất hiện một lần trong một PO.`,
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
                         if (!Number.isFinite(Number(data.unitPrice)) || Number(data.unitPrice) <= 0) {
                             args.cancel = true;
                             Swal.fire({
@@ -1954,16 +1980,22 @@ const App = {
                             const userId = StorageManager.getUserId();
                             const data = args.data[0];
 
+                            if (!data?.id || String(data.id).startsWith('new-')) {
+                                state.secondaryData = state.secondaryData.filter(item => item.id !== data?.id);
+                                requestAnimationFrame(() => refreshPurchaseOrderSummaryFromItems());
+                                return;
+                            }
+
                             try {
                                 const response = await services.deleteSecondaryData(data?.id, userId);
-                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Unable to delete this item.');
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Không thể xóa hàng hóa này.');
                                 if (response?.data?.code === 200) {
                                     if (refreshAfterAction) {
                                         await methods.populateSecondaryData(purchaseOrderId);
                                         secondaryGrid.refresh();
                                         Swal.fire({
                                             icon: 'success',
-                                            title: 'Delete Successful',
+                                            title: 'Xóa hàng hóa thành công',
                                             timer: 2000,
                                             showConfirmButton: false
                                         });
@@ -1974,9 +2006,9 @@ const App = {
 
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Delete Failed',
-                                        text: response?.data?.message ?? 'Unable to delete this item.',
-                                        confirmButtonText: 'OK'
+                                        title: 'Xóa hàng hóa thất bại',
+                                        text: response?.data?.message ?? 'Không thể xóa hàng hóa này.',
+                                        confirmButtonText: 'Đồng ý'
                                     });
                                 }
                             } catch (error) {
@@ -1987,9 +2019,9 @@ const App = {
 
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'Delete Failed',
-                                    text: error.response?.data?.message ?? 'Unable to delete this item.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Xóa hàng hóa thất bại',
+                                    text: error.response?.data?.message ?? 'Không thể xóa hàng hóa này.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                                 throw error;
                             }

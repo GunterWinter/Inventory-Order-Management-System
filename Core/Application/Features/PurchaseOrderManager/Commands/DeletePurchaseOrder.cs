@@ -1,5 +1,6 @@
 ﻿using Application.Common.Repositories;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 
@@ -48,18 +49,18 @@ public class DeletePurchaseOrderHandler : IRequestHandler<DeletePurchaseOrderReq
 
         if (entity == null)
         {
-            throw new Exception($"Entity not found: {request.Id}");
+            throw new InvalidOperationException("Không tìm thấy đơn mua hàng cần xóa.");
         }
 
+        if (entity.OrderStatus != PurchaseOrderStatus.Draft)
+            throw new InvalidOperationException("Chỉ đơn mua hàng Nháp mới được xóa. Đơn đã xác nhận phải dùng chức năng Hủy.");
         entity.UpdatedById = request.DeletedById;
-
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-        await _purchaseOrderService.DeleteSynchronizedGoodsReceivesAsync(
-            entity.Id,
-            entity.UpdatedById,
-            cancellationToken
-        );
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            await _purchaseOrderService.DeleteSynchronizedInventoryAsync(entity.Id, entity.UpdatedById, ct);
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
+        }, cancellationToken);
 
         return new DeletePurchaseOrderResult
         {

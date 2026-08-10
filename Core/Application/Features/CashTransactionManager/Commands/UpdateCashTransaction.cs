@@ -79,7 +79,7 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
 
             if (entity == null)
             {
-                throw new InvalidOperationException($"Entity not found: {request.Id}");
+                throw new InvalidOperationException("Giao dịch không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
             }
 
             previousAccountId = entity.CashAccountId;
@@ -139,7 +139,8 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
                 var existing = await _allocationRepository.GetQuery().Where(a => !a.IsDeleted && a.CashTransactionId == entity.Id).ToListAsync(ct);
                 foreach (var allocation in existing) _allocationRepository.Delete(allocation);
                 var total = request.Allocations.Where(a => a.Amount > 0).Sum(a => a.Amount);
-                if (total > (entity.Amount ?? 0d) + 0.000001d) throw new InvalidOperationException("Allocation total cannot exceed transaction amount.");
+                if (request.Allocations.Count > 0 && Math.Abs(total - (entity.Amount ?? 0d)) > 0.000001d)
+                    throw new InvalidOperationException("Allocation total must equal transaction amount.");
                 foreach (var input in request.Allocations.Where(a => a.Amount > 0))
                 {
                     if (string.IsNullOrWhiteSpace(input.CustomerId)) throw new InvalidOperationException("An allocation must target a customer.");
