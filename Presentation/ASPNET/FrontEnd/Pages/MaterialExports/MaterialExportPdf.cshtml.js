@@ -64,7 +64,7 @@ const App = {
                 state.warehouse = pdfData?.warehouse?.name || '';
 
                 state.number = pdfData?.number || '';
-                state.date = DateFormatManager.formatToLocale(pdfData?.MaterialExportDate) || '';
+                state.date = DateFormatManager.formatToLocale(pdfData?.exportDate) || '';
 
                 state.mappedItems = (state.pdfTransactionList || []).map(item => ({
                     product: `${item.product?.number || ''} ${item.product?.name || ''}`.trim(),
@@ -79,28 +79,11 @@ const App = {
         const handler = {
             downloadPDF: async () => {
                 state.isDownloading = true;
-                await new Promise(resolve => setTimeout(resolve, 500));
-
                 try {
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF('p', 'mm', 'a4');
-                    const content = document.getElementById('content');
-
-                    await html2canvas(content, {
-                        scale: 2,
-                        useCORS: true
-                    }).then(canvas => {
-                        const imgData = canvas.toDataURL('image/png');
-                        const imgWidth = 210;
-                        const pageHeight = 297;
-                        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                        let position = 0;
-
-                        doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                        doc.save(`MaterialExport-${state.number || 'unknown'}.pdf`);
+                    await PdfDocumentManager.downloadSafely({
+                        element: '#content',
+                        fileName: `MaterialExport-${state.number || 'unknown'}.pdf`
                     });
-                } catch (error) {
-                    console.error('Error generating PDF:', error);
                 } finally {
                     state.isDownloading = false;
                 }

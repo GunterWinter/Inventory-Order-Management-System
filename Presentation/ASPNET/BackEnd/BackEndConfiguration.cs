@@ -97,12 +97,12 @@ public static class BackEndConfiguration
         // non-destructive and merely ensures the schema exists.
         var isDemoVersion = configuration.GetValue<bool>("IsDemoVersion");
         host.CreateDatabase(isDemoVersion);
+        host.SeedSystemData();
 
         if (isDemoVersion)
         {
             // Demo mode starts from a clean database and receives the full system,
             // catalog, master-data and transaction dataset.
-            host.SeedSystemData();
             host.SeedDemoData();
         }
         else

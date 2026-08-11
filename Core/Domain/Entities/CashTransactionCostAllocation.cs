@@ -2,7 +2,10 @@ using Domain.Common;
 
 namespace Domain.Entities;
 
-/// <summary>Allocates a manual vendor cash transaction cost to a customer/project.</summary>
+/// <summary>
+/// Analytically splits a manual cash transaction across customers/projects.
+/// Receipt allocations are informational; only expense allocations are project costs.
+/// </summary>
 public class CashTransactionCostAllocation : BaseEntity
 {
     public string? CashTransactionId { get; set; }

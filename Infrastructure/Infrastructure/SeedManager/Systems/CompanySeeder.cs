@@ -21,35 +21,29 @@ public class CompanySeeder
     public async Task GenerateDataAsync()
     {
         var entity = _repository.GetQuery().FirstOrDefault(x => !x.IsDeleted);
+        if (entity != null)
+        {
+            return;
+        }
 
-        var isNewCompany = entity == null;
-        entity ??= new Company
+        entity = new Company
         {
             CreatedAtUtc = AppDateTime.VietnamNow(),
-            IsDeleted = false
+            IsDeleted = false,
+            Name = "Architech Việt Nam",
+            Currency = "VND",
+            Street = "15/29 Nguyễn Thiện Thuật, Tân Tiến",
+            City = "Nha Trang",
+            State = "Khánh Hòa",
+            ZipCode = "650000",
+            Country = "Việt Nam",
+            PhoneNumber = "0979 788 978",
+            FaxNumber = "",
+            EmailAddress = "info@architechvietnam.com",
+            Website = "https://architechvietnam.com/"
         };
 
-        entity.Name = "Architech Việt Nam";
-        entity.Currency = "VND";
-        entity.Street = "15/29 Nguyễn Thiện Thuật, Tân Tiến";
-        entity.City = "Nha Trang";
-        entity.State = "Khánh Hòa";
-        entity.ZipCode = "650000";
-        entity.Country = "Việt Nam";
-        entity.PhoneNumber = "0979 788 978";
-        entity.FaxNumber = "";
-        entity.EmailAddress = "info@architechvietnam.com";
-        entity.Website = "https://architechvietnam.com/";
-
-        if (isNewCompany)
-        {
-            await _repository.CreateAsync(entity);
-        }
-        else
-        {
-            _repository.Update(entity);
-        }
-
+        await _repository.CreateAsync(entity);
         await _unitOfWork.SaveAsync();
     }
 }

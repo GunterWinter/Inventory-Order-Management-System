@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "test:js": "node --test Tests/JavaScript/*.test.js",
-    "test:browser": "node Tests/browser_dashboard_materialexport_smoke.js"
+    "test:browser": "node Tests/browser_dashboard_materialexport_smoke.js",
+    "test:browser:cash": "node Tests/browser_cash_category_report_smoke.js",
+    "test:browser:files": "node Tests/browser_file_workflows_smoke.js",
+    "test:browser:all": "npm run test:browser && npm run test:browser:cash && npm run test:browser:files"
   },
   "devDependencies": {
     "playwright": "^1.54.2"

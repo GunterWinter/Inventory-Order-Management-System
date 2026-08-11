@@ -58,10 +58,19 @@ public class GetMaterialExportSingleHandler : IRequestHandler<GetMaterialExportS
 
         var data = await queryData.SingleOrDefaultAsync(cancellationToken);
 
+        var transactionList = await _context
+            .InventoryTransaction
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Include(x => x.Warehouse)
+            .Where(x => x.ModuleId == request.Id && x.ModuleName == nameof(MaterialExport))
+            .ToListAsync(cancellationToken);
+
         return new GetMaterialExportSingleResult
         {
             Data = data,
-            TransactionList = new List<InventoryTransaction>()
+            TransactionList = transactionList
         };
     }
 }

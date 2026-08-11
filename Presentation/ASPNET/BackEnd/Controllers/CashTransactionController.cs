@@ -165,6 +165,29 @@ public class CashTransactionController : BaseApiController
     }
 
     [Authorize]
+    [HttpGet("GetCashCategorySummary")]
+    public async Task<ActionResult<ApiSuccessResult<GetCashCategorySummaryResult>>> GetCashCategorySummaryAsync(
+        CancellationToken cancellationToken,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? cashAccountId = null)
+    {
+        var response = await _sender.Send(new GetCashCategorySummaryRequest
+        {
+            FromDate = fromDate,
+            ToDate = toDate,
+            CashAccountId = cashAccountId
+        }, cancellationToken);
+
+        return Ok(new ApiSuccessResult<GetCashCategorySummaryResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(GetCashCategorySummaryAsync)}",
+            Content = response
+        });
+    }
+
+    [Authorize]
     [HttpGet("GetCashTransactionCostAllocations")]
     public async Task<ActionResult<ApiSuccessResult<GetCashTransactionCostAllocationsResult>>> GetCashTransactionCostAllocationsAsync(
         CancellationToken cancellationToken,

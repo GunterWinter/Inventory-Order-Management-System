@@ -3,7 +3,8 @@
 
     // Shared interaction conventions for Syncfusion grids and document forms.
     const pending = new WeakMap();
-    const initiallyCollapsedGroups = new WeakSet();
+    const collapsingGroups = new WeakSet();
+    const gridDiscoveryAttempts = new WeakMap();
     const modalStack = [];
     const isGrid = value => value && typeof value.endEdit === 'function';
     const requestTypeOf = args => String(args?.requestType ?? '').toLowerCase();
@@ -245,14 +246,26 @@
     function autoConfigure() {
         document.querySelectorAll('.e-grid').forEach(element => {
             const grid = element.ej2_instances?.[0];
+            if (!grid && !element.dataset.gridDiscoveryPending) {
+                const attempts = (gridDiscoveryAttempts.get(element) || 0) + 1;
+                gridDiscoveryAttempts.set(element, attempts);
+                if (attempts <= 20) {
+                    element.dataset.gridDiscoveryPending = 'true';
+                    window.setTimeout(() => {
+                        delete element.dataset.gridDiscoveryPending;
+                        autoConfigure();
+                    }, Math.min(25 * attempts, 250));
+                }
+            }
             if (grid?.groupSettings?.columns?.length && !element.dataset.groupCollapseWired) {
                 element.dataset.groupCollapseWired = 'true';
-                const collapseWhenRendered = () => collapseGroupsOnFirstLoad(grid);
+                const collapseWhenRendered = () => collapseGroupsOnDataBound(grid);
                 if (typeof grid.addEventListener === 'function') {
                     grid.addEventListener('dataBound', collapseWhenRendered);
                 }
                 collapseWhenRendered();
             }
+            window.GridExportManager?.configure?.(grid);
             // Item grids are mounted with id="SecondaryGrid" across all document pages.
             // Normalize them even when a legacy page still declares Normal mode.
             if (grid && (/^secondarygrid/i.test(element.id || '') || grid.editSettings?.mode === 'Batch') && !element.dataset.batchManaged) {
@@ -387,21 +400,27 @@
         else grid.groupModule.expandAll?.();
     }
 
-    function collapseGroupsOnFirstLoad(grid) {
-        if (!grid || initiallyCollapsedGroups.has(grid)) return;
+    function collapseGroupsOnDataBound(grid) {
+        if (!grid || collapsingGroups.has(grid)) return;
 
         window.requestAnimationFrame(() => {
-            if (initiallyCollapsedGroups.has(grid)) return;
-            const hasRenderedGroups = !!grid.element?.querySelector?.('.e-groupcaptionrow');
-            if (!hasRenderedGroups || !grid.groupModule?.collapseAll) return;
+            if (collapsingGroups.has(grid)) return;
+            if (!grid.groupSettings?.columns?.length || !grid.groupModule?.collapseAll) return;
 
-            // Mark first because collapseAll itself can trigger another dataBound event.
-            initiallyCollapsedGroups.add(grid);
+            // collapseAll can synchronously raise dataBound again. Keep the guard until
+            // the following animation frame so that re-entrant callbacks do not loop.
+            collapsingGroups.add(grid);
             grid.groupModule.collapseAll();
+            window.requestAnimationFrame(() => collapsingGroups.delete(grid));
         });
     }
 
-    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, wireKeyboard, collapseGroups, collapseGroupsOnFirstLoad, autoConfigure };
+    // Compatibility alias for pages that have not yet moved to the data-bound name.
+    function collapseGroupsOnFirstLoad(grid) {
+        collapseGroupsOnDataBound(grid);
+    }
+
+    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure };
     const init = () => { wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();

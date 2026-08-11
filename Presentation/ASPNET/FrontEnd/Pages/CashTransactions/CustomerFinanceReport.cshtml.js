@@ -202,7 +202,7 @@ const App = {
                         if (args.item.id === 'MainGrid_excelexport') mainGrid.obj.excelExport();
                     },
                     dataBound: () => {
-                        GridInteractionManager.collapseGroupsOnFirstLoad(mainGrid.obj);
+                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                     }
                 });
                 mainGrid.obj.appendTo(mainGridRef.value);

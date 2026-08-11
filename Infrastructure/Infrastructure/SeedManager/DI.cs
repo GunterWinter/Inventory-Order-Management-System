@@ -28,22 +28,13 @@ public static class DI
         using var scope = host.Services.CreateScope();
         var serviceProvider = scope.ServiceProvider;
 
-        var context = serviceProvider.GetRequiredService<DataContext>();
-        if (!context.Roles.Any()) //if empty, thats mean never been seeded before
-        {
-            var roleSeeder = serviceProvider.GetRequiredService<RoleSeeder>();
-            roleSeeder.GenerateDataAsync().Wait();
-
-            var userAdminSeeder = serviceProvider.GetRequiredService<UserAdminSeeder>();
-            userAdminSeeder.GenerateDataAsync().Wait();
-
-            var companySeeder = serviceProvider.GetRequiredService<CompanySeeder>();
-            companySeeder.GenerateDataAsync().Wait();
-
-            var systemWarehouseSeeder = serviceProvider.GetRequiredService<SystemWarehouseSeeder>();
-            systemWarehouseSeeder.GenerateDataAsync().Wait();
-
-        }
+        // Each seeder is independently idempotent. Run all of them every time so a
+        // missing company, administrator or system warehouse is repaired even when
+        // roles were seeded previously.
+        serviceProvider.GetRequiredService<RoleSeeder>().GenerateDataAsync().Wait();
+        serviceProvider.GetRequiredService<UserAdminSeeder>().GenerateDataAsync().Wait();
+        serviceProvider.GetRequiredService<CompanySeeder>().GenerateDataAsync().Wait();
+        serviceProvider.GetRequiredService<SystemWarehouseSeeder>().GenerateDataAsync().Wait();
 
         var repair = serviceProvider.GetRequiredService<ProductSerialWarehouseRepair>();
         repair.RepairAsync().Wait();

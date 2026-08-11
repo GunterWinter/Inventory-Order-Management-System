@@ -14,15 +14,38 @@ Khởi động ứng dụng ở terminal thứ nhất:
 dotnet run --project Presentation/ASPNET/ASPNET.csproj --urls http://localhost:5000
 ```
 
-Đợi trang đăng nhập phản hồi thành công, sau đó chạy browser smoke ở terminal thứ hai:
+Đợi trang đăng nhập phản hồi thành công, sau đó chạy toàn bộ browser smoke ở terminal thứ hai:
 
 ```powershell
-npm.cmd run test:browser
+npm.cmd run test:browser:all
 ```
+
+Lệnh tổng hợp chạy lần lượt:
+
+- `npm.cmd run test:browser`: Dashboard, chứng từ, bảo hành, lợi nhuận công trình và công nợ.
+- `npm.cmd run test:browser:cash`: phân bổ Thu/Chi, báo cáo Thu Chi Theo Danh Mục, localization và trạng thái đóng/mở grid gom nhóm.
 
 Bài smoke dùng Microsoft Edge ở chế độ headless, tự đăng nhập và kiểm tra Dashboard, Cash Transaction, báo cáo tài chính, hai loại công nợ, vòng đổi ngôn ngữ và kịch bản dồn tích `2.000.000 - 500.000 = 1.500.000`. Nó cũng chủ động làm một API Dashboard trả lỗi 500 để xác nhận các khối còn lại vẫn hoạt động và nút thử lại phục hồi được dữ liệu. Mọi lỗi console, request thất bại hoặc kết quả tiền sai đều phải làm bài test thất bại.
 
-Khi ứng dụng chạy ở địa chỉ khác, truyền biến môi trường `BASE_URL` trước khi chạy. Antigravity nên chạy smoke trước, sau đó mới thực hiện đầy đủ các kịch bản tương tác bên dưới. Với test khám phá hoặc test thay đổi dữ liệu, bật ghi ảnh/video/trace của công cụ browser và chỉ giữ artifact của ca thất bại.
+Khi ứng dụng chạy ở địa chỉ khác, truyền biến môi trường `BASE_URL` trước khi chạy. Antigravity phải chạy `test:browser:all` trước, sau đó mới thực hiện đầy đủ các kịch bản tương tác bên dưới. Với test khám phá hoặc test thay đổi dữ liệu, bật ghi ảnh/video/trace của công cụ browser và chỉ giữ artifact của ca thất bại.
+
+Không chạy demo browser test trên database làm việc. `IsDemoVersion=true` sẽ xóa và seed lại database khi khởi động. Hãy dùng database cô lập, ví dụ:
+
+```powershell
+$env:ConnectionStrings__DefaultConnection='Server=localhost;Database=WHMS_AntigravityTest;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;'
+$env:Kestrel__Endpoints__Http__Url='http://localhost:5127'
+$env:IsDemoVersion='true'
+dotnet run --project Presentation/ASPNET/ASPNET.csproj
+```
+
+Ở terminal chạy test:
+
+```powershell
+$env:BASE_URL='http://localhost:5127'
+npm.cmd run test:browser:all
+```
+
+Sau khi test, dừng ứng dụng và chỉ xóa đúng database `WHMS_AntigravityTest`; không được xóa hoặc reset database khác.
 
 ## Mục tiêu và cách chạy
 
@@ -172,7 +195,7 @@ Thử số lượng lớn hơn tồn, serial sai kho và xác nhận hai lần. 
 
 ## 9. Công thợ, gia công ván và phân bổ tiền
 
-Giao dịch Chi ghi nhận người nhận tiền hoặc nhà cung cấp ở phần thông tin chung. Chi tiết phân bổ bên trong mới xác định từng khách hàng/công trình chịu bao nhiêu chi phí. Một người thợ hoặc một đơn vị gia công có thể làm cho nhiều công trình trong cùng một lần thanh toán.
+Cả giao dịch Thu và Chi thủ công đều có nút `Chi tiết phân bổ` tùy chọn. Giao dịch Chi ghi nhận người nhận tiền hoặc nhà cung cấp ở phần thông tin chung; chi tiết phân bổ xác định từng khách hàng/công trình chịu bao nhiêu chi phí. Giao dịch Thu có thể chia số tiền cho nhiều khách hàng/công trình để truy vết nhưng các dòng này không được ghi nhận thêm doanh thu hoặc chi phí công trình. Một người thợ hoặc một đơn vị gia công có thể làm cho nhiều công trình trong cùng một lần thanh toán.
 
 ### Công thợ
 
@@ -268,20 +291,53 @@ So sánh tổng hai tab với Dashboard. Các tổng phải dùng cùng công th
 - Giao dịch nguồn Material Export hiển thị công trình, hàng đã xuất, kho, số lượng, giá vốn nguồn và serial. Sales Return và Purchase Return cũng phải hiển thị đúng các dòng hàng hoàn trả.
 - Tiêu đề vùng nguồn là Hàng hóa, không phải Phân bổ.
 - Giao dịch có nguồn và có hàng chỉ hiện Hàng hóa, không hiện thêm khối Phân bổ rỗng. Nguồn có chứng từ nhưng thiếu dòng hàng phải báo lỗi toàn vẹn dữ liệu nguồn.
-- Giao dịch Chi thủ công mới được phân bổ một hoặc nhiều công trình; giao dịch Thu thủ công không hiện phân bổ chi phí.
-- Ở chế độ Xem, nếu giao dịch Chi thủ công không có dòng phân bổ thì ẩn toàn bộ khối Phân bổ. Payment History cũng chỉ hiện khi có lần thanh toán thật.
+- Cả giao dịch Thu và Chi thủ công đều phải hiện nút `Chi tiết phân bổ`; phần này là tùy chọn và không bắt buộc tạo dòng.
+- Nếu có ít nhất một dòng, tổng phân bổ phải bằng tổng giao dịch. Thử cả tổng thấp hơn và cao hơn một đơn vị; cả hai phải bị chặn mà không lưu dữ liệu dở dang.
+- Ở chế độ Xem, nếu giao dịch thủ công không có dòng phân bổ thì ẩn toàn bộ khối Phân bổ. Nếu có dòng, phải hiện đúng khách hàng/công trình, số tiền và diễn giải. Payment History chỉ hiện khi có lần thanh toán thật.
+- Phân bổ Thu chỉ phục vụ truy vết; lọc Báo cáo Tài Chính Công Trình phải xác nhận các dòng Thu không làm tăng doanh thu hoặc chi phí.
 - Nguồn không hợp lệ hoặc đã xóa phải báo rõ, không làm hỏng modal chi tiết.
 - Thử xóa giao dịch tự sinh từ PO/SO/Material Export/Return. Kỳ vọng bị chặn và yêu cầu xử lý chứng từ nguồn. Xóa giao dịch thủ công phải đồng thời xóa payment/allocation và tính lại số dư quỹ.
 
 ## 16. Báo cáo, Excel và kiểm tra liên kết chết
 
-1. Xuất Excel ở các báo cáo còn lại và đối chiếu số dòng, tổng tiền, định dạng ngày/tiền.
-2. Tìm toàn bộ menu và nút hành động. Không liên kết nào được trỏ tới bốn phân hệ đã xóa.
-3. Kiểm tra nhãn tiếng Việt sau khi trang tải và sau khi modal/grid render động.
-4. Kiểm tra console không có lỗi localization hoặc lỗi thành phần grid.
-5. Với tập tồn lớn, mở/sửa đơn bán và Stock Report; request tồn không được timeout và SQL không được chứa nhiều truy vấn con MAX tương quan lặp lại.
+1. Mở `/CashTransactions/CashCategoryReport`. Đối chiếu tổng `Đã thu`, `Đã chi`, `Chênh lệch dòng tiền` trên thẻ với tổng các dòng theo danh mục.
+2. Báo cáo danh mục chỉ dùng số thực tế đã thanh toán, dùng lịch sử thanh toán trước và `PaidAmount` làm fallback cho dữ liệu cũ; phải loại giao dịch đã xóa và hai chân điều chuyển quỹ. Giao dịch thiếu danh mục nằm ở `Chưa phân loại`.
+3. Thử bộ lọc từ ngày, đến ngày và tài khoản quỹ; kết quả và Excel phải khớp dữ liệu đang lọc.
+4. Với mọi grid có gom nhóm, xác nhận sau tải/rebind chỉ có các nhóm đóng. Mở một nhóm và xác nhận các nhóm khác vẫn đóng.
+5. Xuất Excel ở các báo cáo còn lại và đối chiếu số dòng, tổng tiền, định dạng ngày/tiền.
+6. Tìm toàn bộ menu và nút hành động. Không liên kết nào được trỏ tới bốn phân hệ đã xóa.
+7. Kiểm tra nhãn tiếng Việt sau khi trang tải và sau khi modal/grid render động.
+8. Kiểm tra console không có lỗi localization hoặc lỗi thành phần grid.
+9. Với tập tồn lớn, mở/sửa đơn bán và Stock Report; request tồn không được timeout và SQL không được chứa nhiều truy vấn con MAX tương quan lặp lại.
 
-## 17. Mẫu báo cáo lỗi
+## 17. Import, Download Template, Export Excel và PDF
+
+### Download Template và Import Excel
+
+1. Chặn toàn bộ request ra `cdn.jsdelivr.net` và `cdnjs.cloudflare.com`; tải template vẫn phải thành công từ asset nội bộ.
+2. Kiểm tra sheet nhập chính không có dòng mẫu có thể bị import nhầm. File chứng từ phải có `Documents`, `Items`, `Instructions` và lookup; giao dịch tiền có thêm `Allocations`.
+3. Đọc lại workbook tải xuống, đối chiếu các cột bắt buộc với form hiện tại: Product có giá vốn, vật lý, chế độ serial, mã cố định, kho và bảo hành; PO/SO có thuế ở dòng hàng; Cash Transaction có số đã thanh toán, đối tác và phân bổ.
+4. Tạo file có ít nhất hai chứng từ, trong đó dòng cuối sai lookup hoặc sai điều kiện serial. Import phải báo đúng sheet/dòng/cột và không tạo bất kỳ chứng từ nào.
+5. Sửa file hợp lệ rồi import lại. Tất cả chứng từ và dòng hàng phải được tạo cùng lúc ở trạng thái Nháp; tồn, serial, công nợ và báo cáo chưa thay đổi.
+6. Với giao dịch tiền, thử tổng phân bổ sai và `Paid Amount > Amount`; toàn file phải bị từ chối. File hợp lệ phải tạo đúng payment/allocation và số dư quỹ.
+
+### Export Excel
+
+1. Trên một grid thường, áp dụng tìm kiếm, lọc, sắp xếp và chọn page size nhỏ; file phải chứa toàn bộ kết quả khớp, không chỉ trang hiện tại.
+2. Đọc workbook bằng SheetJS và xác nhận không có checkbox, nút thao tác, ID kỹ thuật hoặc cột ẩn; ngày và tiền phải là kiểu Excel phù hợp.
+3. Trên Báo cáo Tài chính Công trình, để tất cả nhóm đóng rồi export. File vẫn phải chứa đầy đủ dòng giao dịch và tổng nhóm đang lọc.
+4. Đổi Việt/Anh và tải lại; tiêu đề cột và tên file phải phù hợp ngôn ngữ, không trộn nhãn.
+
+### Print/Download PDF
+
+1. Mở lần lượt PDF của SO, PO, Sales Return, Purchase Return, Transfer Out, Transfer In, Scrapping, Stock Count và Material Export; API và trang xem trước phải có dữ liệu đúng nguồn.
+2. Material Export phải hiện đúng `ExportDate` và dòng hàng. Purchase/Sales Return phải đọc trực tiếp PO/SO, không còn phụ thuộc `goodsReceive/deliveryOrder`.
+3. Tạo chứng từ có đủ dòng để vượt một trang A4, tải PDF và xác nhận có nhiều trang, không mất dòng, tiêu đề bảng được lặp và footer có `trang/tổng trang`.
+4. Mọi tab PDF phải mở với `noopener`; thiếu ID hoặc API lỗi phải hiện thông báo rõ, không tạo file rỗng.
+
+Mọi file tải xuống chỉ lưu trong thư mục artifact tạm của lượt test. Xóa artifact khi test thành công và chỉ giữ file/trace/video của ca thất bại.
+
+## 18. Mẫu báo cáo lỗi
 
 ```text
 Tiêu đề: [Phân hệ] Kết quả sai ngắn gọn

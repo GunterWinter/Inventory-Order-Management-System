@@ -735,8 +735,11 @@ const App = {
                             allowSorting: false,
                             disableHtmlEncode: false,
                             valueAccessor: (field, data) => {
+                                if (!data[field]) {
+                                    return '<span class="d-inline-flex align-items-center justify-content-center rounded bg-light text-muted" style="width: 38px; height: 38px;" title="Chưa có hình ảnh"><i class="far fa-image"></i></span>';
+                                }
                                 const url = getImageUrl(data[field]);
-                                return `<img src="${url}" class="rounded" style="width: 38px; height: 38px; object-fit: cover;" />`;
+                                return `<img src="${url}" alt="Hình hàng hóa" class="rounded" style="width: 38px; height: 38px; object-fit: cover;" />`;
                             }
                         },
                         { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },

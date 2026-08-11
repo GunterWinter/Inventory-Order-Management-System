@@ -22,6 +22,7 @@ public class CreatePurchaseReturnRequest : IRequest<CreatePurchaseReturnResult>
     public string? Description { get; init; }
     public string? PurchaseOrderId { get; init; }
     public string? CreatedById { get; init; }
+    public bool SkipDefaultItems { get; init; }
 }
 
 public class CreatePurchaseReturnValidator : AbstractValidator<CreatePurchaseReturnRequest>
@@ -72,7 +73,9 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var items = await _itemRepository
+        var items = request.SkipDefaultItems
+            ? []
+            : await _itemRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleId == entity.PurchaseOrderId && x.ModuleName == nameof(PurchaseOrder))

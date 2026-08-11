@@ -1,7 +1,19 @@
 (function (window) {
     const VI_LOCALE = 'vi-VN';
-    const ISO_DATE_LOCALE = 'en-CA';
     const VI_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+    function isVietnamese() {
+        return window.UiLocalization?.getLocale?.() !== 'en';
+    }
+
+    function displayLocale() {
+        return isVietnamese() ? VI_LOCALE : 'en-US';
+    }
+
+    function displayDateFormat(includeTime = false) {
+        const dateFormat = isVietnamese() ? 'dd/MM/yyyy' : 'MM/dd/yyyy';
+        return includeTime ? `${dateFormat} HH:mm` : dateFormat;
+    }
 
     function pad(value) {
         return `${value}`.padStart(2, '0');
@@ -138,8 +150,8 @@
 
     function datePickerOptions(options = {}) {
         return {
-            format: 'yyyy-MM-dd',
-            locale: 'en-US',
+            format: displayDateFormat(false),
+            locale: isVietnamese() ? 'vi' : 'en-US',
             strictMode: true,
             ...options
         };
@@ -151,7 +163,7 @@
             return '';
         }
 
-        return new Intl.DateTimeFormat(ISO_DATE_LOCALE, {
+        return new Intl.DateTimeFormat(displayLocale(), {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit'
@@ -167,6 +179,96 @@
         return `${formatDate(localDate)} ${pad(localDate.getHours())}:${pad(localDate.getMinutes())}:${pad(localDate.getSeconds())}`;
     }
 
+    function normalizeGridDateColumn(column) {
+        if (!column) {
+            return;
+        }
+
+        if (Array.isArray(column.columns)) {
+            column.columns.forEach(normalizeGridDateColumn);
+        }
+
+        const format = `${column.format ?? ''}`;
+        const looksLikeDate = /yyyy|MM|dd/.test(format)
+            && (/date/i.test(`${column.field ?? ''} ${column.headerText ?? ''}`) || /yyyy/.test(format));
+        if (!looksLikeDate) {
+            return;
+        }
+
+        const includesTime = /H|h|m/.test(format.replace(/MM/g, ''));
+        column.__indotalentDateColumn = true;
+        column.__indotalentIncludesTime = includesTime;
+        column.format = displayDateFormat(includesTime);
+    }
+
+    function normalizeGridDates(grid) {
+        if (!Array.isArray(grid?.columns)) {
+            return;
+        }
+
+        grid.columns.forEach(column => {
+            if (column.__indotalentDateColumn) {
+                column.format = displayDateFormat(column.__indotalentIncludesTime);
+            } else {
+                normalizeGridDateColumn(column);
+            }
+        });
+    }
+
+    function patchGrid() {
+        const grid = window.ej?.grids?.Grid;
+        if (!grid || grid.prototype.__vietnamDateFormatPatched) {
+            return;
+        }
+
+        const originalAppendTo = grid.prototype.appendTo;
+        grid.prototype.appendTo = function (selector) {
+            normalizeGridDates(this);
+            return originalAppendTo.call(this, selector);
+        };
+        grid.prototype.__vietnamDateFormatPatched = true;
+    }
+
+    function patchDatePicker() {
+        const datePicker = window.ej?.calendars?.DatePicker;
+        if (!datePicker || datePicker.prototype.__vietnamDateFormatPatched) {
+            return;
+        }
+
+        const originalAppendTo = datePicker.prototype.appendTo;
+        datePicker.prototype.appendTo = function (selector) {
+            const currentFormat = `${this.format ?? ''}`;
+            if (!currentFormat || /yyyy[-/]MM[-/]dd|dd[-/]MM[-/]yyyy|MM[-/]dd[-/]yyyy/.test(currentFormat)) {
+                this.format = displayDateFormat(false);
+                this.locale = isVietnamese() ? 'vi' : 'en-US';
+            }
+            return originalAppendTo.call(this, selector);
+        };
+        datePicker.prototype.__vietnamDateFormatPatched = true;
+    }
+
+    patchGrid();
+    patchDatePicker();
+    window.document.addEventListener('DOMContentLoaded', () => {
+        patchGrid();
+        patchDatePicker();
+    }, { once: true });
+    window.addEventListener('ui:languagechanged', () => {
+        window.document.querySelectorAll('.e-grid').forEach(element => {
+            const grid = element.ej2_instances?.[0];
+            if (!grid) return;
+            normalizeGridDates(grid);
+            grid.refreshColumns?.();
+        });
+        window.document.querySelectorAll('.e-datepicker').forEach(element => {
+            const datePicker = element.ej2_instances?.[0];
+            if (!datePicker) return;
+            datePicker.format = displayDateFormat(false);
+            datePicker.locale = isVietnamese() ? 'vi' : 'en-US';
+            datePicker.dataBind?.();
+        });
+    });
+
     window.DateFormatManager = {
         locale: VI_LOCALE,
         timeZone: VI_TIME_ZONE,
@@ -174,7 +276,7 @@
         parseBusinessDate,
         formatForApiDate,
         datePickerOptions,
-        syncfusionDateLocale: 'en-US',
+        get syncfusionDateLocale() { return isVietnamese() ? 'vi' : 'en-US'; },
         formatToLocale: formatDate,
         formatDateTimeToLocale: formatDateTime
     };

@@ -154,25 +154,25 @@ test('Syncfusion Update toolbar persists changes captured by beforeBatchSave', a
     assert.deepEqual(calls, ['edit:product-1']);
 });
 
-test('grouped grid collapses only after group caption rows are rendered', () => {
+test('grouped grid collapses after every data bind without re-entrant loops', () => {
     const manager = loadManager();
-    let rendered = false;
     let collapseCalls = 0;
     const grid = {
-        element: {
-            querySelector: selector => rendered && selector === '.e-groupcaptionrow' ? {} : null
-        },
+        groupSettings: { columns: ['customerName'] },
         groupModule: {
-            collapseAll: () => { collapseCalls += 1; }
+            collapseAll: () => {
+                collapseCalls += 1;
+                manager.collapseGroupsOnDataBound(grid);
+            }
         }
     };
 
-    manager.collapseGroupsOnFirstLoad(grid);
-    assert.equal(collapseCalls, 0);
-
-    rendered = true;
-    manager.collapseGroupsOnFirstLoad(grid);
-    manager.collapseGroupsOnFirstLoad(grid);
-
+    manager.collapseGroupsOnDataBound(grid);
     assert.equal(collapseCalls, 1);
+
+    manager.collapseGroupsOnDataBound(grid);
+    assert.equal(collapseCalls, 2);
+
+    manager.collapseGroupsOnFirstLoad(grid);
+    assert.equal(collapseCalls, 3);
 });

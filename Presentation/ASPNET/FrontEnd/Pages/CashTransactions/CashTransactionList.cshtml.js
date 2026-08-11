@@ -271,10 +271,12 @@ const App = {
             isEditableSource: () => !!state.sourceModule,
             isSourceTransaction: () => !!state.sourceModule && !!state.sourceModuleId,
             hasSupportedSourceItems: () => sourceModulesWithItems.has((state.sourceModule ?? '').toLowerCase()),
-            isManualExpense: () => !methods.isSourceTransaction() && Number(state.transactionType) === 1,
-            canShowAllocationToggle: () => methods.isManualExpense() && !state.viewMode && !state.deleteMode,
-            shouldShowAllocationPanel: () => methods.isManualExpense()
-                && (state.allocationRows.length > 0 || (!state.viewMode && !state.deleteMode && state.showAllocationDetails)),
+            isManualTransaction: () => !methods.isSourceTransaction(),
+            canShowAllocationToggle: () => methods.isManualTransaction() && !state.viewMode && !state.deleteMode,
+            shouldShowAllocationPanel: () => methods.isManualTransaction()
+                && ((state.viewMode || state.deleteMode)
+                    ? state.allocationRows.length > 0
+                    : state.showAllocationDetails),
             shouldShowGoodsPanel: () => methods.isSourceTransaction() && methods.hasSupportedSourceItems(),
             isFormReadOnly: () => state.viewMode || state.deleteMode,
             canEditPrimaryFields: () => !state.viewMode && !state.deleteMode && !state.sourceModule,
@@ -282,7 +284,7 @@ const App = {
             canEditPaidAmount: () => !state.viewMode && !state.deleteMode
             ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
             ,validateAllocations: () => {
-                if (!methods.shouldShowAllocationPanel() || !methods.canEditPrimaryFields()) return true;
+                if (state.allocationRows.length === 0 || !methods.canEditPrimaryFields()) return true;
                 return Math.abs(methods.allocationTotal() - (Number(state.amount) || 0)) <= 0.000001;
             }
             ,syncAmountFromAllocations: () => {
@@ -292,16 +294,14 @@ const App = {
             ,onAllocationAmountInput: () => {
                 Vue.nextTick(() => methods.syncAmountFromAllocations());
             }
-            ,partnerOptions: () => methods.shouldShowAllocationPanel()
-                ? state.partnerList.filter(partner => !!partner.vendorId)
-                : state.partnerList
+            ,partnerOptions: () => state.partnerList
             ,toggleAllocationDetails: () => {
                 state.showAllocationDetails = !state.showAllocationDetails;
-                if (state.showAllocationDetails) {
-                    const selected = state.partnerList.find(partner => partner.id === state.partnerId);
-                    if (selected && !selected.vendorId) state.partnerId = null;
-                }
                 partnerDropDown.refresh();
+            }
+            ,setAllocationRows: (allocations) => {
+                state.allocationRows = (allocations ?? []).map(allocation => ({ ...allocation }));
+                state.showAllocationDetails = state.allocationRows.length > 0;
             }
             ,addAllocation: () => state.allocationRows.push({ customerId: null, amount: 0, description: '' })
             ,removeAllocation: (index) => {
@@ -654,7 +654,7 @@ const App = {
                             state.sourceModule = data.sourceModule ?? state.sourceModule;
                             state.sourceModuleId = data.sourceModuleId ?? state.sourceModuleId;
                             state.sourceModuleNumber = data.sourceModuleNumber ?? state.sourceModuleNumber;
-                            state.allocationRows = (data.allocations ?? []).map(a => ({ ...a }));
+                            methods.setAllocationRows(data.allocations);
                             await methods.loadSourceDetails();
                         }
 
@@ -878,7 +878,7 @@ const App = {
                             state.sourceModule = args.rowData.sourceModule;
                             state.sourceModuleId = args.rowData.sourceModuleId;
                                 state.sourceModuleNumber = args.rowData.sourceModuleNumber;
-                                state.allocationRows = (args.rowData.allocations ?? []).map(a => ({ ...a }));
+                                methods.setAllocationRows(args.rowData.allocations);
                             await methods.loadSourceDetails();
                             await showMainModal();
                         }
@@ -919,7 +919,7 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
-                                state.allocationRows = (r.allocations ?? []).map(a => ({ ...a }));
+                                methods.setAllocationRows(r.allocations);
                                 await methods.loadSourceDetails();
                                 await showMainModal();
                             }
@@ -944,7 +944,7 @@ const App = {
                                 state.sourceModule = r.sourceModule;
                                 state.sourceModuleId = r.sourceModuleId;
                                 state.sourceModuleNumber = r.sourceModuleNumber;
-                                state.allocationRows = (r.allocations ?? []).map(a => ({ ...a }));
+                                methods.setAllocationRows(r.allocations);
                                 await methods.loadSourceDetails();
                                 await showMainModal();
                             }

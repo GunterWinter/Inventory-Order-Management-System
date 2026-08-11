@@ -30,6 +30,56 @@
     .payment-status-action:hover {
         text-decoration: underline;
     }
+
+    #MainModal .modal-xl {
+        max-width: min(96vw, 1480px);
+    }
+
+    .sales-order-payment-popup {
+        border-radius: 0.875rem !important;
+        box-shadow: 0 1.25rem 3rem rgba(31, 45, 61, 0.22) !important;
+    }
+
+    .sales-order-payment-popup .swal2-title {
+        padding-top: 1.5rem;
+        font-size: 1.55rem;
+    }
+
+    .sales-order-payment-popup .swal2-html-container {
+        margin: 1.25rem 2rem 0;
+    }
+
+    .payment-summary-box {
+        min-height: 92px;
+        padding: 0.875rem;
+        border: 1px solid #e1e7ef;
+        border-radius: 0.625rem;
+        background: #f8fafc;
+    }
+
+    .payment-form-card {
+        padding: 1rem;
+        border: 1px solid #e1e7ef;
+        border-radius: 0.75rem;
+        background: #fff;
+    }
+
+    .payment-form-card .form-control {
+        min-height: 44px;
+        border-color: #cbd5e1;
+        border-radius: 0.5rem;
+    }
+
+    .payment-form-card textarea.form-control {
+        min-height: 76px;
+    }
+
+    @@media (max-width: 575.98px) {
+        .sales-order-payment-popup .swal2-html-container {
+            margin-right: 1rem;
+            margin-left: 1rem;
+        }
+    }
 </style>
 
 <div id="app" v-cloak>

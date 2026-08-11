@@ -22,6 +22,7 @@ public class CreateSalesReturnRequest : IRequest<CreateSalesReturnResult>
     public string? Description { get; init; }
     public string? SalesOrderId { get; init; }
     public string? CreatedById { get; init; }
+    public bool SkipDefaultItems { get; init; }
 }
 
 public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest, CreateSalesReturnResult>
@@ -61,7 +62,9 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
         await _SalesOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var items = await _itemRepository
+        var items = request.SkipDefaultItems
+            ? []
+            : await _itemRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleId == entity.SalesOrderId && x.ModuleName == nameof(SalesOrder))

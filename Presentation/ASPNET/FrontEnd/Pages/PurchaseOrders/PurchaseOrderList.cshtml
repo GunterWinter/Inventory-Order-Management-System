@@ -30,6 +30,63 @@
     .payment-status-action:hover {
         text-decoration: underline;
     }
+
+    #MainModal .modal-xl {
+        max-width: min(96vw, 1480px);
+    }
+
+    .purchase-order-payment-popup {
+        border-radius: 0.875rem !important;
+        box-shadow: 0 1.25rem 3rem rgba(31, 45, 61, 0.22) !important;
+    }
+
+    .purchase-order-payment-popup .swal2-title {
+        padding-top: 1.5rem;
+        font-size: 1.55rem;
+    }
+
+    .purchase-order-payment-popup .swal2-html-container {
+        margin: 1.25rem 2rem 0;
+    }
+
+    .purchase-payment-summary {
+        padding: 0.875rem 1rem;
+        border: 1px solid #e1e7ef;
+        border-radius: 0.625rem;
+        background: #f8fafc;
+    }
+
+    .purchase-payment-summary__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.4rem 0;
+    }
+
+    .purchase-payment-summary__row + .purchase-payment-summary__row {
+        border-top: 1px solid #e7ecf2;
+    }
+
+    .purchase-payment-form {
+        padding: 1rem;
+        border: 1px solid #e1e7ef;
+        border-radius: 0.75rem;
+        background: #fff;
+    }
+
+    .purchase-payment-form .form-control {
+        min-height: 44px;
+        border-color: #cbd5e1;
+        border-radius: 0.5rem;
+    }
+
+    @@media (max-width: 575.98px) {
+        .purchase-order-payment-popup .swal2-html-container {
+            margin-right: 1rem;
+            margin-left: 1rem;
+        }
+    }
 </style>
 
 <div id="app" v-cloak>
@@ -42,7 +99,7 @@
     </div>
 
     <div class="modal fade" ref="mainModalRef" id="MainModal" aria-hidden="true" tabindex="-1" data-bs-focus="false" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">{{ state.mainTitle }}</h5>

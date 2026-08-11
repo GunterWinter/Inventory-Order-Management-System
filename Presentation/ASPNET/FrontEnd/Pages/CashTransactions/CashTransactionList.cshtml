@@ -3,6 +3,81 @@
     ViewData["Title"] = "Cash Transaction List";
 }
 
+<style>
+    .allocation-panel {
+        overflow: hidden;
+        border: 1px solid #dbe3ec;
+        border-radius: 0.75rem;
+        background: #f8fafc;
+        box-shadow: 0 0.125rem 0.375rem rgba(31, 45, 61, 0.06);
+    }
+
+    .allocation-panel__header {
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid #e4e9f0;
+        background: #fff;
+    }
+
+    .allocation-panel__body {
+        padding: 0.875rem 1rem 0.5rem;
+    }
+
+    .allocation-row {
+        padding: 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.625rem;
+        background: #fff;
+    }
+
+    .allocation-row + .allocation-row {
+        margin-top: 0.625rem;
+    }
+
+    .allocation-row .form-control {
+        min-height: 38px;
+    }
+
+    .allocation-remove-button {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        border-radius: 0.5rem;
+    }
+
+    .allocation-panel__footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-top: 1px solid #e4e9f0;
+        background: #fff;
+    }
+
+    .allocation-total {
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: #edf2f7;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .allocation-total.text-danger {
+        background: #fff0f1;
+    }
+
+    @@media (max-width: 767.98px) {
+        .allocation-panel__footer {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .allocation-total {
+            white-space: normal;
+        }
+    }
+</style>
+
 <div id="app" v-cloak>
     <div class="row">
         <div class="col-12">
@@ -93,27 +168,49 @@
                                         </div>
                                         <div v-if="methods.canShowAllocationToggle()" class="d-flex justify-content-end mb-2">
                                             <button type="button" class="btn btn-sm btn-outline-secondary" v-on:click="methods.toggleAllocationDetails()">
-                                                {{ state.showAllocationDetails ? 'Ẩn Chi tiết' : 'Chi tiết' }}
+                                                {{ state.showAllocationDetails ? 'Ẩn chi tiết phân bổ' : 'Chi tiết phân bổ' }}
                                             </button>
                                         </div>
-                                        <div v-if="methods.shouldShowAllocationPanel()" class="card card-body bg-light mb-2">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <strong>Phân bổ</strong>
-                                                <button type="button" class="btn btn-sm btn-outline-primary" v-on:click="methods.addAllocation()" v-bind:disabled="!methods.canEditPrimaryFields()">Thêm dòng</button>
+                                        <div v-if="methods.shouldShowAllocationPanel()" class="allocation-panel mb-2">
+                                            <div class="allocation-panel__header d-flex justify-content-between align-items-center">
+                                                <strong><i class="fas fa-project-diagram text-primary mr-2"></i>Chi tiết phân bổ</strong>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" v-on:click="methods.addAllocation()" v-bind:disabled="!methods.canEditPrimaryFields()">
+                                                    <i class="fas fa-plus mr-1"></i>Thêm dòng
+                                                </button>
                                             </div>
-                                            <div class="row g-2 px-1 mb-1 d-none d-md-flex fw-semibold text-muted small">
-                                                <div class="col-md-4">Khách hàng</div>
-                                                <div class="col-md-3">Giá</div>
-                                                <div class="col">Diễn giải</div>
-                                                <div class="col-auto" style="width: 50px;"></div>
+                                            <div class="allocation-panel__body">
+                                                <div v-if="state.allocationRows.length === 0" class="text-center text-muted py-3">
+                                                    Chưa có dòng phân bổ. Bấm “Thêm dòng” để phân bổ theo khách hàng hoặc công trình.
+                                                </div>
+                                                <div v-for="(row, index) in state.allocationRows" v-bind:key="index" class="allocation-row row align-items-end mx-0">
+                                                    <div class="col-md-4 px-1 mb-2 mb-md-0">
+                                                        <label class="small font-weight-semibold text-muted mb-1">Khách hàng / Công trình</label>
+                                                        <select class="form-control" v-bind:value="row.customerId || ''" v-on:change="row.customerId = $event.target.value || null" v-bind:disabled="!methods.canEditPrimaryFields()">
+                                                            <option value="">Chọn khách hàng / công trình</option>
+                                                            <option v-for="c in state.partnerList.filter(p => p.customerId)" v-bind:key="c.customerId" v-bind:value="c.customerId">{{ c.name }}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3 px-1 mb-2 mb-md-0">
+                                                        <label class="small font-weight-semibold text-muted mb-1">Số tiền</label>
+                                                        <input type="number" min="0" class="form-control" v-model.number="row.amount" v-on:input="methods.onAllocationAmountInput()" placeholder="Nhập số tiền" v-bind:disabled="!methods.canEditPrimaryFields()" />
+                                                    </div>
+                                                    <div class="col px-1 mb-2 mb-md-0">
+                                                        <label class="small font-weight-semibold text-muted mb-1">Diễn giải</label>
+                                                        <input class="form-control" v-model="row.description" placeholder="Nhập diễn giải" v-bind:disabled="!methods.canEditPrimaryFields()" />
+                                                    </div>
+                                                    <div class="col-auto px-1">
+                                                        <button type="button" class="btn btn-outline-danger allocation-remove-button" title="Xóa dòng phân bổ" v-on:click="methods.removeAllocation(index)" v-bind:disabled="!methods.canEditPrimaryFields()">
+                                                            <i class="fas fa-trash-alt"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div v-for="(row, index) in state.allocationRows" v-bind:key="index" class="row g-2 mb-2">
-                                                <div class="col-md-4"><select class="form-select" v-model="row.customerId" v-bind:disabled="!methods.canEditPrimaryFields()"><option :value="null">Chọn khách hàng</option><option v-for="c in state.partnerList.filter(p => p.customerId)" :value="c.customerId">{{ c.name }}</option></select></div>
-                                                <div class="col-md-3"><input type="number" min="0" class="form-control" v-model.number="row.amount" v-on:input="methods.onAllocationAmountInput()" placeholder="Nhập giá" v-bind:disabled="!methods.canEditPrimaryFields()" /></div>
-                                                <div class="col"><input class="form-control" v-model="row.description" placeholder="Nhập diễn giải" v-bind:disabled="!methods.canEditPrimaryFields()" /></div>
-                                                <div class="col-auto"><button type="button" class="btn btn-outline-danger" v-on:click="methods.removeAllocation(index)" v-bind:disabled="!methods.canEditPrimaryFields()">×</button></div>
+                                            <div class="allocation-panel__footer">
+                                                <span class="small text-muted">Tổng các dòng phải bằng tổng tiền giao dịch khi có phân bổ.</span>
+                                                <span class="allocation-total" v-bind:class="{ 'text-danger': !methods.validateAllocations(), 'text-success': methods.validateAllocations() }">
+                                                    Tổng phân bổ: {{ methods.formatMoney(methods.allocationTotal()) }} / {{ methods.formatMoney(state.amount) }}
+                                                </span>
                                             </div>
-                                            <div class="text-end" v-bind:class="{ 'text-danger': !methods.validateAllocations() }">Tổng phân bổ: {{ methods.formatMoney(methods.allocationTotal()) }} / {{ methods.formatMoney(state.amount) }}</div>
                                         </div>
                                     </div>
                                 </div>

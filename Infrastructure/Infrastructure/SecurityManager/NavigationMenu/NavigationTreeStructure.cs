@@ -171,6 +171,11 @@ public static class NavigationTreeStructure
                     "IsModule": false
                 },
                 {
+                    "URL": "/CashTransactions/CashCategoryReport",
+                    "Name": "Cash Flow by Category",
+                    "IsModule": false
+                },
+                {
                     "URL": "/VendorDebtReports/VendorDebtReportList",
                     "Name": "Debt Report",
                     "IsModule": false

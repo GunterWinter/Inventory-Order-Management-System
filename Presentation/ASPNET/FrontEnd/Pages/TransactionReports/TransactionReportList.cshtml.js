@@ -108,7 +108,7 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        GridInteractionManager.collapseGroupsOnFirstLoad(mainGrid.obj);
+                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {

@@ -621,7 +621,7 @@
                         if (args.item.id === 'PrintPDFCustom') {
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                window.open('/Scrappings/ScrappingPdf?id=' + (selectedRecord.id ?? ''), '_blank');
+                                window.open('/Scrappings/ScrappingPdf?id=' + encodeURIComponent(selectedRecord.id ?? ''), '_blank', 'noopener');
                             }
                         }
                     }

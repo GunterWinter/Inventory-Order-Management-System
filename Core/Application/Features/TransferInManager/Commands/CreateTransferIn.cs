@@ -23,6 +23,7 @@ public class CreateTransferInRequest : IRequest<CreateTransferInResult>
     public string? Description { get; init; }
     public string? TransferOutId { get; init; }
     public string? CreatedById { get; init; }
+    public bool SkipDefaultItems { get; init; }
 }
 
 public class CreateTransferInValidator : AbstractValidator<CreateTransferInRequest>
@@ -75,7 +76,9 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
         await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
-        var items = await _itemRepository
+        var items = request.SkipDefaultItems
+            ? []
+            : await _itemRepository
             .GetQuery()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleId == entity.TransferOutId && x.ModuleName == nameof(TransferOut))

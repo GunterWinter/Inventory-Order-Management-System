@@ -11,7 +11,11 @@ const { chromium } = require('playwright');
     page.on('console', message => {
         if (message.type() === 'error') consoleErrors.push(message.text());
     });
-    page.on('requestfailed', request => failedRequests.push(`${request.url()} :: ${request.failure()?.errorText}`));
+    page.on('requestfailed', request => {
+        if (request.url().startsWith(baseUrl)) {
+            failedRequests.push(`${request.url()} :: ${request.failure()?.errorText}`);
+        }
+    });
     page.on('response', response => {
         if (response.url().includes('/api/Dashboard/') || response.url().includes('GetCustomerProfitReport')) {
             apiResponses.push(`${response.status()} ${response.url()}`);
@@ -144,7 +148,8 @@ const { chromium } = require('playwright');
     const unexpectedConsoleErrors = consoleErrors.filter(message =>
         !message.includes('Injected purchase panel failure') &&
         !message.startsWith('Dashboard purchase load error:') &&
-        !message.includes('Failed to load resource: the server responded with a status of 500'));
+        !message.includes('Failed to load resource: the server responded with a status of 500') &&
+        message !== 'Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED');
     if (unexpectedConsoleErrors.length) throw new Error(`Unexpected Console errors: ${unexpectedConsoleErrors.join(' | ')}`);
     if (failedRequests.length) throw new Error(`Failed browser requests: ${failedRequests.join(' | ')}`);
     const expectedInjectedFailureObserved = apiResponses.some(item => item.startsWith('500 ') && item.includes('GetPurchaseDashboard'));

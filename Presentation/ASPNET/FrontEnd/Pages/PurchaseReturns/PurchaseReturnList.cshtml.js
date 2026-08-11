@@ -641,7 +641,7 @@
                         if (args.item.id === 'PrintPDFCustom') {
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                window.open('/PurchaseReturns/PurchaseReturnPdf?id=' + (selectedRecord.id ?? ''), '_blank');
+                                window.open('/PurchaseReturns/PurchaseReturnPdf?id=' + encodeURIComponent(selectedRecord.id ?? ''), '_blank', 'noopener');
                             }
                         }
                     }

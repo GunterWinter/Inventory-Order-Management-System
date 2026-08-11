@@ -1,9 +1,57 @@
 (function (window, document) {
     const DATA_SHEET_NAME = 'Data';
+    const DOCUMENT_SHEET_NAME = 'Documents';
+    const ITEM_SHEET_NAME = 'Items';
+    const ALLOCATION_SHEET_NAME = 'Allocations';
     const INSTRUCTION_SHEET_NAME = 'Instructions';
     const TEMPLATE_BUTTON_ID = 'ExcelImportTemplateCustom';
     const IMPORT_BUTTON_ID = 'ExcelImportCustom';
     const MAX_ERROR_LINES = 12;
+
+    const localizedHeaderAliases = {
+        'Name': ['Tên'],
+        'Description': ['Mô tả', 'Diễn giải'],
+        'Document Key': ['Khóa chứng từ'],
+        'Transaction Key': ['Khóa giao dịch'],
+        'Transaction Date': ['Ngày giao dịch'],
+        'Transaction Type': ['Loại giao dịch'],
+        'Amount': ['Số tiền'],
+        'Paid Amount': ['Số đã thanh toán'],
+        'Cash Account': ['Tài khoản quỹ'],
+        'Cash Category': ['Danh mục quỹ'],
+        'Customer': ['Khách hàng', 'Công trình'],
+        'Vendor': ['Nhà cung cấp'],
+        'Order Date': ['Ngày đơn hàng'],
+        'Sales Type': ['Loại bán hàng'],
+        'Product': ['Sản phẩm', 'Hàng hóa'],
+        'Warehouse': ['Kho'],
+        'Warehouse From': ['Kho nguồn'],
+        'Warehouse To': ['Kho đích'],
+        'Quantity': ['Số lượng'],
+        'Counted Quantity': ['Số lượng kiểm kê'],
+        'Unit Price': ['Đơn giá'],
+        'Cost Price': ['Giá vốn'],
+        'Tax': ['Thuế'],
+        'Status': ['Trạng thái'],
+        'Order Status': ['Trạng thái đơn'],
+        'Physical Product': ['Hàng vật lý'],
+        'Serial Tracking Mode': ['Chế độ serial'],
+        'Internal Serial Fixed Code': ['Mã serial cố định'],
+        'Default Warehouse': ['Kho mặc định'],
+        'Default Warranty Months': ['Số tháng bảo hành mặc định'],
+        'Product Serial IDs': ['ID serial sản phẩm'],
+        'Product Group': ['Nhóm sản phẩm'],
+        'Unit Measure': ['Đơn vị tính'],
+        'Return Date': ['Ngày trả hàng'],
+        'Purchase Order': ['Đơn mua hàng'],
+        'Sales Order': ['Đơn bán hàng'],
+        'Release Date': ['Ngày xuất'],
+        'Receive Date': ['Ngày nhận'],
+        'Transfer Out': ['Phiếu xuất chuyển kho'],
+        'Scrapping Date': ['Ngày hủy hàng'],
+        'Count Date': ['Ngày kiểm kê'],
+        'Export Date': ['Ngày xuất vật tư']
+    };
 
     const normalizeKey = (value) => `${value ?? ''}`
         .trim()
@@ -22,6 +70,7 @@
         vendors: { endpoint: '/Vendor/GetVendorList', sheetName: 'Vendors' },
         customers: { endpoint: '/Customer/GetCustomerList', sheetName: 'Customers' },
         warehouses: { endpoint: '/Warehouse/GetWarehouseList', sheetName: 'Warehouses' },
+        products: { endpoint: '/Product/GetProductList', sheetName: 'Products' },
         salesOrders: { endpoint: '/SalesOrder/GetSalesOrderList', sheetName: 'SalesOrders' },
         purchaseOrders: { endpoint: '/PurchaseOrder/GetPurchaseOrderList', sheetName: 'PurchaseOrders' },
         transferOuts: { endpoint: '/TransferOut/GetTransferOutList', sheetName: 'TransferOuts' },
@@ -31,17 +80,39 @@
         transactionTypes: {
             sheetName: 'TransactionTypes',
             data: [
-                { id: '0', name: 'Debit' },
-                { id: '1', name: 'Credit' }
+                { id: 0, name: 'Debit', aliases: ['Thu', 'Receipt'] },
+                { id: 1, name: 'Credit', aliases: ['Chi', 'Expense'] }
+            ]
+        },
+        accountTypes: {
+            sheetName: 'AccountTypes',
+            data: [
+                { id: 0, name: 'Cash', aliases: ['Tiền mặt'] },
+                { id: 1, name: 'Bank', aliases: ['Ngân hàng'] }
+            ]
+        },
+        serialTrackingModes: {
+            sheetName: 'SerialModes',
+            data: [
+                { id: 0, name: 'None', aliases: ['Không theo dõi'] },
+                { id: 1, name: 'Internal Auto', aliases: ['Mã nội bộ tự sinh'] },
+                { id: 2, name: 'Manufacturer Serial', aliases: ['Serial nhà sản xuất'] }
+            ]
+        },
+        salesTypes: {
+            sheetName: 'SalesTypes',
+            data: [
+                { id: 1, name: 'Retail', aliases: ['Bán lẻ'] },
+                { id: 2, name: 'Internal Export', aliases: ['Xuất nội bộ'] }
             ]
         },
         statuses: {
             sheetName: 'Statuses',
             data: [
-                { id: '0', name: 'Draft' },
-                { id: '1', name: 'Cancelled' },
-                { id: '2', name: 'Confirmed' },
-                { id: '3', name: 'Archived' }
+                { id: '0', name: 'Draft', aliases: ['Nháp'] },
+                { id: '1', name: 'Cancelled', aliases: ['Hủy', 'Đã hủy'] },
+                { id: '2', name: 'Confirmed', aliases: ['Đã xác nhận'] },
+                { id: '3', name: 'Archived', aliases: ['Lưu trữ'] }
             ]
         }
     };
@@ -120,15 +191,20 @@
             fileName: 'warehouses-template.xlsx',
             columns: simpleColumns
         },
-        todos: {
-            title: 'Todo',
-            endpoint: '/Todo/CreateTodo',
-            fileName: 'todos-template.xlsx',
+        cashaccounts: {
+            title: 'Cash Account',
+            fileName: 'cash-accounts-template.xlsx',
             columns: [
-                { header: 'Title', key: 'title', required: true, example: 'Sample todo' },
-                { header: 'Status', key: 'status', required: true, lookup: 'statuses', example: 'Draft' },
-                { header: 'Description', key: 'description', example: '' }
+                { header: 'Name', key: 'name', required: true, example: 'Main bank account' },
+                { header: 'Account Type', key: 'accountType', required: true, lookup: 'accountTypes', example: 'Bank' },
+                { header: 'Initial Balance', key: 'initialBalance', type: 'number', defaultValue: 0, example: 0 },
+                descriptionColumn
             ]
+        },
+        cashcategories: {
+            title: 'Cash Category',
+            fileName: 'cash-categories-template.xlsx',
+            columns: simpleColumns
         },
         cashtransactions: {
             title: 'Cash Transaction',
@@ -137,13 +213,32 @@
             columns: [
                 { header: 'Transaction Date', key: 'transactionDate', required: true, type: 'date', example: '2026-04-29' },
                 { header: 'Transaction Type', key: 'transactionType', required: true, lookup: 'transactionTypes', example: 'Credit' },
-                { header: 'Status', key: 'status', required: true, lookup: 'statuses', example: 'Draft' },
                 { header: 'Amount', key: 'amount', required: true, type: 'number', example: 1000000 },
+                { header: 'Paid Amount', key: 'paidAmount', type: 'number', defaultValue: 0, example: 0 },
                 { header: 'Description', key: 'description', example: '' },
                 { header: 'Cash Account', key: 'cashAccountId', required: true, lookup: 'cashAccounts', example: 'Sample Account' },
                 { header: 'Cash Category', key: 'cashCategoryId', lookup: 'cashCategories', example: 'Sample Category' },
-                { header: 'Customer', key: 'customerId', lookup: 'customers', example: 'Sample Customer' }
-            ]
+                { header: 'Customer', key: 'customerId', lookup: 'customers', example: 'Sample Customer' },
+                { header: 'Vendor', key: 'vendorId', lookup: 'vendors', example: 'Sample Vendor' },
+                { header: 'Transaction Key', key: 'documentKey', required: true, example: 'CT-1', clientOnly: true }
+            ],
+            nestedSheetName: ALLOCATION_SHEET_NAME,
+            nestedProperty: 'allocations',
+            nestedColumns: [
+                { header: 'Transaction Key', key: 'documentKey', required: true, example: 'CT-1', clientOnly: true },
+                { header: 'Customer', key: 'customerId', required: true, lookup: 'customers', example: 'Sample Customer' },
+                { header: 'Amount', key: 'amount', required: true, type: 'number', example: 1000000 },
+                descriptionColumn
+            ],
+            validate: (payload, rowNumber) => {
+                if ((payload.paidAmount ?? 0) < 0 || payload.paidAmount > payload.amount) {
+                    throw new Error(`Row ${rowNumber}: "Paid Amount" must be between zero and the transaction amount.`);
+                }
+                const allocations = payload.allocations ?? [];
+                if (allocations.length && Math.abs(allocations.reduce((sum, item) => sum + Number(item.amount || 0), 0) - payload.amount) > 0.000001) {
+                    throw new Error(`Row ${rowNumber}: allocation total must equal the transaction amount.`);
+                }
+            }
         },
         taxs: {
             title: 'Tax',
@@ -163,11 +258,28 @@
                 { header: 'Name', key: 'name', required: true, example: 'Sample product' },
                 { header: 'Ref Code', key: 'referenceCode', aliases: ['Reference Code', 'SKU'], example: 'SKU-001' },
                 { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
+                { header: 'Cost Price', key: 'costPrice', type: 'number', defaultValue: 0, example: 80000 },
                 { header: 'Physical Product', key: 'physical', required: true, type: 'boolean', example: 'TRUE', defaultValue: true },
+                { header: 'Serial Tracking Mode', key: 'serialTrackingMode', required: true, lookup: 'serialTrackingModes', example: 'None' },
+                { header: 'Internal Serial Fixed Code', key: 'internalSerialFixedCode', example: '' },
+                { header: 'Default Warehouse', key: 'defaultWarehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Default Warranty Months', key: 'defaultWarrantyMonths', type: 'number', defaultValue: 0, example: 12 },
                 { header: 'Product Group', key: 'productGroupId', required: true, lookup: 'productGroups', example: 'General' },
                 { header: 'Unit Measure', key: 'unitMeasureName', required: false, example: 'Cái, Hộp, PCS' },
                 { header: 'Description', key: 'description', example: '' }
-            ]
+            ],
+            validate: (payload, rowNumber) => {
+                if (!payload.physical) {
+                    payload.serialTrackingMode = 0;
+                    payload.internalSerialFixedCode = '';
+                    payload.defaultWarehouseId = null;
+                    payload.defaultWarrantyMonths = null;
+                    return;
+                }
+                if (Number(payload.serialTrackingMode) === 1 && !/^[A-Za-z0-9]{2,4}$/.test(payload.internalSerialFixedCode || '')) {
+                    throw new Error(`Row ${rowNumber}: "Internal Serial Fixed Code" must contain 2-4 letters or numbers for Internal Auto mode.`);
+                }
+            }
         },
         vendors: {
             title: 'Vendor',
@@ -227,11 +339,21 @@
             endpoint: '/SalesOrder/CreateSalesOrder',
             fileName: 'sales-orders-template.xlsx',
             columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SO-1', clientOnly: true },
                 { header: 'Order Date', key: 'orderDate', required: true, type: 'date', example: '2026-04-29' },
-                orderStatusColumn,
                 { header: 'Customer', key: 'customerId', required: true, lookup: 'customers', example: 'Sample customer' },
-                { header: 'Tax', key: 'taxId', required: true, lookup: 'taxes', example: 'VAT 10%' },
+                { header: 'Sales Type', key: 'salesType', required: true, lookup: 'salesTypes', example: 'Retail' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SO-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'quantity', required: true, type: 'number', example: 1 },
+                { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
+                { header: 'Tax', key: 'taxId', lookup: 'taxes', example: 'VAT 10%' },
+                { header: 'Warranty Months', key: 'warrantyMonths', type: 'number', defaultValue: 0, example: 12 },
+                { header: 'Summary', key: 'summary', example: '' }
             ]
         },
         purchaseorders: {
@@ -239,11 +361,21 @@
             endpoint: '/PurchaseOrder/CreatePurchaseOrder',
             fileName: 'purchase-orders-template.xlsx',
             columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'PO-1', clientOnly: true },
                 { header: 'Order Date', key: 'orderDate', required: true, type: 'date', example: '2026-04-29' },
-                orderStatusColumn,
                 { header: 'Vendor', key: 'vendorId', required: true, lookup: 'vendors', example: 'Sample vendor' },
-                { header: 'Tax', key: 'taxId', required: true, lookup: 'taxes', example: 'VAT 10%' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'PO-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'quantity', required: true, type: 'number', example: 1 },
+                { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
+                { header: 'Tax', key: 'taxId', lookup: 'taxes', example: 'VAT 10%' },
+                { header: 'Supplier Warranty Months', key: 'supplierWarrantyMonths', type: 'number', defaultValue: 0, example: 12 },
+                { header: 'Manufacturer Serials', key: 'manufacturerSerialNumbers', type: 'list', example: '' },
+                { header: 'Summary', key: 'summary', example: '' }
             ]
         },
         purchasereturns: {
@@ -251,10 +383,18 @@
             endpoint: '/PurchaseReturn/CreatePurchaseReturn',
             fileName: 'purchase-returns-template.xlsx',
             columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'PR-1', clientOnly: true },
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Purchase Order', key: 'purchaseOrderId', required: true, lookup: 'purchaseOrders', example: 'PO-0001' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'PR-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
             ]
         },
         salesreturns: {
@@ -262,10 +402,18 @@
             endpoint: '/SalesReturn/CreateSalesReturn',
             fileName: 'sales-returns-template.xlsx',
             columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SR-1', clientOnly: true },
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Sales Order', key: 'salesOrderId', required: true, lookup: 'salesOrders', example: 'SO-0001' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SR-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
             ]
         },
         transferouts: {
@@ -277,7 +425,13 @@
                 statusColumn,
                 { header: 'Warehouse From', key: 'warehouseFromId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 { header: 'Warehouse To', key: 'warehouseToId', required: true, lookup: 'warehouses', example: 'Secondary Warehouse' },
-                descriptionColumn
+                descriptionColumn,
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'TO-1', clientOnly: true }
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'TO-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
             ]
         },
         transferins: {
@@ -285,10 +439,17 @@
             endpoint: '/TransferIn/CreateTransferIn',
             fileName: 'transfer-ins-template.xlsx',
             columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'TI-1', clientOnly: true },
                 { header: 'Receive Date', key: 'transferReceiveDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Transfer Out', key: 'transferOutId', required: true, lookup: 'transferOuts', example: 'OUT-0001' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'TI-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
             ]
         },
         scrappings: {
@@ -299,7 +460,13 @@
                 { header: 'Scrapping Date', key: 'scrappingDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
-                descriptionColumn
+                descriptionColumn,
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SCRAP-1', clientOnly: true }
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SCRAP-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
             ]
         },
         stockcounts: {
@@ -310,7 +477,29 @@
                 { header: 'Count Date', key: 'countDate', required: true, type: 'date', example: '2026-04-29' },
                 statusColumn,
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
+                descriptionColumn,
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SC-1', clientOnly: true }
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'SC-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Counted Quantity', key: 'qtySCCount', required: true, type: 'number', example: 1 }
+            ]
+        },
+        materialexports: {
+            title: 'Material Export',
+            fileName: 'material-exports-template.xlsx',
+            columns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'ME-1', clientOnly: true },
+                { header: 'Export Date', key: 'materialExportDate', required: true, type: 'date', example: '2026-04-29' },
+                { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
+                { header: 'Customer', key: 'customerId', required: true, lookup: 'customers', example: 'Sample customer' },
                 descriptionColumn
+            ],
+            itemColumns: [
+                { header: 'Document Key', key: 'documentKey', required: true, example: 'ME-1', clientOnly: true },
+                { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
             ]
         }
     };
@@ -359,11 +548,15 @@
                 item?.number,
                 item?.referenceCode,
                 item?.emailAddress,
-                item?.percentage
+                item?.percentage,
+                ...(item?.aliases ?? [])
             ].forEach((value) => {
                 const key = normalizeKey(value);
-                if (key && !index.has(key)) {
+                if (!key) return;
+                if (!index.has(key)) {
                     index.set(key, item);
+                } else if (index.get(key)?.id !== item?.id) {
+                    index.set(key, null);
                 }
             });
         });
@@ -372,7 +565,7 @@
     };
 
     const getRequiredLookups = (config) => [...new Set(
-        config.columns
+        [...config.columns, ...(config.itemColumns ?? []), ...(config.nestedColumns ?? [])]
             .map((column) => column.lookup)
             .filter(Boolean)
     )];
@@ -400,12 +593,17 @@
         return column.example ?? column.defaultValue ?? '';
     };
 
-    const buildInstructions = (config) => [
+    const buildInstructions = (config, lookups) => [
         ['Instruction'],
-        [`Fill the "${DATA_SHEET_NAME}" sheet, then import this file from the ${config.title} page.`],
+        [`Fill the "${config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME}" sheet, then import this file from the ${config.title} page.`],
         ['Required columns are marked with "*".'],
         ['For lookup columns, use the name, number, reference code, or id from the reference sheets.'],
-        ['Do not rename the header row.']
+        ['Do not rename the header row.'],
+        ['The whole workbook is atomic: if one row is invalid, no rows are imported.'],
+        [],
+        ['Example only - do not copy this row unless you intend to import it.'],
+        [config.columns.map(column => column.header).join(' | ')],
+        [config.columns.map(column => getSampleValue(column, lookups)).join(' | ')]
     ];
 
     const appendLookupSheets = (workbook, lookups) => {
@@ -438,18 +636,18 @@
 
         try {
             const lookups = await fetchLookups(config);
-            const headers = config.columns.map((column) => column.required ? `${column.header} *` : column.header);
-            const sampleRow = config.columns.map((column) => getSampleValue(column, lookups));
             const workbook = XLSX.utils.book_new();
+            const appendEmptyInputSheet = (columns, sheetName) => {
+                const headers = columns.map((column) => column.required ? `${column.header} *` : column.header);
+                XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers]), sheetName);
+            };
 
+            appendEmptyInputSheet(config.columns, config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME);
+            if (config.itemColumns) appendEmptyInputSheet(config.itemColumns, ITEM_SHEET_NAME);
+            if (config.nestedColumns) appendEmptyInputSheet(config.nestedColumns, config.nestedSheetName ?? ALLOCATION_SHEET_NAME);
             XLSX.utils.book_append_sheet(
                 workbook,
-                XLSX.utils.aoa_to_sheet([headers, sampleRow]),
-                DATA_SHEET_NAME
-            );
-            XLSX.utils.book_append_sheet(
-                workbook,
-                XLSX.utils.aoa_to_sheet(buildInstructions(config)),
+                XLSX.utils.aoa_to_sheet(buildInstructions(config, lookups)),
                 INSTRUCTION_SHEET_NAME
             );
             appendLookupSheets(workbook, lookups);
@@ -464,7 +662,12 @@
     );
 
     const getCellValue = (normalizedRow, column) => {
-        const keys = [column.header, column.key, ...(column.aliases ?? [])].map(normalizeKey);
+        const keys = [
+            column.header,
+            column.key,
+            ...(column.aliases ?? []),
+            ...(localizedHeaderAliases[column.header] ?? [])
+        ].map(normalizeKey);
 
         for (const key of keys) {
             if (Object.prototype.hasOwnProperty.call(normalizedRow, key)) {
@@ -499,7 +702,7 @@
             return defaultValue;
         }
 
-        return ['true', 'yes', 'y', '1', 'x', 'checked'].includes(text);
+        return ['true', 'yes', 'y', '1', 'x', 'checked', 'có', 'co', 'đúng', 'dung'].includes(text);
     };
 
     const parseDate = (value) => {
@@ -539,11 +742,14 @@
     const resolveLookup = (column, value, lookups, rowNumber) => {
         const text = toDisplayText(value);
         if (!text) {
-            return '';
+            return null;
         }
 
         const lookup = lookups[column.lookup];
         const item = lookup?.index?.get(normalizeKey(text));
+        if (item === null) {
+            throw new Error(`Row ${rowNumber}: "${column.header}" value "${text}" is ambiguous. Use a unique number, reference code, or id.`);
+        }
         if (!item) {
             throw new Error(`Row ${rowNumber}: "${column.header}" value "${text}" was not found in lookup data.`);
         }
@@ -561,6 +767,11 @@
 
             if (column.required && !valueText && column.defaultValue == null) {
                 throw new Error(`Row ${rowNumber}: "${column.header}" is required.`);
+            }
+
+            if (column.clientOnly) {
+                payload[column.key] = valueText;
+                return;
             }
 
             if (column.lookup) {
@@ -591,6 +802,13 @@
                 return;
             }
 
+            if (column.type === 'list') {
+                payload[column.key] = valueText
+                    ? valueText.split(/[;,\n]/).map(value => value.trim()).filter(Boolean)
+                    : [];
+                return;
+            }
+
             payload[column.key] = valueText;
         });
 
@@ -600,11 +818,14 @@
 
     const getErrorMessage = (error) => {
         const responseData = error?.response?.data;
-        return responseData?.message
+        const value = responseData?.message
             ?? responseData?.title
             ?? responseData?.errors
             ?? error?.message
             ?? 'Please check your data.';
+        if (Array.isArray(value)) return value.map(item => typeof item === 'string' ? item : item?.message ?? JSON.stringify(item)).join('\n');
+        if (value && typeof value === 'object') return Object.values(value).flat().join('\n');
+        return `${value}`;
     };
 
     const readWorkbook = (file) => new Promise((resolve, reject) => {
@@ -621,9 +842,9 @@
         reader.readAsArrayBuffer(file);
     });
 
-    const readDataRows = (workbook) => {
-        const sheetName = workbook.SheetNames.includes(DATA_SHEET_NAME)
-            ? DATA_SHEET_NAME
+    const readDataRows = (workbook, requestedSheetName = DATA_SHEET_NAME) => {
+        const sheetName = workbook.SheetNames.includes(requestedSheetName)
+            ? requestedSheetName
             : workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
@@ -640,7 +861,8 @@
         }
 
         const workbook = await readWorkbook(file);
-        const rows = readDataRows(workbook);
+        const mainSheetName = config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME;
+        const rows = readDataRows(workbook, mainSheetName);
         if (!rows.length) {
             showInfo('No data found', 'The Excel file does not contain any import rows.');
             return;
@@ -661,28 +883,58 @@
             return;
         }
 
-        if (getSwal()) {
-            Swal.fire({
-                title: 'Importing...',
-                text: 'Please wait while rows are being created.',
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                didOpen: () => Swal.showLoading()
-            });
-        }
-
         const lookups = await fetchLookups(config);
         const errors = [];
-        let successCount = 0;
+        const payloads = [];
+        const nestedRows = config.nestedColumns
+            ? readDataRows(workbook, config.nestedSheetName ?? ALLOCATION_SHEET_NAME)
+            : [];
+        const itemRows = config.itemColumns ? readDataRows(workbook, ITEM_SHEET_NAME) : [];
+        const keyColumn = config.columns.find(column => column.key === 'documentKey');
+        if (keyColumn) {
+            const keys = rows.map(item => toDisplayText(getCellValue(getNormalizedRow(item.row), keyColumn)));
+            const duplicateKeys = keys.filter((key, index) => key && keys.indexOf(key) !== index);
+            if (duplicateKeys.length) errors.push(`Duplicate document key: ${[...new Set(duplicateKeys)].join(', ')}.`);
+            const mainKeys = new Set(keys);
+            [
+                ...itemRows.map(item => ({ ...item, column: config.itemColumns?.[0], sheet: ITEM_SHEET_NAME })),
+                ...nestedRows.map(item => ({ ...item, column: config.nestedColumns?.[0], sheet: config.nestedSheetName ?? ALLOCATION_SHEET_NAME }))
+            ].forEach(detail => {
+                const key = toDisplayText(getCellValue(getNormalizedRow(detail.row), detail.column));
+                if (key && !mainKeys.has(key)) errors.push(`${detail.sheet} row ${detail.rowNumber}: document key "${key}" was not found.`);
+            });
+        }
 
         for (const item of rows) {
             try {
                 const payload = buildPayload(config, item.row, lookups, item.rowNumber);
-                const response = await AxiosManager.post(config.endpoint, payload);
-                if (response?.data?.code !== 200) {
-                    throw new Error(response?.data?.message ?? 'Create request failed.');
+                const documentKey = payload.documentKey;
+                delete payload.documentKey;
+
+                if (config.itemColumns) {
+                    payload.items = itemRows
+                        .filter(detail => toDisplayText(getCellValue(getNormalizedRow(detail.row), config.itemColumns[0])) === documentKey)
+                        .map(detail => {
+                            const nestedConfig = { columns: config.itemColumns };
+                            const nestedPayload = buildPayload(nestedConfig, detail.row, lookups, detail.rowNumber);
+                            delete nestedPayload.documentKey;
+                            return nestedPayload;
+                        });
+                    if (!payload.items.length) throw new Error(`Row ${item.rowNumber}: document "${documentKey}" must contain at least one item row.`);
                 }
-                successCount += 1;
+
+                if (config.nestedColumns) {
+                    payload[config.nestedProperty] = nestedRows
+                        .filter(detail => toDisplayText(getCellValue(getNormalizedRow(detail.row), config.nestedColumns[0])) === documentKey)
+                        .map(detail => {
+                            const nestedPayload = buildPayload({ columns: config.nestedColumns }, detail.row, lookups, detail.rowNumber);
+                            delete nestedPayload.documentKey;
+                            return nestedPayload;
+                        });
+                }
+
+                config.validate?.(payload, item.rowNumber);
+                payloads.push(payload);
             } catch (error) {
                 errors.push(getErrorMessage(error));
             }
@@ -693,15 +945,34 @@
             const extra = errors.length > MAX_ERROR_LINES ? `\n...and ${errors.length - MAX_ERROR_LINES} more error(s).` : '';
             if (getSwal()) {
                 await Swal.fire({
-                    icon: successCount ? 'warning' : 'error',
-                    title: `Imported ${successCount}/${rows.length} row(s)`,
-                    html: `<pre style="text-align:left;white-space:pre-wrap;margin:0">${details}${extra}</pre>`,
+                    icon: 'error',
+                    title: 'Import validation failed',
+                    text: `${details}${extra}`,
                     confirmButtonText: 'OK'
                 });
             } else {
-                alert(`Imported ${successCount}/${rows.length} row(s)\n${details}${extra}`);
+                alert(`Import validation failed\n${details}${extra}`);
             }
-        } else if (getSwal()) {
+            return;
+        }
+
+        if (getSwal()) {
+            Swal.fire({
+                title: 'Importing...',
+                text: 'Please wait while the workbook is being validated and saved.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => Swal.showLoading()
+            });
+        }
+
+        const moduleName = window.location.pathname.split('/').filter(Boolean)[0] ?? '';
+        const requestProperty = config.itemColumns || config.nestedColumns ? 'documents' : 'rows';
+        const response = await AxiosManager.post(`/${moduleName}/ImportExcel`, { [requestProperty]: payloads });
+        if (response?.data?.code !== 200) throw new Error(getErrorMessage({ response }));
+        const successCount = response?.data?.content?.importedCount ?? payloads.length;
+
+        if (getSwal()) {
             await Swal.fire({
                 icon: 'success',
                 title: 'Import Successful',
@@ -712,9 +983,7 @@
             alert(`Imported ${successCount} row(s).`);
         }
 
-        if (successCount > 0) {
-            window.location.reload();
-        }
+        window.location.reload();
     };
 
     const openImportPicker = (config) => {
@@ -829,6 +1098,7 @@
     window.ExcelImportManager = {
         downloadTemplate,
         openImportPicker,
-        importFile
+        importFile,
+        _test: { buildPayload, fetchLookup, parseBoolean, parseDate, readDataRows, normalizeKey }
     };
 })(window, document);

@@ -88,7 +88,7 @@ const App = {
                     ],
                     toolbar: ['ExcelExport', 'Search'],
                     dataBound: function () {
-                        GridInteractionManager.collapseGroupsOnFirstLoad(mainGrid.obj);
+                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                         mainGrid.obj.autoFitColumns(['stock', 'statusName', 'createdAtUtc']);
                     },
                     toolbarClick: (args) => {

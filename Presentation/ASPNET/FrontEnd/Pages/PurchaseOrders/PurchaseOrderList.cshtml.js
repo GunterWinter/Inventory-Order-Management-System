@@ -1046,6 +1046,7 @@ const App = {
                     groupSettings: { columns: ['vendorName'] },
                     allowTextWrap: true,
                     allowResizing: true,
+                    allowFreezing: true,
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
@@ -1235,7 +1236,7 @@ const App = {
                         if (args.item.id === 'PrintPDFCustom') {
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                window.open('/PurchaseOrders/PurchaseOrderPdf?id=' + (selectedRecord.id ?? ''), '_blank');
+                                window.open('/PurchaseOrders/PurchaseOrderPdf?id=' + encodeURIComponent(selectedRecord.id ?? ''), '_blank', 'noopener');
                             }
                         }
                     }
@@ -1302,6 +1303,7 @@ const App = {
                     height: 400,
                     dataSource: dataSource,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
+                    allowFreezing: true,
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -1611,6 +1613,7 @@ const App = {
                         {
                             field: 'taxAmount',
                             headerText: 'Tax Amount',
+                            freeze: 'Right',
                             allowEditing: false,
                             width: 160,
                             type: 'number',
@@ -1621,6 +1624,7 @@ const App = {
                         {
                             field: 'afterTaxAmount',
                             headerText: 'Total Amount',
+                            freeze: 'Right',
                             allowEditing: false,
                             width: 170,
                             type: 'number',
@@ -2478,6 +2482,13 @@ const App = {
             }
         };
 
+        const escapeHtml = value => `${value ?? ''}`
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
         const showPaymentPopup = async (
             orderId,
             orderNumber,
@@ -2489,6 +2500,8 @@ const App = {
             existingDescription = null,
             existingTransactionDate = null,
             isSplit = false) => {
+            const isVietnamese = window.UiLocalization?.getLocale?.() !== 'en';
+            const text = (vi, en) => isVietnamese ? vi : en;
             const resolveMoneyAmount = (value) => {
                 if (typeof value === 'number' && Number.isFinite(value)) {
                     return value;
@@ -2504,9 +2517,10 @@ const App = {
             const now = new Date();
             const defaultPaymentDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
                 .toISOString().slice(0, 10);
-            const displayDescription = existingDescription ?? `Payment for order ${orderNumber}`;
+            const displayDescription = existingDescription
+                ?? text(`Thanh toán đơn mua hàng ${orderNumber}`, `Payment for order ${orderNumber}`);
             const accountOptions = state.cashAccountListData
-                .map(a => `<option value="${a.id}" ${a.id === existingCashAccountId ? 'selected' : ''}>${a.name}</option>`)
+                .map(a => `<option value="${escapeHtml(a.id)}" ${a.id === existingCashAccountId ? 'selected' : ''}>${escapeHtml(a.name)}</option>`)
                 .join('');
             const accountIsLocked = Boolean(existingCashAccountId);
             const accountHelpText = accountIsLocked
@@ -2514,22 +2528,35 @@ const App = {
                 : '';
             const statusHtml = ``; // Status is auto-calculated by backend now
             const descHtml = isSplit
-                ? `<div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}" disabled></div>`
-                : `<div class="mb-3"><label class="form-label fw-bold">Description</label><input id="swal-desc" class="form-control" value="${displayDescription}"></div>`;
+                ? `<div class="form-group mb-0"><label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label><input id="swal-desc" class="form-control" value="${escapeHtml(displayDescription)}" disabled></div>`
+                : `<div class="form-group mb-0"><label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label><input id="swal-desc" class="form-control" value="${escapeHtml(displayDescription)}"></div>`;
             const result = await Swal.fire({
-                title: `Payment ${orderNumber}`,
+                title: text(`Thanh toán đơn mua hàng ${orderNumber}`, `Purchase Order Payment ${orderNumber}`),
+                width: 640,
+                customClass: { popup: 'purchase-order-payment-popup' },
                 html: `
-                    <div class="mb-3"><label class="form-label fw-bold">Cash Account</label><select id="swal-account" class="form-select" ${accountIsLocked ? 'disabled' : ''}>${accountOptions}</select>${accountHelpText}</div>
-                    <div class="mb-3"><label class="form-label fw-bold">Total Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(totalAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Paid Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(paidAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Remaining Amount</label><input class="form-control" value="${NumberFormatManager.formatToLocale(remainingAmountValue)}" disabled></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Payment Date</label><input id="swal-payment-date" type="date" class="form-control" value="${defaultPaymentDate}"></div>
-                    <div class="mb-3"><label class="form-label fw-bold">Payment This Time</label><input id="swal-amount" class="form-control" data-number-format="true" inputmode="numeric" value="${displayAmount}"></div>
-                    ${descHtml}
+                    <div class="text-left">
+                        <div class="form-group mb-3">
+                            <label for="swal-account" class="d-block font-weight-bold mb-2">${text('Tài khoản quỹ', 'Cash Account')}</label>
+                            <select id="swal-account" class="form-control" ${accountIsLocked ? 'disabled' : ''}>
+                                <option value="">${text('Chọn tài khoản quỹ', 'Select Cash Account')}</option>${accountOptions}
+                            </select>${accountHelpText}
+                        </div>
+                        <div class="purchase-payment-summary mb-3">
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Tổng thanh toán', 'Total Amount')}</span><strong>${NumberFormatManager.formatToLocale(totalAmountValue)}</strong></div>
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền đã trả', 'Paid Amount')}</span><strong class="text-success">${NumberFormatManager.formatToLocale(paidAmountValue)}</strong></div>
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền còn lại', 'Remaining Amount')}</span><strong class="text-danger">${NumberFormatManager.formatToLocale(remainingAmountValue)}</strong></div>
+                        </div>
+                        <div class="purchase-payment-form">
+                            <div class="form-group mb-3"><label for="swal-payment-date" class="d-block font-weight-bold mb-2">${text('Ngày thanh toán', 'Payment Date')}</label><input id="swal-payment-date" type="date" class="form-control" value="${defaultPaymentDate}"></div>
+                            <div class="form-group mb-3"><label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Số tiền trả lần này', 'Payment This Time')}</label><input id="swal-amount" class="form-control" data-number-format="true" inputmode="numeric" value="${displayAmount}"></div>
+                            ${descHtml}
+                        </div>
+                    </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Save',
-                cancelButtonText: 'Cancel',
+                confirmButtonText: text('Lưu', 'Save'),
+                cancelButtonText: text('Hủy', 'Cancel'),
                 focusConfirm: false,
                 didOpen: () => {
                     NumberFormatManager.bindNumericInput(document.getElementById('swal-amount'));
@@ -2538,20 +2565,20 @@ const App = {
                     const accountId = document.getElementById('swal-account').value;
                     const parsedAmount = NumberFormatManager.parseLocaleNumber(document.getElementById('swal-amount').value) ?? 0;
                     if (!accountId) {
-                        Swal.showValidationMessage('Select a payment account.');
+                        Swal.showValidationMessage(text('Chọn tài khoản thanh toán.', 'Select a payment account.'));
                         return false;
                     }
                     const paymentDate = document.getElementById('swal-payment-date').value;
                     if (parsedAmount <= 0) {
-                        Swal.showValidationMessage('Payment amount must be greater than zero.');
+                        Swal.showValidationMessage(text('Số tiền thanh toán phải lớn hơn 0.', 'Payment amount must be greater than zero.'));
                         return false;
                     }
                     if (parsedAmount > remainingAmountValue) {
-                        Swal.showValidationMessage('Payment amount cannot exceed the remaining amount.');
+                        Swal.showValidationMessage(text('Số tiền thanh toán không được vượt quá số còn lại.', 'Payment amount cannot exceed the remaining amount.'));
                         return false;
                     }
                     if (!paymentDate) {
-                        Swal.showValidationMessage('Payment date is required.');
+                        Swal.showValidationMessage(text('Ngày thanh toán là bắt buộc.', 'Payment date is required.'));
                         return false;
                     }
                     return {

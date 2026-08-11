@@ -156,3 +156,18 @@ Ví dụ bất biến: công trình có đơn bán Đã xác nhận trước thu
 - Báo cáo tồn, lợi nhuận, công nợ và bảng điều khiển phải loại Nháp và Đã hủy.
 - Báo cáo phải tính cả Đã xác nhận và Lưu trữ; trả hàng phải được trừ đúng khỏi doanh thu, chi phí và công nợ liên quan.
 - Giá trị lợi nhuận dùng trước thuế; giá trị công nợ dùng sau thuế.
+
+## Quy trình kiểm thử bắt buộc cho agent
+
+- Sau mọi thay đổi code, agent phải chạy `npm.cmd run test:js` và `dotnet build Indotalent.sln --no-restore`.
+- Không giữ application test tạm trong repository. Nếu tạo application test để xác minh trong lúc sửa lỗi thì phải xóa test và project test đó sau khi kiểm tra xong; JavaScript test và browser test dùng chung vẫn được giữ lại.
+- Khi thay đổi giao diện, giao dịch Thu Chi, báo cáo tài chính, localization, menu hoặc hành vi gom nhóm, agent phải khởi động ứng dụng thật và chạy `npm.cmd run test:browser:all`. Không được kết luận hoàn tất chỉ dựa trên unit test.
+- Browser test phải chạy trên database cô lập, ví dụ `WHMS_AntigravityTest`; tuyệt đối không bật `IsDemoVersion=true` trên database làm việc vì demo startup sẽ xóa và seed lại database.
+- Nếu ứng dụng không chạy tại `http://localhost:5000`, phải truyền `BASE_URL` cho các script Playwright. Mọi HTTP 4xx/5xx cùng origin, request thất bại, JavaScript error hoặc sai tổng tiền đều làm test thất bại.
+- Với giao dịch thủ công, cả Thu (`Debit`) và Chi (`Credit`) đều có `Chi tiết phân bổ` tùy chọn. Nếu có dòng thì tổng dòng phải bằng tổng giao dịch; phân bổ Thu chỉ để truy vết và không được tính thành doanh thu hay chi phí công trình.
+- Báo cáo Thu Chi Theo Danh Mục phải dùng tiền thực thu/thực chi, loại điều chuyển quỹ và dữ liệu đã xóa, đồng thời khớp tổng thẻ với tổng các dòng.
+- Mọi grid có gom nhóm phải đóng toàn bộ nhóm sau lần bind/rebind dữ liệu; mở một nhóm không được làm bung các nhóm còn lại.
+- Import Excel phải kiểm tra toàn bộ workbook và lưu trong một transaction; một lỗi ở bất kỳ sheet/dòng nào phải khiến toàn file không tạo dữ liệu. Chứng từ import luôn là Nháp và chưa tác động tồn kho, serial, công nợ hoặc báo cáo.
+- Browser test Import/Export không được chỉ kiểm tra nút. Phải tải file, đọc lại workbook và đối chiếu sheet, cột, số dòng, kiểu số/ngày, bộ lọc và dữ liệu chi tiết của nhóm đang đóng.
+- Browser test PDF phải tải file thật, kiểm tra chữ ký `%PDF`, số trang và chứng từ dài không mất dòng. Các thư viện export phải được phục vụ nội bộ, không phụ thuộc CDN.
+- Hướng dẫn browser chi tiết và ma trận nghiệp vụ nằm tại `docs/ANTIGRAVITY_BROWSER_TEST_GUIDE.md`; agent phải cập nhật tài liệu này khi thêm hoặc đổi một luồng browser quan trọng.
