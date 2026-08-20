@@ -30,6 +30,39 @@ function loadManager() {
     return window.GridInteractionManager;
 }
 
+function loadInteractiveManager() {
+    function PopupComponent(options = {}) {
+        Object.assign(this, options);
+    }
+    PopupComponent.prototype.appendTo = function (host) {
+        this.host = host;
+    };
+
+    const document = {
+        readyState: 'loading',
+        addEventListener() { },
+        querySelector() { return null; }
+    };
+    const window = {
+        console,
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame: callback => callback(),
+        ej: {
+            calendars: { DatePicker: PopupComponent },
+            dropdowns: { DropDownList: PopupComponent }
+        }
+    };
+    vm.runInNewContext(fs.readFileSync(managerPath, 'utf8'), {
+        window,
+        document,
+        console,
+        setTimeout,
+        clearTimeout
+    });
+    return { manager: window.GridInteractionManager, PopupComponent };
+}
+
 function createBatchGrid({ invalid = false, persistFails = false } = {}) {
     let changes = { addedRecords: [], changedRecords: [], deletedRecords: [] };
     const calls = [];
@@ -175,4 +208,29 @@ test('grouped grid collapses after every data bind without re-entrant loops', ()
 
     manager.collapseGroupsOnFirstLoad(grid);
     assert.equal(collapseCalls, 3);
+});
+
+test('modal date and Item popups are raised above the Bootstrap dialog', () => {
+    const { PopupComponent } = loadInteractiveManager();
+    const host = { closest: selector => selector.includes('.modal') ? {} : null };
+    const popup = new PopupComponent({ zIndex: 1000 });
+
+    popup.appendTo(host);
+
+    assert.equal(popup.zIndex, 2000);
+    assert.equal(popup.host, host);
+});
+
+test('grids recalculate their layout after a hidden document modal is shown', () => {
+    const { manager } = loadInteractiveManager();
+    let refreshCalls = 0;
+    const modal = {
+        querySelectorAll: () => [{
+            ej2_instances: [{ refresh: () => { refreshCalls += 1; } }]
+        }]
+    };
+
+    manager.refreshModalGrids(modal);
+
+    assert.equal(refreshCalls, 1);
 });

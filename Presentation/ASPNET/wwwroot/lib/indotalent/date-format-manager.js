@@ -1,6 +1,9 @@
 (function (window) {
     const VI_LOCALE = 'vi-VN';
     const VI_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+    // Syncfusion only bundles CLDR data for en-US. Keep the DatePicker engine on
+    // that supported locale while controlling the visible format separately.
+    const SYNCFUSION_DATE_LOCALE = 'en-US';
 
     function isVietnamese() {
         return window.UiLocalization?.getLocale?.() !== 'en';
@@ -151,7 +154,7 @@
     function datePickerOptions(options = {}) {
         return {
             format: displayDateFormat(false),
-            locale: isVietnamese() ? 'vi' : 'en-US',
+            locale: SYNCFUSION_DATE_LOCALE,
             strictMode: true,
             ...options
         };
@@ -240,7 +243,7 @@
             const currentFormat = `${this.format ?? ''}`;
             if (!currentFormat || /yyyy[-/]MM[-/]dd|dd[-/]MM[-/]yyyy|MM[-/]dd[-/]yyyy/.test(currentFormat)) {
                 this.format = displayDateFormat(false);
-                this.locale = isVietnamese() ? 'vi' : 'en-US';
+                this.locale = SYNCFUSION_DATE_LOCALE;
             }
             return originalAppendTo.call(this, selector);
         };
@@ -264,7 +267,7 @@
             const datePicker = element.ej2_instances?.[0];
             if (!datePicker) return;
             datePicker.format = displayDateFormat(false);
-            datePicker.locale = isVietnamese() ? 'vi' : 'en-US';
+            datePicker.locale = SYNCFUSION_DATE_LOCALE;
             datePicker.dataBind?.();
         });
     });
@@ -276,7 +279,7 @@
         parseBusinessDate,
         formatForApiDate,
         datePickerOptions,
-        get syncfusionDateLocale() { return isVietnamese() ? 'vi' : 'en-US'; },
+        syncfusionDateLocale: SYNCFUSION_DATE_LOCALE,
         formatToLocale: formatDate,
         formatDateTimeToLocale: formatDateTime
     };

@@ -71,8 +71,10 @@ test('grid và DatePicker tự chuẩn hóa format theo ngôn ngữ hiện tại
     const picker = new runtime.DatePicker({ format: 'yyyy-MM-dd', locale: 'en-US' });
     picker.appendTo({});
     assert.equal(picker.format, 'dd/MM/yyyy');
-    assert.equal(picker.locale, 'vi');
+    assert.equal(picker.locale, 'en-US');
+    assert.equal(runtime.manager.datePickerOptions().locale, 'en-US');
 
     runtime.setLocale('en');
     assert.equal(runtime.manager.datePickerOptions().format, 'MM/dd/yyyy');
+    assert.equal(runtime.manager.datePickerOptions().locale, 'en-US');
 });

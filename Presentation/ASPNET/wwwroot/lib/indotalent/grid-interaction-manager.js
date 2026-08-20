@@ -6,6 +6,7 @@
     const collapsingGroups = new WeakSet();
     const gridDiscoveryAttempts = new WeakMap();
     const modalStack = [];
+    const MODAL_POPUP_Z_INDEX = 2000;
     const isGrid = value => value && typeof value.endEdit === 'function';
     const requestTypeOf = args => String(args?.requestType ?? '').toLowerCase();
     const batchChangeCount = changes => (changes?.addedRecords?.length || 0)
@@ -23,6 +24,50 @@
             throw error;
         }
     };
+
+    function popupHost(selector) {
+        if (typeof selector === 'string') return document.querySelector?.(selector) ?? null;
+        return selector ?? null;
+    }
+
+    function patchPopupComponent(component) {
+        if (!component?.prototype || component.prototype.__documentModalPopupPatched) return;
+
+        const originalAppendTo = component.prototype.appendTo;
+        if (typeof originalAppendTo !== 'function') return;
+
+        component.prototype.appendTo = function (selector) {
+            const host = popupHost(selector);
+            if (host?.closest?.('.modal, .swal2-container')) {
+                this.zIndex = Math.max(Number(this.zIndex) || 0, MODAL_POPUP_Z_INDEX);
+            }
+            return originalAppendTo.call(this, selector);
+        };
+        component.prototype.__documentModalPopupPatched = true;
+    }
+
+    function patchModalPopups() {
+        [
+            window.ej?.calendars?.DatePicker,
+            window.ej?.calendars?.DateTimePicker,
+            window.ej?.dropdowns?.DropDownList,
+            window.ej?.dropdowns?.ComboBox,
+            window.ej?.dropdowns?.MultiSelect,
+            window.ej?.dropdowns?.AutoComplete
+        ].forEach(patchPopupComponent);
+    }
+
+    function refreshModalGrids(modal) {
+        if (!modal?.querySelectorAll) return;
+
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+            modal.querySelectorAll('.e-grid').forEach(element => {
+                const grid = element.ej2_instances?.[0];
+                if (!grid || grid.isDestroyed) return;
+                grid.refresh?.();
+            });
+        }));
+    }
 
     function track(grid, options = {}) {
         if (!grid) return grid;
@@ -387,6 +432,7 @@
             const previousIndex = modalStack.indexOf(modal);
             if (previousIndex >= 0) modalStack.splice(previousIndex, 1);
             modalStack.push(modal);
+            refreshModalGrids(modal);
         }, true);
         root.addEventListener('hidden.bs.modal', event => {
             const index = modalStack.indexOf(event.target);
@@ -420,8 +466,9 @@
         collapseGroupsOnDataBound(grid);
     }
 
-    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure };
-    const init = () => { wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
+    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
+    patchModalPopups();
+    const init = () => { patchModalPopups(); wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
 })(window, document);

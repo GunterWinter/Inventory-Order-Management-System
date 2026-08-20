@@ -1303,7 +1303,6 @@ const App = {
                     height: 400,
                     dataSource: dataSource,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    allowFreezing: true,
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -1613,7 +1612,6 @@ const App = {
                         {
                             field: 'taxAmount',
                             headerText: 'Tax Amount',
-                            freeze: 'Right',
                             allowEditing: false,
                             width: 160,
                             type: 'number',
@@ -1624,7 +1622,6 @@ const App = {
                         {
                             field: 'afterTaxAmount',
                             headerText: 'Total Amount',
-                            freeze: 'Right',
                             allowEditing: false,
                             width: 170,
                             type: 'number',

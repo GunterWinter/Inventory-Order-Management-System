@@ -26,6 +26,12 @@
         cursor: pointer;
     }
 
+    /* Syncfusion appends calendar and dropdown popups to body. Keep them above
+       Bootstrap document modals so date and Item controls remain interactive. */
+    body > .e-popup.e-popup-open {
+        z-index: 2000 !important;
+    }
+
     .e-grid .e-row.e-altrow {
         background-color: #F3F6F9;
     }

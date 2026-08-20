@@ -47,7 +47,7 @@ const { chromium } = require('playwright');
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('text=Injected purchase panel failure');
     if (await page.locator('.dashboard-kpi').count() < 7) throw new Error('Successful Dashboard panels disappeared after one API failed.');
-    if (await page.locator('.e-grid').count() < 2) throw new Error('Successful Dashboard grids disappeared after one API failed.');
+    await page.waitForFunction(() => document.querySelectorAll('.e-grid').length >= 2, null, { timeout: 15000 });
     await page.unroute('**/api/Dashboard/GetPurchaseDashboard');
     await page.locator('button', { hasText: 'Retry' }).click();
     await page.waitForTimeout(800);
