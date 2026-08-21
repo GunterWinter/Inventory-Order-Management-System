@@ -14,7 +14,7 @@ public class Product : BaseEntity
     public double? CostPrice { get; set; } = 0;
     public string? ImageUrl { get; set; }
     public bool? Physical { get; set; } = true;
-    public SerialTrackingMode? SerialTrackingMode { get; set; } = Domain.Enums.SerialTrackingMode.InternalAuto;
+    public SerialTrackingMode? SerialTrackingMode { get; set; } = Domain.Enums.SerialTrackingMode.None;
     public string? InternalSerialFixedCode { get; set; }
     public string? DefaultWarehouseId { get; set; }
     public Warehouse? DefaultWarehouse { get; set; }

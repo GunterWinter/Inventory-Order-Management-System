@@ -1,5 +1,6 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
+using Application.Features.ProductManager;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Enums;
@@ -27,6 +28,10 @@ public record GetProductListDto
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
     public string? ProductGroupName { get; init; }
+    public double OpeningStockQuantity { get; set; }
+    public string? OpeningStockWarehouseId { get; set; }
+    public string? OpeningStockWarehouseName { get; set; }
+    public bool HasOpeningStockHistory { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -42,7 +47,11 @@ public class GetProductListProfile : Profile
             .ForMember(
                 dest => dest.DefaultWarehouseName,
                 opt => opt.MapFrom(src => src.DefaultWarehouse != null ? src.DefaultWarehouse.Name : string.Empty)
-            );
+            )
+            .ForMember(dest => dest.OpeningStockQuantity, opt => opt.Ignore())
+            .ForMember(dest => dest.OpeningStockWarehouseId, opt => opt.Ignore())
+            .ForMember(dest => dest.OpeningStockWarehouseName, opt => opt.Ignore())
+            .ForMember(dest => dest.HasOpeningStockHistory, opt => opt.Ignore());
 
     }
 }
@@ -82,6 +91,49 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetProductListDto>>(entities);
+
+        var productIds = entities.Select(x => x.Id).ToList();
+        var openingRows = await _context.Set<InventoryTransaction>()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && x.ProductId != null
+                && productIds.Contains(x.ProductId)
+                && x.ModuleName == nameof(StockCount)
+                && x.ModuleCode == ProductOpeningStockService.OpeningStockModuleCode)
+            .Select(x => new
+            {
+                ProductId = x.ProductId!,
+                x.Stock,
+                x.Status,
+                x.WarehouseId,
+                WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
+                x.CreatedAtUtc,
+                x.Id
+            })
+            .ToListAsync(cancellationToken);
+
+        var openingLookup = openingRows
+            .GroupBy(x => x.ProductId)
+            .ToDictionary(x => x.Key, x => x
+                .OrderBy(row => row.CreatedAtUtc)
+                .ThenBy(row => row.Id)
+                .ToList());
+
+        foreach (var dto in dtos)
+        {
+            if (dto.Id == null || !openingLookup.TryGetValue(dto.Id, out var history))
+            {
+                continue;
+            }
+
+            var first = history[0];
+            dto.HasOpeningStockHistory = true;
+            dto.OpeningStockQuantity = history
+                .Where(x => x.Status == InventoryTransactionStatus.Confirmed)
+                .Sum(x => x.Stock ?? 0d);
+            dto.OpeningStockWarehouseId = first.WarehouseId;
+            dto.OpeningStockWarehouseName = first.WarehouseName;
+        }
 
         return new GetProductListResult
         {

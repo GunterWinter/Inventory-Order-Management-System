@@ -42,7 +42,12 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
 {
     public CreateCashTransactionValidator()
     {
-        RuleFor(x => x.Amount).GreaterThan(0);
+        RuleFor(x => x.TransactionDate).NotNull();
+        RuleFor(x => x.TransactionType)
+            .NotNull()
+            .Must(value => !value.HasValue || Enum.IsDefined(typeof(CashTransactionType), value.Value))
+            .WithMessage("Transaction Type is invalid.");
+        RuleFor(x => x.Amount).NotNull().GreaterThan(0);
         RuleFor(x => x.Allocations).Must((r, a) => a == null || a.Count == 0
                 || Math.Abs(a.Where(x => x.Amount > 0d).Sum(x => x.Amount) - (r.Amount ?? 0d)) <= 0.000001d)
             .WithMessage("Allocation total must equal transaction amount.");

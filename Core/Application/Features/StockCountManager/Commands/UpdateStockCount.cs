@@ -85,7 +85,7 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                 {
                     var lines = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
                         .Where(x => !x.IsDeleted && x.ModuleName == nameof(StockCount) && x.ModuleId == entity.Id)
-                        .Select(x => new { x.ProductId, x.WarehouseId, x.MovementDate })
+                        .Select(x => new { x.ProductId, x.WarehouseId, x.MovementDate, x.CreatedAtUtc })
                         .ToListAsync(ct);
                     foreach (var line in lines)
                     {
@@ -93,11 +93,14 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                             .Where(x => !x.IsDeleted && x.Status == InventoryTransactionStatus.Confirmed
                                 && x.ProductId == line.ProductId && x.WarehouseId == line.WarehouseId
                                 && !(x.ModuleName == nameof(StockCount) && x.ModuleId == entity.Id)
-                                && x.MovementDate > line.MovementDate)
+                                && ((line.CreatedAtUtc != null && x.CreatedAtUtc > line.CreatedAtUtc)
+                                    || (line.CreatedAtUtc == null && x.MovementDate > line.MovementDate)))
+                            .OrderBy(x => x.CreatedAtUtc ?? x.MovementDate)
+                            .ThenBy(x => x.Id)
                             .Select(x => x.ModuleNumber ?? x.Number)
                             .FirstOrDefaultAsync(ct);
                         if (newerDocument != null)
-                            throw new InvalidOperationException($"Không thể hủy phiếu kiểm kê {entity.Number}: hàng hóa đã có giao dịch mới hơn tại {newerDocument}. Hãy hoàn tác giao dịch mới hơn trước.");
+                            throw new InvalidOperationException($"Không thể hủy phiếu kiểm kê {entity.Number}: hàng hóa đã có giao dịch phát sinh sau tại {newerDocument}. Hãy hoàn tác giao dịch mới hơn trước.");
                     }
                 }
             }

@@ -47,12 +47,12 @@
                                                  <label class="text-danger">{{ state.errors.referenceCode }}</label>
                                              </div>
                                              <div class="col-md-4">
-                                                 <label for="CostPrice">Giá vốn</label>
+                                                 <label for="CostPrice">Cost Price</label>
                                                  <input ref="costPriceRef">
                                                  <label class="text-danger">{{ state.errors.costPrice }}</label>
                                              </div>
                                              <div class="col-md-4">
-                                                 <label for="UnitPrice">Giá bán</label>
+                                                 <label for="UnitPrice">Sales Price</label>
                                                  <input ref="unitPriceRef">
                                                  <label class="text-danger">{{ state.errors.unitPrice }}</label>
                                              </div>
@@ -60,7 +60,7 @@
 
                                          <div class="row mb-2">
                                              <div class="col-md-12">
-                                                 <label for="ImageUrl">Hình ảnh</label>
+                                                 <label for="ImageUrl">Image</label>
                                                  <div class="d-flex align-items-center gap-3">
                                                      <img :src="getImageUrl(state.imageUrl)" alt="Product Image" class="img-thumbnail" style="width: 70px; height: 70px; object-fit: cover;" />
                                                      <div class="flex-grow-1">
@@ -74,7 +74,7 @@
                                         <div class="row mb-2">
                                             <div class="col-md-6">
                                                 <label for="UnitMeasureName">Unit Measure</label>
-                                                <input type="text" class="form-control" v-model="state.unitMeasureName" placeholder="Nhập đơn vị tính" />
+                                                <input type="text" class="form-control" v-model="state.unitMeasureName" placeholder="Enter Unit Measure" />
                                                 <label class="text-danger">{{ state.errors.unitMeasureName }}</label>
                                             </div>
                                             <div class="col-md-6">
@@ -82,7 +82,7 @@
                                                 <div class="quick-add-wrapper">
                                                     <div ref="productGroupIdRef"></div>
                                                     <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
-                                                            v-on:click="handler.quickAddProductGroup" title="Thêm nhanh">
+                                                            v-on:click="handler.quickAddProductGroup" title="Quick Add Product Group">
                                                         <i class="fas fa-plus"></i>
                                                     </button>
                                                 </div>
@@ -96,7 +96,7 @@
                                                 <div class="quick-add-wrapper">
                                                     <div ref="defaultWarehouseIdRef"></div>
                                                     <button type="button" class="btn btn-sm btn-outline-primary quick-add-btn"
-                                                            v-on:click="handler.quickAddWarehouse" title="Thêm nhanh">
+                                                            v-on:click="handler.quickAddWarehouse" title="Quick Add Warehouse">
                                                         <i class="fas fa-plus"></i>
                                                     </button>
                                                 </div>
@@ -128,7 +128,7 @@
                                                                name="SerialTrackingMode"
                                                                v-model.number="state.serialTrackingMode"
                                                                v-bind:value="0">
-                                                        <label class="form-check-label" for="SerialTrackingNone">Không theo dõi serial</label>
+                                                        <label class="form-check-label" for="SerialTrackingNone">No serial tracking</label>
                                                     </div>
                                                     <div class="form-check mt-3">
                                                         <input class="form-check-input"
@@ -163,6 +163,33 @@
                                                         </label>
                                                     </div>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="OpeningStockQuantity">Opening Stock</label>
+                                                <input id="OpeningStockQuantity" ref="openingStockQuantityRef">
+                                                <label class="text-danger d-block">{{ state.errors.openingStockQuantity }}</label>
+                                                <small class="text-muted d-block" v-if="state.physical && state.id === '' && state.serialTrackingMode !== 2">
+                                                    Opening stock uses the default warehouse when first entered.
+                                                </small>
+                                                <small class="text-muted d-block" v-if="!state.physical">
+                                                    Non-physical products do not have stock.
+                                                </small>
+                                                <small class="text-muted d-block" v-else-if="state.serialTrackingMode === 2 || (state.id !== '' && state.originalSerialTrackingMode === 2)">
+                                                    Opening stock for manufacturer serial products must be entered through a Purchase Order.
+                                                </small>
+                                                <small class="text-muted d-block" v-else-if="state.id !== '' && (state.serialTrackingMode === 1 || state.originalSerialTrackingMode === 1)">
+                                                    Opening stock for auto-generated internal codes can only be entered when the product is created.
+                                                </small>
+                                            </div>
+                                            <div class="col-md-6" v-if="state.hasOpeningStockHistory">
+                                                <label>Opening Stock Warehouse</label>
+                                                <input type="text" class="form-control" v-bind:value="state.openingStockWarehouseName || '-'" readonly>
+                                                <small class="text-muted d-block" v-if="state.openingStockWarehouseId && state.defaultWarehouseId && state.openingStockWarehouseId !== state.defaultWarehouseId">
+                                                    Changing the default warehouse does not move opening stock.
+                                                </small>
                                             </div>
                                         </div>
 

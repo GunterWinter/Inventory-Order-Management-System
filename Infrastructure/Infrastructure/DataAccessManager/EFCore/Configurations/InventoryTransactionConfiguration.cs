@@ -28,6 +28,7 @@ public class InventoryTransactionConfiguration : BaseEntityConfiguration<Invento
         builder.Property(x => x.QtySCSys).IsRequired(false);
         builder.Property(x => x.QtySCCount).IsRequired(false);
         builder.Property(x => x.QtySCDelta).IsRequired(false);
+        builder.Property(x => x.UnitCost).IsRequired(false);
 
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.ModuleName);

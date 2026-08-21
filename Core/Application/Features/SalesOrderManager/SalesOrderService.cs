@@ -148,6 +148,14 @@ public class SalesOrderService
 
         if (order.OrderStatus == SalesOrderStatus.Confirmed)
         {
+            // Freeze the latest shared cost resolution when the sale becomes
+            // effective. Draft orders may outlive new receipts/opening-stock
+            // corrections, so their earlier preview cost can be stale.
+            foreach (var item in order.SalesOrderItemList)
+            {
+                await _inventoryService.UpdateSalesOrderItemCostAsync(item, userId, ct);
+            }
+
             foreach (var transaction in transactions.Concat(await _inventoryRepository.GetQuery()
                 .Where(x => !x.IsDeleted && x.ModuleName == nameof(SalesOrder) && x.ModuleId == order.Id)
                 .ToListAsync(ct)).GroupBy(x => x.Id).Select(x => x.First()))

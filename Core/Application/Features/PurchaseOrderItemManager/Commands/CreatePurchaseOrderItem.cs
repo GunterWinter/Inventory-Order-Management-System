@@ -25,7 +25,7 @@ public class CreatePurchaseOrderItemRequest : IRequest<CreatePurchaseOrderItemRe
     public string? TaxId { get; init; }
     public int? SupplierWarrantyMonths { get; init; }
     public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; }
+    public double? Quantity { get; init; } = 1;
     public string? CreatedById { get; init; }
 }
 
@@ -37,7 +37,7 @@ public class CreatePurchaseOrderItemValidator : AbstractValidator<CreatePurchase
         RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.UnitPrice).NotEmpty();
-        RuleFor(x => x.Quantity).NotEmpty();
+        RuleFor(x => x.Quantity).NotNull().GreaterThan(0);
     }
 }
 

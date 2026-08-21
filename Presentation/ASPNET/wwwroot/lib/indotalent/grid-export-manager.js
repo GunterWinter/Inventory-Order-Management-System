@@ -11,6 +11,15 @@
         .replace(/[^\p{L}\p{N}_.-]+/gu, '-')
         .replace(/^-+|-+$/g, '') || 'Export';
 
+    function getLocalizedHeaderText(column) {
+        const originalHeader = column?.__originalHeaderText
+            ?? column?.headerText
+            ?? column?.field
+            ?? '';
+        const locale = window.UiLocalization?.getLocale?.() ?? 'en';
+        return window.UiLocalization?.translateText?.(originalHeader, locale) ?? originalHeader;
+    }
+
     function getExportColumns(grid) {
         return (grid?.columns || [])
             .filter(column => column
@@ -21,7 +30,7 @@
                 && !technicalFields.has(`${column.field}`.toLowerCase()))
             .map(column => ({
                 field: column.field,
-                headerText: column.headerText || column.field,
+                headerText: getLocalizedHeaderText(column),
                 width: column.width,
                 textAlign: column.textAlign,
                 format: column.format,
@@ -87,7 +96,7 @@
         document.querySelectorAll('.e-grid').forEach(element => configure(element.ej2_instances?.[0]));
     }
 
-    window.GridExportManager = { configure, exportExcel, getExportColumns, autoConfigure };
+    window.GridExportManager = { configure, exportExcel, getExportColumns, getLocalizedHeaderText, autoConfigure };
     const init = () => {
         autoConfigure();
         new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true });

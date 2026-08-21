@@ -1,5 +1,12 @@
 ﻿const App = {
     setup() {
+        const stockCountStatus = Object.freeze({
+            draft: '0',
+            cancelled: '1',
+            confirmed: '2',
+            archived: '3'
+        });
+
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
@@ -14,7 +21,12 @@
             countDate: '',
             description: '',
             warehouseId: null,
-            status: null,
+            status: stockCountStatus.draft,
+            originalStatus: null,
+            isHeaderReadOnly: false,
+            canEditStatus: true,
+            canEditLines: false,
+            canSubmit: true,
             errors: {
                 countDate: '',
                 warehouseId: '',
@@ -32,6 +44,56 @@
         const warehouseIdRef = Vue.ref(null);
         const statusRef = Vue.ref(null);
         const numberRef = Vue.ref(null);
+
+        const normalizeStatus = (value) => value === null || value === undefined ? '' : String(value);
+
+        const getAllowedStatusData = () => {
+            const currentStatus = normalizeStatus(state.originalStatus ?? state.status);
+            let allowedStatuses;
+
+            if (state.isViewMode || state.deleteMode) {
+                allowedStatuses = [currentStatus];
+            } else if (!state.id) {
+                allowedStatuses = [stockCountStatus.draft];
+            } else if (currentStatus === stockCountStatus.draft) {
+                allowedStatuses = [stockCountStatus.draft, stockCountStatus.confirmed];
+            } else if (currentStatus === stockCountStatus.confirmed) {
+                allowedStatuses = [stockCountStatus.confirmed, stockCountStatus.cancelled, stockCountStatus.archived];
+            } else {
+                allowedStatuses = [currentStatus];
+            }
+
+            return (state.stockCountStatusListLookupData ?? [])
+                .filter(item => allowedStatuses.includes(normalizeStatus(item.id)));
+        };
+
+        const refreshEditorPermissions = () => {
+            const originalStatus = normalizeStatus(state.originalStatus ?? state.status);
+            const isExisting = Boolean(state.id);
+            const isDraft = !isExisting || originalStatus === stockCountStatus.draft;
+            const isConfirmed = isExisting && originalStatus === stockCountStatus.confirmed;
+            const isInteractive = !state.isViewMode && !state.deleteMode;
+
+            state.isHeaderReadOnly = !isInteractive || (isExisting && !isDraft);
+            state.canEditStatus = isInteractive && (isDraft || isConfirmed);
+            state.canEditLines = isInteractive && isExisting && isDraft;
+            state.canSubmit = isInteractive && (isDraft || isConfirmed);
+
+            if (countDatePicker.obj) {
+                countDatePicker.obj.enabled = !state.isHeaderReadOnly;
+                countDatePicker.obj.dataBind();
+            }
+            if (warehouseListLookup.obj) {
+                warehouseListLookup.obj.enabled = !state.isHeaderReadOnly;
+                warehouseListLookup.obj.dataBind();
+            }
+            if (statusListLookup.obj) {
+                statusListLookup.refresh();
+            }
+            if (secondaryGrid.obj) {
+                secondaryGrid.refresh();
+            }
+        };
 
         const validateForm = function () {
             state.errors.countDate = '';
@@ -62,7 +124,12 @@
             state.countDate = '';
             state.description = '';
             state.warehouseId = null;
-            state.status = null;
+            state.status = stockCountStatus.draft;
+            state.originalStatus = null;
+            state.isHeaderReadOnly = false;
+            state.canEditStatus = true;
+            state.canEditLines = false;
+            state.canSubmit = true;
             state.errors = {
                 countDate: '',
                 warehouseId: '',
@@ -78,6 +145,7 @@
                     placeholder: 'Select Date',
                     format: 'yyyy-MM-dd',
                     locale: DateFormatManager.syncfusionDateLocale,
+                    enabled: !state.isHeaderReadOnly,
                     value: state.countDate ? DateFormatManager.parseBusinessDate(state.countDate) : null,
                     change: (e) => {
                         state.countDate = e.value;
@@ -109,6 +177,7 @@
                         fields: { value: 'id', text: 'name' },
                         placeholder: 'Select Warehouse',
                         allowFiltering: true,
+                        enabled: !state.isHeaderReadOnly,
                         filtering: (e) => {
                             e.preventDefaultAction = true;
                             let query = new ej.data.Query();
@@ -144,10 +213,11 @@
             create: () => {
                 if (state.stockCountStatusListLookupData && Array.isArray(state.stockCountStatusListLookupData)) {
                     statusListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.stockCountStatusListLookupData,
+                        dataSource: getAllowedStatusData(),
                         fields: { value: 'id', text: 'name' },
                         placeholder: 'Select Status',
                         allowFiltering: false,
+                        enabled: state.canEditStatus,
                         change: (e) => {
                             state.status = e.value;
                         }
@@ -157,7 +227,11 @@
             },
             refresh: () => {
                 if (statusListLookup.obj) {
-                    statusListLookup.obj.value = state.status;
+                    statusListLookup.obj.setProperties({
+                        dataSource: getAllowedStatusData(),
+                        enabled: state.canEditStatus,
+                        value: normalizeStatus(state.status)
+                    });
                 }
             }
         };
@@ -167,15 +241,6 @@
             (newVal, oldVal) => {
                 statusListLookup.refresh();
                 state.errors.status = '';
-
-                // Filter Draft out of dropdown when status > 0
-                StatusDropdownHelper.applyToDropdown(
-                    statusListLookup.obj,
-                    state.stockCountStatusListLookupData,
-                    newVal
-                );
-            
-            
             }
         );
 
@@ -334,7 +399,69 @@
                 const totalMovement = state.secondaryData.reduce((sum, record) => sum + (record.qtySCDelta ?? 0), 0);
                 state.totalMovementFormatted = NumberFormatManager.formatToLocale(totalMovement);
             },
+            refreshMainToolbarActions: () => {
+                if (!mainGrid.obj?.toolbarModule) return;
+
+                const selectedRecords = mainGrid.obj.getSelectedRecords();
+                const hasSingleSelection = selectedRecords.length === 1;
+                const selectedStatus = hasSingleSelection ? normalizeStatus(selectedRecords[0].status) : '';
+                const canEditSelection = hasSingleSelection
+                    && [stockCountStatus.draft, stockCountStatus.confirmed].includes(selectedStatus);
+                const canDeleteSelection = selectedRecords.length > 0
+                    && selectedRecords.every(record => normalizeStatus(record.status) === stockCountStatus.draft);
+
+                mainGrid.obj.toolbarModule.enableItems(['EditCustom'], canEditSelection);
+                mainGrid.obj.toolbarModule.enableItems(['DeleteCustom'], canDeleteSelection);
+                mainGrid.obj.toolbarModule.enableItems(['ViewCustom', 'PrintPDFCustom'], hasSingleSelection);
+            },
+            openRecord: async (selectedRecord, viewMode) => {
+                if (!selectedRecord) return;
+
+                state.deleteMode = false;
+                state.isViewMode = viewMode;
+                state.id = selectedRecord.id ?? '';
+                state.number = selectedRecord.number ?? '';
+                state.countDate = selectedRecord.countDate
+                    ? DateFormatManager.parseBusinessDate(selectedRecord.countDate)
+                    : null;
+                state.description = selectedRecord.description ?? '';
+                state.warehouseId = selectedRecord.warehouseId ?? '';
+                state.status = normalizeStatus(selectedRecord.status);
+                state.originalStatus = state.status;
+
+                if (viewMode) {
+                    state.mainTitle = 'View Stock Count';
+                } else if (state.originalStatus === stockCountStatus.confirmed) {
+                    state.mainTitle = 'Update Stock Count Status';
+                } else {
+                    state.mainTitle = 'Edit Stock Count';
+                }
+
+                await methods.populateSecondaryData(state.id);
+                state.showComplexDiv = true;
+                refreshEditorPermissions();
+                mainModal.obj.show();
+            },
             submitMainData: async () => {
+                const originalStatus = normalizeStatus(state.originalStatus ?? state.status);
+                const requestedStatus = normalizeStatus(state.status);
+
+                if (!state.canSubmit) {
+                    return { isValid: false, response: null };
+                }
+                if (state.id && originalStatus === stockCountStatus.confirmed
+                    && ![stockCountStatus.cancelled, stockCountStatus.archived].includes(requestedStatus)) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Status transition required',
+                        text: 'A confirmed stock count can only be cancelled or archived.'
+                    });
+                    return { isValid: false, response: null };
+                }
+                if (state.id && [stockCountStatus.cancelled, stockCountStatus.archived].includes(originalStatus)) {
+                    return { isValid: false, response: null };
+                }
+
                 const isValid = validateForm();
                 if (!isValid) {
                     return { isValid, response: null };
@@ -357,11 +484,14 @@
                 }
             },
             onMainModalHidden: () => {
+                state.deleteMode = false;
+                state.isViewMode = false;
                 resetFormState();
                 state.errors.countDate = '';
                 state.errors.warehouseId = '';
                 state.errors.status = '';
                 state.showComplexDiv = false;
+                refreshEditorPermissions();
             }
         };
 
@@ -382,12 +512,22 @@
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
-                            state.mainTitle = 'Edit Stock Count';
-                            state.id = response?.data?.content?.data.id ?? '';
-                            state.number = response?.data?.content?.data.number ?? '';
+                            const savedRecord = response?.data?.content?.data ?? {};
+                            state.id = savedRecord.id ?? '';
+                            state.number = savedRecord.number ?? '';
+                            state.status = normalizeStatus(savedRecord.status ?? state.status);
+                            state.originalStatus = state.status;
+                            if ([stockCountStatus.cancelled, stockCountStatus.archived].includes(state.originalStatus)) {
+                                state.isViewMode = true;
+                                state.mainTitle = 'View Stock Count';
+                            } else if (state.originalStatus === stockCountStatus.confirmed) {
+                                state.mainTitle = 'Update Stock Count Status';
+                            } else {
+                                state.mainTitle = 'Edit Stock Count';
+                            }
                             await methods.populateSecondaryData(state.id);
-                            secondaryGrid.refresh();
                             state.showComplexDiv = true;
+                            refreshEditorPermissions();
 
                             Swal.fire({
                                 icon: 'success',
@@ -407,7 +547,7 @@
                                 mainModal.obj.hide();
                                 resetFormState();
                                 state.isViewMode = false;
-            }, 2000);
+                            }, 2000);
                         }
                     } else {
                         Swal.fire({
@@ -450,6 +590,16 @@
 
                 await methods.populateProductListLookupData();
                 await secondaryGrid.create(state.secondaryData);
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const requestedViewId = urlParams.get('viewId')
+                    || (urlParams.get('viewMode') === 'true' ? urlParams.get('id') : null);
+                if (requestedViewId) {
+                    const selectedRecord = state.mainData.find(record => record.id === requestedViewId);
+                    if (selectedRecord) {
+                        await methods.openRecord(selectedRecord, true);
+                    }
+                }
 
             } catch (e) {
                 console.error('page init error:', e);
@@ -499,53 +649,30 @@
                         { type: 'Separator' },
                         { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
                         { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
-                        { text: 'Xem', tooltipText: 'Xem chi tiết', prefixIcon: 'e-eye', id: 'ViewCustom' },
+                        { text: 'View', tooltipText: 'View Details', prefixIcon: 'e-eye', id: 'ViewCustom' },
                         { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
                         { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        methods.refreshMainToolbarActions();
                         mainGrid.obj.autoFitColumns(['number', 'countDate', 'warehouseName', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
+                        methods.refreshMainToolbarActions();
                     },
                     rowDeselected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
+                        methods.refreshMainToolbarActions();
                     },
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {
                             mainGrid.obj.clearSelection();
                         }
                     },
-                                        recordDoubleClick: async (args) => {
-                        if (args.rowData) {
-                            const selectedRecord = args.rowData;
-                            state.isViewMode = true;
-                            state.deleteMode = false;
-                            state.mainTitle = 'Xem ki\u1ec3m k\u00ea';
-                            state.id = selectedRecord.id ?? '';
-                            state.number = selectedRecord.number ?? '';
-                            state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
-                            state.description = selectedRecord.description ?? '';
-                            state.warehouseId = selectedRecord.warehouseId ?? '';
-                            state.status = String(selectedRecord.status ?? '');
-                            await methods.populateSecondaryData(selectedRecord.id);
-                            secondaryGrid.refresh();
-                            state.showComplexDiv = true;
-                            mainModal.obj.show();
-                        }
+                    recordDoubleClick: async (args) => {
+                        await methods.openRecord(args.rowData, true);
                     },
                     toolbarClick: async (args) => {
                         if (args.item.id === 'MainGrid_excelexport') {
@@ -554,68 +681,60 @@
 
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             state.mainTitle = 'Add Stock Count';
                             resetFormState();
                             state.showComplexDiv = false;
+                            refreshEditorPermissions();
                             mainModal.obj.show();
                         }
 
                         if (args.item.id === 'EditCustom') {
-                            state.deleteMode = false;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Edit Stock Count';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
-                                state.description = selectedRecord.description ?? '';
-                                state.warehouseId = selectedRecord.warehouseId ?? '';
-                                state.status = String(selectedRecord.status ?? '');
-                                await methods.populateSecondaryData(selectedRecord.id);
-                                secondaryGrid.refresh();
-                                state.showComplexDiv = true;
-                                mainModal.obj.show();
-                            }
+                            const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
+                            const selectedStatus = normalizeStatus(selectedRecord?.status);
+                            if (![stockCountStatus.draft, stockCountStatus.confirmed].includes(selectedStatus)) return;
+                            await methods.openRecord(selectedRecord, false);
                         }
 
                         if (args.item.id === 'ViewCustom') {
-                            state.deleteMode = false;
-                                state.isViewMode = true;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Xem phiếu Stock Count';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
-                                state.description = selectedRecord.description ?? '';
-                                state.warehouseId = selectedRecord.warehouseId ?? '';
-                                state.status = String(selectedRecord.status ?? '');
-                                await methods.populateSecondaryData(selectedRecord.id);
-                                secondaryGrid.refresh();
-                                state.showComplexDiv = true;
-                                mainModal.obj.show();
-                            }
+                            await methods.openRecord(mainGrid.obj.getSelectedRecords()[0], true);
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            const selected = mainGrid.obj.getSelectedRecords(); if (!selected.length) return;
-                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} phiếu kiểm kê đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false }); if (!result.isConfirmed) return;
-                            for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId()); await methods.populateMainData(); mainGrid.refresh(); Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} phiếu kiểm kê.`, heightAuto: false }); return;
-                            state.deleteMode = true;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                state.mainTitle = 'Delete Stock Count?';
-                                state.id = selectedRecord.id ?? '';
-                                state.number = selectedRecord.number ?? '';
-                                state.countDate = selectedRecord.countDate ? DateFormatManager.parseBusinessDate(selectedRecord.countDate) : null;
-                                state.description = selectedRecord.description ?? '';
-                                state.warehouseId = selectedRecord.warehouseId ?? '';
-                                state.status = String(selectedRecord.status ?? '');
-                                await methods.populateSecondaryData(selectedRecord.id);
-                                secondaryGrid.refresh();
-                                state.showComplexDiv = false;
-                                mainModal.obj.show();
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            if (selected.some(record => normalizeStatus(record.status) !== stockCountStatus.draft)) {
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Delete unavailable',
+                                    text: 'Only draft stock counts can be deleted.',
+                                    heightAuto: false
+                                });
+                                return;
                             }
+
+                            const result = await Swal.fire({
+                                icon: 'warning',
+                                title: 'Confirm Delete',
+                                text: 'Are you sure you want to delete the selected stock counts?',
+                                showCancelButton: true,
+                                confirmButtonText: 'Delete',
+                                cancelButtonText: 'Cancel',
+                                heightAuto: false
+                            });
+                            if (!result.isConfirmed) return;
+
+                            for (const record of selected) {
+                                await services.deleteMainData(record.id, StorageManager.getUserId());
+                            }
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Delete Successful',
+                                text: 'Selected stock counts were deleted.',
+                                heightAuto: false
+                            });
                         }
 
                         if (args.item.id === 'PrintPDFCustom') {
@@ -634,7 +753,7 @@
             }
         };
 
-                let warehouseObj = null;
+        let warehouseObj = null;
         let productObj = null;
         let movementObj = null;
         let qtySCCountObj = null;
@@ -645,7 +764,7 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
+                    editSettings: { allowEditing: state.canEditLines, allowAdding: state.canEditLines, allowDeleting: state.canEditLines, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: state.canEditLines },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -770,7 +889,7 @@
                         },
                         { field: 'qtySCDelta', headerText: 'Adjustment', width: 100, allowEditing: false, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
                     ],
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: !state.canEditLines ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
@@ -779,14 +898,14 @@
                     dataBound: function () { },
                     excelExportComplete: () => { },
                     rowSelected: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length == 1) {
+                        if (state.canEditLines && secondaryGrid.obj.getSelectedRecords().length == 1) {
                             secondaryGrid.obj.toolbarModule.enableItems(['SecondaryGrid_edit'], true);
                         } else {
                             secondaryGrid.obj.toolbarModule.enableItems(['SecondaryGrid_edit'], false);
                         }
                     },
                     rowDeselected: () => {
-                        if (secondaryGrid.obj.getSelectedRecords().length == 1) {
+                        if (state.canEditLines && secondaryGrid.obj.getSelectedRecords().length == 1) {
                             secondaryGrid.obj.toolbarModule.enableItems(['SecondaryGrid_edit'], true);
                         } else {
                             secondaryGrid.obj.toolbarModule.enableItems(['SecondaryGrid_edit'], false);
@@ -803,6 +922,10 @@
                         }
                     },
                     actionBegin: (args) => {
+                        if (!state.canEditLines && ['add', 'beginEdit', 'save', 'delete'].includes(args.requestType)) {
+                            args.cancel = true;
+                            return;
+                        }
                         ProductSerialPicker.validateGridSave(args, {
                             productListGetter: () => state.productListLookupData,
                             quantityField: 'qtySCCount',
@@ -903,11 +1026,11 @@
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
             },
             refresh: () => {
-                const allowEdit = !state.isViewMode;
+                const allowEdit = state.canEditLines;
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: !allowEdit ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',

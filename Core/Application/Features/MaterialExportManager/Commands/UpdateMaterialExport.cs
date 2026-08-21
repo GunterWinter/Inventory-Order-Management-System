@@ -51,6 +51,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
     private readonly ICommandRepository<Customer> _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly InventoryCostResolver _inventoryCostResolver;
     private readonly ProductSerialService _productSerialService;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly IQueryContext _queryContext;
@@ -65,6 +66,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         ICommandRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork,
         InventoryTransactionService inventoryTransactionService,
+        InventoryCostResolver inventoryCostResolver,
         ProductSerialService productSerialService,
         NumberSequenceService numberSequenceService,
         IQueryContext queryContext)
@@ -78,6 +80,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _inventoryCostResolver = inventoryCostResolver;
         _productSerialService = productSerialService;
         _numberSequenceService = numberSequenceService;
         _queryContext = queryContext;
@@ -241,24 +244,16 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     if (movement > availableStock + 0.000001d)
                         throw new InvalidOperationException($"Not enough stock for {line.Product.Name}. Available: {availableStock}.");
 
-                    var receiptCosts = await (
-                        from transaction in _inventoryTransactionRepository.GetQuery()
-                        join purchaseItem in _queryContext.Set<PurchaseOrderItem>()
-                            on transaction.ModuleItemId equals purchaseItem.Id
-                        where !transaction.IsDeleted
-                            && !purchaseItem.IsDeleted
-                            && transaction.ModuleName == nameof(PurchaseOrder)
-                            && transaction.Status == InventoryTransactionStatus.Confirmed
-                            && transaction.ProductId == line.ProductId
-                            && transaction.WarehouseId == entity.WarehouseId
-                            && (transaction.Stock ?? 0d) > 0d
-                        select new { Quantity = transaction.Stock ?? 0d, UnitCost = purchaseItem.UnitPrice ?? 0d })
-                        .ToListAsync(ct);
-                    var received = receiptCosts.Sum(x => x.Quantity);
-                    var unitCost = received > 0d
-                        ? receiptCosts.Sum(x => x.Quantity * x.UnitCost) / received
-                        : line.Product.CostPrice ?? 0d;
-                    purchaseOrderCosts[$"WEIGHTED:{line.Id}"] = unitCost * movement;
+                    var costResolution = await _inventoryCostResolver.ResolveAsync(
+                        line.ProductId,
+                        entity.WarehouseId,
+                        cancellationToken: ct);
+                    var costKeyPrefix = costResolution.IsFallbackCost
+                        ? "FALLBACK"
+                        : costResolution.IncludesOpeningStock && !costResolution.IncludesPurchase
+                            ? "OPENING"
+                            : "WEIGHTED";
+                    purchaseOrderCosts[$"{costKeyPrefix}:{line.Id}"] = costResolution.UnitCost * movement;
 
                     line.Status = InventoryTransactionStatus.Confirmed;
                     line.WarehouseId = entity.WarehouseId;
@@ -293,6 +288,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     selectedSerials = await _productSerialRepository.GetQuery()
                         .ApplyIsDeletedFilter(false)
                         .Include(x => x.PurchaseOrderItem)
+                        .Include(x => x.Product)
                         .Where(x => manualIds.Contains(x.Id))
                         .ToListAsync(ct);
                 }
@@ -302,6 +298,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     selectedSerials = await _productSerialRepository.GetQuery()
                         .ApplyIsDeletedFilter(false)
                         .Include(x => x.PurchaseOrderItem)
+                        .Include(x => x.Product)
                         .Where(x => x.ProductId == line.ProductId
                             && x.CurrentWarehouseId == entity.WarehouseId
                             && x.Status == ProductSerialStatus.InStock
@@ -330,18 +327,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     {
                         throw new InvalidOperationException("A selected serial is no longer available in the selected warehouse.");
                     }
-                    if (serial.UnitCost == null)
-                    {
-                        throw new InvalidOperationException($"Serial {serial.InternalSerialNumber} does not have a unit cost.");
-                    }
-                    if (string.IsNullOrWhiteSpace(serial.PurchaseOrderItem?.PurchaseOrderId))
-                    {
-                        throw new InvalidOperationException($"Serial {serial.InternalSerialNumber} is not linked to a purchase order.");
-                    }
-
-                    var purchaseOrderId = serial.PurchaseOrderItem.PurchaseOrderId;
-                    purchaseOrderCosts[purchaseOrderId] =
-                        purchaseOrderCosts.GetValueOrDefault(purchaseOrderId) + serial.UnitCost.Value;
+                    var serialCost = _inventoryCostResolver.ResolveSerial(serial);
+                    purchaseOrderCosts[serialCost.SourceKey] =
+                        purchaseOrderCosts.GetValueOrDefault(serialCost.SourceKey) + serialCost.UnitCost;
                 }
 
                 line.Status = InventoryTransactionStatus.Confirmed;
@@ -379,12 +367,17 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
 
             foreach (var pair in purchaseOrderCosts.Where(x => x.Value > 0d))
             {
+                var costDescription = pair.Key.StartsWith("FALLBACK:", StringComparison.Ordinal)
+                    ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn hàng hóa dự phòng)"
+                    : pair.Key.StartsWith("OPENING:", StringComparison.Ordinal)
+                        ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn tồn đầu kỳ)"
+                        : $"Phân bổ công trình cho {selectedCustomer.Name}";
                 await CreateProjectCostTransactionAsync(
                     entity,
                     pair.Key,
                     pair.Value,
                     projectAllocationCategory.Id,
-                    $"Phân bổ công trình cho {selectedCustomer.Name}",
+                    costDescription,
                     request.UpdatedById,
                     ct);
             }

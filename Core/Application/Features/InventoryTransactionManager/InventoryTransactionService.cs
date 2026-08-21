@@ -17,8 +17,10 @@ public partial class InventoryTransactionService
     private readonly WarehouseService _warehouseService;
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
+    private readonly ICommandRepository<StockCount> _stockCountRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProductSerialService _productSerialService;
+    private readonly InventoryCostResolver _inventoryCostResolver;
 
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
 
@@ -27,18 +29,22 @@ public partial class InventoryTransactionService
         WarehouseService warehouseService,
         IQueryContext queryContext,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
+        ICommandRepository<StockCount> stockCountRepository,
         IUnitOfWork unitOfWork,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
-        ProductSerialService productSerialService
+        ProductSerialService productSerialService,
+        InventoryCostResolver inventoryCostResolver
         )
     {
         _numberSequenceService = numberSequenceService;
         _warehouseService = warehouseService;
         _queryContext = queryContext;
         _inventoryTransactionRepository = inventoryTransactionRepository;
+        _stockCountRepository = stockCountRepository;
         _unitOfWork = unitOfWork;
         _salesOrderItemRepository = salesOrderItemRepository;
         _productSerialService = productSerialService;
+        _inventoryCostResolver = inventoryCostResolver;
     }
 
     public double GetStock(string? warehouseId, string? productId, string? currentId = null)
@@ -234,9 +240,10 @@ public partial class InventoryTransactionService
             throw new Exception("Quantity must not zero and should be positive.");
         }
 
-        if (moduleName == nameof(StockCount) && transaction.QtySCCount <= 0.0)
+        if (moduleName == nameof(StockCount)
+            && (transaction.QtySCCount == null || transaction.QtySCCount < 0.0))
         {
-            throw new Exception("Quantity must not zero and should be positive.");
+            throw new Exception("Stock count quantity must be zero or a positive number.");
         }
 
         switch (moduleName)

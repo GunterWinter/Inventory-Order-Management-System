@@ -25,6 +25,16 @@ public class CreateSalesReturnRequest : IRequest<CreateSalesReturnResult>
     public bool SkipDefaultItems { get; init; }
 }
 
+public class CreateSalesReturnValidator : AbstractValidator<CreateSalesReturnRequest>
+{
+    public CreateSalesReturnValidator()
+    {
+        RuleFor(x => x.ReturnDate).NotEmpty();
+        RuleFor(x => x.Status).NotEmpty();
+        RuleFor(x => x.SalesOrderId).NotEmpty();
+    }
+}
+
 public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest, CreateSalesReturnResult>
 {
     private readonly ICommandRepository<SalesReturn> _SalesOrderRepository;

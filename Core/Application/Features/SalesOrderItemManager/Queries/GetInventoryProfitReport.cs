@@ -1,5 +1,6 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
+using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -38,10 +39,14 @@ public sealed class GetInventoryProfitReportHandler
     : IRequestHandler<GetInventoryProfitReportRequest, GetInventoryProfitReportResult>
 {
     private readonly IQueryContext _context;
+    private readonly InventoryCostResolver _costResolver;
 
-    public GetInventoryProfitReportHandler(IQueryContext context)
+    public GetInventoryProfitReportHandler(
+        IQueryContext context,
+        InventoryCostResolver costResolver)
     {
         _context = context;
+        _costResolver = costResolver;
     }
 
     public async Task<GetInventoryProfitReportResult> Handle(
@@ -51,7 +56,9 @@ public sealed class GetInventoryProfitReportHandler
         var salesItems = await _context.Set<SalesOrderItem>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.SalesOrder != null && x.SalesOrder.OrderStatus == SalesOrderStatus.Confirmed)
+            .Where(x => x.SalesOrder != null
+                && (x.SalesOrder.OrderStatus == SalesOrderStatus.Confirmed
+                    || x.SalesOrder.OrderStatus == SalesOrderStatus.Archived))
             .Select(x => new
             {
                 x.Id,
@@ -60,7 +67,9 @@ public sealed class GetInventoryProfitReportHandler
                 ProductNumber = x.Product != null ? x.Product.Number : null,
                 ProductReferenceCode = x.Product != null ? x.Product.ReferenceCode : null,
                 ProductName = x.Product != null ? x.Product.Name : null,
-                ProductCostPrice = x.Product != null ? x.Product.CostPrice ?? 0d : 0d,
+                SerialTrackingMode = x.Product != null && x.Product.Physical == true
+                    ? x.Product.SerialTrackingMode ?? SerialTrackingMode.None
+                    : SerialTrackingMode.None,
                 WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
                 SalesOrderNumber = x.SalesOrder!.Number,
                 SoldDate = x.SalesOrder.OrderDate ?? x.CreatedAtUtc,
@@ -69,80 +78,38 @@ public sealed class GetInventoryProfitReportHandler
             })
             .ToListAsync(cancellationToken);
 
-        var itemIds = salesItems.Select(x => x.Id).ToList();
-        var productIds = salesItems.Select(x => x.ProductId).Where(x => x != null).Distinct().ToList();
-        var warehouseIds = salesItems.Select(x => x.WarehouseId).Where(x => x != null).Distinct().ToList();
-
-        var serialCosts = await _context.Set<ProductSerial>()
+        var salesItemIds = salesItems.Select(x => x.Id).ToList();
+        var serialCounts = await _context.Set<ProductSerial>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.SalesOrderItemId != null
-                && itemIds.Contains(x.SalesOrderItemId)
-                && x.PurchaseOrderItem != null)
-            .Select(x => new
-            {
-                x.SalesOrderItemId,
-                UnitCost = x.PurchaseOrderItem!.UnitPrice ?? 0d
-            })
-            .ToListAsync(cancellationToken);
-        var serialCostMap = serialCosts
-            .Where(x => x.SalesOrderItemId != null)
+            .Where(x => x.SalesOrderItemId != null && salesItemIds.Contains(x.SalesOrderItemId))
             .GroupBy(x => x.SalesOrderItemId!)
-            .ToDictionary(x => x.Key, x => x.ToList());
+            .Select(group => new { SalesOrderItemId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(x => x.SalesOrderItemId, x => x.Count, cancellationToken);
 
-        var receiptCosts = await (
-            from transaction in _context.Set<InventoryTransaction>().AsNoTracking()
-            join purchaseItem in _context.Set<PurchaseOrderItem>().AsNoTracking()
-                on transaction.ModuleItemId equals purchaseItem.Id
-            where !transaction.IsDeleted
-                && !purchaseItem.IsDeleted
-                && transaction.Status == InventoryTransactionStatus.Confirmed
-                && transaction.ModuleName == nameof(PurchaseOrder)
-                && productIds.Contains(transaction.ProductId)
-                && warehouseIds.Contains(transaction.WarehouseId)
-                && (transaction.Stock ?? transaction.Movement ?? 0d) > 0d
-            select new
-            {
-                transaction.ProductId,
-                transaction.WarehouseId,
-                Quantity = transaction.Stock ?? transaction.Movement ?? 0d,
-                UnitCost = purchaseItem.UnitPrice ?? 0d
-            })
-            .ToListAsync(cancellationToken);
-        var receiptCostMap = receiptCosts
-            .GroupBy(x => (ProductId: x.ProductId ?? string.Empty, WarehouseId: x.WarehouseId ?? string.Empty))
-            .ToDictionary(
-                x => x.Key,
-                x => x.Sum(row => row.Quantity * row.UnitCost) / x.Sum(row => row.Quantity));
-
-        var data = salesItems.Select(item =>
+        var data = new List<InventoryProfitReportItemDto>(salesItems.Count);
+        foreach (var item in salesItems)
         {
-            double unitCost;
-            string costSource;
-            var isFallback = false;
-
-            if (serialCostMap.TryGetValue(item.Id, out var itemSerialCosts) && itemSerialCosts.Count > 0)
+            if (item.SerialTrackingMode != SerialTrackingMode.None)
             {
-                unitCost = itemSerialCosts.Average(x => x.UnitCost);
-                costSource = "PO theo serial";
-            }
-            else if (receiptCostMap.TryGetValue(
-                (item.ProductId ?? string.Empty, item.WarehouseId ?? string.Empty),
-                out var receivedUnitCost))
-            {
-                unitCost = receivedUnitCost;
-                costSource = "PO thực nhập bình quân";
-            }
-            else
-            {
-                unitCost = item.ProductCostPrice;
-                costSource = "Giá vốn hàng hóa (dự phòng)";
-                isFallback = true;
+                var expectedSerialCount = item.Quantity;
+                var actualSerialCount = serialCounts.GetValueOrDefault(item.Id);
+                if (Math.Abs(expectedSerialCount - Math.Round(expectedSerialCount)) > 0.000001d
+                    || actualSerialCount != Convert.ToInt32(Math.Round(expectedSerialCount)))
+                {
+                    throw new InvalidOperationException(
+                        $"Dòng bán {item.SalesOrderNumber} của {item.ProductName} có số serial không khớp số lượng.");
+                }
             }
 
-            var totalCost = Math.Round(unitCost * item.Quantity, 0, MidpointRounding.AwayFromZero);
+            var resolution = await _costResolver.ResolveAsync(
+                item.ProductId,
+                item.WarehouseId,
+                item.Id,
+                cancellationToken);
+            var totalCost = Math.Round(resolution.UnitCost * item.Quantity, 0, MidpointRounding.AwayFromZero);
             var totalSales = Math.Round(item.SalesUnitPrice * item.Quantity, 0, MidpointRounding.AwayFromZero);
-            return new InventoryProfitReportItemDto
+            data.Add(new InventoryProfitReportItemDto
             {
                 SalesOrderItemId = item.Id,
                 SalesOrderNumber = item.SalesOrderNumber,
@@ -152,16 +119,16 @@ public sealed class GetInventoryProfitReportHandler
                 ProductName = item.ProductName,
                 WarehouseName = item.WarehouseName,
                 Quantity = item.Quantity,
-                UnitCost = unitCost,
+                UnitCost = resolution.UnitCost,
                 SalesUnitPrice = item.SalesUnitPrice,
                 TotalCost = totalCost,
                 TotalSales = totalSales,
                 Profit = totalSales - totalCost,
-                CostSource = costSource,
-                IsFallbackCost = isFallback,
+                CostSource = resolution.CostSource,
+                IsFallbackCost = resolution.IsFallbackCost,
                 SoldDate = item.SoldDate
-            };
-        }).ToList();
+            });
+        }
 
         return new GetInventoryProfitReportResult { Data = data };
     }

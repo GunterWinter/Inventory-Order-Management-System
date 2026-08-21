@@ -220,8 +220,8 @@
         'Please select a payment account.': 'Vui lòng chọn tài khoản thanh toán.',
         'Select Device Code': 'Chọn Mã Thiết Bị',
         'Fixed Code must be 2-4 letters or digits.': 'Mã cố định phải có 2-4 ký tự chữ hoặc số.',
-        'Number (System Code)': 'Number (Mã HT)',
-        'Reference Code (Custom Code)': 'Reference Code (Mã tùy chỉnh)',
+        'Number (System Code)': 'Mã Hệ Thống',
+        'Reference Code (Custom Code)': 'Mã Tùy Chỉnh',
         'Enter Name': 'Nhập Tên',
         'Login': 'Đăng Nhập',
         'Log In': 'Đăng Nhập',
@@ -278,6 +278,41 @@
         'Download Template': 'Tải File Mẫu',
         'Import Excel': 'Nhập Excel',
         'Import Successful': 'Nhập Excel Thành Công',
+        'Image': 'Hình Ảnh',
+        'Product Image': 'Hình Hàng Hóa',
+        'No product image': 'Chưa Có Hình Ảnh',
+        'No serial tracking': 'Không Theo Dõi Serial',
+        'Confirm Delete': 'Xác Nhận Xóa',
+        'Are you sure you want to delete the selected products?': 'Bạn Có Chắc Chắn Muốn Xóa Các Hàng Hóa Đã Chọn Không?',
+        'Selected products were deleted.': 'Đã Xóa Các Hàng Hóa Đã Chọn.',
+        'Opening Stock': 'Tồn Kho Nhập Lần Đầu',
+        'Opening Stock Warehouse': 'Kho Tồn Đầu Kỳ',
+        'Opening stock uses the default warehouse when first entered.': 'Tồn đầu kỳ sử dụng kho mặc định tại lần nhập đầu tiên.',
+        'Non-physical products do not have stock.': 'Hàng hóa phi vật lý không có tồn kho.',
+        'Opening stock for manufacturer serial products must be entered through a Purchase Order.': 'Tồn đầu kỳ của hàng dùng serial nhà sản xuất phải được nhập qua Đơn mua hàng.',
+        'Opening stock for auto-generated internal codes can only be entered when the product is created.': 'Tồn đầu kỳ của hàng tự sinh mã nội bộ chỉ được nhập khi tạo hàng hóa.',
+        'Changing the default warehouse does not move opening stock.': 'Đổi kho mặc định không di chuyển tồn đầu kỳ.',
+        'Opening stock must be zero or greater.': 'Tồn đầu kỳ phải lớn hơn hoặc bằng 0.',
+        'Opening stock must be a whole number for auto-generated internal codes.': 'Tồn đầu kỳ phải là số nguyên đối với hàng tự sinh mã nội bộ.',
+        'Cost price is required when opening stock is greater than zero.': 'Giá vốn là bắt buộc khi tồn đầu kỳ lớn hơn 0.',
+        'Default warehouse is required when opening stock is greater than zero.': 'Kho mặc định là bắt buộc khi tồn đầu kỳ lớn hơn 0.',
+        'Serial Tracking Mode': 'Chế Độ Theo Dõi Serial',
+        'Internal Serial Fixed Code': 'Mã Cố Định Serial Nội Bộ',
+        'Default Warehouse': 'Kho Mặc Định',
+        'Default Warranty Months': 'Bảo Hành Mặc Định (Tháng)',
+        'Document Key': 'Khóa Chứng Từ',
+        'Transaction Key': 'Khóa Giao Dịch',
+        'Export Date': 'Ngày Xuất',
+        'Counted Quantity': 'Số Lượng Kiểm Kê',
+        'Supplier Warranty Months': 'Bảo Hành Nhà Cung Cấp (Tháng)',
+        'Manufacturer Serials': 'Serial Nhà Sản Xuất',
+        'Product Serial IDs': 'ID Serial Hàng Hóa',
+        'WhatsApp': 'WhatsApp',
+        'LinkedIn': 'LinkedIn',
+        'Facebook': 'Facebook',
+        'Instagram': 'Instagram',
+        'Twitter X': 'Twitter X',
+        'TikTok': 'TikTok',
         'Import validation failed': 'Dữ Liệu Import Không Hợp Lệ',
         'Importing...': 'Đang Nhập Dữ Liệu...',
         'No data found': 'Không Tìm Thấy Dữ Liệu',
@@ -562,8 +597,22 @@
         'Warranty End Date': 'Ngày Hết Hạn Bảo Hành',
         'Warranty Status': 'Trạng Thái Bảo Hành',
         'Document Detail': 'Chi Tiết Chứng Từ',
+        'Document Details': 'Chi Tiết Chứng Từ',
         'Purchase Order Details': 'Chi Tiết Đơn Mua Hàng',
         'Sales Order Details': 'Chi Tiết Đơn Bán Hàng',
+        'Stock Count Details': 'Chi Tiết Phiếu Kiểm Kê',
+        'View Stock Count': 'Xem Phiếu Kiểm Kê',
+        'Update Stock Count Status': 'Cập Nhật Trạng Thái Phiếu Kiểm Kê',
+        'Status transition required': 'Cần Chọn Trạng Thái Chuyển Tiếp',
+        'A confirmed stock count can only be cancelled or archived.': 'Phiếu Kiểm Kê Đã Xác Nhận Chỉ Có Thể Được Hủy Hoặc Lưu Trữ.',
+        'Delete unavailable': 'Không Thể Xóa',
+        'Only draft stock counts can be deleted.': 'Chỉ Phiếu Kiểm Kê Ở Trạng Thái Nháp Mới Được Phép Xóa.',
+        'Are you sure you want to delete the selected stock counts?': 'Bạn Có Chắc Chắn Muốn Xóa Các Phiếu Kiểm Kê Đã Chọn Không?',
+        'Selected stock counts were deleted.': 'Đã Xóa Các Phiếu Kiểm Kê Đã Chọn.',
+        'View': 'Xem',
+        'View Details': 'Xem Chi Tiết',
+        'Internal serial, manufacturer serial, sales order number, customer, or phone number': 'Serial Nội Bộ, Serial Nhà Sản Xuất, Số Đơn Bán, Khách Hàng Hoặc Số Điện Thoại',
+        'Project / Customer': 'Công Trình / Khách Hàng',
         'Document Number': 'Số Chứng Từ',
         'Items': 'Danh Sách Mặt Hàng',
         'Price': 'Đơn Giá',
@@ -866,6 +915,25 @@
         'product number': 'mã hàng',
         'product name': 'tên hàng',
         'physical product': 'hàng hóa vật lý',
+        'opening stock': 'tồn kho nhập lần đầu',
+        'opening stock warehouse': 'kho tồn đầu kỳ',
+        'serial tracking mode': 'chế độ theo dõi serial',
+        'internal serial fixed code': 'mã cố định serial nội bộ',
+        'default warehouse': 'kho mặc định',
+        'default warranty months': 'bảo hành mặc định (tháng)',
+        'document key': 'khóa chứng từ',
+        'transaction key': 'khóa giao dịch',
+        'export date': 'ngày xuất',
+        'counted quantity': 'số lượng kiểm kê',
+        'supplier warranty months': 'bảo hành nhà cung cấp (tháng)',
+        'manufacturer serials': 'serial nhà sản xuất',
+        'product serial ids': 'id serial hàng hóa',
+        'whatsapp': 'whatsapp',
+        'linkedin': 'linkedin',
+        'facebook': 'facebook',
+        'instagram': 'instagram',
+        'twitter x': 'twitter x',
+        'tiktok': 'tiktok',
         'reference code': 'mã tham khảo',
         'ref code': 'mã tham khảo',
         'batch number': 'số lô',
@@ -1122,9 +1190,24 @@
         }
 
         if (locale === 'en') {
-            return exactEnglishByVietnamese[value]
-                ?? termEnglishByVietnamese[value.toLowerCase()]
-                ?? value;
+            // Canonical English input must remain byte-for-byte stable. Some
+            // Vietnamese labels (for example "ID") normalize to the same text
+            // as an English dictionary key, so reverse lookup alone can turn
+            // "Id" into "id" and corrupt exported/import-template headers.
+            if (Object.prototype.hasOwnProperty.call(exactTranslations, value)) {
+                return value;
+            }
+
+            const exactEnglish = exactEnglishByVietnamese[value];
+            if (exactEnglish) {
+                return exactEnglish;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(termTranslations, value.toLowerCase())) {
+                return value;
+            }
+
+            return termEnglishByVietnamese[value.toLowerCase()] ?? value;
         }
 
         if (exactTranslations[value]) {

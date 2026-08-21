@@ -1,10 +1,9 @@
 using Application.Common.Repositories;
-using Application.Common.CQS.Queries;
+using Application.Features.ProductManager;
 using Domain.Entities;
 using Domain.Enums;
 using FluentValidation;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ProductManager.Commands;
 
@@ -22,13 +21,14 @@ public class UpdateProductRequest : IRequest<UpdateProductResult>
     public double? UnitPrice { get; init; }
     public double? CostPrice { get; init; }
     public string? ImageUrl { get; init; }
-    public bool? Physical { get; init; } = true;
-    public SerialTrackingMode? SerialTrackingMode { get; init; } = Domain.Enums.SerialTrackingMode.InternalAuto;
+    public bool? Physical { get; init; }
+    public SerialTrackingMode? SerialTrackingMode { get; init; }
     public string? InternalSerialFixedCode { get; init; }
     public string? DefaultWarehouseId { get; init; }
     public int? DefaultWarrantyMonths { get; init; }
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
+    public double? OpeningStockQuantity { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -41,6 +41,7 @@ public class UpdateProductValidator : AbstractValidator<UpdateProductRequest>
         RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0).When(x => x.UnitPrice.HasValue);
         RuleFor(x => x.CostPrice).GreaterThanOrEqualTo(0).When(x => x.CostPrice.HasValue);
         RuleFor(x => x.Physical).NotNull();
+        RuleFor(x => x.SerialTrackingMode).IsInEnum().When(x => x.SerialTrackingMode.HasValue);
         RuleFor(x => x.InternalSerialFixedCode)
             .NotEmpty()
             .Length(2, 4)
@@ -48,7 +49,21 @@ public class UpdateProductValidator : AbstractValidator<UpdateProductRequest>
             .When(x => x.Physical == true && x.SerialTrackingMode == SerialTrackingMode.InternalAuto);
         RuleFor(x => x.DefaultWarrantyMonths).GreaterThanOrEqualTo(0).When(x => x.DefaultWarrantyMonths.HasValue);
 
+        RuleFor(x => x.UnitMeasureName).NotEmpty();
         RuleFor(x => x.ProductGroupId).NotEmpty();
+        RuleFor(x => x.OpeningStockQuantity)
+            .Must(x => !x.HasValue || (double.IsFinite(x.Value) && x.Value >= 0d))
+            .WithMessage("Opening stock must be a finite, non-negative number.");
+        RuleFor(x => x.OpeningStockQuantity)
+            .Must((request, quantity) => !quantity.HasValue
+                || (request.Physical == true
+                    && (request.SerialTrackingMode == null
+                        || request.SerialTrackingMode == SerialTrackingMode.None)))
+            .WithMessage("Only physical products without serial tracking can have opening stock edited.");
+        RuleFor(x => x.UpdatedById)
+            .NotEmpty()
+            .When(x => x.OpeningStockQuantity.HasValue)
+            .WithMessage("Người xác nhận là bắt buộc khi hiệu chỉnh tồn đầu kỳ.");
     }
 }
 
@@ -56,72 +71,84 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
 {
     private readonly ICommandRepository<Product> _repository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IQueryContext _queryContext;
+    private readonly ProductOpeningStockService _openingStockService;
 
     public UpdateProductHandler(
         ICommandRepository<Product> repository,
         IUnitOfWork unitOfWork,
-        IQueryContext queryContext
+        ProductOpeningStockService openingStockService
         )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
-        _queryContext = queryContext;
+        _openingStockService = openingStockService;
     }
 
     public async Task<UpdateProductResult> Handle(UpdateProductRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        Product? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct);
 
-        var requestedPhysical = request.Physical == true;
-        var requestedTrackingMode = requestedPhysical
-            ? request.SerialTrackingMode ?? SerialTrackingMode.InternalAuto
-            : SerialTrackingMode.None;
-        var currentTrackingMode = entity.Physical == true
-            ? entity.SerialTrackingMode ?? SerialTrackingMode.None
-            : SerialTrackingMode.None;
-        var trackingModeChanged = entity.Physical != requestedPhysical || currentTrackingMode != requestedTrackingMode;
-        if (trackingModeChanged)
-        {
-            var hasInventoryHistory = await _queryContext.Set<InventoryTransaction>()
-                .AsNoTracking()
-                .AnyAsync(x => x.ProductId == entity.Id, cancellationToken);
-            var hasSerialHistory = await _queryContext.Set<ProductSerial>()
-                .AsNoTracking()
-                .AnyAsync(x => x.ProductId == entity.Id, cancellationToken);
-            if (hasInventoryHistory || hasSerialHistory)
+            if (entity == null)
+            {
+                throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+            }
+
+            var requestedPhysical = request.Physical == true;
+            var currentTrackingMode = entity.Physical == true
+                ? entity.SerialTrackingMode ?? SerialTrackingMode.None
+                : SerialTrackingMode.None;
+            var requestedTrackingMode = requestedPhysical
+                ? request.SerialTrackingMode ?? currentTrackingMode
+                : SerialTrackingMode.None;
+
+            if (request.OpeningStockQuantity.HasValue
+                && (entity.Physical != true || currentTrackingMode != SerialTrackingMode.None))
             {
                 throw new InvalidOperationException(
-                    "Không thể đổi chế độ serial của hàng hóa đã có tồn kho hoặc lịch sử giao dịch.");
+                    "Chỉ hàng hóa vật lý đang ở chế độ không theo dõi serial mới được sửa tồn đầu kỳ.");
             }
-        }
 
-        entity.UpdatedById = request.UpdatedById;
+            var trackingModeChanged = entity.Physical != requestedPhysical || currentTrackingMode != requestedTrackingMode;
+            if (trackingModeChanged)
+            {
+                if (await _openingStockService.HasInventoryOrSerialHistoryAsync(entity.Id, ct))
+                {
+                    throw new InvalidOperationException(
+                        "Không thể đổi chế độ serial của hàng hóa đã có tồn kho hoặc lịch sử giao dịch.");
+                }
+            }
 
-        entity.Name = request.Name;
-        entity.UnitPrice = request.UnitPrice;
-        entity.CostPrice = request.CostPrice;
-        entity.ImageUrl = request.ImageUrl;
-        entity.Physical = requestedPhysical;
-        entity.SerialTrackingMode = requestedTrackingMode;
-        entity.InternalSerialFixedCode = entity.SerialTrackingMode == SerialTrackingMode.InternalAuto
-            ? NormalizeInternalSerialFixedCode(request.InternalSerialFixedCode)
-            : null;
-        entity.DefaultWarehouseId = requestedPhysical ? request.DefaultWarehouseId : null;
-        entity.DefaultWarrantyMonths = requestedPhysical ? request.DefaultWarrantyMonths : null;
-        entity.ReferenceCode = request.ReferenceCode;
-        entity.Description = request.Description;
-        entity.UnitMeasureName = request.UnitMeasureName;
-        entity.ProductGroupId = request.ProductGroupId;
+            var previousFixedCode = entity.InternalSerialFixedCode;
+            entity.UpdatedById = request.UpdatedById;
+            entity.Name = request.Name;
+            entity.UnitPrice = request.UnitPrice;
+            entity.CostPrice = request.CostPrice;
+            entity.ImageUrl = request.ImageUrl;
+            entity.Physical = requestedPhysical;
+            entity.SerialTrackingMode = requestedTrackingMode;
+            entity.InternalSerialFixedCode = entity.SerialTrackingMode == SerialTrackingMode.InternalAuto
+                ? NormalizeInternalSerialFixedCode(request.InternalSerialFixedCode)
+                    ?? (request.SerialTrackingMode == null ? previousFixedCode : null)
+                : null;
+            entity.DefaultWarehouseId = requestedPhysical ? request.DefaultWarehouseId : null;
+            entity.DefaultWarrantyMonths = requestedPhysical ? request.DefaultWarrantyMonths : null;
+            entity.ReferenceCode = request.ReferenceCode;
+            entity.Description = request.Description;
+            entity.UnitMeasureName = request.UnitMeasureName;
+            entity.ProductGroupId = request.ProductGroupId;
 
-        _repository.Update(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
+            _repository.Update(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _openingStockService.ApplyAsync(
+                entity,
+                request.OpeningStockQuantity,
+                isCreate: false,
+                userId: request.UpdatedById,
+                cancellationToken: ct);
+        }, cancellationToken);
 
         return new UpdateProductResult
         {

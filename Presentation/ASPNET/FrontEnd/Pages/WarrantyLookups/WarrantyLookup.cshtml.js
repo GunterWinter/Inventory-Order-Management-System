@@ -20,6 +20,8 @@ const App = {
         const mainGridRef = Vue.ref(null);
         const movementGridRef = Vue.ref(null);
         const documentModalRef = Vue.ref(null);
+
+        const getDisplayLocale = () => window.UiLocalization?.getLocale?.() === 'vi' ? 'vi-VN' : 'en-US';
         
         const documentModal = {
             obj: null,
@@ -114,7 +116,7 @@ const App = {
                 if (!dateString) return '';
                 const date = dateString instanceof Date ? dateString : DateFormatManager.parseServerDate(dateString);
                 if (!date) return '';
-                return new Intl.DateTimeFormat('vi-VN', {
+                return new Intl.DateTimeFormat(getDisplayLocale(), {
                     timeZone: 'Asia/Ho_Chi_Minh',
                     day: '2-digit', month: '2-digit', year: 'numeric'
                 }).format(date);
@@ -123,7 +125,7 @@ const App = {
                 if (!dateString) return '';
                 const date = dateString instanceof Date ? dateString : DateFormatManager.parseServerDate(dateString);
                 if (!date) return '';
-                return new Intl.DateTimeFormat('vi-VN', {
+                return new Intl.DateTimeFormat(getDisplayLocale(), {
                     timeZone: 'Asia/Ho_Chi_Minh',
                     day: '2-digit', month: '2-digit', year: 'numeric',
                     hour: '2-digit', minute: '2-digit', hour12: false
@@ -131,25 +133,54 @@ const App = {
             },
             formatNumber: (value) => {
                 if (!value && value !== 0) return '';
-                return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                return Number(value).toLocaleString(getDisplayLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 0 });
             },
             formatStatus: (statusValue) => {
-                if (!statusValue) return '';
+                if (statusValue === null || statusValue === undefined || statusValue === '') return '';
                 // basic mapping
                 const statuses = {
-                    '1': 'Draft',
+                    '0': 'Draft',
+                    '1': 'Cancelled',
                     '2': 'Confirmed',
-                    '3': 'Processing',
-                    '4': 'Completed',
-                    '5': 'Cancelled'
+                    '3': 'Archived'
                 };
                 return statuses[statusValue] || statusValue;
+            },
+            formatStockCountStatus: (statusValue) => {
+                const statuses = {
+                    '0': 'Draft',
+                    '1': 'Cancelled',
+                    '2': 'Confirmed',
+                    '3': 'Archived'
+                };
+                return statuses[String(statusValue)] || statusValue;
+            },
+            getDocumentConfig: (moduleName) => {
+                const configs = {
+                    PurchaseOrder: {
+                        title: 'Purchase Order Details',
+                        endpoint: (id) => `/PurchaseOrder/GetPurchaseOrderSingle?id=${encodeURIComponent(id)}`
+                    },
+                    SalesOrder: {
+                        title: 'Sales Order Details',
+                        endpoint: (id) => `/SalesOrder/GetSalesOrderSingle?id=${encodeURIComponent(id)}`
+                    },
+                    StockCount: {
+                        title: 'Stock Count Details',
+                        endpoint: (id) => `/StockCount/GetStockCountSingle?id=${encodeURIComponent(id)}`
+                    }
+                };
+
+                return configs[moduleName] ?? {
+                    title: 'Document Details',
+                    endpoint: (id) => `/${moduleName}/Get${moduleName}Single?id=${encodeURIComponent(id)}`
+                };
             },
             openDocumentModal: async (moduleName, moduleId, movementData = null) => {
                 if (!moduleName || !moduleId) return;
 
                 if (moduleName === 'CostAllocation') {
-                    state.docTitle = 'Chi tiết phân bổ công trình';
+                    state.docTitle = 'Cost Allocation Details';
                     state.docType = 'CostAllocation';
                     state.docData = movementData;
                     state.docItems = [];
@@ -160,8 +191,9 @@ const App = {
 
                 const targetModule = moduleName;
                 const targetId = moduleId;
+                const documentConfig = methods.getDocumentConfig(targetModule);
 
-                state.docTitle = moduleName === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
+                state.docTitle = documentConfig.title;
                 state.docType = null;
                 state.docData = null;
                 state.docItems = [];
@@ -172,14 +204,33 @@ const App = {
                 }
 
                 try {
-                    const endpoint = `/${targetModule}/Get${targetModule}Single?id=${targetId}`;
-                    const res = await AxiosManager.get(endpoint, {});
-                    const data = res?.data?.content?.data;
+                    const res = await AxiosManager.get(documentConfig.endpoint(targetId), {});
+                    const content = res?.data?.content ?? {};
+                    const data = content.data;
                     if (data) {
                         state.docType = targetModule;
-                        state.docData = data;
-                        state.docItems = data.purchaseOrderItemList || data.salesOrderItemList || [];
-                        state.docTitle = targetModule === 'PurchaseOrder' ? 'Purchase Order Details' : 'Sales Order Details';
+                        if (targetModule === 'StockCount') {
+                            state.docItems = (content.transactionList ?? []).map(item => ({
+                                ...item,
+                                quantity: item.qtySCCount ?? Math.abs(item.movement ?? 0),
+                                unitPrice: item.unitCost ?? 0
+                            }));
+                            const totalCost = state.docItems.reduce(
+                                (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+                                0);
+                            state.docData = {
+                                ...data,
+                                orderDate: data.countDate,
+                                orderStatus: methods.formatStockCountStatus(data.status),
+                                beforeTaxAmount: totalCost,
+                                taxAmount: 0,
+                                afterTaxAmount: totalCost
+                            };
+                        } else {
+                            state.docData = data;
+                            state.docItems = data.purchaseOrderItemList || data.salesOrderItemList || [];
+                        }
+                        state.docTitle = documentConfig.title;
                     } else {
                         state.docTitle = 'Document not found';
                     }
@@ -222,6 +273,21 @@ const App = {
             }
         };
 
+        const handleLanguageChanged = () => {
+            state.mainData = state.mainData.map(item => ({
+                ...item,
+                salesOrderDateText: methods.formatDate(item.salesOrderDate),
+                customerWarrantyEndDateText: methods.formatDate(item.customerWarrantyEndDate),
+                supplierWarrantyEndDateText: methods.formatDate(item.supplierWarrantyEndDate)
+            }));
+            state.movementData = state.movementData.map(item => ({
+                ...item,
+                movementDateText: methods.formatDateTime(item.movementDate)
+            }));
+            mainGrid.refresh();
+            movementGrid.refresh();
+        };
+
         Vue.onMounted(async () => {
             try {
                 await SecurityManager.authorizePage(['WarrantyLookups']);
@@ -232,9 +298,14 @@ const App = {
                 await movementGrid.create([]);
                 documentModal.create();
                 await methods.lookupWarranty(1, state.pageSize);
+                window.addEventListener('ui:languagechanged', handleLanguageChanged);
             } catch (e) {
                 console.error('page init error:', e);
             }
+        });
+
+        Vue.onUnmounted(() => {
+            window.removeEventListener('ui:languagechanged', handleLanguageChanged);
         });
 
         const mainGrid = {

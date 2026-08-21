@@ -16,14 +16,19 @@ public partial class InventoryTransactionService
         IReadOnlyCollection<string>? productSerialIds = null
         )
     {
-        var parent = await _queryContext
-            .StockCount
+        var parent = await _stockCountRepository
+            .GetQuery()
             .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Id == moduleId, cancellationToken);
+            .SingleOrDefaultAsync(x => !x.IsDeleted && x.Id == moduleId, cancellationToken);
 
         if (parent == null)
         {
             throw new Exception($"Parent entity not found: {moduleId}");
+        }
+        if (parent.Status != StockCountStatus.Draft)
+        {
+            throw new InvalidOperationException(
+                "Chỉ được thêm dòng hàng khi phiếu kiểm kê còn ở trạng thái Nháp.");
         }
 
         var child = new InventoryTransaction();
@@ -65,6 +70,7 @@ public partial class InventoryTransactionService
         {
             throw new Exception($"Child entity not found: {id}");
         }
+        await EnsureStockCountParentIsDraftAsync(child.ModuleId, cancellationToken);
 
         child.UpdatedById = updatedById;
 
@@ -92,6 +98,7 @@ public partial class InventoryTransactionService
         {
             throw new Exception($"Child entity not found: {id}");
         }
+        await EnsureStockCountParentIsDraftAsync(child.ModuleId, cancellationToken);
 
         child.UpdatedById = updatedById;
 
@@ -115,5 +122,21 @@ public partial class InventoryTransactionService
             .ToListAsync(cancellationToken);
 
         return await EnrichProductSerialsAsync(childs, cancellationToken);
+    }
+
+    private async Task EnsureStockCountParentIsDraftAsync(
+        string? moduleId,
+        CancellationToken cancellationToken)
+    {
+        var isDraft = await _stockCountRepository.GetQuery()
+            .AsNoTracking()
+            .AnyAsync(x => !x.IsDeleted
+                && x.Id == moduleId
+                && x.Status == StockCountStatus.Draft, cancellationToken);
+        if (!isDraft)
+        {
+            throw new InvalidOperationException(
+                "Chỉ được thay đổi dòng hàng khi phiếu kiểm kê còn ở trạng thái Nháp.");
+        }
     }
 }

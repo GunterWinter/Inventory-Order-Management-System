@@ -1,6 +1,7 @@
 using Application.Common.Repositories;
 using Application.Features.CashTransactionManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 
@@ -27,6 +28,10 @@ public class UpdateCashAccountValidator : AbstractValidator<UpdateCashAccountReq
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
+        RuleFor(x => x.AccountType)
+            .NotNull()
+            .Must(value => !value.HasValue || Enum.IsDefined(typeof(CashAccountType), value.Value))
+            .WithMessage("Account Type is invalid.");
     }
 }
 

@@ -21,6 +21,7 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.Property(x => x.SalesOrderItemId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
         builder.Property(x => x.SupplierWarrantyEndDate).IsRequired(false);
         builder.Property(x => x.CustomerWarrantyEndDate).IsRequired(false);
+        builder.Property(x => x.UnitCost).IsRequired(false);
         builder.Property(x => x.CostAllocationId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
 
         builder.HasOne(x => x.CostAllocation)

@@ -15,17 +15,20 @@ public class ProductSerialService
     private const string Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
     private readonly ICommandRepository<ProductSerialMovement> _productSerialMovementRepository;
+    private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public ProductSerialService(
         ICommandRepository<ProductSerial> productSerialRepository,
         ICommandRepository<ProductSerialMovement> productSerialMovementRepository,
+        ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         IQueryContext queryContext,
         IUnitOfWork unitOfWork)
     {
         _productSerialRepository = productSerialRepository;
         _productSerialMovementRepository = productSerialMovementRepository;
+        _inventoryTransactionRepository = inventoryTransactionRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
     }
@@ -79,8 +82,8 @@ public class ProductSerialService
             }
 
             var candidateList = candidates.ToList();
-            var existing = await _queryContext
-                .Set<ProductSerial>()
+            var existing = await _productSerialRepository
+                .GetQuery()
                 .AsNoTracking()
                 .Where(x => candidateList.Contains(x.InternalSerialNumber!))
                 .Select(x => x.InternalSerialNumber!)
@@ -392,9 +395,11 @@ public class ProductSerialService
             return;
         }
 
-        var transaction = await _queryContext
-            .Set<InventoryTransaction>()
-            .AsNoTracking()
+        // Release can run inside the command transaction that has just updated this
+        // inventory row. Reading it through QueryContext opens a second connection,
+        // which blocks on the uncommitted row lock until the SQL command times out.
+        var transaction = await _inventoryTransactionRepository
+            .GetQuery()
             .SingleOrDefaultAsync(x => x.Id == inventoryTransactionId, cancellationToken);
 
         var movements = await _productSerialMovementRepository
@@ -458,12 +463,11 @@ public class ProductSerialService
             return;
         }
 
-        var latest = await _queryContext.Set<ProductSerialMovement>()
+        var latest = await _productSerialMovementRepository.GetQuery()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ProductSerialId == movement.ProductSerialId && x.ReversedAtUtc == null)
-            .OrderByDescending(x => x.MovementDate)
-            .ThenByDescending(x => x.CreatedAtUtc)
+            .OrderByDescending(x => x.CreatedAtUtc ?? x.MovementDate)
             .ThenByDescending(x => x.Id)
             .Select(x => new
             {
@@ -482,7 +486,7 @@ public class ProductSerialService
             return;
         }
 
-        var serial = await _queryContext.Set<ProductSerial>()
+        var serial = await _productSerialRepository.GetQuery()
             .AsNoTracking()
             .Include(x => x.Product)
             .SingleOrDefaultAsync(x => x.Id == movement.ProductSerialId, cancellationToken);

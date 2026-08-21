@@ -26,6 +26,7 @@ public class CreateCustomerContactValidator : AbstractValidator<CreateCustomerCo
 {
     public CreateCustomerContactValidator()
     {
+        RuleFor(x => x.CustomerId).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.JobTitle).NotEmpty();
         RuleFor(x => x.PhoneNumber).NotEmpty();

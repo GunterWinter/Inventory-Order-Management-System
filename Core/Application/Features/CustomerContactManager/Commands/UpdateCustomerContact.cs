@@ -27,6 +27,7 @@ public class UpdateCustomerContactValidator : AbstractValidator<UpdateCustomerCo
     public UpdateCustomerContactValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
+        RuleFor(x => x.CustomerId).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.JobTitle).NotEmpty();
         RuleFor(x => x.PhoneNumber).NotEmpty();

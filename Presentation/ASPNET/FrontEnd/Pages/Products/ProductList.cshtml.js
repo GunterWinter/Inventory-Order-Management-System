@@ -19,8 +19,14 @@ const App = {
             description: '',
             productGroupId: null,
             physical: true,
-            serialTrackingMode: 1,
+            serialTrackingMode: 0,
+            originalSerialTrackingMode: 0,
             internalSerialFixedCode: 'CAM',
+            openingStockQuantity: 0,
+            openingStockWarehouseId: null,
+            openingStockWarehouseName: '',
+            hasOpeningStockHistory: false,
+            openingStockDirty: false,
             errors: {
                 name: '',
                 referenceCode: '',
@@ -28,6 +34,7 @@ const App = {
                 costPrice: '',
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
+                openingStockQuantity: '',
                 productGroupId: '',
                 unitMeasureName: ''
             },
@@ -45,6 +52,7 @@ const App = {
         const costPriceRef = Vue.ref(null);
         const imageFileRef = Vue.ref(null);
         const defaultWarrantyMonthsRef = Vue.ref(null);
+        const openingStockQuantityRef = Vue.ref(null);
 
         const getImageUrl = (name) => {
             if (!name) return '/noimage.png';
@@ -52,8 +60,20 @@ const App = {
             return '/api/FileImage/GetImage?imageName=' + encodeURIComponent(name);
         };
         const normalizeInternalSerialFixedCode = (value) => (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
-        const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode ?? 1) : 0;
+        const getEffectiveSerialTrackingMode = () => state.physical ? Number(state.serialTrackingMode ?? 0) : 0;
         const getEffectiveInternalSerialFixedCode = () => getEffectiveSerialTrackingMode() === 1 ? normalizeInternalSerialFixedCode(state.internalSerialFixedCode) : null;
+        const isOpeningStockEditable = () => {
+            if (state.deleteMode || !state.physical) {
+                return false;
+            }
+
+            const serialTrackingMode = getEffectiveSerialTrackingMode();
+            if (state.id !== '') {
+                return Number(state.originalSerialTrackingMode ?? 0) === 0 && serialTrackingMode === 0;
+            }
+
+            return serialTrackingMode === 0 || serialTrackingMode === 1;
+        };
         const getInternalSerialPreview = () => {
             const fixedCode = getEffectiveInternalSerialFixedCode() || 'CAM';
             const randomLength = Math.max(0, 12 - fixedCode.length);
@@ -83,6 +103,30 @@ const App = {
             return Number(state.defaultWarrantyMonths);
         };
 
+        const getOpeningStockValue = () => {
+            if (state.openingStockQuantity === '' || state.openingStockQuantity == null) {
+                return null;
+            }
+
+            if (typeof state.openingStockQuantity === 'number') {
+                return Number.isFinite(state.openingStockQuantity) ? state.openingStockQuantity : null;
+            }
+
+            return NumberFormatManager.parseLocaleNumber(state.openingStockQuantity);
+        };
+
+        const getOpeningStockPayloadValue = () => {
+            if (state.id !== '' && !state.openingStockDirty) {
+                return undefined;
+            }
+
+            if (!isOpeningStockEditable()) {
+                return state.id === '' ? null : undefined;
+            }
+
+            return getOpeningStockValue() ?? 0;
+        };
+
         const validateForm = function () {
             state.errors.name = '';
             state.errors.referenceCode = '';
@@ -90,6 +134,7 @@ const App = {
             state.errors.costPrice = '';
             state.errors.defaultWarrantyMonths = '';
             state.errors.internalSerialFixedCode = '';
+            state.errors.openingStockQuantity = '';
             state.errors.productGroupId = '';
 
             let isValid = true;
@@ -120,6 +165,26 @@ const App = {
                     isValid = false;
                 }
             }
+            if (isOpeningStockEditable()) {
+                const openingStockValue = getOpeningStockValue() ?? 0;
+                if (openingStockValue < 0) {
+                    state.errors.openingStockQuantity = 'Opening stock must be zero or greater.';
+                    isValid = false;
+                } else if (getEffectiveSerialTrackingMode() === 1 && !Number.isInteger(openingStockValue)) {
+                    state.errors.openingStockQuantity = 'Opening stock must be a whole number for auto-generated internal codes.';
+                    isValid = false;
+                }
+
+                if (openingStockValue > 0 && !state.hasOpeningStockHistory && costPriceValue == null) {
+                    state.errors.costPrice = 'Cost price is required when opening stock is greater than zero.';
+                    isValid = false;
+                }
+
+                if (openingStockValue > 0 && !state.hasOpeningStockHistory && !state.defaultWarehouseId) {
+                    state.errors.openingStockQuantity = 'Default warehouse is required when opening stock is greater than zero.';
+                    isValid = false;
+                }
+            }
             if (!state.productGroupId) {
                 state.errors.productGroupId = 'ProductGroup is required.';
                 isValid = false;
@@ -146,8 +211,14 @@ const App = {
             state.productGroupId = null;
             state.unitMeasureName = '';
             state.physical = true;
-            state.serialTrackingMode = 1;
+            state.serialTrackingMode = 0;
+            state.originalSerialTrackingMode = 0;
             state.internalSerialFixedCode = 'CAM';
+            state.openingStockQuantity = 0;
+            state.openingStockWarehouseId = null;
+            state.openingStockWarehouseName = '';
+            state.hasOpeningStockHistory = false;
+            state.openingStockDirty = false;
             state.errors = {
                 name: '',
                 referenceCode: '',
@@ -155,6 +226,7 @@ const App = {
                 costPrice: '',
                 defaultWarrantyMonths: '',
                 internalSerialFixedCode: '',
+                openingStockQuantity: '',
                 productGroupId: '',
                 unitMeasureName: ''
             };
@@ -172,21 +244,29 @@ const App = {
                     throw error;
                 }
             },
-            createMainData: async (name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, createdById) => {
+            createMainData: async (name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, openingStockQuantity, createdById) => {
                 try {
-                    const response = await AxiosManager.post('/Product/CreateProduct', {
+                    const payload = {
                         name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, createdById
-                    });
+                    };
+                    if (openingStockQuantity !== undefined) {
+                        payload.openingStockQuantity = openingStockQuantity;
+                    }
+                    const response = await AxiosManager.post('/Product/CreateProduct', payload);
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateMainData: async (id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, updatedById) => {
+            updateMainData: async (id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, openingStockQuantity, updatedById) => {
                 try {
-                    const response = await AxiosManager.post('/Product/UpdateProduct', {
+                    const payload = {
                         id, name, referenceCode, unitPrice, costPrice, imageUrl, physical, serialTrackingMode, internalSerialFixedCode, defaultWarehouseId, defaultWarrantyMonths, description, productGroupId, unitMeasureName, updatedById
-                    });
+                    };
+                    if (openingStockQuantity !== undefined) {
+                        payload.openingStockQuantity = openingStockQuantity;
+                    }
+                    const response = await AxiosManager.post('/Product/UpdateProduct', payload);
                     return response;
                 } catch (error) {
                     throw error;
@@ -390,6 +470,41 @@ const App = {
                 }
             }
         };
+        const openingStockNumber = {
+            obj: null,
+            create: () => {
+                openingStockNumber.obj = new ej.inputs.NumericTextBox({
+                    value: getOpeningStockValue() ?? 0,
+                    format: 'n6',
+                    min: 0,
+                    decimals: 6,
+                    validateDecimalOnType: false,
+                    enabled: isOpeningStockEditable(),
+                    change: (e) => {
+                        state.openingStockQuantity = e.value ?? 0;
+                        state.openingStockDirty = true;
+                        state.errors.openingStockQuantity = '';
+                    }
+                });
+                openingStockNumber.obj.appendTo(openingStockQuantityRef.value);
+            },
+            refresh: () => {
+                if (!openingStockNumber.obj) {
+                    return;
+                }
+
+                const requiresWholeNumber = getEffectiveSerialTrackingMode() === 1;
+                openingStockNumber.obj.setProperties({
+                    value: getOpeningStockValue() ?? 0,
+                    format: requiresWholeNumber ? 'n0' : 'n6',
+                    decimals: requiresWholeNumber ? 0 : 6,
+                    validateDecimalOnType: requiresWholeNumber,
+                    enabled: isOpeningStockEditable()
+                }, true);
+                openingStockNumber.obj.dataBind();
+                NumberFormatManager.refreshNumericTextBox(openingStockNumber.obj);
+            }
+        };
         const costPriceNumber = {
             obj: null,
             create: () => {
@@ -499,8 +614,38 @@ const App = {
                     state.serialTrackingMode = 0;
                     state.internalSerialFixedCode = '';
                     state.errors.internalSerialFixedCode = '';
+                    if (state.id === '') {
+                        state.openingStockQuantity = 0;
+                    }
+                }
+                Vue.nextTick(() => openingStockNumber.refresh());
+            }
+        );
+
+        Vue.watch(
+            () => state.serialTrackingMode,
+            (newVal) => {
+                state.errors.openingStockQuantity = '';
+                if (state.id === '' && Number(newVal) === 2) {
+                    state.openingStockQuantity = 0;
+                }
+                Vue.nextTick(() => openingStockNumber.refresh());
+            }
+        );
+
+        Vue.watch(
+            () => state.openingStockQuantity,
+            () => {
+                state.errors.openingStockQuantity = '';
+                if (document.activeElement !== openingStockNumber.obj?.element) {
+                    openingStockNumber.refresh();
                 }
             }
+        );
+
+        Vue.watch(
+            () => state.id,
+            () => Vue.nextTick(() => openingStockNumber.refresh())
         );
 
         Vue.watch(
@@ -587,32 +732,40 @@ const App = {
                     }
 
                     const response = state.id === ''
-                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, StorageManager.getUserId())
+                        ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, getOpeningStockPayloadValue(), StorageManager.getUserId())
                         : state.deleteMode
                             ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, StorageManager.getUserId());
+                            : await services.updateMainData(state.id, state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, getOpeningStockPayloadValue(), StorageManager.getUserId());
 
                     if (response.data.code === 200) {
                         await methods.populateMainData();
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
+                            const responseProduct = response?.data?.content?.data;
+                            const savedProduct = state.mainData.find(item => item.id === responseProduct?.id) ?? responseProduct ?? {};
                             state.mainTitle = 'Edit Product';
-                            state.id = response?.data?.content?.data.id ?? '';
-                            state.number = response?.data?.content?.data.number ?? '';
-                            state.referenceCode = response?.data?.content?.data.referenceCode ?? '';
-                            state.name = response?.data?.content?.data.name ?? '';
-                            state.unitPrice = response?.data?.content?.data.unitPrice ?? '';
-                            state.costPrice = response?.data?.content?.data.costPrice ?? '';
-                            state.imageUrl = response?.data?.content?.data.imageUrl ?? '';
-                            state.defaultWarehouseId = response?.data?.content?.data.defaultWarehouseId ?? null;
-                            state.defaultWarrantyMonths = response?.data?.content?.data.defaultWarrantyMonths ?? '';
-                            state.description = response?.data?.content?.data.description ?? '';
-                            state.productGroupId = response?.data?.content?.data.productGroupId ?? '';
-                            state.unitMeasureName = response?.data?.content?.data.unitMeasureName ?? '';
-                            state.physical = response?.data?.content?.data.physical ?? true;
-                            state.serialTrackingMode = response?.data?.content?.data.serialTrackingMode ?? (state.physical ? 1 : 0);
-                            state.internalSerialFixedCode = response?.data?.content?.data.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
+                            state.id = savedProduct.id ?? '';
+                            state.number = savedProduct.number ?? '';
+                            state.referenceCode = savedProduct.referenceCode ?? '';
+                            state.name = savedProduct.name ?? '';
+                            state.unitPrice = savedProduct.unitPrice ?? '';
+                            state.costPrice = savedProduct.costPrice ?? '';
+                            state.imageUrl = savedProduct.imageUrl ?? '';
+                            state.defaultWarehouseId = savedProduct.defaultWarehouseId ?? null;
+                            state.defaultWarrantyMonths = savedProduct.defaultWarrantyMonths ?? '';
+                            state.description = savedProduct.description ?? '';
+                            state.productGroupId = savedProduct.productGroupId ?? '';
+                            state.unitMeasureName = savedProduct.unitMeasureName ?? '';
+                            state.physical = savedProduct.physical ?? true;
+                            state.serialTrackingMode = savedProduct.serialTrackingMode ?? 0;
+                            state.originalSerialTrackingMode = state.serialTrackingMode;
+                            state.internalSerialFixedCode = savedProduct.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
+                            state.openingStockQuantity = savedProduct.openingStockQuantity ?? state.openingStockQuantity ?? 0;
+                            state.openingStockWarehouseId = savedProduct.openingStockWarehouseId ?? null;
+                            state.openingStockWarehouseName = savedProduct.openingStockWarehouseName ?? '';
+                            state.hasOpeningStockHistory = savedProduct.hasOpeningStockHistory ?? false;
+                            state.openingStockDirty = false;
 
                             Swal.fire({
                                 icon: 'success',
@@ -679,11 +832,10 @@ const App = {
                 costPriceNumber.create();
                 unitPriceNumber.create();
                 defaultWarrantyMonthsNumber.create();
+                openingStockNumber.create();
 
                 mainModal.create();
-                mainModalRef.value?.addEventListener('hidden.bs.modal', () => {
-                    resetFormState();
-                });
+                mainModalRef.value?.addEventListener('hidden.bs.modal', resetFormState);
 
             } catch (e) {
                 console.error('page init error:', e);
@@ -736,23 +888,25 @@ const App = {
                             disableHtmlEncode: false,
                             valueAccessor: (field, data) => {
                                 if (!data[field]) {
-                                    return '<span class="d-inline-flex align-items-center justify-content-center rounded bg-light text-muted" style="width: 38px; height: 38px;" title="Chưa có hình ảnh"><i class="far fa-image"></i></span>';
+                                    return '<span class="d-inline-flex align-items-center justify-content-center rounded bg-light text-muted" style="width: 38px; height: 38px;" title="No product image"><i class="far fa-image"></i></span>';
                                 }
                                 const url = getImageUrl(data[field]);
-                                return `<img src="${url}" alt="Hình hàng hóa" class="rounded" style="width: 38px; height: 38px; object-fit: cover;" />`;
+                                return `<img src="${url}" alt="Product Image" class="rounded" style="width: 38px; height: 38px; object-fit: cover;" />`;
                             }
                         },
                         { field: 'number', headerText: 'Number', width: 180, minWidth: 180 },
                         { field: 'referenceCode', headerText: 'Ref Code', width: 150, minWidth: 150 },
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200 },
                         { field: 'productGroupName', headerText: 'Product Group', width: 150, minWidth: 150 },
-                        { field: 'costPrice', headerText: 'Giá vốn', width: 160, minWidth: 160, format: 'N0' },
-                        { field: 'unitPrice', headerText: 'Giá bán', width: 170, minWidth: 170, format: 'N0' },
+                        { field: 'costPrice', headerText: 'Cost Price', width: 160, minWidth: 160, format: 'N0' },
+                        { field: 'unitPrice', headerText: 'Sales Price', width: 170, minWidth: 170, format: 'N0' },
                         { field: 'unitMeasureName', headerText: 'Unit Measure', width: 150, minWidth: 150 },
                         { field: 'defaultWarehouseName', headerText: 'Warehouse', width: 180, minWidth: 180 },
                         { field: 'defaultWarrantyMonths', headerText: 'Warranty Months', width: 210, minWidth: 210, type: 'number', format: 'N0' },
                         { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
                         { field: 'internalSerialFixedCode', headerText: 'Device Code', width: 150, minWidth: 150 },
+                        { field: 'openingStockQuantity', headerText: 'Opening Stock', width: 160, minWidth: 160, type: 'number', format: 'N2' },
+                        { field: 'openingStockWarehouseName', headerText: 'Opening Stock Warehouse', width: 220, minWidth: 220 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
@@ -766,7 +920,7 @@ const App = {
                     beforeDataBound: () => { },
                     dataBound: function () {
                         mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'DeleteCustom'], false);
-                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'costPrice', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'internalSerialFixedCode', 'createdAtUtc']);
+                        mainGrid.obj.autoFitColumns(['number', 'referenceCode', 'name', 'productGroupName', 'costPrice', 'unitPrice', 'unitMeasureName', 'defaultWarehouseName', 'defaultWarrantyMonths', 'physical', 'internalSerialFixedCode', 'openingStockQuantity', 'openingStockWarehouseName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
@@ -819,13 +973,42 @@ const App = {
                                 state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
                                 state.serialTrackingMode = selectedRecord.serialTrackingMode ?? 0;
+                                state.originalSerialTrackingMode = state.serialTrackingMode;
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
+                                state.openingStockQuantity = selectedRecord.openingStockQuantity ?? 0;
+                                state.openingStockWarehouseId = selectedRecord.openingStockWarehouseId ?? null;
+                                state.openingStockWarehouseName = selectedRecord.openingStockWarehouseName ?? '';
+                                state.hasOpeningStockHistory = selectedRecord.hasOpeningStockHistory ?? false;
+                                state.openingStockDirty = false;
                                 mainModal.obj.show();
                             }
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            const selected = mainGrid.obj.getSelectedRecords(); if (!selected.length) return; const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} sản phẩm đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false }); if (!result.isConfirmed) return; for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId()); await methods.populateMainData(); mainGrid.refresh(); Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} sản phẩm.`, heightAuto: false }); return;
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const result = await Swal.fire({
+                                icon: 'warning',
+                                title: 'Confirm Delete',
+                                text: 'Are you sure you want to delete the selected products?',
+                                showCancelButton: true,
+                                confirmButtonText: 'Delete',
+                                cancelButtonText: 'Cancel',
+                                heightAuto: false
+                            });
+                            if (!result.isConfirmed) return;
+                            for (const record of selected) {
+                                await services.deleteMainData(record.id, StorageManager.getUserId());
+                            }
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Delete Successful',
+                                text: 'Selected products were deleted.',
+                                heightAuto: false
+                            });
+                            return;
                             state.deleteMode = true;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
@@ -844,7 +1027,13 @@ const App = {
                                 state.unitMeasureName = selectedRecord.unitMeasureName ?? '';
                                 state.physical = selectedRecord.physical ?? true;
                                 state.serialTrackingMode = selectedRecord.serialTrackingMode ?? 0;
+                                state.originalSerialTrackingMode = state.serialTrackingMode;
                                 state.internalSerialFixedCode = selectedRecord.internalSerialFixedCode ?? (state.physical ? 'CAM' : '');
+                                state.openingStockQuantity = selectedRecord.openingStockQuantity ?? 0;
+                                state.openingStockWarehouseId = selectedRecord.openingStockWarehouseId ?? null;
+                                state.openingStockWarehouseName = selectedRecord.openingStockWarehouseName ?? '';
+                                state.hasOpeningStockHistory = selectedRecord.hasOpeningStockHistory ?? false;
+                                state.openingStockDirty = false;
                                 mainModal.obj.show();
                             }
                         }
@@ -879,6 +1068,7 @@ const App = {
             costPriceRef,
             imageFileRef,
             defaultWarrantyMonthsRef,
+            openingStockQuantityRef,
             getInternalSerialPreview,
             getImageUrl,
             state,

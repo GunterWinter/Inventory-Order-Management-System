@@ -1,6 +1,7 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Application.Common.Repositories;
+using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
 using Domain.Entities;
@@ -40,6 +41,7 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
     private readonly NumberSequenceService _numberSequenceService;
     private readonly SalesOrderService _salesOrderService;
     private readonly ProductSerialService _productSerialService;
+    private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreateSalesOrderFromPurchaseOrderHandler(
         IQueryContext queryContext,
@@ -48,7 +50,8 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
         SalesOrderService salesOrderService,
-        ProductSerialService productSerialService
+        ProductSerialService productSerialService,
+        InventoryTransactionService inventoryTransactionService
     )
     {
         _queryContext = queryContext;
@@ -58,6 +61,7 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
         _numberSequenceService = numberSequenceService;
         _salesOrderService = salesOrderService;
         _productSerialService = productSerialService;
+        _inventoryTransactionService = inventoryTransactionService;
     }
 
     public async Task<CreateSalesOrderFromPurchaseOrderResult> Handle(CreateSalesOrderFromPurchaseOrderRequest request, CancellationToken cancellationToken = default)
@@ -152,6 +156,11 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
                     await _productSerialService.ReserveSalesOrderItemSerialsAsync(soItem, serialIds, request.CreatedById, cancellationToken);
                 }
             }
+
+            await _inventoryTransactionService.UpdateSalesOrderItemCostAsync(
+                soItem,
+                request.CreatedById,
+                cancellationToken);
         }
 
         await _unitOfWork.SaveAsync(cancellationToken);

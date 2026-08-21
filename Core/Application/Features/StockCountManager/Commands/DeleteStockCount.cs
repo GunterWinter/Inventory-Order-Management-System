@@ -45,29 +45,35 @@ public class DeleteStockCountHandler : IRequestHandler<DeleteStockCountRequest, 
 
     public async Task<DeleteStockCountResult> Handle(DeleteStockCountRequest request, CancellationToken cancellationToken)
     {
-
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        StockCount? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
-        }
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct);
 
-        entity.UpdatedById = request.DeletedById;
+            if (entity == null)
+            {
+                throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+            }
+            if (entity.Status != StockCountStatus.Draft)
+            {
+                throw new InvalidOperationException(
+                    "Chỉ phiếu kiểm kê Nháp mới được xóa; phiếu đã xác nhận phải được Hủy.");
+            }
 
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
+            entity.UpdatedById = request.DeletedById;
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
 
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(StockCount),
-            entity.CountDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id,
+                nameof(StockCount),
+                entity.CountDate,
+                (InventoryTransactionStatus?)entity.Status,
+                entity.IsDeleted,
+                entity.UpdatedById,
+                null,
+                ct);
+        }, cancellationToken);
 
         return new DeleteStockCountResult
         {

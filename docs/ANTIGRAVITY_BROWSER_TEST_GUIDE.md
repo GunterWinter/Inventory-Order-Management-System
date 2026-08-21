@@ -24,7 +24,9 @@ Lệnh tổng hợp chạy lần lượt:
 
 - `npm.cmd run test:browser`: Dashboard, chứng từ, bảo hành, lợi nhuận công trình và công nợ.
 - `npm.cmd run test:browser:documents`: modal SO/PO, chuyển thật EN/VI rồi chọn ngày chứng từ ở cả hai ngôn ngữ, hiển thị/cuộn Item grid và popup chọn hàng hóa.
+- `npm.cmd run test:browser:sales-items`: thêm dòng SO bằng Batch Editor, tự điền đơn giá từ Product, chọn thuế, lưu và đọc lại đúng item từ API.
 - `npm.cmd run test:browser:cash`: phân bổ Thu/Chi, báo cáo Thu Chi Theo Danh Mục, localization và trạng thái đóng/mở grid gom nhóm.
+- `npm.cmd run test:browser:files`: tồn đầu kỳ Product, Import/Export Excel song ngữ, rollback toàn workbook và tải/đọc file PDF thật.
 
 Bài smoke dùng Microsoft Edge ở chế độ headless, tự đăng nhập và kiểm tra Dashboard, Cash Transaction, báo cáo tài chính, hai loại công nợ, vòng đổi ngôn ngữ và kịch bản dồn tích `2.000.000 - 500.000 = 1.500.000`. Nó cũng chủ động làm một API Dashboard trả lỗi 500 để xác nhận các khối còn lại vẫn hoạt động và nút thử lại phục hồi được dữ liệu. Mọi lỗi console, request thất bại hoặc kết quả tiền sai đều phải làm bài test thất bại.
 
@@ -115,9 +117,16 @@ Tạo bốn mặt hàng:
 
 Kỳ vọng:
 
+- Modal thêm mới mặc định chọn `Không theo dõi serial`.
 - Ba hàng vật lý lưu đúng chế độ đã chọn.
 - Mã cố định chỉ bắt buộc ở chế độ tự sinh.
 - Hàng phi vật lý tự trở về Không theo dõi, không giữ kho mặc định hoặc bảo hành.
+- `E2E-VL-KhongSerial` được nhập tồn đầu kỳ thập phân không âm và chỉ mode này được sửa tổng tồn đầu kỳ về sau. Sửa metadata hoặc đổi kho mặc định mà không sửa ô tồn không được tạo giao dịch kho.
+- `E2E-VL-NoiBo` chỉ nhận tồn đầu kỳ nguyên khi tạo, sinh đúng số mã nội bộ duy nhất và khóa ô tồn khi sửa. `E2E-VL-NSX` không nhận tồn đầu kỳ từ Product mà chỉ tăng tồn sau Purchase Order có đủ serial nhà sản xuất.
+- Tồn đầu kỳ dương bắt buộc có Cost Price và kho thường. Giao dịch phải là Stock Count đã xác nhận, có dấu vết người xác nhận; hiệu chỉnh sau dùng kho mở đầu cũ và giá vốn snapshot cũ dù Kho mặc định/Cost Price của Product đã thay đổi.
+- Thử số âm, số lẻ cho Internal Auto, thiếu Cost Price, thiếu kho, Manufacturer/phi vật lý có tồn dương và gọi API sửa tồn ở mode bị khóa. Mọi ca phải rollback Product, Stock Count, transaction, serial và movement.
+- Stock Count sinh từ Product không được sửa/xóa trực tiếp; Cancel hợp lệ hoàn tác tồn/serial, Archive giữ nguyên tác động và Cancel bị chặn khi đã có chuyển động phụ thuộc.
+- Kiểm tra giá vốn: hàng không serial có tồn đầu kỳ `10 @ 100` và PO `10 @ 200` phải bán/xuất vật tư theo bình quân `150`; hàng Internal Auto dùng đúng `ProductSerial.UnitCost` của từng mã mở đầu, kể cả serial không có `PurchaseOrderItem`. Báo cáo lợi nhuận và Material Export phải khớp cùng nguồn giá, còn fallback phải được gắn nhãn rõ.
 - Khi đổi Vật lý sang Phi vật lý trước khi có lịch sử, các trường kho/serial/bảo hành bị xóa.
 - Sau khi một hàng có lịch sử kho hoặc serial, thử đổi Vật lý/chế độ serial phải bị chặn với thông báo rõ.
 
@@ -157,12 +166,13 @@ Tạo đơn mua dịch vụ phi vật lý. Kỳ vọng dòng không cần kho, k
 
 1. Tạo đơn bán Nháp cho Công trình A.
 2. Thêm hàng không serial từ kho và thêm hàng serial bằng cách chọn đúng serial đang Trong kho.
-3. Khi Nháp, tồn và công nợ khách chưa đổi.
-4. Xác nhận. Kỳ vọng hàng vật lý giảm tồn trực tiếp, serial chuyển Đã bán, không cần chứng từ giao hàng.
-5. Kỳ vọng khoản phải thu bằng tổng sau thuế.
-6. Mở Xem đơn bán: dòng hàng, serial, thuế và tổng tiền phải hiển thị ngay cả khi request danh sách tồn bị chặn hoặc giả lập lỗi.
-7. Mở Sửa: chỉ cho chỉnh dòng khi đơn Nháp và dữ liệu tồn đã tải; đơn Đã xác nhận phải chỉ đọc.
-8. Thử bán quá tồn, chọn serial sai kho hoặc serial đã bán. Kỳ vọng xác nhận thất bại và không có tác động dở dang.
+3. Ngay khi chọn Product ở dòng mới, đơn giá, kho mặc định, bảo hành và mô tả phải hiện trong Batch Editor. Chọn thuế rồi lưu; tải lại phải đọc được đúng một item với Product, đơn giá và thuế đã chọn, không được trả về danh sách rỗng.
+4. Khi Nháp, tồn và công nợ khách chưa đổi.
+5. Xác nhận. Kỳ vọng hàng vật lý giảm tồn trực tiếp, serial chuyển Đã bán, không cần chứng từ giao hàng.
+6. Kỳ vọng khoản phải thu bằng tổng sau thuế.
+7. Mở Xem đơn bán: dòng hàng, serial, thuế và tổng tiền phải hiển thị ngay cả khi request danh sách tồn bị chặn hoặc giả lập lỗi.
+8. Mở Sửa: chỉ cho chỉnh dòng khi đơn Nháp và dữ liệu tồn đã tải; đơn Đã xác nhận phải chỉ đọc.
+9. Thử bán quá tồn, chọn serial sai kho hoặc serial đã bán. Kỳ vọng xác nhận thất bại và không có tác động dở dang.
 
 Với đơn chưa có phụ thuộc, kiểm tra hủy hoàn tác tồn, serial, bảo hành và khoản phải thu. Sau thanh toán hoặc trả hàng, hủy phải bị chặn.
 
@@ -317,17 +327,19 @@ So sánh tổng hai tab với Dashboard. Các tổng phải dùng cùng công th
 
 1. Chặn toàn bộ request ra `cdn.jsdelivr.net` và `cdnjs.cloudflare.com`; tải template vẫn phải thành công từ asset nội bộ.
 2. Kiểm tra sheet nhập chính không có dòng mẫu có thể bị import nhầm. File chứng từ phải có `Documents`, `Items`, `Instructions` và lookup; giao dịch tiền có thêm `Allocations`.
-3. Đọc lại workbook tải xuống, đối chiếu các cột bắt buộc với form hiện tại: Product có giá vốn, vật lý, chế độ serial, mã cố định, kho và bảo hành; PO/SO có thuế ở dòng hàng; Cash Transaction có số đã thanh toán, đối tác và phân bổ.
-4. Tạo file có ít nhất hai chứng từ, trong đó dòng cuối sai lookup hoặc sai điều kiện serial. Import phải báo đúng sheet/dòng/cột và không tạo bất kỳ chứng từ nào.
-5. Sửa file hợp lệ rồi import lại. Tất cả chứng từ và dòng hàng phải được tạo cùng lúc ở trạng thái Nháp; tồn, serial, công nợ và báo cáo chưa thay đổi.
-6. Với giao dịch tiền, thử tổng phân bổ sai và `Paid Amount > Amount`; toàn file phải bị từ chối. File hợp lệ phải tạo đúng payment/allocation và số dư quỹ.
+3. Tải Product/Customer template ở cả English và Tiếng Việt, đọc lại workbook và đối chiếu header thật với `UiLocalization` của locale đang chọn. Tên sheet kỹ thuật `Data`, `Documents`, `Items`, `Allocations` không đổi theo ngôn ngữ.
+4. Đối chiếu dấu bắt buộc với form/backend: Product có Unit Measure, mode serial mặc định None và `Opening Stock`; địa chỉ Customer/Vendor đều tùy chọn; Tax của PO/SO item bắt buộc; Status của chứng từ import không xuất hiện vì server luôn tạo Draft.
+5. Import cùng một template bằng header English và Tiếng Việt ở cả hai locale. Tạo Customer Group tên chính xác `Đá`, rồi import Customer chỉ có Name/Group/Category và để trống Street cùng toàn bộ địa chỉ; lookup phải phân biệt `Đá` với `Da`.
+6. Tạo file có ít nhất hai chứng từ, trong đó dòng cuối sai lookup hoặc sai điều kiện serial. Import phải báo đúng sheet/dòng/cột và không tạo bất kỳ chứng từ nào.
+7. Sửa file hợp lệ rồi import lại. Tất cả chứng từ và dòng hàng phải được tạo cùng lúc ở trạng thái Nháp; tồn, serial, công nợ và báo cáo chưa thay đổi. Riêng Product có `Opening Stock` phải tạo Product và Stock Count mở đầu trong cùng transaction.
+8. Với giao dịch tiền, thử tổng phân bổ sai và `Paid Amount > Amount`; toàn file phải bị từ chối. File hợp lệ phải tạo đúng payment/allocation và số dư quỹ.
 
 ### Export Excel
 
 1. Trên một grid thường, áp dụng tìm kiếm, lọc, sắp xếp và chọn page size nhỏ; file phải chứa toàn bộ kết quả khớp, không chỉ trang hiện tại.
 2. Đọc workbook bằng SheetJS và xác nhận không có checkbox, nút thao tác, ID kỹ thuật hoặc cột ẩn; ngày và tiền phải là kiểu Excel phù hợp.
 3. Trên Báo cáo Tài chính Công trình, để tất cả nhóm đóng rồi export. File vẫn phải chứa đầy đủ dòng giao dịch và tổng nhóm đang lọc.
-4. Đổi Việt/Anh và tải lại; tiêu đề cột và tên file phải phù hợp ngôn ngữ, không trộn nhãn.
+4. Đổi Việt/Anh và tải lại; tiêu đề cột trong workbook phải khớp chính xác header grid của locale hiện tại, không trộn nhãn. Tên sheet kỹ thuật vẫn ổn định.
 
 ### Print/Download PDF
 

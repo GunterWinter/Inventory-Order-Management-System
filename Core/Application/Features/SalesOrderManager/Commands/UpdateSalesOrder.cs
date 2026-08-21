@@ -18,7 +18,7 @@ public class UpdateSalesOrderRequest : IRequest<UpdateSalesOrderResult>
     public string? OrderStatus { get; init; }
     public string? Description { get; init; }
     public string? CustomerId { get; init; }
-    public SalesType? SalesType { get; init; } = Domain.Enums.SalesType.Retail;
+    public SalesType? SalesType { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -30,6 +30,7 @@ public class UpdateSalesOrderValidator : AbstractValidator<UpdateSalesOrderReque
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
+        RuleFor(x => x.SalesType).NotNull().IsInEnum();
     }
 }
 

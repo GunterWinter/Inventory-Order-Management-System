@@ -6,59 +6,54 @@
     const INSTRUCTION_SHEET_NAME = 'Instructions';
     const TEMPLATE_BUTTON_ID = 'ExcelImportTemplateCustom';
     const IMPORT_BUTTON_ID = 'ExcelImportCustom';
+    const SEPARATOR_ID = 'ExcelImportSeparatorCustom';
     const MAX_ERROR_LINES = 12;
 
-    const localizedHeaderAliases = {
-        'Name': ['Tên'],
+    // Keep only genuine synonyms and aliases from older workbooks here. Normal
+    // English/Vietnamese header translation is resolved through UiLocalization.
+    const legacyHeaderAliases = {
         'Description': ['Mô tả', 'Diễn giải'],
-        'Document Key': ['Khóa chứng từ'],
-        'Transaction Key': ['Khóa giao dịch'],
-        'Transaction Date': ['Ngày giao dịch'],
-        'Transaction Type': ['Loại giao dịch'],
-        'Amount': ['Số tiền'],
-        'Paid Amount': ['Số đã thanh toán'],
-        'Cash Account': ['Tài khoản quỹ'],
-        'Cash Category': ['Danh mục quỹ'],
-        'Customer': ['Khách hàng', 'Công trình'],
-        'Vendor': ['Nhà cung cấp'],
-        'Order Date': ['Ngày đơn hàng'],
-        'Sales Type': ['Loại bán hàng'],
+        'Customer': ['Công trình'],
         'Product': ['Sản phẩm', 'Hàng hóa'],
-        'Warehouse': ['Kho'],
-        'Warehouse From': ['Kho nguồn'],
-        'Warehouse To': ['Kho đích'],
-        'Quantity': ['Số lượng'],
-        'Counted Quantity': ['Số lượng kiểm kê'],
-        'Unit Price': ['Đơn giá'],
-        'Cost Price': ['Giá vốn'],
-        'Tax': ['Thuế'],
-        'Status': ['Trạng thái'],
-        'Order Status': ['Trạng thái đơn'],
-        'Physical Product': ['Hàng vật lý'],
-        'Serial Tracking Mode': ['Chế độ serial'],
-        'Internal Serial Fixed Code': ['Mã serial cố định'],
-        'Default Warehouse': ['Kho mặc định'],
-        'Default Warranty Months': ['Số tháng bảo hành mặc định'],
-        'Product Serial IDs': ['ID serial sản phẩm'],
-        'Product Group': ['Nhóm sản phẩm'],
-        'Unit Measure': ['Đơn vị tính'],
-        'Return Date': ['Ngày trả hàng'],
-        'Purchase Order': ['Đơn mua hàng'],
-        'Sales Order': ['Đơn bán hàng'],
-        'Release Date': ['Ngày xuất'],
-        'Receive Date': ['Ngày nhận'],
-        'Transfer Out': ['Phiếu xuất chuyển kho'],
-        'Scrapping Date': ['Ngày hủy hàng'],
-        'Count Date': ['Ngày kiểm kê'],
-        'Export Date': ['Ngày xuất vật tư']
+        'Ref Code': ['Reference Code', 'SKU']
     };
 
     const normalizeKey = (value) => `${value ?? ''}`
+        .normalize('NFKC')
         .trim()
         .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
+        .replace(/[^\p{L}\p{N}]+/gu, '');
 
     const toDisplayText = (value) => `${value ?? ''}`.trim();
+
+    const getActiveLocale = () => window.UiLocalization?.getLocale?.() ?? 'en';
+
+    const translateHeader = (value, locale = getActiveLocale()) =>
+        window.UiLocalization?.translateText?.(value, locale) ?? value;
+
+    const getHeaderAliases = (column) => {
+        const canonicalValues = [
+            column.header,
+            column.key,
+            ...(column.aliases ?? []),
+            ...(legacyHeaderAliases[column.header] ?? [])
+        ];
+
+        return [...new Set(canonicalValues.flatMap((value) => [
+            value,
+            translateHeader(value, 'en'),
+            translateHeader(value, 'vi')
+        ]).filter(Boolean))];
+    };
+
+    const getTemplateHeaders = (columns, locale = getActiveLocale()) => columns.map((column) => {
+        const header = translateHeader(column.header, locale);
+        return column.required ? `${header} *` : header;
+    });
+
+    const getLookupHeaders = (locale = getActiveLocale()) =>
+        ['Name', 'Number', 'Ref Code', 'Email Address', 'Id']
+            .map((header) => translateHeader(header, locale));
 
     const lookupSources = {
         productGroups: { endpoint: '/ProductGroup/GetProductGroupList', sheetName: 'ProductGroups' },
@@ -124,14 +119,14 @@
 
     const addressColumns = [
         { header: 'Name', key: 'name', required: true, example: 'Sample company' },
-        { header: 'Street', key: 'street', required: true, example: '123 Main Street' },
-        { header: 'City', key: 'city', required: true, example: 'Ho Chi Minh City' },
-        { header: 'State', key: 'state', required: true, example: 'Ho Chi Minh' },
-        { header: 'Zip Code', key: 'zipCode', required: true, example: '700000' },
+        { header: 'Street', key: 'street', example: '123 Main Street' },
+        { header: 'City', key: 'city', example: 'Ho Chi Minh City' },
+        { header: 'State', key: 'state', example: 'Ho Chi Minh' },
+        { header: 'Zip Code', key: 'zipCode', example: '700000' },
         { header: 'Country', key: 'country', example: 'Vietnam' },
-        { header: 'Phone Number', key: 'phoneNumber', required: true, example: '0900000000' },
+        { header: 'Phone Number', key: 'phoneNumber', example: '0900000000' },
         { header: 'Fax Number', key: 'faxNumber', example: '' },
-        { header: 'Email Address', key: 'emailAddress', required: true, example: 'sample@example.com' },
+        { header: 'Email Address', key: 'emailAddress', example: 'sample@example.com' },
         { header: 'Website', key: 'website', example: '' },
         { header: 'WhatsApp', key: 'whatsApp', example: '' },
         { header: 'LinkedIn', key: 'linkedIn', example: '' },
@@ -146,12 +141,20 @@
         { header: 'Name', key: 'name', required: true, example: 'Sample contact' },
         { header: 'Job Title', key: 'jobTitle', required: true, example: 'Manager' },
         { header: 'Phone Number', key: 'phoneNumber', required: true, example: '0900000000' },
+    ];
+
+    const customerContactColumns = [
+        ...contactColumns,
         { header: 'Email Address', key: 'emailAddress', required: true, example: 'contact@example.com' },
         { header: 'Description', key: 'description', example: '' }
     ];
 
-    const statusColumn = { header: 'Status', key: 'status', required: true, lookup: 'statuses', example: 'Draft' };
-    const orderStatusColumn = { header: 'Order Status', key: 'orderStatus', required: true, lookup: 'statuses', example: 'Draft' };
+    const vendorContactColumns = [
+        ...contactColumns,
+        { header: 'Email Address', key: 'emailAddress', required: true, example: 'contact@example.com' },
+        { header: 'Description', key: 'description', example: '' }
+    ];
+
     const descriptionColumn = { header: 'Description', key: 'description', example: '' };
 
     const pageConfigs = {
@@ -216,7 +219,7 @@
                 { header: 'Amount', key: 'amount', required: true, type: 'number', example: 1000000 },
                 { header: 'Paid Amount', key: 'paidAmount', type: 'number', defaultValue: 0, example: 0 },
                 { header: 'Description', key: 'description', example: '' },
-                { header: 'Cash Account', key: 'cashAccountId', required: true, lookup: 'cashAccounts', example: 'Sample Account' },
+                { header: 'Cash Account', key: 'cashAccountId', lookup: 'cashAccounts', example: 'Sample Account' },
                 { header: 'Cash Category', key: 'cashCategoryId', lookup: 'cashCategories', example: 'Sample Category' },
                 { header: 'Customer', key: 'customerId', lookup: 'customers', example: 'Sample Customer' },
                 { header: 'Vendor', key: 'vendorId', lookup: 'vendors', example: 'Sample Vendor' },
@@ -248,7 +251,12 @@
                 { header: 'Name', key: 'name', required: true, example: 'VAT 10%' },
                 { header: 'Percentage', key: 'percentage', required: true, type: 'number', example: 10 },
                 { header: 'Description', key: 'description', example: '' }
-            ]
+            ],
+            validate: (payload, rowNumber) => {
+                if (!Number.isFinite(payload.percentage) || payload.percentage < 0 || payload.percentage > 100) {
+                    throw new Error(`Row ${rowNumber}: "Percentage" must be between 0 and 100.`);
+                }
+            }
         },
         products: {
             title: 'Product',
@@ -257,28 +265,62 @@
             columns: [
                 { header: 'Name', key: 'name', required: true, example: 'Sample product' },
                 { header: 'Ref Code', key: 'referenceCode', aliases: ['Reference Code', 'SKU'], example: 'SKU-001' },
-                { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
-                { header: 'Cost Price', key: 'costPrice', type: 'number', defaultValue: 0, example: 80000 },
-                { header: 'Physical Product', key: 'physical', required: true, type: 'boolean', example: 'TRUE', defaultValue: true },
-                { header: 'Serial Tracking Mode', key: 'serialTrackingMode', required: true, lookup: 'serialTrackingModes', example: 'None' },
+                { header: 'Unit Price', key: 'unitPrice', type: 'number', example: 100000 },
+                { header: 'Cost Price', key: 'costPrice', type: 'number', example: 80000 },
+                { header: 'Physical Product', key: 'physical', type: 'boolean', example: 'TRUE', defaultValue: true },
+                { header: 'Serial Tracking Mode', key: 'serialTrackingMode', lookup: 'serialTrackingModes', example: 'None', defaultValue: 0 },
                 { header: 'Internal Serial Fixed Code', key: 'internalSerialFixedCode', example: '' },
                 { header: 'Default Warehouse', key: 'defaultWarehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
-                { header: 'Default Warranty Months', key: 'defaultWarrantyMonths', type: 'number', defaultValue: 0, example: 12 },
+                { header: 'Default Warranty Months', key: 'defaultWarrantyMonths', type: 'number', example: 12 },
                 { header: 'Product Group', key: 'productGroupId', required: true, lookup: 'productGroups', example: 'General' },
-                { header: 'Unit Measure', key: 'unitMeasureName', required: false, example: 'Cái, Hộp, PCS' },
+                { header: 'Unit Measure', key: 'unitMeasureName', required: true, example: 'Cái, Hộp, PCS' },
+                { header: 'Opening Stock', key: 'openingStockQuantity', type: 'number', defaultValue: 0, example: 0 },
                 { header: 'Description', key: 'description', example: '' }
             ],
             validate: (payload, rowNumber) => {
+                const openingStock = Number(payload.openingStockQuantity ?? 0);
+                const trackingMode = Number(payload.serialTrackingMode ?? 0);
+
+                if (!Number.isFinite(openingStock) || openingStock < 0) {
+                    throw new Error(`Row ${rowNumber}: "Opening Stock" must be zero or greater.`);
+                }
+                if (payload.unitPrice != null && payload.unitPrice < 0) {
+                    throw new Error(`Row ${rowNumber}: "Unit Price" must be zero or greater.`);
+                }
+                if (payload.costPrice != null && payload.costPrice < 0) {
+                    throw new Error(`Row ${rowNumber}: "Cost Price" must be zero or greater.`);
+                }
+                if (payload.defaultWarrantyMonths != null && payload.defaultWarrantyMonths < 0) {
+                    throw new Error(`Row ${rowNumber}: "Default Warranty Months" must be zero or greater.`);
+                }
                 if (!payload.physical) {
+                    if (openingStock > 0) {
+                        throw new Error(`Row ${rowNumber}: non-physical products cannot have opening stock.`);
+                    }
                     payload.serialTrackingMode = 0;
                     payload.internalSerialFixedCode = '';
                     payload.defaultWarehouseId = null;
                     payload.defaultWarrantyMonths = null;
+                    payload.openingStockQuantity = 0;
                     return;
                 }
-                if (Number(payload.serialTrackingMode) === 1 && !/^[A-Za-z0-9]{2,4}$/.test(payload.internalSerialFixedCode || '')) {
+
+                if (openingStock > 0 && !payload.defaultWarehouseId) {
+                    throw new Error(`Row ${rowNumber}: "Default Warehouse" is required when opening stock is greater than zero.`);
+                }
+                if (openingStock > 0 && payload.costPrice == null) {
+                    throw new Error(`Row ${rowNumber}: "Cost Price" is required when opening stock is greater than zero.`);
+                }
+                if (trackingMode === 2 && openingStock > 0) {
+                    throw new Error(`Row ${rowNumber}: manufacturer-serial products can receive stock only through a purchase order.`);
+                }
+                if (trackingMode === 1 && openingStock > 0 && !Number.isInteger(openingStock)) {
+                    throw new Error(`Row ${rowNumber}: "Opening Stock" must be a whole number for Internal Auto mode.`);
+                }
+                if (trackingMode === 1 && !/^[A-Za-z0-9]{2,4}$/.test(payload.internalSerialFixedCode || '')) {
                     throw new Error(`Row ${rowNumber}: "Internal Serial Fixed Code" must contain 2-4 letters or numbers for Internal Auto mode.`);
                 }
+                if (trackingMode !== 1) payload.internalSerialFixedCode = '';
             }
         },
         vendors: {
@@ -307,7 +349,7 @@
             fileName: 'customer-contacts-template.xlsx',
             columns: [
                 { header: 'Customer', key: 'customerId', required: true, lookup: 'customers', example: 'Sample customer' },
-                ...contactColumns
+                ...customerContactColumns
             ]
         },
         vendorcontacts: {
@@ -316,7 +358,7 @@
             fileName: 'vendor-contacts-template.xlsx',
             columns: [
                 { header: 'Vendor', key: 'vendorId', required: true, lookup: 'vendors', example: 'Sample vendor' },
-                ...contactColumns
+                ...vendorContactColumns
             ]
         },
         todos: {
@@ -342,17 +384,18 @@
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SO-1', clientOnly: true },
                 { header: 'Order Date', key: 'orderDate', required: true, type: 'date', example: '2026-04-29' },
                 { header: 'Customer', key: 'customerId', required: true, lookup: 'customers', example: 'Sample customer' },
-                { header: 'Sales Type', key: 'salesType', required: true, lookup: 'salesTypes', example: 'Retail' },
+                { header: 'Sales Type', key: 'salesType', lookup: 'salesTypes', defaultValue: 1, example: 'Retail' },
                 descriptionColumn
             ],
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SO-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
-                { header: 'Quantity', key: 'quantity', required: true, type: 'number', example: 1 },
+                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', requiredWhen: 'physicalProduct', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'quantity', required: true, type: 'number', defaultValue: 1, wholeWhen: 'serialTrackedProduct', example: 1 },
                 { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
-                { header: 'Tax', key: 'taxId', lookup: 'taxes', example: 'VAT 10%' },
+                { header: 'Tax', key: 'taxId', required: true, lookup: 'taxes', example: 'VAT 10%' },
                 { header: 'Warranty Months', key: 'warrantyMonths', type: 'number', defaultValue: 0, example: 12 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'quantity', example: '' },
                 { header: 'Summary', key: 'summary', example: '' }
             ]
         },
@@ -369,12 +412,12 @@
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'PO-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', example: 'Main Warehouse' },
-                { header: 'Quantity', key: 'quantity', required: true, type: 'number', example: 1 },
+                { header: 'Warehouse', key: 'warehouseId', lookup: 'warehouses', requiredWhen: 'physicalProduct', example: 'Main Warehouse' },
+                { header: 'Quantity', key: 'quantity', required: true, type: 'number', defaultValue: 1, wholeWhen: 'serialTrackedProduct', example: 1 },
                 { header: 'Unit Price', key: 'unitPrice', required: true, type: 'number', example: 100000 },
-                { header: 'Tax', key: 'taxId', lookup: 'taxes', example: 'VAT 10%' },
-                { header: 'Supplier Warranty Months', key: 'supplierWarrantyMonths', type: 'number', defaultValue: 0, example: 12 },
-                { header: 'Manufacturer Serials', key: 'manufacturerSerialNumbers', type: 'list', example: '' },
+                { header: 'Tax', key: 'taxId', required: true, lookup: 'taxes', example: 'VAT 10%' },
+                { header: 'Supplier Warranty Months', key: 'supplierWarrantyMonths', type: 'number', defaultValue: 6, example: 6 },
+                { header: 'Manufacturer Serials', key: 'manufacturerSerialNumbers', type: 'list', serialMode: 'manufacturer', serialCountKey: 'quantity', example: '' },
                 { header: 'Summary', key: 'summary', example: '' }
             ]
         },
@@ -385,7 +428,6 @@
             columns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'PR-1', clientOnly: true },
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Purchase Order', key: 'purchaseOrderId', required: true, lookup: 'purchaseOrders', example: 'PO-0001' },
                 descriptionColumn
             ],
@@ -394,7 +436,7 @@
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
-                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         },
         salesreturns: {
@@ -404,7 +446,6 @@
             columns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SR-1', clientOnly: true },
                 { header: 'Return Date', key: 'returnDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Sales Order', key: 'salesOrderId', required: true, lookup: 'salesOrders', example: 'SO-0001' },
                 descriptionColumn
             ],
@@ -413,7 +454,7 @@
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
-                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         },
         transferouts: {
@@ -422,7 +463,6 @@
             fileName: 'transfer-outs-template.xlsx',
             columns: [
                 { header: 'Release Date', key: 'transferReleaseDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Warehouse From', key: 'warehouseFromId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 { header: 'Warehouse To', key: 'warehouseToId', required: true, lookup: 'warehouses', example: 'Secondary Warehouse' },
                 descriptionColumn,
@@ -431,7 +471,8 @@
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'TO-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         },
         transferins: {
@@ -441,7 +482,6 @@
             columns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'TI-1', clientOnly: true },
                 { header: 'Receive Date', key: 'transferReceiveDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Transfer Out', key: 'transferOutId', required: true, lookup: 'transferOuts', example: 'OUT-0001' },
                 descriptionColumn
             ],
@@ -449,7 +489,7 @@
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'TI-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
                 { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
-                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', example: '' }
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         },
         scrappings: {
@@ -458,7 +498,6 @@
             fileName: 'scrappings-template.xlsx',
             columns: [
                 { header: 'Scrapping Date', key: 'scrappingDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 descriptionColumn,
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SCRAP-1', clientOnly: true }
@@ -466,7 +505,8 @@
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SCRAP-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         },
         stockcounts: {
@@ -475,7 +515,6 @@
             fileName: 'stock-counts-template.xlsx',
             columns: [
                 { header: 'Count Date', key: 'countDate', required: true, type: 'date', example: '2026-04-29' },
-                statusColumn,
                 { header: 'Warehouse', key: 'warehouseId', required: true, lookup: 'warehouses', example: 'Main Warehouse' },
                 descriptionColumn,
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SC-1', clientOnly: true }
@@ -483,7 +522,8 @@
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'SC-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Counted Quantity', key: 'qtySCCount', required: true, type: 'number', example: 1 }
+                { header: 'Counted Quantity', key: 'qtySCCount', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'qtySCCount', allowZeroSerialCount: true, example: '' }
             ]
         },
         materialexports: {
@@ -499,7 +539,8 @@
             itemColumns: [
                 { header: 'Document Key', key: 'documentKey', required: true, example: 'ME-1', clientOnly: true },
                 { header: 'Product', key: 'productId', required: true, lookup: 'products', example: 'SKU-001' },
-                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 }
+                { header: 'Quantity', key: 'movement', required: true, type: 'number', example: 1 },
+                { header: 'Product Serial IDs', key: 'productSerialIds', type: 'list', serialMode: 'tracked', serialCountKey: 'movement', example: '' }
             ]
         }
     };
@@ -538,7 +579,10 @@
         }
 
         const response = source.endpoint ? await AxiosManager.get(source.endpoint, {}) : null;
-        const data = source.data ?? getResponseData(response) ?? [];
+        const sourceData = source.data ?? getResponseData(response) ?? [];
+        const data = lookupName === 'warehouses'
+            ? sourceData.filter((item) => item?.systemWarehouse !== true)
+            : sourceData;
         const index = new Map();
 
         data.forEach((item) => {
@@ -593,8 +637,8 @@
         return column.example ?? column.defaultValue ?? '';
     };
 
-    const buildInstructions = (config, lookups) => [
-        ['Instruction'],
+    const buildInstructions = (config, lookups, locale = getActiveLocale()) => [
+        [translateHeader('Instruction', locale)],
         [`Fill the "${config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME}" sheet, then import this file from the ${config.title} page.`],
         ['Required columns are marked with "*".'],
         ['For lookup columns, use the name, number, reference code, or id from the reference sheets.'],
@@ -602,18 +646,18 @@
         ['The whole workbook is atomic: if one row is invalid, no rows are imported.'],
         [],
         ['Example only - do not copy this row unless you intend to import it.'],
-        [config.columns.map(column => column.header).join(' | ')],
+        [config.columns.map(column => translateHeader(column.header, locale)).join(' | ')],
         [config.columns.map(column => getSampleValue(column, lookups)).join(' | ')]
     ];
 
-    const appendLookupSheets = (workbook, lookups) => {
+    const appendLookupSheets = (workbook, lookups, locale = getActiveLocale()) => {
         Object.values(lookups).forEach((lookup) => {
             if (!lookup?.source) {
                 return;
             }
 
             const rows = [
-                ['Name', 'Number', 'Ref Code', 'Email Address', 'Id'],
+                getLookupHeaders(locale),
                 ...lookup.data.map((item) => [
                     item?.name ?? '',
                     item?.number ?? '',
@@ -634,11 +678,12 @@
             return;
         }
 
+        const locale = getActiveLocale();
         try {
             const lookups = await fetchLookups(config);
             const workbook = XLSX.utils.book_new();
             const appendEmptyInputSheet = (columns, sheetName) => {
-                const headers = columns.map((column) => column.required ? `${column.header} *` : column.header);
+                const headers = getTemplateHeaders(columns, locale);
                 XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers]), sheetName);
             };
 
@@ -647,10 +692,10 @@
             if (config.nestedColumns) appendEmptyInputSheet(config.nestedColumns, config.nestedSheetName ?? ALLOCATION_SHEET_NAME);
             XLSX.utils.book_append_sheet(
                 workbook,
-                XLSX.utils.aoa_to_sheet(buildInstructions(config, lookups)),
+                XLSX.utils.aoa_to_sheet(buildInstructions(config, lookups, locale)),
                 INSTRUCTION_SHEET_NAME
             );
-            appendLookupSheets(workbook, lookups);
+            appendLookupSheets(workbook, lookups, locale);
             XLSX.writeFile(workbook, config.fileName);
         } catch (error) {
             showError('Template download failed', getErrorMessage(error));
@@ -662,12 +707,7 @@
     );
 
     const getCellValue = (normalizedRow, column) => {
-        const keys = [
-            column.header,
-            column.key,
-            ...(column.aliases ?? []),
-            ...(localizedHeaderAliases[column.header] ?? [])
-        ].map(normalizeKey);
+        const keys = getHeaderAliases(column).map(normalizeKey);
 
         for (const key of keys) {
             if (Object.prototype.hasOwnProperty.call(normalizedRow, key)) {
@@ -688,7 +728,7 @@
         }
 
         const parsed = window.NumberFormatManager?.parseLocaleNumber?.(value);
-        if (parsed != null) {
+        if (Number.isFinite(parsed)) {
             return parsed;
         }
 
@@ -757,15 +797,91 @@
         return item.id;
     };
 
+    const hasPayloadValue = (value) => {
+        if (Array.isArray(value)) return value.length > 0;
+        return value != null && (typeof value !== 'string' || value.trim() !== '');
+    };
+
+    const getLookupItemById = (lookup, id) => lookup?.data?.find((item) =>
+        `${item?.id ?? ''}` === `${id ?? ''}`) ?? null;
+
+    const getPayloadProduct = (payload, lookups) =>
+        getLookupItemById(lookups?.products, payload.productId);
+
+    const matchesRequiredCondition = (condition, payload, lookups) => {
+        const product = getPayloadProduct(payload, lookups);
+        switch (condition) {
+            case 'physicalProduct':
+                return product?.physical === true;
+            default:
+                return false;
+        }
+    };
+
+    const validateConditionalColumns = (config, payload, lookups, rowNumber) => {
+        const product = getPayloadProduct(payload, lookups);
+        const isPhysical = product?.physical === true;
+        const trackingMode = isPhysical ? Number(product?.serialTrackingMode ?? 0) : 0;
+
+        config.columns.forEach((column) => {
+            const value = payload[column.key];
+            if (column.requiredWhen
+                && matchesRequiredCondition(column.requiredWhen, payload, lookups)
+                && !hasPayloadValue(value)) {
+                throw new Error(`Row ${rowNumber}: "${column.header}" is required for physical products.`);
+            }
+
+            if (column.wholeWhen === 'serialTrackedProduct'
+                && trackingMode !== 0
+                && (!Number.isFinite(value) || !Number.isInteger(value))) {
+                throw new Error(`Row ${rowNumber}: "${column.header}" must be a whole number for serial-tracked products.`);
+            }
+
+            if (!column.serialMode) return;
+
+            const serialValues = Array.isArray(value) ? value : [];
+            const serialModeMatches = column.serialMode === 'manufacturer'
+                ? trackingMode === 2
+                : trackingMode !== 0;
+
+            if (!serialModeMatches) {
+                if (serialValues.length) {
+                    throw new Error(`Row ${rowNumber}: "${column.header}" is not allowed for this product's serial mode.`);
+                }
+                return;
+            }
+
+            const expectedCount = Number(payload[column.serialCountKey]);
+            const countHeader = config.columns.find((item) => item.key === column.serialCountKey)?.header
+                ?? column.serialCountKey;
+            const allowZero = column.allowZeroSerialCount === true;
+            if (!Number.isInteger(expectedCount) || expectedCount < 0 || (!allowZero && expectedCount === 0)) {
+                const requirement = allowZero ? 'a non-negative whole number' : 'a positive whole number';
+                throw new Error(`Row ${rowNumber}: "${countHeader}" must be ${requirement} for serial-tracked products.`);
+            }
+            const normalizedSerials = serialValues.map((item) => `${item ?? ''}`.normalize('NFKC').trim().toLowerCase());
+            if (normalizedSerials.some((item) => !item) || new Set(normalizedSerials).size !== serialValues.length) {
+                throw new Error(`Row ${rowNumber}: "${column.header}" values must be unique.`);
+            }
+            if (serialValues.length !== expectedCount) {
+                throw new Error(`Row ${rowNumber}: "${column.header}" count must match "${countHeader}".`);
+            }
+        });
+    };
+
     const buildPayload = (config, row, lookups, rowNumber) => {
         const normalizedRow = getNormalizedRow(row);
         const payload = {};
 
         config.columns.forEach((column) => {
             const rawValue = getCellValue(normalizedRow, column);
-            const valueText = toDisplayText(rawValue);
+            const hasDefault = Object.prototype.hasOwnProperty.call(column, 'defaultValue');
+            const effectiveValue = toDisplayText(rawValue) === '' && hasDefault
+                ? column.defaultValue
+                : rawValue;
+            const valueText = toDisplayText(effectiveValue);
 
-            if (column.required && !valueText && column.defaultValue == null) {
+            if (column.required && !valueText && !hasDefault) {
                 throw new Error(`Row ${rowNumber}: "${column.header}" is required.`);
             }
 
@@ -775,12 +891,12 @@
             }
 
             if (column.lookup) {
-                payload[column.key] = resolveLookup(column, rawValue, lookups, rowNumber);
+                payload[column.key] = resolveLookup(column, effectiveValue, lookups, rowNumber);
                 return;
             }
 
             if (column.type === 'number') {
-                const numberValue = parseNumber(rawValue);
+                const numberValue = parseNumber(effectiveValue);
                 if (column.required && numberValue == null) {
                     throw new Error(`Row ${rowNumber}: "${column.header}" must be a number.`);
                 }
@@ -789,7 +905,7 @@
             }
 
             if (column.type === 'date') {
-                const dateValue = parseDate(rawValue);
+                const dateValue = parseDate(effectiveValue);
                 if (column.required && !dateValue) {
                     throw new Error(`Row ${rowNumber}: "${column.header}" must be a valid date.`);
                 }
@@ -798,7 +914,7 @@
             }
 
             if (column.type === 'boolean') {
-                payload[column.key] = parseBoolean(rawValue, column.defaultValue ?? false);
+                payload[column.key] = parseBoolean(effectiveValue, column.defaultValue ?? false);
                 return;
             }
 
@@ -812,6 +928,7 @@
             payload[column.key] = valueText;
         });
 
+        validateConditionalColumns(config, payload, lookups, rowNumber);
         payload.createdById = StorageManager.getUserId();
         return payload;
     };
@@ -1008,7 +1125,7 @@
         input.click();
     };
 
-    const createToolbarButton = (id, text, iconClass, clickHandler) => {
+    const createToolbarButton = (id, text, iconClass) => {
         const item = document.createElement('div');
         item.className = 'e-toolbar-item e-template';
         item.id = id;
@@ -1022,28 +1139,58 @@
         button.innerHTML = `<span class="${iconClass} e-icon-left"></span><span class="e-tbar-btn-text">${text}</span>`;
         item.appendChild(button);
 
-        item.addEventListener('click', clickHandler);
-        item.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                clickHandler(event);
-            }
-        });
-
         return item;
     };
 
+    // Syncfusion rebuilds toolbar nodes when the UI locale changes. Delegating
+    // these actions keeps the generated buttons functional after that rebuild.
+    const runToolbarAction = (item) => {
+        const config = getCurrentConfig();
+        if (!config) return;
+
+        if (item.id === TEMPLATE_BUTTON_ID) {
+            downloadTemplate(config);
+        } else if (item.id === IMPORT_BUTTON_ID) {
+            openImportPicker(config);
+        }
+    };
+
+    document.addEventListener('click', (event) => {
+        const item = event.target.closest?.(`#${TEMPLATE_BUTTON_ID}, #${IMPORT_BUTTON_ID}`);
+        if (!item) return;
+        // These nodes are injected beside Syncfusion's own toolbar items. Handle
+        // them before the grid sees the click, because they have no args.item.
+        event.stopPropagation();
+        runToolbarAction(item);
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const item = event.target.closest?.(`#${TEMPLATE_BUTTON_ID}, #${IMPORT_BUTTON_ID}`);
+        if (!item) return;
+        event.preventDefault();
+        event.stopPropagation();
+        runToolbarAction(item);
+    }, true);
+
     const createSeparator = () => {
         const separator = document.createElement('div');
+        separator.id = SEPARATOR_ID;
         separator.className = 'e-toolbar-item e-separator';
         separator.setAttribute('role', 'separator');
         return separator;
     };
 
     const injectToolbarButtons = (config) => {
-        if (document.getElementById(TEMPLATE_BUTTON_ID) || document.getElementById(IMPORT_BUTTON_ID)) {
+        const existingTemplate = document.getElementById(TEMPLATE_BUTTON_ID);
+        const existingImport = document.getElementById(IMPORT_BUTTON_ID);
+        if (existingTemplate && existingImport) {
             return true;
         }
+
+        existingTemplate?.remove();
+        existingImport?.remove();
+        document.getElementById(SEPARATOR_ID)?.remove();
 
         const addButton = document.getElementById('AddCustom');
         const addItem = addButton?.closest?.('.e-toolbar-item');
@@ -1059,14 +1206,12 @@
         fragment.appendChild(createToolbarButton(
             TEMPLATE_BUTTON_ID,
             'Download Template',
-            'e-icons e-download',
-            () => downloadTemplate(config)
+            'e-icons e-download'
         ));
         fragment.appendChild(createToolbarButton(
             IMPORT_BUTTON_ID,
             'Import Excel',
-            'e-icons e-upload',
-            () => openImportPicker(config)
+            'e-icons e-upload'
         ));
 
         addItem.after(fragment);
@@ -1095,10 +1240,34 @@
         init();
     }
 
+    window.addEventListener('ui:languagechanged', () => {
+        // Grid localization can finish its toolbar refresh asynchronously, so
+        // retry briefly instead of assuming the first injected node survives.
+        let attempts = 0;
+        const timer = window.setInterval(() => {
+            attempts += 1;
+            const config = getCurrentConfig();
+            if (config) injectToolbarButtons(config);
+            if (attempts >= 20) window.clearInterval(timer);
+        }, 100);
+    });
+
     window.ExcelImportManager = {
         downloadTemplate,
         openImportPicker,
         importFile,
-        _test: { buildPayload, fetchLookup, parseBoolean, parseDate, readDataRows, normalizeKey }
+        _test: {
+            buildPayload,
+            fetchLookup,
+            parseBoolean,
+            parseDate,
+            readDataRows,
+            normalizeKey,
+            getHeaderAliases,
+            getTemplateHeaders,
+            getLookupHeaders,
+            validateConditionalColumns,
+            pageConfigs
+        }
     };
 })(window, document);

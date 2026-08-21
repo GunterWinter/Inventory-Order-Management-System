@@ -143,11 +143,15 @@ async function assertItemGridUsable(page, pageName) {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
         grid.editCell(0, 'productId');
     });
-    await page.waitForFunction(() => Boolean(
-        document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
-    ));
-    await page.evaluate(() => {
-        document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist').ej2_instances[0].showPopup();
+    // Resolve and open the Syncfusion editor in one browser task. During a Batch
+    // rebind the old input can be destroyed between a separate wait and evaluate.
+    await page.waitForFunction(() => {
+        if (document.querySelector('body > .e-ddl.e-popup.e-popup-open')) return true;
+        const editor = document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')
+            ?.ej2_instances?.[0];
+        if (!editor || editor.isDestroyed) return false;
+        editor.showPopup();
+        return Boolean(document.querySelector('body > .e-ddl.e-popup.e-popup-open'));
     });
 
     const popup = page.locator('body > .e-ddl.e-popup.e-popup-open').last();

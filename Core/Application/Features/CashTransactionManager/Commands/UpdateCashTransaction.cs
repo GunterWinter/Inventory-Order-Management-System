@@ -37,7 +37,12 @@ public class UpdateCashTransactionValidator : AbstractValidator<UpdateCashTransa
     public UpdateCashTransactionValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
-        RuleFor(x => x.Amount).GreaterThan(0).When(x => x.Amount.HasValue);
+        RuleFor(x => x.TransactionDate).NotNull();
+        RuleFor(x => x.TransactionType)
+            .NotNull()
+            .Must(value => !value.HasValue || Enum.IsDefined(typeof(CashTransactionType), value.Value))
+            .WithMessage("Transaction Type is invalid.");
+        RuleFor(x => x.Amount).NotNull().GreaterThan(0);
         RuleFor(x => x.PaidAmount)
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)

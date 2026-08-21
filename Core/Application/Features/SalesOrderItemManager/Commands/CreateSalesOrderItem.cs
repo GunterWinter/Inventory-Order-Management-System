@@ -24,9 +24,9 @@ public class CreateSalesOrderItemRequest : IRequest<CreateSalesOrderItemResult>
     public string? WarehouseId { get; init; }
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
-    public int? WarrantyMonths { get; init; }
+    public int? WarrantyMonths { get; init; } = 0;
     public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; }
+    public double? Quantity { get; init; } = 1;
     public List<string>? ProductSerialIds { get; init; }
     public string? CreatedById { get; init; }
 }
@@ -42,7 +42,7 @@ public class CreateSalesOrderItemValidator : AbstractValidator<CreateSalesOrderI
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.WarrantyMonths).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.UnitPrice).NotEmpty();
-        RuleFor(x => x.Quantity).NotEmpty();
+        RuleFor(x => x.Quantity).NotNull().GreaterThan(0);
     }
 }
 

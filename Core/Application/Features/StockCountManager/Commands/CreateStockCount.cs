@@ -27,6 +27,10 @@ public class CreateStockCountValidator : AbstractValidator<CreateStockCountReque
     {
         RuleFor(x => x.CountDate).NotEmpty();
         RuleFor(x => x.Status).NotEmpty();
+        RuleFor(x => x.Status)
+            .Must(x => int.TryParse(x, out var value)
+                && value == (int)StockCountStatus.Draft)
+            .WithMessage("Phiếu kiểm kê mới phải ở trạng thái Nháp.");
         RuleFor(x => x.WarehouseId).NotEmpty();
     }
 }
@@ -55,7 +59,7 @@ public class CreateStockCountHandler : IRequestHandler<CreateStockCountRequest, 
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(StockCount), "", "SC");
         entity.CountDate = request.CountDate;
-        entity.Status = (StockCountStatus)int.Parse(request.Status!);
+        entity.Status = StockCountStatus.Draft;
         entity.Description = request.Description;
         entity.WarehouseId = request.WarehouseId;
 

@@ -27,9 +27,11 @@ public class UpdateVendorContactValidator : AbstractValidator<UpdateVendorContac
     public UpdateVendorContactValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
+        RuleFor(x => x.VendorId).NotEmpty();
         RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.JobTitle).NotEmpty();
         RuleFor(x => x.PhoneNumber).NotEmpty();
+        RuleFor(x => x.EmailAddress).NotEmpty();
     }
 }
 

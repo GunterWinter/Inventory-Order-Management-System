@@ -30,6 +30,7 @@ public class InventoryTransaction : BaseEntity
     public double? QtySCSys { get; set; }
     public double? QtySCCount { get; set; }
     public double? QtySCDelta { get; set; }
+    public double? UnitCost { get; set; }
     [NotMapped]
     public List<string>? ProductSerialIds { get; set; }
     [NotMapped]

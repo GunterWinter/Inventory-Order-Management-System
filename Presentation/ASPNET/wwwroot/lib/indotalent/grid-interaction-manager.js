@@ -4,9 +4,11 @@
     // Shared interaction conventions for Syncfusion grids and document forms.
     const pending = new WeakMap();
     const collapsingGroups = new WeakSet();
+    const scheduledGroupCollapses = new WeakSet();
     const gridDiscoveryAttempts = new WeakMap();
     const modalStack = [];
     const MODAL_POPUP_Z_INDEX = 2000;
+    const MAX_GROUP_COLLAPSE_ATTEMPTS = 4;
     const isGrid = value => value && typeof value.endEdit === 'function';
     const requestTypeOf = args => String(args?.requestType ?? '').toLowerCase();
     const batchChangeCount = changes => (changes?.addedRecords?.length || 0)
@@ -446,19 +448,66 @@
         else grid.groupModule.expandAll?.();
     }
 
+    function groupRowsAreRendered(grid) {
+        if (grid?.isDestroyed || grid?.element?.isConnected === false) return false;
+        if (typeof grid?.getRowsObject !== 'function' || typeof grid?.getRowElementByUID !== 'function') return true;
+
+        try {
+            return (grid.getRowsObject() || []).every(row => !row?.isDataRow || Boolean(grid.getRowElementByUID(row.uid)));
+        } catch {
+            return false;
+        }
+    }
+
+    function isTransientGroupRenderError(error) {
+        if (error?.name !== 'TypeError') return false;
+        const details = `${error.message || ''}\n${error.stack || ''}`;
+        return details.includes('updateVisibleexpandCollapseRows')
+            || /Cannot read properties of (?:null|undefined) \(reading ['"]style['"]\)/.test(details);
+    }
+
     function collapseGroupsOnDataBound(grid) {
-        if (!grid || collapsingGroups.has(grid)) return;
+        if (!grid || collapsingGroups.has(grid) || scheduledGroupCollapses.has(grid)) return;
 
-        window.requestAnimationFrame(() => {
-            if (collapsingGroups.has(grid)) return;
-            if (!grid.groupSettings?.columns?.length || !grid.groupModule?.collapseAll) return;
+        scheduledGroupCollapses.add(grid);
+        const attemptCollapse = attempt => window.requestAnimationFrame(() => {
+            if (!scheduledGroupCollapses.has(grid)) return;
+            if (!grid.groupSettings?.columns?.length || !grid.groupModule?.collapseAll || grid.isDestroyed) {
+                scheduledGroupCollapses.delete(grid);
+                return;
+            }
 
-            // collapseAll can synchronously raise dataBound again. Keep the guard until
-            // the following animation frame so that re-entrant callbacks do not loop.
+            // Syncfusion can publish dataBound before its row objects and row elements
+            // are in sync. collapseAll assumes every data row already has an element.
+            if (!groupRowsAreRendered(grid)) {
+                if (attempt < MAX_GROUP_COLLAPSE_ATTEMPTS) attemptCollapse(attempt + 1);
+                else scheduledGroupCollapses.delete(grid);
+                return;
+            }
+
             collapsingGroups.add(grid);
-            grid.groupModule.collapseAll();
-            window.requestAnimationFrame(() => collapsingGroups.delete(grid));
+            try {
+                grid.groupModule.collapseAll();
+            } catch (error) {
+                collapsingGroups.delete(grid);
+                if (isTransientGroupRenderError(error) && attempt < MAX_GROUP_COLLAPSE_ATTEMPTS) {
+                    attemptCollapse(attempt + 1);
+                    return;
+                }
+                scheduledGroupCollapses.delete(grid);
+                if (!isTransientGroupRenderError(error)) throw error;
+                return;
+            }
+
+            // collapseAll can synchronously raise dataBound again. Keep both guards
+            // until the following frame so re-entrant callbacks cannot schedule a loop.
+            window.requestAnimationFrame(() => {
+                collapsingGroups.delete(grid);
+                scheduledGroupCollapses.delete(grid);
+            });
         });
+
+        attemptCollapse(1);
     }
 
     // Compatibility alias for pages that have not yet moved to the data-bound name.

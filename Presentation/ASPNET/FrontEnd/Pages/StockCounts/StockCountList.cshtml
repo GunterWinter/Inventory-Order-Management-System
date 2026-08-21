@@ -55,7 +55,7 @@
                                         <div class="row mb-2">
                                             <div class="col-md-12">
                                                 <label for="Description">Description</label>
-                                                <textarea class="form-control" rows="3" v-model="state.description"></textarea>
+                                                <textarea class="form-control" rows="3" v-model="state.description" v-bind:disabled="state.isHeaderReadOnly"></textarea>
                                                 <label class="text-danger">{{ state.errors.description }}</label>
                                             </div>
                                         </div>
@@ -63,7 +63,7 @@
                                 </div>
                             </div>
                         </div>
-                    </form>`n                    </fieldset>
+                    </form>
                     <div id="ComplexDiv" :style="{ display: state.showComplexDiv ? 'block' : 'none' }">
                         <div class="row mt-3">
                             <div class="col-md-12">
@@ -107,7 +107,8 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button"
-                            v-if="!state.isViewMode"`n                            id="MainSaveButton"
+                            v-if="state.canSubmit"
+                            id="MainSaveButton"
                             class="btn"
                             v-bind:class="state.deleteMode ? 'btn-danger' : 'btn-primary'"
                             v-on:click="handler.handleSubmit"

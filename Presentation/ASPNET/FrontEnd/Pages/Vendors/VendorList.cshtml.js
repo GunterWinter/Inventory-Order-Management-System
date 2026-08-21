@@ -969,7 +969,7 @@ const App = {
                         { field: 'name', headerText: 'Name', width: 200, minWidth: 200, validationRules: { required: true } },
                         { field: 'jobTitle', headerText: 'Job Title', width: 200, minWidth: 200, validationRules: { required: true } },
                         { field: 'phoneNumber', headerText: 'Phone', width: 200, minWidth: 200, validationRules: { required: true } },
-                        { field: 'emailAddress', headerText: 'Email', width: 200, minWidth: 200 },
+                        { field: 'emailAddress', headerText: 'Email', width: 200, minWidth: 200, validationRules: { required: true } },
                         { field: 'description', headerText: 'Description', width: 400, minWidth: 400 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],

@@ -13,7 +13,7 @@
                 <div class="card-body">
                     <div class="row g-2 align-items-end">
                         <div class="col-md-8">
-                            <label class="form-label">Serial nội bộ, serial nhà sản xuất, số đơn bán, khách hàng hoặc số điện thoại</label>
+                            <label class="form-label">Internal serial, manufacturer serial, sales order number, customer, or phone number</label>
                             <input ref="searchTextRef" type="text">
                         </div>
                         <div class="col-md-4">
@@ -59,18 +59,18 @@
                         <div class="card shadow-sm border-0">
                             <div class="card-body">
                                 <div class="row g-3">
-                                    <div class="col-md-4"><label class="form-label text-muted small">Đơn mua hàng</label><div class="fw-bold">{{ state.docData.purchaseOrderNumber || '—' }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Công trình / Khách hàng</label><div class="fw-bold">{{ state.docData.allocationCustomerName || '—' }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Ngày giao dịch</label><div class="fw-bold">{{ methods.formatDateTime(state.docData.movementDate) }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Hàng hóa</label><div>{{ state.docData.allocationProductName || '—' }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Kho</label><div>{{ state.docData.allocationWarehouseName || '—' }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Số lượng</label><div>{{ methods.formatNumber(state.docData.allocationQuantity) }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Đơn giá</label><div>{{ methods.formatNumber(state.docData.allocationUnitPrice) }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Thành tiền</label><div class="fw-bold">{{ methods.formatNumber(state.docData.allocationTotal) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Purchase Order</label><div class="fw-bold">{{ state.docData.purchaseOrderNumber || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Project / Customer</label><div class="fw-bold">{{ state.docData.allocationCustomerName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Movement Date</label><div class="fw-bold">{{ methods.formatDateTime(state.docData.movementDate) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Product</label><div>{{ state.docData.allocationProductName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Warehouse</label><div>{{ state.docData.allocationWarehouseName || '—' }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Quantity</label><div>{{ methods.formatNumber(state.docData.allocationQuantity) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Unit Price</label><div>{{ methods.formatNumber(state.docData.allocationUnitPrice) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Total</label><div class="fw-bold">{{ methods.formatNumber(state.docData.allocationTotal) }}</div></div>
                                 </div>
                             </div>
                             <div class="card-footer bg-white text-end" v-if="state.docData.purchaseOrderId">
-                                <button type="button" class="btn btn-outline-primary" v-on:click="methods.openDocumentView('PurchaseOrder', state.docData.purchaseOrderId)">Xem đơn mua hàng</button>
+                                <button type="button" class="btn btn-outline-primary" v-on:click="methods.openDocumentView('PurchaseOrder', state.docData.purchaseOrderId)">View Purchase Order</button>
                             </div>
                         </div>
                     </div>
@@ -88,8 +88,8 @@
                                         <div class="fw-bold">{{ methods.formatDate(state.docData.orderDate) }}</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <label class="form-label text-muted small mb-1">{{ state.docType === 'PurchaseOrder' ? 'Vendor' : 'Customer' }}</label>
-                                        <div class="fw-bold">{{ state.docData.vendor?.name || state.docData.customer?.name }}</div>
+                                        <label class="form-label text-muted small mb-1">{{ state.docType === 'PurchaseOrder' ? 'Vendor' : (state.docType === 'StockCount' ? 'Warehouse' : 'Customer') }}</label>
+                                        <div class="fw-bold">{{ state.docType === 'StockCount' ? state.docData.warehouse?.name : (state.docData.vendor?.name || state.docData.customer?.name) }}</div>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label text-muted small mb-1">Status</label>

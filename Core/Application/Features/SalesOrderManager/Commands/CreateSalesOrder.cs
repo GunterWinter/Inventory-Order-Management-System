@@ -29,6 +29,7 @@ public class CreateSalesOrderValidator : AbstractValidator<CreateSalesOrderReque
         RuleFor(x => x.OrderDate).NotEmpty();
         RuleFor(x => x.OrderStatus).NotEmpty();
         RuleFor(x => x.CustomerId).NotEmpty();
+        RuleFor(x => x.SalesType).NotNull().IsInEnum();
     }
 }
 

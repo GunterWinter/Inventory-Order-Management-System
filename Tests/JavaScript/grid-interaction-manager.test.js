@@ -9,7 +9,7 @@ const managerPath = path.resolve(
     '../../Presentation/ASPNET/wwwroot/lib/indotalent/grid-interaction-manager.js'
 );
 
-function loadManager() {
+function loadManager(requestAnimationFrame = callback => callback()) {
     const document = {
         readyState: 'loading',
         addEventListener() { }
@@ -18,7 +18,7 @@ function loadManager() {
         console,
         setTimeout,
         clearTimeout,
-        requestAnimationFrame: callback => callback()
+        requestAnimationFrame
     };
     vm.runInNewContext(fs.readFileSync(managerPath, 'utf8'), {
         window,
@@ -208,6 +208,71 @@ test('grouped grid collapses after every data bind without re-entrant loops', ()
 
     manager.collapseGroupsOnFirstLoad(grid);
     assert.equal(collapseCalls, 3);
+});
+
+test('grouped grid waits until Syncfusion row objects have matching DOM rows', () => {
+    const animationFrames = [];
+    const manager = loadManager(callback => animationFrames.push(callback));
+    let collapseCalls = 0;
+    let rowElement = null;
+    const grid = {
+        element: { isConnected: true },
+        groupSettings: { columns: ['customerName'] },
+        getRowsObject: () => [{ isDataRow: true, uid: 'row-1' }],
+        getRowElementByUID: () => rowElement,
+        groupModule: { collapseAll: () => { collapseCalls += 1; } }
+    };
+
+    manager.collapseGroupsOnDataBound(grid);
+    animationFrames.shift()();
+    assert.equal(collapseCalls, 0);
+
+    rowElement = { style: {} };
+    animationFrames.shift()();
+    assert.equal(collapseCalls, 1);
+    animationFrames.shift()();
+});
+
+test('queued group collapse is discarded when the grid is ungrouped', () => {
+    const animationFrames = [];
+    const manager = loadManager(callback => animationFrames.push(callback));
+    let collapseCalls = 0;
+    const grid = {
+        groupSettings: { columns: ['customerName'] },
+        groupModule: { collapseAll: () => { collapseCalls += 1; } }
+    };
+
+    manager.collapseGroupsOnDataBound(grid);
+    grid.groupSettings.columns = [];
+    animationFrames.shift()();
+
+    assert.equal(collapseCalls, 0);
+});
+
+test('group collapse retries the known Syncfusion transient row-style failure', () => {
+    const animationFrames = [];
+    const manager = loadManager(callback => animationFrames.push(callback));
+    let collapseCalls = 0;
+    const grid = {
+        groupSettings: { columns: ['customerName'] },
+        groupModule: {
+            collapseAll: () => {
+                collapseCalls += 1;
+                if (collapseCalls === 1) {
+                    const error = new TypeError("Cannot read properties of null (reading 'style')");
+                    error.stack = `${error.stack}\nGroup.updateVisibleexpandCollapseRows`;
+                    throw error;
+                }
+            }
+        }
+    };
+
+    manager.collapseGroupsOnDataBound(grid);
+    animationFrames.shift()();
+    animationFrames.shift()();
+    animationFrames.shift()();
+
+    assert.equal(collapseCalls, 2);
 });
 
 test('modal date and Item popups are raised above the Bootstrap dialog', () => {

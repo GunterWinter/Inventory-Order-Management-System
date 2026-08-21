@@ -1,6 +1,7 @@
 using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 
@@ -25,6 +26,10 @@ public class CreateCashAccountValidator : AbstractValidator<CreateCashAccountReq
     public CreateCashAccountValidator()
     {
         RuleFor(x => x.Name).NotEmpty();
+        RuleFor(x => x.AccountType)
+            .NotNull()
+            .Must(value => !value.HasValue || Enum.IsDefined(typeof(CashAccountType), value.Value))
+            .WithMessage("Account Type is invalid.");
     }
 }
 
