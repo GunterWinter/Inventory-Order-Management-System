@@ -38,7 +38,7 @@ public class CreateTransferInValidator : AbstractValidator<CreateTransferInReque
 
 public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, CreateTransferInResult>
 {
-    private readonly ICommandRepository<TransferIn> _deliveryOrderRepository;
+    private readonly ICommandRepository<TransferIn> _transferInRepository;
     private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
@@ -46,7 +46,7 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
     private readonly IQueryContext _queryContext;
 
     public CreateTransferInHandler(
-        ICommandRepository<TransferIn> deliveryOrderRepository,
+        ICommandRepository<TransferIn> transferInRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
@@ -54,7 +54,7 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
         IQueryContext queryContext
         )
     {
-        _deliveryOrderRepository = deliveryOrderRepository;
+        _transferInRepository = transferInRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -73,7 +73,7 @@ public class CreateTransferInHandler : IRequestHandler<CreateTransferInRequest, 
         entity.Description = request.Description;
         entity.TransferOutId = request.TransferOutId;
 
-        await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
+        await _transferInRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
         var items = request.SkipDefaultItems

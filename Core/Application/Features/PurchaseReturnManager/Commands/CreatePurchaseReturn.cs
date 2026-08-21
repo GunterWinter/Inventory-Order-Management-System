@@ -37,14 +37,14 @@ public class CreatePurchaseReturnValidator : AbstractValidator<CreatePurchaseRet
 
 public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnRequest, CreatePurchaseReturnResult>
 {
-    private readonly ICommandRepository<PurchaseReturn> _deliveryOrderRepository;
+    private readonly ICommandRepository<PurchaseReturn> _purchaseReturnRepository;
     private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreatePurchaseReturnHandler(
-        ICommandRepository<PurchaseReturn> deliveryOrderRepository,
+        ICommandRepository<PurchaseReturn> purchaseReturnRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         ICommandRepository<Warehouse> warehouseRepository,
         IUnitOfWork unitOfWork,
@@ -52,7 +52,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         InventoryTransactionService inventoryTransactionService
         )
     {
-        _deliveryOrderRepository = deliveryOrderRepository;
+        _purchaseReturnRepository = purchaseReturnRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -70,7 +70,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         entity.Description = request.Description;
         entity.PurchaseOrderId = request.PurchaseOrderId;
 
-        await _deliveryOrderRepository.CreateAsync(entity, cancellationToken);
+        await _purchaseReturnRepository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
 
         var items = request.SkipDefaultItems

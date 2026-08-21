@@ -146,32 +146,22 @@ const App = {
             applySalesOrderItemAmounts(row);
             return { ...values, total: row.total, taxAmount: row.taxAmount, afterTaxAmount: row.afterTaxAmount, serialTracked };
         };
-        const writeSalesOrderBatchFields = (row, values) => {
+        const writeSalesOrderBatchFields = (row, values, editorElement = null) => {
             const grid = secondaryGrid?.obj;
             if (!grid || !row || !values) return;
-            let rowIndex = normalizeLookupId(row.id) ? grid.getRowIndexByPrimaryKey(row.id) : -1;
-            if (rowIndex == null || rowIndex < 0) {
-                rowIndex = grid.getRowsObject?.().findIndex(item => item.data === row
-                    || (normalizeLookupId(item.data?.id) && normalizeLookupId(item.data.id) === normalizeLookupId(row.id))) ?? -1;
-            }
-            if (rowIndex < 0) return;
-
-            const rowObject = grid.getRowsObject?.()[rowIndex];
-            if (rowObject?.data && rowObject.data !== row) Object.assign(rowObject.data, values);
-            const changes = grid.getBatchChanges?.() ?? {};
-            [...(changes.addedRecords ?? []), ...(changes.changedRecords ?? [])]
-                .filter(item => normalizeLookupId(item.id) === normalizeLookupId(row.id))
-                .forEach(item => Object.assign(item, values));
-
-            Object.entries(values).forEach(([field, value]) => {
-                if (field === 'productId' || field === 'serialTracked' || !grid.getColumnByField(field)) return;
-                const columnIndex = grid.getColumnIndexByField(field);
-                const cell = grid.getRows?.()[rowIndex]?.querySelector?.(`[data-colindex="${columnIndex}"]`);
-                if (!cell || cell.querySelector('input, select, textarea')) return;
-                if (field === 'warehouseId') cell.textContent = row.warehouseName ?? '';
-                else if (['unitPrice', 'quantity', 'total', 'taxAmount', 'afterTaxAmount'].includes(field)) {
-                    cell.textContent = NumberFormatManager.formatToLocale(value ?? 0);
-                } else cell.textContent = value ?? '';
+            const numberFormatter = value => NumberFormatManager.formatToLocale(value ?? 0);
+            GridInteractionManager.syncBatchRowValues(grid, {
+                rowData: row,
+                editorElement,
+                values,
+                formatters: {
+                    warehouseId: (value, data) => data.warehouseName ?? '',
+                    unitPrice: numberFormatter,
+                    quantity: numberFormatter,
+                    total: numberFormatter,
+                    taxAmount: numberFormatter,
+                    afterTaxAmount: numberFormatter
+                }
             });
         };
         const editNewSalesOrderProductCell = (temporaryId, attempt = 0) => {
@@ -1145,7 +1135,7 @@ const App = {
                 mainGrid.obj.element.dataset.groupCollapseWired = 'true';
                 window.setTimeout(() => {
                     if (mainGrid.obj?.element?.isConnected) {
-                        GridInteractionManager.collapseGroups(mainGrid.obj);
+                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                     }
                 }, 250);
             },
@@ -1304,6 +1294,7 @@ const App = {
                                             Object.assign(args.rowData, rowValues);
                                             if (productChanged) clearSerialSelection(args.rowData);
                                             Object.assign(rowValues, applySalesOrderItemAmounts(args.rowData));
+                                            writeSalesOrderBatchFields(args.rowData, { ...rowValues, serialTracked }, args.element);
                                             if (productObj) {
                                                 productObj.value = selection.productId;
                                                 productObj.dataBind();
@@ -1340,16 +1331,6 @@ const App = {
                                                 }
                                             }
 
-                                            [
-                                                ['warehouseId', selection.warehouseId],
-                                                ['warrantyMonths', selection.warrantyMonths],
-                                                ['unitPrice', selection.unitPrice],
-                                                 ['quantity', selection.quantity],
-                                                 ['total', args.rowData.total],
-                                                 ['summary', selection.summary],
-                                                 ['taxAmount', args.rowData.taxAmount],
-                                                 ['afterTaxAmount', args.rowData.afterTaxAmount]
-                                             ].forEach(([field, value]) => updateEditorRowCell(args.element, field, value));
                                         }
                                     };
 

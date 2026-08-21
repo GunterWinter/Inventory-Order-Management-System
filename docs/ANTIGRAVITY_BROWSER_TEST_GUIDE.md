@@ -8,34 +8,39 @@ Tại thư mục gốc của repository, cài dependency một lần:
 npm.cmd install
 ```
 
-Khởi động ứng dụng ở terminal thứ nhất:
+Lệnh chuẩn và bắt buộc cho Antigravity là:
 
 ```powershell
-dotnet run --project Presentation/ASPNET/ASPNET.csproj --urls http://localhost:5000
+npm.cmd run test:browser:isolated
 ```
 
-Đợi trang đăng nhập phản hồi thành công, sau đó chạy toàn bộ browser smoke ở terminal thứ hai:
+Runner này tự build, tạo một database duy nhất có tiền tố `WHMS_AntigravityTest_`, seed dữ liệu demo, chờ ứng dụng sẵn sàng, chạy browser suite tuần tự, dừng đúng process ứng dụng và xóa đúng database của lượt test. Khi thành công, log/artifact tạm được xóa; khi thất bại, log, screenshot, video và trace được giữ trong `artifacts/`.
+
+Muốn chỉ định cổng hoặc tên database để chẩn đoán, vẫn phải dùng đúng tiền tố an toàn:
 
 ```powershell
-npm.cmd run test:browser:all
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/run-antigravity-browser.ps1 `
+  -Port 5127 `
+  -DatabaseName WHMS_AntigravityTest_ProductPrice
 ```
 
 Lệnh tổng hợp chạy lần lượt:
 
 - `npm.cmd run test:browser`: Dashboard, chứng từ, bảo hành, lợi nhuận công trình và công nợ.
 - `npm.cmd run test:browser:documents`: modal SO/PO, chuyển thật EN/VI rồi chọn ngày chứng từ ở cả hai ngôn ngữ, hiển thị/cuộn Item grid và popup chọn hàng hóa.
-- `npm.cmd run test:browser:sales-items`: thêm dòng SO bằng Batch Editor, tự điền đơn giá từ Product, chọn thuế, lưu và đọc lại đúng item từ API.
+- `npm.cmd run test:browser:sales-items`: tạo Product có tồn đầu kỳ hoàn toàn qua UI, xác nhận giá/tồn sau lưu, chọn Product trong SO/PO và thấy giá ngay trước Enter, sau đó chọn thuế, lưu và reload item đúng giá.
+- `npm.cmd run test:browser:gate:purchase-sales`: alias chạy riêng gate Product/PO/SO ở trên; chỉ dùng khi ứng dụng đã chạy trên database test cô lập.
 - `npm.cmd run test:browser:cash`: phân bổ Thu/Chi, báo cáo Thu Chi Theo Danh Mục, localization và trạng thái đóng/mở grid gom nhóm.
 - `npm.cmd run test:browser:files`: tồn đầu kỳ Product, Import/Export Excel song ngữ, rollback toàn workbook và tải/đọc file PDF thật.
 
 Bài smoke dùng Microsoft Edge ở chế độ headless, tự đăng nhập và kiểm tra Dashboard, Cash Transaction, báo cáo tài chính, hai loại công nợ, vòng đổi ngôn ngữ và kịch bản dồn tích `2.000.000 - 500.000 = 1.500.000`. Nó cũng chủ động làm một API Dashboard trả lỗi 500 để xác nhận các khối còn lại vẫn hoạt động và nút thử lại phục hồi được dữ liệu. Mọi lỗi console, request thất bại hoặc kết quả tiền sai đều phải làm bài test thất bại.
 
-Khi ứng dụng chạy ở địa chỉ khác, truyền biến môi trường `BASE_URL` trước khi chạy. Antigravity phải chạy `test:browser:all` trước, sau đó mới thực hiện đầy đủ các kịch bản tương tác bên dưới. Với test khám phá hoặc test thay đổi dữ liệu, bật ghi ảnh/video/trace của công cụ browser và chỉ giữ artifact của ca thất bại.
+Khi chẩn đoán thủ công trên một ứng dụng test đã chạy ở địa chỉ khác, truyền `BASE_URL` trước khi chạy alias mục tiêu. Lượt hoàn tất của Antigravity vẫn phải dùng `test:browser:isolated`. Playwright Test tự giám sát lỗi console/HTTP/request và chỉ giữ ảnh/video/trace của ca thất bại.
 
-Không chạy demo browser test trên database làm việc. `IsDemoVersion=true` sẽ xóa và seed lại database khi khởi động. Hãy dùng database cô lập, ví dụ:
+Không chạy demo browser test trên database làm việc. `IsDemoVersion=true` sẽ xóa và seed lại database khi khởi động. Khối lệnh thủ công dưới đây chỉ dùng để chẩn đoán và database vẫn phải có tiền tố an toàn:
 
 ```powershell
-$env:ConnectionStrings__DefaultConnection='Server=localhost;Database=WHMS_AntigravityTest;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;'
+$env:ConnectionStrings__DefaultConnection='Server=localhost;Database=WHMS_AntigravityTest_Manual;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;'
 $env:Kestrel__Endpoints__Http__Url='http://localhost:5127'
 $env:IsDemoVersion='true'
 dotnet run --project Presentation/ASPNET/ASPNET.csproj
@@ -48,11 +53,11 @@ $env:BASE_URL='http://localhost:5127'
 npm.cmd run test:browser:all
 ```
 
-Sau khi test, dừng ứng dụng và chỉ xóa đúng database `WHMS_AntigravityTest`; không được xóa hoặc reset database khác.
+Sau khi chẩn đoán thủ công, dừng ứng dụng và chỉ xóa đúng database `WHMS_AntigravityTest_Manual`; không được xóa hoặc reset database khác.
 
 ## Mục tiêu và cách chạy
 
-Agent phải kiểm thử như một kế toán kho thực tế, dùng trình duyệt tự động và lưu bằng chứng cho từng lỗi. Không sửa dữ liệu trực tiếp trong database. Mỗi kịch bản phải ghi lại URL hiện tại, dữ liệu nhập, thông báo nhận được, giá trị trước/sau và ảnh chụp khi thất bại.
+Agent phải kiểm thử như một kế toán kho thực tế, dùng trình duyệt tự động và lưu bằng chứng cho từng lỗi. Không sửa dữ liệu trực tiếp trong database. API chỉ dựng fixture hoặc đọc đối chiếu; click, nhập, chọn, lưu và reload thuộc hành vi đang kiểm thử phải đi qua UI. Không được sửa giá/payload hoặc commit ô trong test để che lỗi. Mỗi kịch bản phải ghi lại URL hiện tại, dữ liệu nhập, thông báo nhận được, giá trị trước/sau và ảnh chụp khi thất bại.
 
 Quy tắc diễn giải trước khi kết luận lỗi:
 

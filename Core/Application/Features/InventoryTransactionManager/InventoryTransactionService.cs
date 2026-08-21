@@ -305,7 +305,8 @@ public partial class InventoryTransactionService
             .ToListAsync(cancellationToken);
 
         var serialLookup = serials
-            .GroupBy(x => x.InventoryTransactionId)
+            .Where(x => !string.IsNullOrWhiteSpace(x.InventoryTransactionId))
+            .GroupBy(x => x.InventoryTransactionId!)
             .ToDictionary(x => x.Key, x => x.ToList());
 
         foreach (var transaction in transactions)

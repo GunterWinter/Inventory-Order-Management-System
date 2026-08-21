@@ -52,9 +52,9 @@ public class GetTransferInSingleHandler : IRequestHandler<GetTransferInSingleReq
             .TransferIn
             .AsNoTracking()
             .Include(x => x.TransferOut)
-                .ThenInclude(x => x.WarehouseFrom)
+                .ThenInclude(x => x!.WarehouseFrom)
             .Include(x => x.TransferOut)
-                .ThenInclude(x => x.WarehouseTo)
+                .ThenInclude(x => x!.WarehouseTo)
             .Where(x => x.Id == request.Id)
             .AsQueryable();
 

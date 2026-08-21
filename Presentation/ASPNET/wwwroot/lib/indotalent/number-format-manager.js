@@ -3,7 +3,7 @@
     const DEFAULT_CURRENCY = 'VND';
     const GROUP_SEPARATOR = '.';
     const DECIMAL_SEPARATOR = ',';
-    const MAX_FRACTION_DIGITS = 0;
+    const MAX_FRACTION_DIGITS = 6;
     const MONEY_FORMAT = 'N0';
     const MONEY_FIELD_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|sales)/i;
     const numericInputHandlers = new WeakMap();
@@ -105,9 +105,25 @@
         const rawValue = `${value ?? ''}`.trim();
         const sign = rawValue.startsWith('-') ? '-' : '';
         const unsignedValue = sign ? rawValue.slice(1) : rawValue;
-        const lastDotIndex = unsignedValue.lastIndexOf('.');
         const lastCommaIndex = unsignedValue.lastIndexOf(',');
-        const decimalIndex = Math.max(lastDotIndex, lastCommaIndex);
+        const dotMatches = unsignedValue.match(/\./g) ?? [];
+        const lastDotIndex = unsignedValue.lastIndexOf('.');
+
+        // Vietnamese uses dots for grouping and commas for decimals. A single
+        // dot is also accepted as a decimal separator for keyboard/API values,
+        // except for the unambiguous three-digit grouping form (for example
+        // 345.000). This also handles Syncfusion's n6 edit value "2.000000"
+        // without turning it into 2,000,000.
+        let decimalIndex = -1;
+        if (lastCommaIndex >= 0) {
+            decimalIndex = lastCommaIndex;
+        } else if (dotMatches.length === 1) {
+            const dotFraction = unsignedValue.slice(lastDotIndex + 1).replace(/\D/g, '');
+            if (dotFraction.length === 0
+                || (dotFraction.length <= MAX_FRACTION_DIGITS && dotFraction.length !== 3)) {
+                decimalIndex = lastDotIndex;
+            }
+        }
 
         let integerPart = unsignedValue;
         let fractionPart = '';

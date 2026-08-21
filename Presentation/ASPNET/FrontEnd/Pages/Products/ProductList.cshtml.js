@@ -127,6 +127,43 @@ const App = {
             return getOpeningStockValue() ?? 0;
         };
 
+        const readNumericEditorValue = (editor, fallback) => {
+            if (!editor) return fallback;
+            if (typeof editor.value === 'number' && Number.isFinite(editor.value)) {
+                return editor.value;
+            }
+            const inputValue = editor.element?.value;
+            if (inputValue !== undefined && inputValue !== null && inputValue !== '') {
+                const parsed = NumberFormatManager.parseLocaleNumber(inputValue);
+                if (parsed !== null && Number.isFinite(parsed)) return parsed;
+            }
+            return editor.value ?? fallback;
+        };
+
+        const snapshotProductEditors = () => {
+            state.name = nameText.obj?.value ?? state.name;
+            state.referenceCode = referenceCodeText.obj?.value ?? state.referenceCode;
+            state.unitPrice = readNumericEditorValue(unitPriceNumber.obj, state.unitPrice) ?? '';
+            state.costPrice = readNumericEditorValue(costPriceNumber.obj, state.costPrice) ?? '';
+            state.defaultWarrantyMonths = readNumericEditorValue(
+                defaultWarrantyMonthsNumber.obj,
+                state.defaultWarrantyMonths
+            ) ?? '';
+            state.defaultWarehouseId = defaultWarehouseListLookup.obj?.value ?? state.defaultWarehouseId;
+
+            if (isOpeningStockEditable()) {
+                const previousOpeningStock = getOpeningStockValue() ?? 0;
+                const currentOpeningStock = readNumericEditorValue(
+                    openingStockNumber.obj,
+                    state.openingStockQuantity
+                ) ?? 0;
+                state.openingStockQuantity = currentOpeningStock;
+                if (state.id !== '' && Math.abs(currentOpeningStock - previousOpeningStock) > 0.000001) {
+                    state.openingStockDirty = true;
+                }
+            }
+        };
+
         const validateForm = function () {
             state.errors.name = '';
             state.errors.referenceCode = '';
@@ -725,7 +762,8 @@ const App = {
             handleSubmit: async function () {
                 try {
                     state.isSubmitting = true;
-                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    if (!state.deleteMode) snapshotProductEditors();
 
                     if (!validateForm()) {
                         return;

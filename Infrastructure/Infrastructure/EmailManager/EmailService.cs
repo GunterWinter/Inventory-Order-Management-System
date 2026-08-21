@@ -21,8 +21,14 @@ public class EmailService : IEmailService
     {
         try
         {
+            var smtpHost = _smtpSettings.Host
+                ?? throw new InvalidOperationException("SMTP host is not configured.");
+            var smtpUserName = _smtpSettings.UserName
+                ?? throw new InvalidOperationException("SMTP user name is not configured.");
+            var smtpPassword = _smtpSettings.Password
+                ?? throw new InvalidOperationException("SMTP password is not configured.");
             var message = new MimeMessage();
-            message.From.Add(new MailboxAddress("noreply", _smtpSettings.UserName));
+            message.From.Add(new MailboxAddress("noreply", smtpUserName));
             message.To.Add(new MailboxAddress(email, email));
             message.Subject = subject;
 
@@ -35,8 +41,8 @@ public class EmailService : IEmailService
 
             using (var client = new MailKit.Net.Smtp.SmtpClient())
             {
-                await client.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port, true);
-                await client.AuthenticateAsync(_smtpSettings.UserName, _smtpSettings.Password);
+                await client.ConnectAsync(smtpHost, _smtpSettings.Port, true);
+                await client.AuthenticateAsync(smtpUserName, smtpPassword);
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
             }

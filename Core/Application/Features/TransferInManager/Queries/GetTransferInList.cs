@@ -77,9 +77,9 @@ public class GetTransferInListHandler : IRequestHandler<GetTransferInListRequest
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
             .Include(x => x.TransferOut)
-                .ThenInclude(x => x.WarehouseFrom)
+                .ThenInclude(x => x!.WarehouseFrom)
             .Include(x => x.TransferOut)
-                .ThenInclude(x => x.WarehouseTo)
+                .ThenInclude(x => x!.WarehouseTo)
             .AsQueryable();
 
 

@@ -81,7 +81,9 @@ namespace Infrastructure.SeedManager.Systems
                 // Load movements for candidate serials, including the transaction to find their original warehouses
                 var movements = await _productSerialMovementRepository.GetQuery()
                     .Include(x => x.InventoryTransaction)
-                    .Where(x => !x.IsDeleted && candidateIds.Contains(x.ProductSerialId))
+                    .Where(x => !x.IsDeleted
+                        && x.ProductSerialId != null
+                        && candidateIds.Contains(x.ProductSerialId))
                     .ToListAsync();
 
                 var movementsBySerial = movements

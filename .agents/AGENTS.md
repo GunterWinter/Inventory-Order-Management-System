@@ -161,8 +161,11 @@ Ví dụ bất biến: công trình có đơn bán Đã xác nhận trước thu
 
 - Sau mọi thay đổi code, agent phải chạy `npm.cmd run test:js` và `dotnet build Indotalent.sln --no-restore`.
 - Không giữ application test tạm trong repository. Nếu tạo application test để xác minh trong lúc sửa lỗi thì phải xóa test và project test đó sau khi kiểm tra xong; JavaScript test và browser test dùng chung vẫn được giữ lại.
-- Khi thay đổi giao diện, giao dịch Thu Chi, báo cáo tài chính, localization, menu hoặc hành vi gom nhóm, agent phải khởi động ứng dụng thật và chạy `npm.cmd run test:browser:all`. Không được kết luận hoàn tất chỉ dựa trên unit test.
-- Browser test phải chạy trên database cô lập, ví dụ `WHMS_AntigravityTest`; tuyệt đối không bật `IsDemoVersion=true` trên database làm việc vì demo startup sẽ xóa và seed lại database.
+- Khi thay đổi giao diện, giao dịch Thu Chi, báo cáo tài chính, localization, menu hoặc hành vi gom nhóm, agent phải chạy ứng dụng thật bằng `npm.cmd run test:browser:isolated`. Không được kết luận hoàn tất chỉ dựa trên unit test hoặc một ứng dụng đang chạy thủ công.
+- Runner Antigravity chỉ được tạo/xóa database có tiền tố `WHMS_AntigravityTest_`, phải tự seed, chờ ứng dụng sẵn sàng, chạy tuần tự, dừng đúng process đã tạo và chỉ xóa đúng database của lượt đó. Tuyệt đối không bật `IsDemoVersion=true` trên database làm việc vì demo startup sẽ xóa và seed lại database.
+- Trong browser test, API chỉ được dùng để dựng fixture hoặc đối chiếu kết quả. Hành vi đang kiểm thử phải thao tác qua UI thật; không được gọi API thay cho click/nhập/lưu của người dùng.
+- Không được tự điền lại giá, sửa payload, commit ô hộ người dùng hoặc chèn fallback trong test để đi qua lỗi. Mỗi lỗi UI phải có regression tái hiện thất bại trước bản vá và assertion ở đúng thời điểm lỗi xảy ra.
+- Playwright phải giám sát JavaScript error, console error, HTTP 4xx/5xx cùng origin và request failure. Trace, video và screenshot chỉ giữ khi lỗi; một gate chỉ xanh khi toàn bộ gate trước vẫn xanh.
 - Nếu ứng dụng không chạy tại `http://localhost:5000`, phải truyền `BASE_URL` cho các script Playwright. Mọi HTTP 4xx/5xx cùng origin, request thất bại, JavaScript error hoặc sai tổng tiền đều làm test thất bại.
 - Với giao dịch thủ công, cả Thu (`Debit`) và Chi (`Credit`) đều có `Chi tiết phân bổ` tùy chọn. Nếu có dòng thì tổng dòng phải bằng tổng giao dịch; phân bổ Thu chỉ để truy vết và không được tính thành doanh thu hay chi phí công trình.
 - Báo cáo Thu Chi Theo Danh Mục phải dùng tiền thực thu/thực chi, loại điều chuyển quỹ và dữ liệu đã xóa, đồng thời khớp tổng thẻ với tổng các dòng.

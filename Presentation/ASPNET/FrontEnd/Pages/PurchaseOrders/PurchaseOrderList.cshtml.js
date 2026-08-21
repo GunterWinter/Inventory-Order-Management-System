@@ -104,7 +104,7 @@ const App = {
             if (!row || !product) return null;
 
             const quantity = resetQuantity ? 1 : (Number(row.quantity) || 1);
-            const unitPrice = Number(product.unitPrice ?? product.costPrice ?? 0) || 0;
+            const unitPrice = Number(product.costPrice ?? product.unitPrice ?? 0) || 0;
             const warehouseId = product.physical === false ? null : (product.defaultWarehouseId ?? null);
             const defaults = {
                 productId: product.id,
@@ -122,14 +122,21 @@ const App = {
             applyPurchaseOrderItemAmounts(row, { unitPrice, quantity });
             return { ...defaults, quantity: row.quantity, unitPrice: row.unitPrice, total: row.total, taxAmount: row.taxAmount, afterTaxAmount: row.afterTaxAmount };
         };
-        const writePurchaseOrderBatchFields = (row, values) => {
+        const writePurchaseOrderBatchFields = (row, values, editorElement = null) => {
             if (!secondaryGrid?.obj || !row || !values) return;
-            const rowIndex = secondaryGrid.obj.getRowIndexByPrimaryKey(row.id);
-            if (rowIndex == null || rowIndex < 0) return;
-
-            Object.entries(values).forEach(([field, value]) => {
-                if (field === 'productId' || !secondaryGrid.obj.getColumnByField(field)) return;
-                secondaryGrid.obj.updateCell(rowIndex, field, value);
+            const numberFormatter = value => NumberFormatManager.formatToLocale(value ?? 0);
+            GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
+                rowData: row,
+                editorElement,
+                values,
+                formatters: {
+                    warehouseId: (value, data) => data.warehouseName ?? '',
+                    unitPrice: numberFormatter,
+                    quantity: numberFormatter,
+                    total: numberFormatter,
+                    taxAmount: numberFormatter,
+                    afterTaxAmount: numberFormatter
+                }
             });
         };
         const refreshPurchaseOrderItemAmountCells = (editorElement, row) => {
@@ -1356,26 +1363,31 @@ const App = {
                                                 ?? state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
                                                 const defaults = applyPurchaseOrderProductDefaults(args.rowData, selectedProduct.id, true);
-                                                requestAnimationFrame(() => writePurchaseOrderBatchFields(args.rowData, defaults));
+                                                writePurchaseOrderBatchFields(args.rowData, defaults, args.element);
                                                 if (warehouseObj) {
                                                     warehouseObj.value = args.rowData.warehouseId;
                                                     warehouseObj.dataBind();
                                                 }
                                                 if (numberObj) {
                                                     numberObj.value = args.rowData.productNumber;
+                                                    numberObj.dataBind();
                                                 }
                                                 if (priceObj) {
                                                     priceObj.value = args.rowData.unitPrice;
+                                                    priceObj.dataBind();
                                                 }
                                                 if (summaryObj) {
                                                     summaryObj.value = args.rowData.summary;
+                                                    summaryObj.dataBind();
                                                 }
                                                 if (quantityObj) {
                                                     quantityObj.value = args.rowData.quantity;
+                                                    quantityObj.dataBind();
                                                 }
                                                 refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
                                                 if (supplierWarrantyObj) {
                                                     supplierWarrantyObj.value = args.rowData.supplierWarrantyMonths;
+                                                    supplierWarrantyObj.dataBind();
                                                 }
                                             }
                                         },
@@ -2071,6 +2083,7 @@ const App = {
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
             },
             refresh: () => {
+                if (!secondaryGrid.obj) return;
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,

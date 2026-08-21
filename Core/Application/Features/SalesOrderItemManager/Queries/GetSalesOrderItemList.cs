@@ -121,12 +121,14 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
             .ToListAsync(cancellationToken);
 
         var serialLookup = serials
-            .GroupBy(x => x.SalesOrderItemId)
+            .Where(x => !string.IsNullOrWhiteSpace(x.SalesOrderItemId))
+            .GroupBy(x => x.SalesOrderItemId!)
             .ToDictionary(x => x.Key, x => x.ToList());
 
         foreach (var dto in dtos)
         {
-            if (serialLookup.TryGetValue(dto.Id, out var itemSerials))
+            if (!string.IsNullOrWhiteSpace(dto.Id)
+                && serialLookup.TryGetValue(dto.Id, out var itemSerials))
             {
                 dto.ProductSerialIds = itemSerials.Select(x => x.Id).ToList();
                 dto.ProductSerialNumbers = string.Join(", ", itemSerials.Select(x => x.InternalSerialNumber));

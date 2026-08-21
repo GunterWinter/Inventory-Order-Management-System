@@ -187,6 +187,41 @@ test('Syncfusion Update toolbar persists changes captured by beforeBatchSave', a
     assert.deepEqual(calls, ['edit:product-1']);
 });
 
+test('product selection synchronizes a detached Batch editor row immediately', () => {
+    const manager = loadManager();
+    const editorData = { id: 'new-1', productId: null, unitPrice: 0 };
+    const actualData = { id: 'new-1', productId: null, unitPrice: 0 };
+    const addedRecord = { id: 'new-1', productId: null, unitPrice: 0 };
+    const priceCell = { textContent: '', contains: () => false, querySelector: () => null };
+    const productCell = { textContent: '', contains: element => element === editorElement, querySelector: () => ({}) };
+    const rowElement = {};
+    const editorElement = { closest: selector => selector === 'tr' ? rowElement : null };
+    const grid = {
+        getRows: () => [rowElement],
+        getRowsObject: () => [{ data: actualData }],
+        getBatchChanges: () => ({ addedRecords: [addedRecord], changedRecords: [], deletedRecords: [] }),
+        getColumnByField: field => ({ field }),
+        getColumnIndexByField: field => field === 'productId' ? 0 : 1,
+        getCellFromIndex: (rowIndex, columnIndex) => columnIndex === 0 ? productCell : priceCell
+    };
+
+    const rowIndex = manager.syncBatchRowValues(grid, {
+        rowData: editorData,
+        editorElement,
+        values: { productId: 'product-1', unitPrice: 345000 },
+        formatters: { unitPrice: value => `formatted:${value}` }
+    });
+
+    assert.equal(rowIndex, 0);
+    assert.equal(editorData.productId, 'product-1');
+    assert.equal(actualData.productId, 'product-1');
+    assert.equal(actualData.unitPrice, 345000);
+    assert.equal(addedRecord.productId, 'product-1');
+    assert.equal(addedRecord.unitPrice, 345000);
+    assert.equal(priceCell.textContent, 'formatted:345000');
+    assert.equal(productCell.textContent, '');
+});
+
 test('grouped grid collapses after every data bind without re-entrant loops', () => {
     const manager = loadManager();
     let collapseCalls = 0;

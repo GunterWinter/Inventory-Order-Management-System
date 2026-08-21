@@ -375,16 +375,13 @@ public class AllocatePurchaseOrderCostsHandler
 
             var totalAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? 0d);
             var isNewObligation = obligation == null;
-            if (isNewObligation)
-            {
-                obligation = new CashTransaction
+            obligation ??= new CashTransaction
                 {
                     CreatedById = request.CreatedById,
                     Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
                     SourceModule = nameof(PurchaseOrder),
                     SourceModuleId = purchaseOrder.Id
                 };
-            }
 
             obligation.TransactionDate = DateTime.Today;
             obligation.TransactionType = CashTransactionType.Credit;

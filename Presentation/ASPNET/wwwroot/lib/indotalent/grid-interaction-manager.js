@@ -27,6 +27,61 @@
         }
     };
 
+    function syncBatchRowValues(grid, { rowData, editorElement, values, formatters = {} } = {}) {
+        if (!grid || !rowData || !values) return -1;
+
+        const normalizedId = value => value === null || value === undefined || value === ''
+            ? null
+            : String(value);
+        const targetId = normalizedId(rowData.id);
+        const renderedRows = grid.getRows?.() ?? [];
+        const editorRow = editorElement?.closest?.('tr') ?? null;
+        let rowIndex = editorRow ? renderedRows.indexOf(editorRow) : -1;
+
+        if (rowIndex < 0 && targetId && typeof grid.getRowIndexByPrimaryKey === 'function') {
+            rowIndex = grid.getRowIndexByPrimaryKey(rowData.id);
+        }
+
+        const rowObjects = grid.getRowsObject?.() ?? [];
+        if (rowIndex == null || rowIndex < 0) {
+            rowIndex = rowObjects.findIndex(item => item?.data === rowData
+                || (targetId && normalizedId(item?.data?.id) === targetId));
+        }
+        if (rowIndex == null || rowIndex < 0) return -1;
+
+        Object.assign(rowData, values);
+        const actualRow = rowObjects[rowIndex]?.data;
+        if (actualRow && actualRow !== rowData) Object.assign(actualRow, values);
+
+        const changes = grid.getBatchChanges?.() ?? {};
+        [...(changes.addedRecords ?? []), ...(changes.changedRecords ?? [])]
+            .filter(item => item === rowData
+                || item === actualRow
+                || (targetId && normalizedId(item?.id) === targetId))
+            .forEach(item => Object.assign(item, values));
+
+        Object.entries(values).forEach(([field, value]) => {
+            const column = grid.getColumnByField?.(field);
+            if (!column) return;
+            const columnIndex = grid.getColumnIndexByField?.(field);
+            if (columnIndex == null || columnIndex < 0) return;
+
+            const cell = grid.getCellFromIndex?.(rowIndex, columnIndex)
+                ?? renderedRows[rowIndex]?.querySelector?.(`[data-colindex="${columnIndex}"]`)
+                ?? null;
+            if (!cell || cell === editorElement || cell.contains?.(editorElement)) return;
+            if (cell.querySelector?.('input, select, textarea, button')) return;
+
+            const formatter = formatters[field];
+            const displayValue = typeof formatter === 'function'
+                ? formatter(value, actualRow ?? rowData, field)
+                : value;
+            cell.textContent = displayValue ?? '';
+        });
+
+        return rowIndex;
+    }
+
     function popupHost(selector) {
         if (typeof selector === 'string') return document.querySelector?.(selector) ?? null;
         return selector ?? null;
@@ -348,6 +403,22 @@
         const getModalSubmitButton = modal => modal?.querySelector?.(
             '#MainSaveButton:not([disabled]), button[data-action="submit"]:not([disabled]), button[type="submit"]:not([disabled]), .modal-footer .btn-primary:not([disabled])'
         );
+        const isOpenDropDownInteraction = target => {
+            const popup = target?.closest?.('.e-ddl.e-popup.e-popup-open, .e-multi-select-list-wrapper.e-popup-open');
+            if (popup) return true;
+
+            const control = target?.closest?.('.e-ddl, .e-combobox, .e-multiselect');
+            return control?.getAttribute?.('aria-expanded') === 'true';
+        };
+
+        // Syncfusion closes a popup on mousedown when its read-only input loses
+        // focus inside a Bootstrap modal. Keeping focus on the control allows the
+        // component's subsequent click handler to select the item normally.
+        root.addEventListener('mousedown', event => {
+            if (event.target?.closest?.('.e-ddl.e-popup.e-popup-open .e-list-item')) {
+                event.preventDefault();
+            }
+        }, true);
 
         root.addEventListener('click', event => {
             const button = event.target?.closest?.('button[type="submit"], button[data-action="submit"], .modal .btn-primary');
@@ -375,6 +446,8 @@
             const topModal = getTopModal();
 
             if (event.key === 'Enter' && topModal && !window.Swal?.isVisible?.()) {
+                if (isOpenDropDownInteraction(target)) return;
+
                 // Bootstrap focus is deliberately relaxed for nested dialogs, so focus can
                 // remain on the main grid behind the modal. Always consume Enter at the
                 // topmost modal to prevent Syncfusion from toggling an underlying row.
@@ -515,7 +588,7 @@
         collapseGroupsOnDataBound(grid);
     }
 
-    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
+    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
     patchModalPopups();
     const init = () => { patchModalPopups(); wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
