@@ -11,7 +11,7 @@ public sealed class DebtPaymentDto
 {
     public string? Id { get; init; }
     public DateTime? PaymentDate { get; init; }
-    public double Amount { get; init; }
+    public decimal Amount { get; init; }
     public string? Description { get; init; }
 }
 
@@ -21,9 +21,9 @@ public sealed class DebtDocumentDto
     public string? Number { get; init; }
     public DateTime? DocumentDate { get; init; }
     public string? SourceType { get; init; }
-    public double TotalAmount { get; init; }
-    public double PaidAmount { get; init; }
-    public double Remaining { get; init; }
+    public decimal TotalAmount { get; init; }
+    public decimal PaidAmount { get; init; }
+    public decimal Remaining { get; init; }
     public List<DebtPaymentDto> Payments { get; init; } = [];
 }
 
@@ -31,18 +31,18 @@ public sealed class DebtPartyDto
 {
     public string? PartyId { get; init; }
     public string? PartyName { get; init; }
-    public double TotalAmount { get; init; }
-    public double PaidAmount { get; init; }
-    public double Remaining { get; init; }
+    public decimal TotalAmount { get; init; }
+    public decimal PaidAmount { get; init; }
+    public decimal Remaining { get; init; }
     public List<DebtDocumentDto> Documents { get; init; } = [];
 }
 
 public sealed class GetDebtReportResult
 {
     public string PartyType { get; init; } = "Customer";
-    public double TotalAmount { get; init; }
-    public double PaidAmount { get; init; }
-    public double Remaining { get; init; }
+    public decimal TotalAmount { get; init; }
+    public decimal PaidAmount { get; init; }
+    public decimal Remaining { get; init; }
     public List<DebtPartyDto> Data { get; init; } = [];
 }
 
@@ -56,7 +56,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
     private sealed class DocumentSource
     {
         public DocumentSource() { }
-        public DocumentSource(string id, string partyId, string? number, DateTime? date, double amount)
+        public DocumentSource(string id, string partyId, string? number, DateTime? date, decimal amount)
         {
             Id = id;
             PartyId = partyId;
@@ -68,7 +68,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
         public string PartyId { get; private set; } = string.Empty;
         public string? Number { get; private set; }
         public DateTime? Date { get; private set; }
-        public double Amount { get; private set; }
+        public decimal Amount { get; private set; }
     }
     private readonly IQueryContext _queryContext;
     public GetDebtReportHandler(IQueryContext queryContext) => _queryContext = queryContext;
@@ -82,7 +82,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
         {
             sources = await _queryContext.Set<PurchaseOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed && x.VendorId != null)
-                .Select(x => new DocumentSource(x.Id, x.VendorId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0d))
+                .Select(x => new DocumentSource(x.Id, x.VendorId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0m))
                 .ToListAsync(cancellationToken);
             partyNames = await _queryContext.Set<Vendor>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
@@ -91,7 +91,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
         {
             sources = await _queryContext.Set<SalesOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed && x.CustomerId != null)
-                .Select(x => new DocumentSource(x.Id, x.CustomerId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0d))
+                .Select(x => new DocumentSource(x.Id, x.CustomerId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0m))
                 .ToListAsync(cancellationToken);
             partyNames = await _queryContext.Set<Customer>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
@@ -123,7 +123,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
                         Description = x.Description
                     }).ToList() ?? [];
                 var paid = transaction?.PaidAmount ?? payments.Sum(x => x.Amount);
-                paid = Math.Min(source.Amount, Math.Max(0d, paid));
+                paid = Math.Min(source.Amount, Math.Max(0m, paid));
                 return new DebtDocumentDto
                 {
                     Id = source.Id,
@@ -132,7 +132,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
                     SourceType = sourceType,
                     TotalAmount = source.Amount,
                     PaidAmount = paid,
-                    Remaining = Math.Max(0d, source.Amount - paid),
+                    Remaining = Math.Max(0m, source.Amount - paid),
                     Payments = payments
                 };
             }).OrderByDescending(x => x.DocumentDate).ToList();

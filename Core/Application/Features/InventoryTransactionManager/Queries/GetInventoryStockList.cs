@@ -18,9 +18,9 @@ public record GetInventoryStockListDto
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
 
-    public double? Stock { get; init; }
+    public decimal? Stock { get; init; }
     public int? SupplierWarrantyMonths { get; set; }
-    public double? SupplierWarrantyRemaining { get; set; }
+    public decimal? SupplierWarrantyRemaining { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -131,7 +131,7 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                     ProductName = first.ProductName,
                     ProductNumber = first.ProductNumber,
                     ProductReferenceCode = first.ProductReferenceCode,
-                    Stock = group.Sum(x => x.Stock ?? 0d),
+                    Stock = group.Sum(x => x.Stock ?? 0m),
                     StatusName = nameof(InventoryTransactionStatus.Confirmed),
                     CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
                 };

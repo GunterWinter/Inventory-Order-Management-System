@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
@@ -22,7 +22,7 @@ public sealed record RecentSalesOrderDashboardDto
     public DateTime? OrderDate { get; init; }
     public string? Number { get; init; }
     public string? ProductName { get; init; }
-    public double Total { get; init; }
+    public decimal Total { get; init; }
 }
 
 public class GetSalesDashboardResult
@@ -62,7 +62,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                 OrderDate = x.SalesOrder.OrderDate,
                 Number = x.SalesOrder.Number,
                 ProductName = x.Product != null ? x.Product.Name : null,
-                Total = x.Total ?? 0d
+                Total = x.Total ?? 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -76,7 +76,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                 CustomerGroupName = x.SalesOrder.Customer != null && x.SalesOrder.Customer.CustomerGroup != null
                     ? x.SalesOrder.Customer.CustomerGroup.Name
                     : null,
-                Quantity = x.Quantity ?? 0d
+                Quantity = x.Quantity ?? 0m
             })
             .GroupBy(x => new { x.Status, x.CustomerGroupName })
             .Select(g => new
@@ -97,7 +97,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                 CustomerCategoryName = x.SalesOrder!.Customer != null && x.SalesOrder.Customer.CustomerCategory != null
                     ? x.SalesOrder.Customer.CustomerCategory.Name
                     : null,
-                Quantity = x.Quantity ?? 0d
+                Quantity = x.Quantity ?? 0m
             })
             .GroupBy(x => new { x.Status, x.CustomerCategoryName })
             .Select(g => new
@@ -124,7 +124,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                         Width = 2,
                         YName = "y",
                         Name = Enum.GetName(typeof(SalesOrderStatus), status)!,
-                        ColumnSpacing = 0.1,
+                        ColumnSpacing = 0.1m,
                         TooltipMappingName = "tooltipMappingName",
                         DataSource = salesByCustomerGroupData
                             .Where(x => x.Status == status)
@@ -146,7 +146,7 @@ public class GetSalesDashboardHandler : IRequestHandler<GetSalesDashboardRequest
                         Width = 2,
                         YName = "y",
                         Name = Enum.GetName(typeof(SalesOrderStatus), status)!,
-                        ColumnSpacing = 0.1,
+                        ColumnSpacing = 0.1m,
                         TooltipMappingName = "tooltipMappingName",
                         DataSource = salesByCustomerCategoryData
                             .Where(x => x.Status == status)

@@ -379,3 +379,25 @@ test('Tax Excel validation accepts zero and rejects values outside 0-100', () =>
     assert.throws(() => validate({ percentage: -1 }, 2), /between 0 and 100/);
     assert.throws(() => validate({ percentage: 101 }, 2), /between 0 and 100/);
 });
+
+test('Excel template keeps a Vietnamese example row in a separate reference sheet', () => {
+    const manager = loadManager('vi');
+    const columns = [
+        { header: 'Name', key: 'name', required: true, example: 'Dây điện 2.5mm' },
+        { header: 'Opening Stock', key: 'openingStockQuantity', type: 'number', example: 12.5 }
+    ];
+
+    const rows = manager.buildExampleRows(columns, {}, 'vi');
+    const instructions = manager.buildInstructions({ title: 'Products', columns }, {}, 'vi');
+
+    assert.equal(rows[0][0], `${vietnameseHeaders.Name} *`);
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[1])), ['Dây điện 2.5mm', 12.5]);
+    assert.match(instructions.flat().join(' '), /Example-/);
+});
+
+test('Excel empty-file message is available in Vietnamese', () => {
+    const localizationSource = fs.readFileSync(path.resolve(__dirname,
+        '../../Presentation/ASPNET/wwwroot/lib/indotalent/ui-localization.js'), 'utf8');
+
+    assert.match(localizationSource, /The Excel file does not contain any import rows\.[^\n]+File Excel không chứa dòng dữ liệu nào để nhập\./);
+});

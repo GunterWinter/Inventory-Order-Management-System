@@ -8,20 +8,20 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.InventoryTransactionManager;
 
 public readonly record struct InventoryUnitCostResolution(
-    double UnitCost,
+    decimal UnitCost,
     string CostSource,
     bool IsFallbackCost,
     bool IncludesOpeningStock = false,
     bool IncludesPurchase = false);
 
 public readonly record struct InventorySerialCostResolution(
-    double UnitCost,
+    decimal UnitCost,
     string SourceKey,
     string CostSource);
 
 public sealed class InventoryCostResolver
 {
-    private const double QuantityTolerance = 0.000001d;
+    private const decimal QuantityTolerance = 0.000001m;
 
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
@@ -86,7 +86,7 @@ public sealed class InventoryCostResolver
                 var usedFallback = resolvedSerialCosts.Any(x => !x.UnitCost.HasValue);
                 var fallbackCost = usedFallback
                     ? RequireFallbackCost(await GetFallbackCostAsync(productId, cancellationToken), productId)
-                    : 0d;
+                    : 0m;
                 var source = serialCosts.All(x => x.IsOpeningStock)
                     ? "Giá vốn tồn đầu kỳ"
                     : serialCosts.Any(x => x.IsOpeningStock)
@@ -172,12 +172,12 @@ public sealed class InventoryCostResolver
                 && transaction.ModuleName == nameof(PurchaseOrder)
                 && transaction.ProductId == productId
                 && (string.IsNullOrWhiteSpace(warehouseId) || transaction.WarehouseId == warehouseId)
-                && (transaction.Stock ?? transaction.Movement ?? 0d) > 0d
+                && (transaction.Stock ?? transaction.Movement ?? 0m) > 0m
             select new
             {
                 purchaseItem.PurchaseOrderId,
                 transaction.WarehouseId,
-                Quantity = transaction.Stock ?? transaction.Movement ?? 0d,
+                Quantity = transaction.Stock ?? transaction.Movement ?? 0m,
                 UnitCost = purchaseItem.UnitPrice
             })
             .ToListAsync(cancellationToken);
@@ -191,10 +191,10 @@ public sealed class InventoryCostResolver
                 && x.ModuleCode == ProductOpeningStockService.OpeningStockModuleCode
                 && x.ProductId == productId
                 && (string.IsNullOrWhiteSpace(warehouseId) || x.WarehouseId == warehouseId)
-                && (x.Stock ?? 0d) != 0d)
+                && (x.Stock ?? 0m) != 0m)
             .Select(x => new
             {
-                Quantity = x.Stock ?? 0d,
+                Quantity = x.Stock ?? 0m,
                 x.UnitCost
             })
             .ToListAsync(cancellationToken);
@@ -210,12 +210,12 @@ public sealed class InventoryCostResolver
                 && transaction.ModuleName == nameof(PurchaseReturn)
                 && transaction.ProductId == productId
                 && (string.IsNullOrWhiteSpace(warehouseId) || transaction.WarehouseId == warehouseId)
-                && (transaction.Stock ?? 0d) < 0d
+                && (transaction.Stock ?? 0m) < 0m
             select new
             {
                 purchaseReturn.PurchaseOrderId,
                 transaction.WarehouseId,
-                Quantity = transaction.Stock ?? 0d
+                Quantity = transaction.Stock ?? 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -234,7 +234,7 @@ public sealed class InventoryCostResolver
             {
                 x.PurchaseOrderId,
                 x.WarehouseId,
-                Quantity = x.Quantity ?? 0d,
+                Quantity = x.Quantity ?? 0m,
                 UnitCost = x.UnitPrice
             })
             .ToListAsync(cancellationToken);
@@ -243,7 +243,7 @@ public sealed class InventoryCostResolver
             || openingData.Any(x => !IsValidCost(x.UnitCost));
         var requiredFallbackCost = usedFallback
             ? RequireFallbackCost(fallbackCost, productId)
-            : 0d;
+            : 0m;
         var rows = receiptData
             .Select(x => new CostRow(
                 x.Quantity,
@@ -331,7 +331,7 @@ public sealed class InventoryCostResolver
             true);
     }
 
-    private async Task<double?> GetFallbackCostAsync(
+    private async Task<decimal?> GetFallbackCostAsync(
         string productId,
         CancellationToken cancellationToken)
     {
@@ -343,10 +343,10 @@ public sealed class InventoryCostResolver
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    private static bool IsValidCost(double? value)
-        => value.HasValue && double.IsFinite(value.Value) && value.Value >= 0d;
+    private static bool IsValidCost(decimal? value)
+        => value.HasValue && value.Value >= 0m;
 
-    private static double RequireFallbackCost(double? value, string productId)
+    private static decimal RequireFallbackCost(decimal? value, string productId)
     {
         if (!IsValidCost(value))
         {
@@ -357,5 +357,5 @@ public sealed class InventoryCostResolver
         return value!.Value;
     }
 
-    private readonly record struct CostRow(double Quantity, double UnitCost);
+    private readonly record struct CostRow(decimal Quantity, decimal UnitCost);
 }

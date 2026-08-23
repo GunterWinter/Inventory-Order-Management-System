@@ -10,7 +10,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> TransferInCreateInvenTrans(
         string? moduleId,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? createdById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
@@ -56,7 +56,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> TransferInUpdateInvenTrans(
         string? id,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? updatedById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null

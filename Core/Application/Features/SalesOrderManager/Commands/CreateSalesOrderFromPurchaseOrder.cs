@@ -6,6 +6,7 @@ using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -99,15 +100,15 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
         foreach (var poItem in purchaseOrder.PurchaseOrderItemList)
         {
             var product = poItem.Product;
-            double unitPrice = salesType == SalesType.Internal
+            decimal unitPrice = salesType == SalesType.Internal
                 ? (product?.CostPrice ?? poItem.UnitPrice ?? 0)
                 : (product?.UnitPrice ?? poItem.UnitPrice ?? 0);
 
-            double quantity = poItem.Quantity ?? 1;
-            double total = unitPrice * quantity;
-            double taxRate = poItem.Tax?.Percentage ?? 0;
-            double taxAmount = total * (taxRate / 100.0);
-            double afterTaxAmount = total + taxAmount;
+            decimal quantity = poItem.Quantity ?? 1;
+            decimal total = AccountingMath.RoundVnd(unitPrice * quantity);
+            decimal taxRate = poItem.Tax?.Percentage ?? 0;
+            decimal taxAmount = AccountingMath.RoundVnd(total * taxRate / 100m);
+            decimal afterTaxAmount = total + taxAmount;
 
             var soItem = new SalesOrderItem
             {

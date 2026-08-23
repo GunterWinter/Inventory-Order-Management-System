@@ -15,10 +15,10 @@ public record GetCashAccountListDto
     public string? Number { get; init; }
     public CashAccountType? AccountType { get; init; }
     public string? Description { get; init; }
-    public double? InitialBalance { get; init; }
-    public double? TotalDebit { get; init; }
-    public double? TotalCredit { get; init; }
-    public double? CurrentBalance { get; init; }
+    public decimal? InitialBalance { get; init; }
+    public decimal? TotalDebit { get; init; }
+    public decimal? TotalCredit { get; init; }
+    public decimal? CurrentBalance { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -71,8 +71,8 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
             .Select(g => new
             {
                 CashAccountId = g.Key,
-                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.PaidAmount ?? 0d),
-                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.PaidAmount ?? 0d)
+                TotalDebit = g.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.PaidAmount ?? 0m),
+                TotalCredit = g.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.PaidAmount ?? 0m)
             })
             .ToDictionaryAsync(x => x.CashAccountId ?? string.Empty, cancellationToken);
 
@@ -92,10 +92,10 @@ public class GetCashAccountListHandler : IRequestHandler<GetCashAccountListReque
         var dtos = entities.Select(entity =>
         {
             transactionBalances.TryGetValue(entity.Id, out var balance);
-            var initialBalance = entity.InitialBalance ?? 0d;
+            var initialBalance = entity.InitialBalance ?? 0m;
             paymentBalances.TryGetValue(entity.Id, out var paymentBalance);
-            var totalDebit = (balance?.TotalDebit ?? 0d) + (paymentBalance?.TotalDebit ?? 0d);
-            var totalCredit = (balance?.TotalCredit ?? 0d) + (paymentBalance?.TotalCredit ?? 0d);
+            var totalDebit = (balance?.TotalDebit ?? 0m) + (paymentBalance?.TotalDebit ?? 0m);
+            var totalCredit = (balance?.TotalCredit ?? 0m) + (paymentBalance?.TotalCredit ?? 0m);
             var currentBalance = initialBalance + totalDebit - totalCredit;
 
             return new GetCashAccountListDto

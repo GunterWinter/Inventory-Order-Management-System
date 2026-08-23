@@ -58,6 +58,12 @@ public class DataContext : IdentityDbContext<ApplicationUser>, IEntityDbSet
     public DbSet<MaterialExport> MaterialExport { get; set; }
     public DbSet<MaterialExportItem> MaterialExportItem { get; set; }
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<decimal>().HavePrecision(19, 6);
+        configurationBuilder.Properties<decimal?>().HavePrecision(19, 6);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

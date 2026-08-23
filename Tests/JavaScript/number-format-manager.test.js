@@ -29,13 +29,25 @@ test('parses Vietnamese grouping and decimal quantities without changing their s
     assert.equal(manager.parseLocaleNumber('345.000'), 345000);
     assert.equal(manager.parseLocaleNumber('1.234.567'), 1234567);
     assert.equal(manager.parseLocaleNumber('5,5'), 5.5);
-    assert.equal(manager.parseLocaleNumber('5.5'), 5.5);
+    assert.equal(manager.parseLocaleNumber('5.5'), 55);
+    assert.equal(manager.parseLocaleNumber('200.000,25'), 200000.25);
+    assert.equal(manager.formatToLocale(12350.231), '12.350,231');
 });
 
-test('preserves Syncfusion n6 edit values used by opening stock and quantities', () => {
+test('uses only the comma as the Vietnamese decimal separator', () => {
     const manager = loadManager();
 
-    assert.equal(manager.parseLocaleNumber('2.000000'), 2);
-    assert.equal(manager.formatEditableValue('2.000000'), '2,000000');
+    assert.equal(manager.parseLocaleNumber('2.000000'), 2000000);
+    assert.equal(manager.formatEditableValue('2.000000'), '2.000.000');
+    assert.equal(manager.normalizeNumberString('12.322,'), '12322.');
+    assert.equal(manager.formatEditableValue('12322,'), '12.322,');
+    assert.equal(manager.parseLocaleNumber('2,1234567'), 2.123456);
     assert.equal(manager.formatToLocale(2.25), '2,25');
+});
+
+test('formats accounting money with Vietnamese grouping and a decimal comma', () => {
+    const manager = loadManager();
+
+    assert.equal(manager.formatMoneyToLocale(10000000), '10.000.000');
+    assert.equal(manager.formatMoneyToLocale(12350.231), '12.350,231');
 });

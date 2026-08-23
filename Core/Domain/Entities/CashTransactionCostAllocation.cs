@@ -12,6 +12,6 @@ public class CashTransactionCostAllocation : BaseEntity
     public CashTransaction? CashTransaction { get; set; }
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }
-    public double Amount { get; set; }
+    public decimal Amount { get; set; }
     public string? Description { get; set; }
 }

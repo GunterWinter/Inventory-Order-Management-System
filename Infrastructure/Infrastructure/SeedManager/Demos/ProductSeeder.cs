@@ -42,7 +42,7 @@ namespace Infrastructure.SeedManager.Demos
             var serialGroupId = groups.Single(x => x.Name == "Thiết bị có serial").Id;
             var furnitureGroupId = groups.Single(x => x.Name == "Nội thất").Id;
             var serviceGroupId = groups.Single(x => x.Name == "Dịch vụ").Id;
-            var productsToSeed = new List<(string Name, string Ref, string Desc, double Price, double Cost, int Warranty, string UnitName, string GroupId, SerialTrackingMode TrackingMode, string FixedCode)>
+            var productsToSeed = new List<(string Name, string Ref, string Desc, decimal Price, decimal Cost, int Warranty, string UnitName, string GroupId, SerialTrackingMode TrackingMode, string FixedCode)>
             {
                 ("LED dây 12V", "MAT-LED-001", "Vật tư không theo dõi serial", 500000, 350000, 0, "Cuộn", electricalGroupId, SerialTrackingMode.None, ""),
                 ("Ván MDF chống ẩm", "MAT-MDF-001", "Vật tư ván không theo dõi serial", 800000, 600000, 0, "Tấm", furnitureGroupId, SerialTrackingMode.None, ""),

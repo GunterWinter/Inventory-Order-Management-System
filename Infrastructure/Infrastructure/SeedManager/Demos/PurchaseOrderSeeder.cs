@@ -55,10 +55,10 @@ public class PurchaseOrderSeeder
 
         var definitions = new[]
         {
-            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 0, Description = "DEMO PO VẬT TƯ GIÁ VỐN THỰC TẾ", Lines = new[] { ("MAT-LED-001", 20d, 400_000d), ("ELEC-TV-001", 2d, 10_500_000d) } },
-            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 1, Description = "DEMO PO SERIAL NHÀ SẢN XUẤT", Lines = new[] { ("ELEC-WM-001", 2d, 7_200_000d), ("SM-CAM-001", 3d, 470_000d) } },
-            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 2, Description = "DEMO PO VÁN VÀ NỘI THẤT", Lines = new[] { ("MAT-MDF-001", 10d, 620_000d), ("FURN-CHR-001", 4d, 870_000d) } },
-            new { Status = PurchaseOrderStatus.Draft, Vendor = 0, Description = "DEMO PO NHÁP", Lines = new[] { ("SM-SW-001", 2d, 230_000d) } }
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 0, Description = "DEMO PO VẬT TƯ GIÁ VỐN THỰC TẾ", Lines = new[] { ("MAT-LED-001", 20m, 400_000m), ("ELEC-TV-001", 2m, 10_500_000m) } },
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 1, Description = "DEMO PO SERIAL NHÀ SẢN XUẤT", Lines = new[] { ("ELEC-WM-001", 2m, 7_200_000m), ("SM-CAM-001", 3m, 470_000m) } },
+            new { Status = PurchaseOrderStatus.Confirmed, Vendor = 2, Description = "DEMO PO VÁN VÀ NỘI THẤT", Lines = new[] { ("MAT-MDF-001", 10m, 620_000m), ("FURN-CHR-001", 4m, 870_000m) } },
+            new { Status = PurchaseOrderStatus.Draft, Vendor = 0, Description = "DEMO PO NHÁP", Lines = new[] { ("SM-SW-001", 2m, 230_000m) } }
         };
 
         for (var orderIndex = 0; orderIndex < definitions.Length; orderIndex++)
@@ -78,7 +78,7 @@ public class PurchaseOrderSeeder
             {
                 if (!products.TryGetValue(reference, out var product)) continue;
                 var total = quantity * unitPrice;
-                var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
+                var taxAmount = total * (tax.Percentage ?? 0m) / 100m;
                 var manufacturerSerials = product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial
                     ? Enumerable.Range(1, Convert.ToInt32(quantity))
                         .Select(index => $"MFG-{reference}-{orderIndex + 1}-{index}").ToList()

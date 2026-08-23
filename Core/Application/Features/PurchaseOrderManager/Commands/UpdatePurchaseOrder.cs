@@ -1,6 +1,7 @@
 using Application.Common.Repositories;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -63,6 +64,7 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
                 || !Enum.IsDefined(typeof(PurchaseOrderStatus), statusValue))
                 throw new InvalidOperationException("Invalid purchase order status.");
             var requestedStatus = (PurchaseOrderStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.OrderDate, requestedStatus == PurchaseOrderStatus.Confirmed);
             if (entity.OrderStatus == PurchaseOrderStatus.Draft
                 && requestedStatus is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Archived)
                 throw new InvalidOperationException("Đơn mua hàng Nháp phải được xóa hoặc xác nhận; không thể chuyển thẳng sang Hủy/Lưu trữ.");

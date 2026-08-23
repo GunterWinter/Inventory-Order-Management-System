@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
@@ -36,60 +36,60 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
         var salesTotal = await _context.SalesOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .SumAsync(x => (double?)x.Quantity, cancellationToken);
+            .SumAsync(x => (decimal?)x.Quantity, cancellationToken);
 
         var salesReturnTotal = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleName == nameof(SalesReturn) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
+            .SumAsync(x => (decimal?)x.Movement, cancellationToken);
 
         var purchaseTotal = await _context.PurchaseOrderItem
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .SumAsync(x => (double?)x.Quantity, cancellationToken);
+            .SumAsync(x => (decimal?)x.Quantity, cancellationToken);
 
         var purchaseReturnTotal = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleName == nameof(PurchaseReturn) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
+            .SumAsync(x => (decimal?)x.Movement, cancellationToken);
 
         var transferOutTotal = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleName == nameof(TransferOut) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
+            .SumAsync(x => (decimal?)x.Movement, cancellationToken);
 
         var transferInTotal = await _context.InventoryTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleName == nameof(TransferIn) && x.Status == InventoryTransactionStatus.Confirmed && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => (double?)x.Movement, cancellationToken);
+            .SumAsync(x => (decimal?)x.Movement, cancellationToken);
 
         var confirmedSalesAmount = await _context.Set<SalesOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
-            .SumAsync(x => x.BeforeTaxAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.BeforeTaxAmount ?? 0m, cancellationToken);
 
         var customerObligationAmount = await _context.Set<SalesOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
-            .SumAsync(x => x.AfterTaxAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.AfterTaxAmount ?? 0m, cancellationToken);
 
         var confirmedPurchaseAmount = await _context.Set<PurchaseOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
-            .SumAsync(x => x.BeforeTaxAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.BeforeTaxAmount ?? 0m, cancellationToken);
 
         var vendorObligationAmount = await _context.Set<PurchaseOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
-            .SumAsync(x => x.AfterTaxAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.AfterTaxAmount ?? 0m, cancellationToken);
 
         var salesPaidAmount = await _context.Set<CashTransaction>()
             .AsNoTracking()
@@ -100,7 +100,7 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
                     order.Id == x.SourceModuleId
                     && !order.IsDeleted
                     && order.OrderStatus == SalesOrderStatus.Confirmed))
-            .SumAsync(x => x.PaidAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.PaidAmount ?? 0m, cancellationToken);
 
         var purchasePaidAmount = await _context.Set<CashTransaction>()
             .AsNoTracking()
@@ -111,12 +111,12 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
                     order.Id == x.SourceModuleId
                     && !order.IsDeleted
                     && order.OrderStatus == PurchaseOrderStatus.Confirmed))
-            .SumAsync(x => x.PaidAmount ?? 0d, cancellationToken);
+            .SumAsync(x => x.PaidAmount ?? 0m, cancellationToken);
 
         var cashBalance = await _context.Set<CashAccount>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .SumAsync(x => x.CurrentBalance ?? 0d, cancellationToken);
+            .SumAsync(x => x.CurrentBalance ?? 0m, cancellationToken);
 
         var inventoryQuantity = await _context.InventoryTransaction
             .AsNoTracking()
@@ -124,7 +124,7 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .Where(x => x.Status == InventoryTransactionStatus.Confirmed
                 && x.Product!.Physical == true
                 && x.Warehouse!.SystemWarehouse == false)
-            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+            .SumAsync(x => x.Stock ?? 0m, cancellationToken);
 
         var materialExportCount = await _context.Set<MaterialExport>()
             .AsNoTracking()
@@ -142,8 +142,8 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             ConfirmedSalesAmount = confirmedSalesAmount,
             ConfirmedPurchaseAmount = confirmedPurchaseAmount,
             CashBalance = cashBalance,
-            CustomerReceivable = Math.Max(0d, customerObligationAmount - salesPaidAmount),
-            VendorDebt = Math.Max(0d, vendorObligationAmount - purchasePaidAmount),
+            CustomerReceivable = Math.Max(0m, customerObligationAmount - salesPaidAmount),
+            VendorDebt = Math.Max(0m, vendorObligationAmount - purchasePaidAmount),
             InventoryQuantity = inventoryQuantity,
             MaterialExportCount = materialExportCount
         };

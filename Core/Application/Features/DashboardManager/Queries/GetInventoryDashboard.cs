@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
@@ -21,7 +21,7 @@ public sealed record RecentInventoryTransactionDashboardDto
     public string? Number { get; init; }
     public string? WarehouseName { get; init; }
     public string? ProductName { get; init; }
-    public double Stock { get; init; }
+    public decimal Stock { get; init; }
     public string? ModuleName { get; init; }
 }
 
@@ -63,7 +63,7 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                 Number = x.Number,
                 WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
                 ProductName = x.Product != null ? x.Product.Name : null,
-                Stock = x.Stock ?? 0d,
+                Stock = x.Stock ?? 0m,
                 ModuleName = x.ModuleName
             })
             .ToListAsync(cancellationToken);
@@ -113,7 +113,7 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                         Width = 2,
                         YName = "y",
                         Name = wh ?? "",
-                        ColumnSpacing = 0.1,
+                        ColumnSpacing = 0.1m,
                         TooltipMappingName = "tooltipMappingName",
                         DataSource = inventoryStockData
                             .Where(x => x.Warehouse == wh)
@@ -125,7 +125,7 @@ public class GetInventoryDashboardHandler : IRequestHandler<GetInventoryDashboar
                                 TooltipMappingName = string.IsNullOrWhiteSpace(x.ProductReferenceCode)
                                     ? x.Product ?? string.Empty
                                     : $"{x.ProductReferenceCode} - {x.Product}",
-                                Y = (int)(x.Stock ?? 0.0)
+                                Y = (int)(x.Stock ?? 0m)
                             }).ToList()
                     })
                     .ToList()

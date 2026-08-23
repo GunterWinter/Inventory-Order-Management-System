@@ -62,9 +62,9 @@ public class PurchaseOrderService
         var order = _orderRepository.GetQuery().ApplyIsDeletedFilter().SingleOrDefault(x => x.Id == orderId);
         if (order == null) return;
         var items = _itemRepository.GetQuery().ApplyIsDeletedFilter().Where(x => x.PurchaseOrderId == orderId).ToList();
-        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0d);
-        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0d);
-        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0d) + (x.TaxAmount ?? 0d)));
+        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0m);
+        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0m);
+        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0m) + (x.TaxAmount ?? 0m)));
         _orderRepository.Update(order);
         _unitOfWork.Save();
     }
@@ -83,11 +83,11 @@ public class PurchaseOrderService
             CreatedById = userId,
             Number = _numberSequence.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
             SourceModule = nameof(PurchaseOrder), SourceModuleId = order.Id,
-            TransactionType = CashTransactionType.Credit, PaidAmount = 0d
+            TransactionType = CashTransactionType.Credit, PaidAmount = 0m
         };
-        var amount = order.AfterTaxAmount ?? order.PurchaseOrderItemList.Sum(x => x.AfterTaxAmount ?? 0d);
-        var paid = obligation.PaidAmount ?? 0d;
-        if (paid > amount + 0.000001d)
+        var amount = order.AfterTaxAmount ?? order.PurchaseOrderItemList.Sum(x => x.AfterTaxAmount ?? 0m);
+        var paid = obligation.PaidAmount ?? 0m;
+        if (paid > amount + 0.000001m)
             throw new InvalidOperationException("Purchase-order total cannot be lower than the amount already paid.");
         obligation.TransactionDate = order.OrderDate;
         obligation.Amount = amount;
@@ -194,13 +194,13 @@ public class PurchaseOrderService
     {
         if (await _paymentRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.CashTransaction != null
             && !x.CashTransaction.IsDeleted && x.CashTransaction.SourceModule == nameof(PurchaseOrder)
-            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0d, ct))
+            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0m, ct))
             throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì đã có lịch sử thanh toán. Hãy hoàn tác các lần thanh toán trước.");
         if (await _queryContext.Set<PurchaseReturn>().AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == order.Id
             && x.Status != PurchaseReturnStatus.Cancelled, ct))
             throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì còn phiếu trả hàng mua đang hiệu lực. Hãy hủy phiếu trả hàng trước.");
         if (await _costAllocationRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == order.Id
-            && x.CustomerId != null && (x.Quantity ?? 0d) > 0d, ct))
+            && x.CustomerId != null && (x.Quantity ?? 0m) > 0m, ct))
             throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì vật tư đã được phân bổ cho công trình. Hãy hoàn tác phân bổ trước.");
 
         var itemIds = order.PurchaseOrderItemList.Select(x => x.Id).ToList();
@@ -255,14 +255,14 @@ public class PurchaseOrderService
             var balanceWithoutReceipt = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
                 .Where(x => !x.IsDeleted && x.Status == InventoryTransactionStatus.Confirmed
                     && x.ProductId == transaction.ProductId && x.WarehouseId == transaction.WarehouseId && x.Id != transaction.Id)
-                .SumAsync(x => x.Stock ?? 0d, ct);
-            if (balanceWithoutReceipt < -0.000001d)
+                .SumAsync(x => x.Stock ?? 0m, ct);
+            if (balanceWithoutReceipt < -0.000001m)
             {
                 var product = order.PurchaseOrderItemList.FirstOrDefault(x => x.Id == transaction.ModuleItemId)?.Product;
                 var warehouse = order.PurchaseOrderItemList.FirstOrDefault(x => x.Id == transaction.ModuleItemId)?.Warehouse;
                 throw new InvalidOperationException(
                     $"Không thể hủy PO {order.Number}: tồn của {product?.Name ?? "hàng hóa"} tại " +
-                    $"{warehouse?.Name ?? "kho nhập"} không đủ để hoàn tác số lượng {transaction.Movement ?? 0d}. " +
+                    $"{warehouse?.Name ?? "kho nhập"} không đủ để hoàn tác số lượng {transaction.Movement ?? 0m}. " +
                     "Hàng đã được xuất dùng hoặc chuyển đi; cần hoàn tác chứng từ phụ thuộc trước.");
             }
         }
@@ -275,7 +275,7 @@ public class PurchaseOrderService
         var accounts = transactions.Select(x => x.CashAccountId).ToList();
         foreach (var transaction in transactions)
         {
-            if ((transaction.PaidAmount ?? 0d) > 0d)
+            if ((transaction.PaidAmount ?? 0m) > 0m)
                 throw new InvalidOperationException("Không thể hủy đơn mua hàng đã phát sinh thanh toán. Hãy hoàn tác thanh toán trước.");
             transaction.UpdatedById = userId;
             _cashRepository.Delete(transaction);
@@ -286,13 +286,13 @@ public class PurchaseOrderService
 
     private static bool IsPhysicalInventoryItem(PurchaseOrderItem item) => item.Product?.Physical == true
         && !string.IsNullOrWhiteSpace(item.ProductId) && !string.IsNullOrWhiteSpace(item.WarehouseId)
-        && (item.Quantity ?? 0d) > 0d;
+        && (item.Quantity ?? 0m) > 0m;
     private static InventoryTransactionStatus ToInventoryStatus(PurchaseOrderStatus? status) => status switch
     {
         PurchaseOrderStatus.Confirmed or PurchaseOrderStatus.Archived => InventoryTransactionStatus.Confirmed,
         PurchaseOrderStatus.Cancelled => InventoryTransactionStatus.Cancelled,
         _ => InventoryTransactionStatus.Draft
     };
-    private static CashTransactionStatus PaymentStatus(double paid, double amount) => amount <= 0d || paid >= amount
-        ? CashTransactionStatus.Paid : paid > 0d ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid;
+    private static CashTransactionStatus PaymentStatus(decimal paid, decimal amount) => amount <= 0m || paid >= amount
+        ? CashTransactionStatus.Paid : paid > 0m ? CashTransactionStatus.PartiallyPaid : CashTransactionStatus.Unpaid;
 }

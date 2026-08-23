@@ -141,6 +141,7 @@ const App = {
                 salesType: state.salesType
             });
             const { serialTracked, productChanged, ...values } = selection;
+            values.availableStock = getAvailableStock(values.productId, values.warehouseId);
             Object.assign(row, values);
             if (productChanged) clearSerialSelection(row);
             applySalesOrderItemAmounts(row);
@@ -150,17 +151,19 @@ const App = {
             const grid = secondaryGrid?.obj;
             if (!grid || !row || !values) return;
             const numberFormatter = value => NumberFormatManager.formatToLocale(value ?? 0);
+            const moneyFormatter = value => NumberFormatManager.formatMoneyToLocale(value ?? 0);
             GridInteractionManager.syncBatchRowValues(grid, {
                 rowData: row,
                 editorElement,
                 values,
                 formatters: {
                     warehouseId: (value, data) => data.warehouseName ?? '',
-                    unitPrice: numberFormatter,
+                    availableStock: numberFormatter,
+                    unitPrice: moneyFormatter,
                     quantity: numberFormatter,
-                    total: numberFormatter,
-                    taxAmount: numberFormatter,
-                    afterTaxAmount: numberFormatter
+                    total: moneyFormatter,
+                    taxAmount: moneyFormatter,
+                    afterTaxAmount: moneyFormatter
                 }
             });
         };
@@ -199,19 +202,24 @@ const App = {
             rowData.productSerialNumbers = '';
         };
         const applySerialSelection = (rowData, selectedSerials) => {
-            if (selectedSerials === null) return false;
+            if (selectedSerials === null) return null;
             const selection = SalesOrderItemEditor.normalizeSerialSelection(selectedSerials);
             rowData.productSerialIds = selection.ids;
             rowData.productSerialNumbers = selection.numbers;
             rowData.quantity = selection.quantity;
-            rowData.total = Number(rowData.unitPrice ?? 0) * selection.quantity;
-            return true;
+            const amounts = applySalesOrderItemAmounts(rowData);
+            return {
+                productSerialIds: selection.ids,
+                productSerialNumbers: selection.numbers,
+                ...amounts
+            };
         };
         const enrichSalesOrderItem = (item) => ({
             ...item,
             productId: normalizeLookupId(item.productId),
             warehouseId: normalizeLookupId(item.warehouseId),
             taxId: normalizeLookupId(item.taxId),
+            availableStock: getAvailableStock(item.productId, item.warehouseId),
             productSerialIds: Array.isArray(item.productSerialIds)
                 ? item.productSerialIds.map(normalizeLookupId).filter(Boolean)
                 : [],
@@ -352,6 +360,7 @@ const App = {
             },
             createSecondaryData: async (unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds) => {
                 try {
+                    if (productSerialIds?.length) quantity = productSerialIds.length;
                     const response = await AxiosManager.post('/SalesOrderItem/CreateSalesOrderItem', {
                         unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, createdById, productSerialIds
                     });
@@ -362,6 +371,7 @@ const App = {
             },
             updateSecondaryData: async (id, unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds) => {
                 try {
+                    if (productSerialIds?.length) quantity = productSerialIds.length;
                     const response = await AxiosManager.post('/SalesOrderItem/UpdateSalesOrderItem', {
                         id, unitPrice, quantity, summary, productId, warehouseId, warrantyMonths, taxId, salesOrderId, updatedById, productSerialIds
                     });
@@ -597,9 +607,9 @@ const App = {
             refreshPaymentSummary: async (id) => {
                 const record = state.mainData.find(item => item.id === id);
                 if (record) {
-                    state.subTotalAmount = NumberFormatManager.formatToLocale(record.beforeTaxAmount ?? 0);
-                    state.taxAmount = NumberFormatManager.formatToLocale(record.taxAmount ?? 0);
-                    state.totalAmount = NumberFormatManager.formatToLocale(record.afterTaxAmount ?? 0);
+                    state.subTotalAmount = NumberFormatManager.formatMoneyToLocale(record.beforeTaxAmount ?? 0);
+                    state.taxAmount = NumberFormatManager.formatMoneyToLocale(record.taxAmount ?? 0);
+                    state.totalAmount = NumberFormatManager.formatMoneyToLocale(record.afterTaxAmount ?? 0);
                 }
             },
             onSalesTypeChanged: async (newSalesType) => {
@@ -647,9 +657,9 @@ const App = {
                 const subTotal = rows.reduce((total, item) => total + Number(item.total ?? 0), 0);
                 const taxTotal = rows.reduce((total, item) => total + Number(item.taxAmount ?? 0), 0);
                 const grandTotal = rows.reduce((total, item) => total + Number(item.afterTaxAmount ?? 0), 0);
-                state.subTotalAmount = NumberFormatManager.formatToLocale(subTotal);
-                state.taxAmount = NumberFormatManager.formatToLocale(taxTotal);
-                state.totalAmount = NumberFormatManager.formatToLocale(grandTotal);
+                state.subTotalAmount = NumberFormatManager.formatMoneyToLocale(subTotal);
+                state.taxAmount = NumberFormatManager.formatMoneyToLocale(taxTotal);
+                state.totalAmount = NumberFormatManager.formatMoneyToLocale(grandTotal);
             },
             handleFormSubmit: async () => {
                 state.isSubmitting = true;
@@ -1204,13 +1214,13 @@ const App = {
                     moduleItemId: normalizeLookupId(rowData.id),
                     selectedIds: Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds : []
                 });
-                if (!applySerialSelection(rowData, selectedSerials)) return;
-
+                const serialValues = applySerialSelection(rowData, selectedSerials);
+                if (!serialValues) return;
+                writeSalesOrderBatchFields(rowData, serialValues);
                 const rowIndex = secondaryGrid.obj.getRows().indexOf(row);
                 if (rowIndex >= 0) {
-                    secondaryGrid.obj.updateCell(rowIndex, 'productSerialNumbers', rowData.productSerialNumbers);
-                    secondaryGrid.obj.updateCell(rowIndex, 'quantity', rowData.quantity);
-                    secondaryGrid.obj.updateCell(rowIndex, 'total', rowData.total);
+                    ['quantity', 'total', 'taxAmount', 'afterTaxAmount'].forEach(field =>
+                        secondaryGrid.obj.updateCell(rowIndex, field, serialValues[field]));
                 }
                 secondaryGrid.syncSerialPickerRows();
             },
@@ -1291,6 +1301,7 @@ const App = {
                                                 salesType: state.salesType
                                             });
                                             const { serialTracked, productChanged, ...rowValues } = selection;
+                                            rowValues.availableStock = getAvailableStock(rowValues.productId, rowValues.warehouseId);
                                             Object.assign(args.rowData, rowValues);
                                             if (productChanged) clearSerialSelection(args.rowData);
                                             Object.assign(rowValues, applySalesOrderItemAmounts(args.rowData));
@@ -1402,6 +1413,8 @@ const App = {
                                             const selectedWarehouse = warehouseOptions.find(item => item.id === warehouseId);
                                             args.rowData.warehouseId = selectedWarehouse ? warehouseId : null;
                                             args.rowData.warehouseName = selectedWarehouse?.name ?? '';
+                                            args.rowData.availableStock = getAvailableStock(args.rowData.productId, args.rowData.warehouseId);
+                                            updateEditorRowCell(args.element, 'availableStock', args.rowData.availableStock);
                                             clearSerialSelection(args.rowData);
                                         },
                                         floatLabelType: 'Never'
@@ -1409,6 +1422,14 @@ const App = {
                                     warehouseObj.appendTo(args.element);
                                 }
                             }
+                        },
+                        {
+                            field: 'availableStock',
+                            headerText: 'Tồn khả dụng',
+                            width: 150,
+                            allowEditing: false,
+                            textAlign: 'Right',
+                            valueAccessor: (field, data) => formatQuantity(data[field] ?? 0)
                         },
                         {
                             field: 'warrantyMonths',
@@ -1506,7 +1527,7 @@ const App = {
                             // Validate the completed row in actionBegin. Cell-level validation
                             // fires too early while the user is still choosing product/warehouse.
                             validationRules: { required: false },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', format: 'N6', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let quantityElem = document.createElement('input');
@@ -1525,9 +1546,9 @@ const App = {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
                                         readonly: isSerialTrackedProduct(args.rowData.productId),
-                                        format: 'n0',
-                                        decimals: 0,
-                                        validateDecimalOnType: true,
+                                        format: 'n6',
+                                        decimals: 6,
+                                        validateDecimalOnType: false,
                                         change: (e) => {
                                             args.rowData.quantity = Number(e.value ?? 0);
                                             args.rowData.total = args.rowData.quantity * Number(args.rowData.unitPrice ?? priceObj?.value ?? 0);
@@ -1980,21 +2001,15 @@ const App = {
                         }
 
                         const quantity = Number(data.quantity ?? 0);
-                        const currentRow = state.secondaryData.find(item => item.id === data.id);
-                        const currentQuantity = args.action === 'edit'
-                            && currentRow?.productId === data.productId
-                            && currentRow?.warehouseId === data.warehouseId
-                            ? Number(currentRow.quantity ?? 0)
-                            : 0;
-                        const maxQuantity = getAvailableStock(data.productId, data.warehouseId) + currentQuantity;
+                        const maxQuantity = getAvailableStock(data.productId, data.warehouseId);
 
                         if (selectedProduct?.physical !== false && !isSerialTracked && quantity > maxQuantity) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'error',
                                 title: 'Lưu thất bại',
-                                text: `Quantity must not exceed remaining stock (${formatQuantity(maxQuantity)}).`,
-                                confirmButtonText: 'OK'
+                                text: `Số lượng không được vượt quá tồn khả dụng (${formatQuantity(maxQuantity)}).`,
+                                confirmButtonText: 'Đồng ý'
                             });
                         }
                     },
@@ -2018,6 +2033,10 @@ const App = {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
+                            if (data?.productSerialIds?.length) {
+                                data.quantity = data.productSerialIds.length;
+                                applySalesOrderItemAmounts(data);
+                            }
 
                             try {
                                 const response = await services.createSecondaryData(data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
@@ -2055,6 +2074,10 @@ const App = {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
+                            if (data?.productSerialIds?.length) {
+                                data.quantity = data.productSerialIds.length;
+                                applySalesOrderItemAmounts(data);
+                            }
 
                             try {
                                 const response = await services.updateSecondaryData(data?.id, data?.unitPrice, data?.quantity, data?.summary, data?.productId, data?.warehouseId, data?.warrantyMonths, data?.taxId, salesOrderId, userId, data?.productSerialIds ?? []);
@@ -2237,9 +2260,9 @@ const App = {
                             <span class="badge ${statusKey === 'Paid' ? 'bg-success' : (statusKey === 'Partially Paid' ? 'bg-warning text-dark' : 'bg-secondary')}">${statusText}</span>
                         </div>
                         <div class="row mx-n1 mb-4">
-                            <div class="col-12 col-sm-4 px-1 mb-2 mb-sm-0"><div class="payment-summary-box"><div class="small text-muted">${text('Tổng tiền đơn hàng', 'Order Total')}</div><div class="font-weight-bold mt-2">${NumberFormatManager.formatToLocale(totalAmountValue)}</div></div></div>
-                            <div class="col-12 col-sm-4 px-1 mb-2 mb-sm-0"><div class="payment-summary-box"><div class="small text-muted">${text('Đã thanh toán', 'Paid')}</div><div class="font-weight-bold text-success mt-2">${NumberFormatManager.formatToLocale(paidAmountValue)}</div></div></div>
-                            <div class="col-12 col-sm-4 px-1"><div class="payment-summary-box"><div class="small text-muted">${text('Còn lại', 'Remaining')}</div><div class="font-weight-bold text-danger mt-2">${NumberFormatManager.formatToLocale(remainingAmountValue)}</div></div></div>
+                            <div class="col-12 col-sm-4 px-1 mb-2 mb-sm-0"><div class="payment-summary-box"><div class="small text-muted">${text('Tổng tiền đơn hàng', 'Order Total')}</div><div class="font-weight-bold mt-2">${NumberFormatManager.formatMoneyToLocale(totalAmountValue)}</div></div></div>
+                            <div class="col-12 col-sm-4 px-1 mb-2 mb-sm-0"><div class="payment-summary-box"><div class="small text-muted">${text('Đã thanh toán', 'Paid')}</div><div class="font-weight-bold text-success mt-2">${NumberFormatManager.formatMoneyToLocale(paidAmountValue)}</div></div></div>
+                            <div class="col-12 col-sm-4 px-1"><div class="payment-summary-box"><div class="small text-muted">${text('Còn lại', 'Remaining')}</div><div class="font-weight-bold text-danger mt-2">${NumberFormatManager.formatMoneyToLocale(remainingAmountValue)}</div></div></div>
                         </div>
                         <div class="payment-form-card">
                             <div class="form-group mb-3">
@@ -2248,7 +2271,7 @@ const App = {
                             </div>
                             <div class="form-group mb-3">
                                 <label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Thanh toán lần này', 'Payment This Time')}</label>
-                                <input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatToLocale(remainingAmountValue)}">
+                                <input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatMoneyToLocale(remainingAmountValue)}">
                             </div>
                             <div class="form-group mb-0">
                                 <label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label>
@@ -2304,8 +2327,7 @@ const App = {
                     const response = await services.upsertSalesOrderPayment(payload);
                     if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Payment could not be saved.');
                     await methods.populateMainData();
-                    mainGrid.obj.setProperties({ dataSource: state.mainData }, true);
-                    mainGrid.obj.refresh();
+                    mainGrid.refresh();
                     const savedStatus = response?.data?.content?.status;
                     Swal.fire({
                         icon: 'success',

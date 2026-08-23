@@ -6,6 +6,7 @@ using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -97,6 +98,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
         }
 
         var requestedStatus = (MaterialExportStatus)statusValue;
+        DocumentDateGuard.EnsureCanPost(request.MaterialExportDate, requestedStatus == MaterialExportStatus.Confirmed);
         MaterialExport? entity = null;
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -132,9 +134,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     .Where(x => x.SourceModule == nameof(MaterialExport) && x.SourceModuleId == entity.Id)
                     .ToListAsync(ct);
                 var sourceTransactionIds = sourceTransactions.Select(x => x.Id).ToList();
-                var hasPayment = sourceTransactions.Any(x => (x.PaidAmount ?? 0d) > 0d)
+                var hasPayment = sourceTransactions.Any(x => (x.PaidAmount ?? 0m) > 0m)
                     || await _queryContext.Set<CashTransactionPayment>().AsNoTracking()
-                        .AnyAsync(x => !x.IsDeleted && sourceTransactionIds.Contains(x.CashTransactionId) && x.Amount != 0d, ct);
+                        .AnyAsync(x => !x.IsDeleted && sourceTransactionIds.Contains(x.CashTransactionId) && x.Amount != 0m, ct);
                 if (hasPayment)
                     throw new InvalidOperationException($"Không thể hủy phiếu xuất vật tư {entity.Number} vì chi phí nguồn đã có thanh toán. Hãy hoàn tác thanh toán trước.");
 
@@ -219,7 +221,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             }
 
             var selectedAcrossDocument = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var purchaseOrderCosts = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var purchaseOrderCosts = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var line in lines)
             {
@@ -227,8 +229,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 {
                     throw new InvalidOperationException("All material export lines must be Draft before confirmation.");
                 }
-                var movement = line.Movement ?? 0d;
-                if (line.Product?.Physical != true || movement <= 0d)
+                var movement = line.Movement ?? 0m;
+                if (line.Product?.Physical != true || movement <= 0m)
                 {
                     throw new InvalidOperationException("Material exports require a physical product and a positive quantity.");
                 }
@@ -240,8 +242,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                             && x.ProductId == line.ProductId
                             && x.WarehouseId == entity.WarehouseId
                             && x.Status == InventoryTransactionStatus.Confirmed)
-                        .SumAsync(x => x.Stock ?? 0d, ct);
-                    if (movement > availableStock + 0.000001d)
+                        .SumAsync(x => x.Stock ?? 0m, ct);
+                    if (movement > availableStock + 0.000001m)
                         throw new InvalidOperationException($"Not enough stock for {line.Product.Name}. Available: {availableStock}.");
 
                     var costResolution = await _inventoryCostResolver.ResolveAsync(
@@ -265,7 +267,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     continue;
                 }
 
-                if (Math.Abs(movement - Math.Round(movement)) > 0.000001d)
+                if (Math.Abs(movement - Math.Round(movement)) > 0.000001m)
                 {
                     throw new InvalidOperationException("Material export quantity must be a positive whole number.");
                 }
@@ -365,7 +367,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 await _unitOfWork.SaveAsync(ct);
             }
 
-            foreach (var pair in purchaseOrderCosts.Where(x => x.Value > 0d))
+            foreach (var pair in purchaseOrderCosts.Where(x => x.Value > 0m))
             {
                 var costDescription = pair.Key.StartsWith("FALLBACK:", StringComparison.Ordinal)
                     ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn hàng hóa dự phòng)"
@@ -393,7 +395,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
     private async Task CreateProjectCostTransactionAsync(
         MaterialExport materialExport,
         string purchaseOrderId,
-        double amount,
+        decimal amount,
         string cashCategoryId,
         string description,
         string? userId,
@@ -407,7 +409,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             TransactionType = CashTransactionType.Credit,
             Status = CashTransactionStatus.Unpaid,
             Amount = amount,
-            PaidAmount = 0d,
+            PaidAmount = 0m,
             Description = description,
             CashAccountId = null,
             CashCategoryId = cashCategoryId,

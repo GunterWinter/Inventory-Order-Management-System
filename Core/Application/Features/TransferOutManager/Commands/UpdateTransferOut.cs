@@ -3,6 +3,7 @@ using Application.Features.InventoryTransactionManager;
 using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -68,6 +69,7 @@ public class UpdateTransferOutHandler : IRequestHandler<UpdateTransferOutRequest
                 || !Enum.IsDefined(typeof(TransferStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu chuyển kho không hợp lệ.");
             var requestedStatus = (TransferStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.TransferReleaseDate, requestedStatus == TransferStatus.Confirmed);
             if (entity.Status == TransferStatus.Draft)
             {
                 if (requestedStatus is TransferStatus.Cancelled or TransferStatus.Archived)

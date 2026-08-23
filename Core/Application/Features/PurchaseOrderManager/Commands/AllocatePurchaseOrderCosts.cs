@@ -20,8 +20,8 @@ public class AllocatePurchaseOrderCostsItem
 {
     public string? PurchaseOrderItemId { get; set; }
     public string? CustomerId { get; set; }
-    public double Quantity { get; set; }
-    public double UnitPrice { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
 }
 
 public class AllocatePurchaseOrderCostsRequest : IRequest<AllocatePurchaseOrderCostsResult>
@@ -130,7 +130,7 @@ public class AllocatePurchaseOrderCostsHandler
             }
 
             obligation = existingObligations.SingleOrDefault();
-            if ((obligation?.PaidAmount ?? 0d) > 0d)
+            if ((obligation?.PaidAmount ?? 0m) > 0m)
             {
                 throw new InvalidOperationException("A partially or fully paid purchase order cannot be reallocated.");
             }
@@ -143,7 +143,7 @@ public class AllocatePurchaseOrderCostsHandler
 
             var itemMap = purchaseOrderItems.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var requestedItems = (request.Items ?? new List<AllocatePurchaseOrderCostsItem>())
-                .Where(x => x.Quantity > 0d)
+                .Where(x => x.Quantity > 0m)
                 .GroupBy(x => new { x.PurchaseOrderItemId, x.CustomerId })
                 .Select(g => new AllocatePurchaseOrderCostsItem
                 {
@@ -179,7 +179,7 @@ public class AllocatePurchaseOrderCostsHandler
                 var requestedQuantity = requestedItems
                     .Where(x => string.Equals(x.PurchaseOrderItemId, purchaseOrderItem.Id, StringComparison.OrdinalIgnoreCase))
                     .Sum(x => x.Quantity);
-                if (requestedQuantity > (purchaseOrderItem.Quantity ?? 0d) + 0.000001d)
+                if (requestedQuantity > (purchaseOrderItem.Quantity ?? 0m) + 0.000001m)
                 {
                     throw new InvalidOperationException(
                         $"Allocated quantity exceeds purchased quantity for {purchaseOrderItem.Product?.Name ?? purchaseOrderItem.ProductId}.");
@@ -232,7 +232,7 @@ public class AllocatePurchaseOrderCostsHandler
 
             foreach (var purchaseOrderItem in purchaseOrderItems)
             {
-                purchaseOrderItem.AllocatedQuantity = 0d;
+                purchaseOrderItem.AllocatedQuantity = 0m;
                 _purchaseOrderItemRepository.Update(purchaseOrderItem);
             }
             await _unitOfWork.SaveAsync(ct);
@@ -243,8 +243,8 @@ public class AllocatePurchaseOrderCostsHandler
                 var allocated = requestedItems
                     .Where(x => string.Equals(x.PurchaseOrderItemId, purchaseOrderItem.Id, StringComparison.OrdinalIgnoreCase))
                     .Sum(x => x.Quantity);
-                var remaining = (purchaseOrderItem.Quantity ?? 0d) - allocated;
-                if (remaining > 0.000001d)
+                var remaining = (purchaseOrderItem.Quantity ?? 0m) - allocated;
+                if (remaining > 0.000001m)
                 {
                     finalItems.Add(new AllocatePurchaseOrderCostsItem
                     {
@@ -288,8 +288,8 @@ public class AllocatePurchaseOrderCostsHandler
                     if (purchaseOrderItem.Product?.Physical == true
                         && (purchaseOrderItem.Product.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.None)
                     {
-                        var allocationQuantity = allocation.Quantity ?? 0d;
-                        if (Math.Abs(allocationQuantity - Math.Round(allocationQuantity)) > 0.000001d)
+                        var allocationQuantity = allocation.Quantity ?? 0m;
+                        if (Math.Abs(allocationQuantity - Math.Round(allocationQuantity)) > 0.000001m)
                         {
                             throw new InvalidOperationException("Serial-tracked products require a whole-number quantity.");
                         }
@@ -373,7 +373,7 @@ public class AllocatePurchaseOrderCostsHandler
 
             await _unitOfWork.SaveAsync(ct);
 
-            var totalAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? 0d);
+            var totalAmount = purchaseOrderItems.Sum(x => x.AfterTaxAmount ?? 0m);
             var isNewObligation = obligation == null;
             obligation ??= new CashTransaction
                 {
@@ -387,7 +387,7 @@ public class AllocatePurchaseOrderCostsHandler
             obligation.TransactionType = CashTransactionType.Credit;
             obligation.Status = CashTransactionStatus.Unpaid;
             obligation.Amount = totalAmount;
-            obligation.PaidAmount = 0d;
+            obligation.PaidAmount = 0m;
             obligation.Description = $"{purchaseOrder.Vendor?.Name} - {purchaseOrder.Number}".Trim(' ', '-');
             obligation.CashAccountId = null;
             obligation.CashCategoryId = request.CashCategoryId ?? obligation.CashCategoryId;
@@ -414,8 +414,8 @@ public class AllocatePurchaseOrderCostsHandler
         };
     }
 
-    private static double ResolveUnitPrice(PurchaseOrderItem item)
+    private static decimal ResolveUnitPrice(PurchaseOrderItem item)
     {
-        return item.UnitPrice ?? 0d;
+        return item.UnitPrice ?? 0m;
     }
 }

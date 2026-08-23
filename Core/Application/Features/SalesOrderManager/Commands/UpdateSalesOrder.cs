@@ -1,6 +1,7 @@
 using Application.Common.Repositories;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 
@@ -63,6 +64,7 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
                 || !Enum.IsDefined(typeof(SalesOrderStatus), statusValue))
                 throw new InvalidOperationException("Invalid sales order status.");
             var requestedStatus = (SalesOrderStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.OrderDate, requestedStatus == SalesOrderStatus.Confirmed);
             if (entity.OrderStatus == SalesOrderStatus.Draft
                 && requestedStatus is SalesOrderStatus.Cancelled or SalesOrderStatus.Archived)
                 throw new InvalidOperationException("Đơn bán hàng Nháp phải được xóa hoặc xác nhận; không thể chuyển thẳng sang Hủy/Lưu trữ.");

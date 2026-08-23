@@ -3,6 +3,7 @@ using Application.Features.CashTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,9 @@ public class UpsertSalesOrderPaymentResult
 {
     public string? CashTransactionId { get; init; }
     public string? CashAccountId { get; init; }
-    public double Amount { get; init; }
-    public double PaidAmount { get; init; }
-    public double RemainingAmount { get; init; }
+    public decimal Amount { get; init; }
+    public decimal PaidAmount { get; init; }
+    public decimal RemainingAmount { get; init; }
     public string? Status { get; init; }
 }
 
@@ -24,8 +25,8 @@ public class UpsertSalesOrderPaymentRequest : IRequest<UpsertSalesOrderPaymentRe
     public string? SalesOrderId { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
-    public double? PaidAmount { get; init; }
-    public double? PaymentAmount { get; init; }
+    public decimal? PaidAmount { get; init; }
+    public decimal? PaymentAmount { get; init; }
     public string? Description { get; init; }
     public DateTime? PaymentDate { get; init; }
     public string? UpdatedById { get; init; }
@@ -42,6 +43,9 @@ public class UpsertSalesOrderPaymentValidator : AbstractValidator<UpsertSalesOrd
             .WithMessage("Payment amount is required.");
         RuleFor(x => x.PaymentAmount).GreaterThan(0).When(x => x.PaymentAmount.HasValue);
         RuleFor(x => x.PaidAmount).GreaterThanOrEqualTo(0).When(x => x.PaidAmount.HasValue);
+        RuleFor(x => x.PaymentDate)
+            .Must(value => !value.HasValue || value.Value.Date <= AppDateTime.VietnamNow().Date)
+            .WithMessage("Ngày thanh toán không được lớn hơn ngày hiện tại.");
     }
 }
 
@@ -101,7 +105,7 @@ public class UpsertSalesOrderPaymentHandler : IRequestHandler<UpsertSalesOrderPa
                 throw new InvalidOperationException("Cash account was not found.");
             }
 
-            var amount = salesOrder.AfterTaxAmount ?? 0d;
+            var amount = salesOrder.AfterTaxAmount ?? 0m;
 
             transaction = await _cashTransactionRepository.GetQuery()
                 .SingleOrDefaultAsync(x => !x.IsDeleted
@@ -130,17 +134,17 @@ public class UpsertSalesOrderPaymentHandler : IRequestHandler<UpsertSalesOrderPa
                 _cashTransactionRepository.Update(transaction);
             }
 
-            var previousPaidAmount = transaction.PaidAmount ?? 0d;
+            var previousPaidAmount = transaction.PaidAmount ?? 0m;
             var paidAmount = request.PaymentAmount.HasValue
                 ? previousPaidAmount + request.PaymentAmount.Value
                 : request.PaidAmount ?? previousPaidAmount;
-            if (paidAmount < previousPaidAmount - 0.000001d)
+            if (paidAmount < previousPaidAmount - 0.000001m)
             {
                 throw new InvalidOperationException("Paid amount cannot be less than the amount already paid.");
             }
-            if (paidAmount > amount + 0.000001d)
+            if (paidAmount > amount + 0.000001m)
             {
-                throw new InvalidOperationException($"Payment amount cannot exceed the remaining amount ({Math.Max(0d, amount - previousPaidAmount):N2}).");
+                throw new InvalidOperationException($"Payment amount cannot exceed the remaining amount ({Math.Max(0m, amount - previousPaidAmount):N2}).");
             }
 
             var recordedPaidAmount = await _paymentRepository.GetQuery()
@@ -150,13 +154,13 @@ public class UpsertSalesOrderPaymentHandler : IRequestHandler<UpsertSalesOrderPa
             // Backfill payment history created by the legacy Sales Order flow before
             // recording the new installment. This keeps PaidAmount and the history in sync.
             var missingHistoryAmount = previousPaidAmount - recordedPaidAmount;
-            if (missingHistoryAmount > 0.000001d)
+            if (missingHistoryAmount > 0.000001m)
             {
                 await _paymentRepository.CreateAsync(new CashTransactionPayment
                 {
                     CashTransactionId = transaction.Id,
                     CashAccountId = previousAccountId ?? request.CashAccountId,
-                    PaymentDate = transaction.TransactionDate ?? request.PaymentDate ?? DateTime.UtcNow,
+                    PaymentDate = transaction.TransactionDate ?? request.PaymentDate ?? AppDateTime.VietnamNow(),
                     Amount = missingHistoryAmount,
                     Description = transaction.Description,
                     CreatedById = request.UpdatedById
@@ -164,20 +168,20 @@ public class UpsertSalesOrderPaymentHandler : IRequestHandler<UpsertSalesOrderPa
             }
 
             var installmentAmount = paidAmount - previousPaidAmount;
-            if (installmentAmount > 0.000001d)
+            if (installmentAmount > 0.000001m)
             {
                 await _paymentRepository.CreateAsync(new CashTransactionPayment
                 {
                     CashTransactionId = transaction.Id,
                     CashAccountId = request.CashAccountId,
-                    PaymentDate = request.PaymentDate ?? DateTime.UtcNow,
+                    PaymentDate = request.PaymentDate ?? AppDateTime.VietnamNow(),
                     Amount = installmentAmount,
                     Description = request.Description,
                     CreatedById = request.UpdatedById
                 }, ct);
             }
 
-            transaction.TransactionDate = request.PaymentDate ?? transaction.TransactionDate ?? DateTime.UtcNow;
+            transaction.TransactionDate = request.PaymentDate ?? transaction.TransactionDate ?? AppDateTime.VietnamNow();
             transaction.Amount = amount;
             transaction.PaidAmount = paidAmount;
             transaction.Status = ComputePaymentStatus(paidAmount, amount);
@@ -194,23 +198,23 @@ public class UpsertSalesOrderPaymentHandler : IRequestHandler<UpsertSalesOrderPa
                 ct);
         }, cancellationToken);
 
-        var finalAmount = transaction!.Amount ?? 0d;
-        var finalPaidAmount = transaction.PaidAmount ?? 0d;
+        var finalAmount = transaction!.Amount ?? 0m;
+        var finalPaidAmount = transaction.PaidAmount ?? 0m;
         return new UpsertSalesOrderPaymentResult
         {
             CashTransactionId = transaction.Id,
             CashAccountId = transaction.CashAccountId,
             Amount = finalAmount,
             PaidAmount = finalPaidAmount,
-            RemainingAmount = Math.Max(0d, finalAmount - finalPaidAmount),
+            RemainingAmount = Math.Max(0m, finalAmount - finalPaidAmount),
             Status = transaction.Status?.ToString()
         };
     }
 
-    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    private static CashTransactionStatus ComputePaymentStatus(decimal paidAmount, decimal amount)
     {
-        if (amount <= 0d || paidAmount >= amount) return CashTransactionStatus.Paid;
-        if (paidAmount > 0d) return CashTransactionStatus.PartiallyPaid;
+        if (amount <= 0m || paidAmount >= amount) return CashTransactionStatus.Paid;
+        if (paidAmount > 0m) return CashTransactionStatus.PartiallyPaid;
         return CashTransactionStatus.Unpaid;
     }
 }

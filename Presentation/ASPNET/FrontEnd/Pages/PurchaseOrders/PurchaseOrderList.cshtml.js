@@ -125,17 +125,18 @@ const App = {
         const writePurchaseOrderBatchFields = (row, values, editorElement = null) => {
             if (!secondaryGrid?.obj || !row || !values) return;
             const numberFormatter = value => NumberFormatManager.formatToLocale(value ?? 0);
+            const moneyFormatter = value => NumberFormatManager.formatMoneyToLocale(value ?? 0);
             GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
                 rowData: row,
                 editorElement,
                 values,
                 formatters: {
                     warehouseId: (value, data) => data.warehouseName ?? '',
-                    unitPrice: numberFormatter,
+                    unitPrice: moneyFormatter,
                     quantity: numberFormatter,
-                    total: numberFormatter,
-                    taxAmount: numberFormatter,
-                    afterTaxAmount: numberFormatter
+                    total: moneyFormatter,
+                    taxAmount: moneyFormatter,
+                    afterTaxAmount: moneyFormatter
                 }
             });
         };
@@ -147,7 +148,7 @@ const App = {
             ['total', 'taxAmount', 'afterTaxAmount'].forEach(field => {
                 const cellIndex = grid.getColumnIndexByField(field);
                 if (cellIndex >= 0 && tableRow.cells[cellIndex]) {
-                    tableRow.cells[cellIndex].textContent = NumberFormatManager.formatToLocale(row[field] ?? 0);
+                    tableRow.cells[cellIndex].textContent = NumberFormatManager.formatMoneyToLocale(row[field] ?? 0);
                 }
             });
         };
@@ -160,9 +161,9 @@ const App = {
                 result.afterTax += amounts.afterTaxAmount;
                 return result;
             }, { beforeTax: 0, tax: 0, afterTax: 0 });
-            state.subTotalAmount = NumberFormatManager.formatToLocale(totals.beforeTax);
-            state.taxAmount = NumberFormatManager.formatToLocale(totals.tax);
-            state.totalAmount = NumberFormatManager.formatToLocale(totals.afterTax);
+            state.subTotalAmount = NumberFormatManager.formatMoneyToLocale(totals.beforeTax);
+            state.taxAmount = NumberFormatManager.formatMoneyToLocale(totals.tax);
+            state.totalAmount = NumberFormatManager.formatMoneyToLocale(totals.afterTax);
         };
         const validateForm = function () {
             state.errors.orderDate = '';
@@ -2553,9 +2554,9 @@ const App = {
                             </select>${accountHelpText}
                         </div>
                         <div class="purchase-payment-summary mb-3">
-                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Tổng thanh toán', 'Total Amount')}</span><strong>${NumberFormatManager.formatToLocale(totalAmountValue)}</strong></div>
-                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền đã trả', 'Paid Amount')}</span><strong class="text-success">${NumberFormatManager.formatToLocale(paidAmountValue)}</strong></div>
-                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền còn lại', 'Remaining Amount')}</span><strong class="text-danger">${NumberFormatManager.formatToLocale(remainingAmountValue)}</strong></div>
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Tổng thanh toán', 'Total Amount')}</span><strong>${NumberFormatManager.formatMoneyToLocale(totalAmountValue)}</strong></div>
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền đã trả', 'Paid Amount')}</span><strong class="text-success">${NumberFormatManager.formatMoneyToLocale(paidAmountValue)}</strong></div>
+                            <div class="purchase-payment-summary__row"><span class="text-muted">${text('Số tiền còn lại', 'Remaining Amount')}</span><strong class="text-danger">${NumberFormatManager.formatMoneyToLocale(remainingAmountValue)}</strong></div>
                         </div>
                         <div class="purchase-payment-form">
                             <div class="form-group mb-3"><label for="swal-payment-date" class="d-block font-weight-bold mb-2">${text('Ngày thanh toán', 'Payment Date')}</label><input id="swal-payment-date" type="date" class="form-control" value="${defaultPaymentDate}"></div>
@@ -2627,6 +2628,7 @@ const App = {
 
                     await methods.populateMainData();
                     mainGrid.refresh();
+                    mainGrid.obj.refresh();
                     Swal.fire({ icon: 'success', title: 'Payment successful', timer: 1000, showConfirmButton: false });
                 } catch (err) {
                     Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message ?? err.message ?? 'Please try again.' });

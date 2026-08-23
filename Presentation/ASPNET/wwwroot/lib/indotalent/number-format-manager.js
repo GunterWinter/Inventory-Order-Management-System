@@ -4,8 +4,12 @@
     const GROUP_SEPARATOR = '.';
     const DECIMAL_SEPARATOR = ',';
     const MAX_FRACTION_DIGITS = 6;
-    const MONEY_FORMAT = 'N0';
-    const MONEY_FIELD_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|sales)/i;
+    const MONEY_MIN_FRACTION_DIGITS = 0;
+    const MONEY_FORMAT = 'N2';
+    const MONEY_FIELD_PATTERN = /(price|amount|balance|debit|credit|receipt|expense|revenue|debt|paid|payment|cost|profit|cogs|subtotal|total|sales)/i;
+    const QUANTITY_FIELD_PATTERN = /(quantity|qty|stock|movement)/i;
+    const DECIMAL_FIELD_PATTERN = /(quantity|qty|stock|movement|price|amount|cost|profit|cogs|subtotal|total|rate|percentage)/i;
+    const INTEGER_FIELD_PATTERN = /(month|warranty|year|page|sequence|serial)/i;
     const numericInputHandlers = new WeakMap();
 
     function toFiniteNumber(value) {
@@ -42,7 +46,11 @@
         }).format(safeValue);
     }
 
-    function formatCurrency(value, minimumFractionDigits = 0, maximumFractionDigits = 0) {
+    function formatMoney(value) {
+        return formatNumber(value, MONEY_MIN_FRACTION_DIGITS, MAX_FRACTION_DIGITS);
+    }
+
+    function formatCurrency(value, minimumFractionDigits = MONEY_MIN_FRACTION_DIGITS, maximumFractionDigits = MAX_FRACTION_DIGITS) {
         const safeValue = toFiniteNumber(value);
 
         return new Intl.NumberFormat(VI_LOCALE, {
@@ -63,7 +71,8 @@
     }
 
     function isMoneyText(value) {
-        return MONEY_FIELD_PATTERN.test(`${value ?? ''}`);
+        const text = `${value ?? ''}`;
+        return MONEY_FIELD_PATTERN.test(text) && !QUANTITY_FIELD_PATTERN.test(text);
     }
 
     function isMoneyNumericTextBox(numericTextBox) {
@@ -71,19 +80,24 @@
             numericTextBox?.placeholder,
             numericTextBox?.element?.id,
             numericTextBox?.element?.name,
-            numericTextBox?.element?.className,
             numericTextBox?.htmlAttributes?.name,
             numericTextBox?.htmlAttributes?.id
         ].filter(Boolean).join(' '));
     }
 
-    function normalizeMoneyNumericTextBox(numericTextBox) {
-        const format = `${numericTextBox?.format ?? ''}`.toLowerCase();
-        if (format === 'n2' && isMoneyNumericTextBox(numericTextBox)) {
-            numericTextBox.format = 'n0';
-            numericTextBox.decimals = 0;
-            numericTextBox.validateDecimalOnType = false;
-        }
+    function normalizeDecimalNumericTextBox(numericTextBox) {
+        const identity = [
+            numericTextBox?.placeholder,
+            numericTextBox?.element?.id,
+            numericTextBox?.element?.name,
+            numericTextBox?.htmlAttributes?.name,
+            numericTextBox?.htmlAttributes?.id
+        ].filter(Boolean).join(' ');
+        if (!DECIMAL_FIELD_PATTERN.test(identity) || INTEGER_FIELD_PATTERN.test(identity)) return;
+
+        numericTextBox.format = 'n6';
+        numericTextBox.decimals = MAX_FRACTION_DIGITS;
+        numericTextBox.validateDecimalOnType = false;
     }
 
     function normalizeMoneyGridColumn(column) {
@@ -95,9 +109,18 @@
             column.columns.forEach(normalizeMoneyGridColumn);
         }
 
+        const columnText = getColumnText(column);
+        const moneyColumn = isMoneyText(columnText);
         const format = `${column.format ?? ''}`.toLowerCase();
-        if (format === 'n2' && isMoneyText(getColumnText(column))) {
+        if ((format === 'n0' || format === 'n2') && moneyColumn) {
             column.format = MONEY_FORMAT;
+        }
+
+        if (!column.valueAccessor && DECIMAL_FIELD_PATTERN.test(columnText) && !INTEGER_FIELD_PATTERN.test(columnText)) {
+            column.valueAccessor = (field, data) => data?.[field] == null
+                ? ''
+                : (moneyColumn ? formatMoney(data[field]) : formatNumber(data[field]));
+            column.format = undefined;
         }
     }
 
@@ -106,40 +129,16 @@
         const sign = rawValue.startsWith('-') ? '-' : '';
         const unsignedValue = sign ? rawValue.slice(1) : rawValue;
         const lastCommaIndex = unsignedValue.lastIndexOf(',');
-        const dotMatches = unsignedValue.match(/\./g) ?? [];
-        const lastDotIndex = unsignedValue.lastIndexOf('.');
-
-        // Vietnamese uses dots for grouping and commas for decimals. A single
-        // dot is also accepted as a decimal separator for keyboard/API values,
-        // except for the unambiguous three-digit grouping form (for example
-        // 345.000). This also handles Syncfusion's n6 edit value "2.000000"
-        // without turning it into 2,000,000.
-        let decimalIndex = -1;
-        if (lastCommaIndex >= 0) {
-            decimalIndex = lastCommaIndex;
-        } else if (dotMatches.length === 1) {
-            const dotFraction = unsignedValue.slice(lastDotIndex + 1).replace(/\D/g, '');
-            if (dotFraction.length === 0
-                || (dotFraction.length <= MAX_FRACTION_DIGITS && dotFraction.length !== 3)) {
-                decimalIndex = lastDotIndex;
-            }
-        }
 
         let integerPart = unsignedValue;
         let fractionPart = '';
-        let hasDecimalSeparator = false;
+        const hasDecimalSeparator = lastCommaIndex >= 0;
 
-        if (decimalIndex >= 0) {
-            const candidateFraction = unsignedValue.slice(decimalIndex + 1).replace(/\D/g, '');
-            const candidateInteger = unsignedValue.slice(0, decimalIndex);
-            const treatAsDecimal = candidateFraction.length > 0 && candidateFraction.length <= MAX_FRACTION_DIGITS;
-            const keepTrailingDecimal = candidateFraction.length === 0;
-
-            if (treatAsDecimal || keepTrailingDecimal) {
-                integerPart = candidateInteger;
-                fractionPart = candidateFraction.slice(0, MAX_FRACTION_DIGITS);
-                hasDecimalSeparator = true;
-            }
+        if (hasDecimalSeparator) {
+            integerPart = unsignedValue.slice(0, lastCommaIndex);
+            fractionPart = unsignedValue.slice(lastCommaIndex + 1)
+                .replace(/\D/g, '')
+                .slice(0, MAX_FRACTION_DIGITS);
         }
 
         integerPart = integerPart.replace(/\D/g, '');
@@ -171,9 +170,7 @@
         }
 
         const integerPart = parts.integerPart || '0';
-        const fractionSection = parts.hasDecimalSeparator && parts.fractionPart
-            ? `.${parts.fractionPart}`
-            : '';
+        const fractionSection = parts.hasDecimalSeparator ? `.${parts.fractionPart}` : '';
 
         return `${parts.sign}${integerPart}${fractionSection}`;
     }
@@ -195,7 +192,9 @@
         }
 
         const value = numericTextBox.value ?? parseLocaleNumber(element.value);
-        element.value = value == null ? '' : formatNumber(value);
+        element.value = value == null
+            ? ''
+            : (element.dataset.moneyFormat === 'true' ? formatMoney(value) : formatNumber(value));
     }
 
     function countDigitsBeforeCaret(value, caretPosition) {
@@ -221,8 +220,12 @@
         return formattedValue.length;
     }
 
-    function restoreCaret(element, digitOffset) {
-        const caretPosition = resolveCaretPosition(element.value, digitOffset);
+    function restoreCaret(element, digitOffset, afterDecimalSeparator = false) {
+        let caretPosition = resolveCaretPosition(element.value, digitOffset);
+        if (afterDecimalSeparator) {
+            const decimalIndex = element.value.lastIndexOf(DECIMAL_SEPARATOR);
+            if (decimalIndex >= 0) caretPosition = decimalIndex + 1;
+        }
         try {
             element.setSelectionRange(caretPosition, caretPosition);
         } catch (error) {
@@ -260,6 +263,8 @@
         const element = numericTextBox.element;
         let isComposing = false;
         let inputRevision = 0;
+        let componentValuePrepared = false;
+        let preparedBlurValue = null;
 
         const prepareInputForComponent = () => {
             if (isComposing || numericTextBox.readonly || numericTextBox.enabled === false) {
@@ -267,7 +272,9 @@
             }
 
             const editableValue = element.value;
-            const digitOffset = countDigitsBeforeCaret(editableValue, element.selectionStart ?? editableValue.length);
+            const selectionStart = element.selectionStart ?? editableValue.length;
+            const digitOffset = countDigitsBeforeCaret(editableValue, selectionStart);
+            const afterDecimalSeparator = editableValue.slice(0, selectionStart).endsWith(DECIMAL_SEPARATOR);
             const normalizedValue = normalizeNumberString(editableValue);
             const parsedValue = parseLocaleNumber(editableValue);
             const revision = ++inputRevision;
@@ -275,6 +282,7 @@
             // Syncfusion must parse an ungrouped value. Reapply the grouped
             // presentation only after all component input handlers have run.
             element.value = normalizedValue;
+            componentValuePrepared = true;
             const applyFormattedDisplay = () => {
                 if (revision !== inputRevision || document.activeElement !== element) {
                     return;
@@ -284,7 +292,7 @@
                     numericTextBox.setProperties({ value: parsedValue }, true);
                 }
                 element.value = formatEditableValue(editableValue);
-                restoreCaret(element, digitOffset);
+                restoreCaret(element, digitOffset, afterDecimalSeparator);
             };
 
             queueMicrotask(applyFormattedDisplay);
@@ -293,7 +301,9 @@
 
         const prepareBlurForComponent = () => {
             const parsedValue = parseLocaleNumber(element.value);
+            preparedBlurValue = parsedValue;
             element.value = parsedValue == null ? '' : `${parsedValue}`;
+            componentValuePrepared = true;
             setTimeout(() => syncNumericDisplay(numericTextBox), 0);
         };
 
@@ -308,12 +318,18 @@
 
         numericInputHandlers.set(element, {
             prepareInputForComponent,
-            prepareBlurForComponent
+            prepareBlurForComponent,
+            getPreparedBlurValue: () => preparedBlurValue,
+            consumePreparedValue: () => {
+                const prepared = componentValuePrepared;
+                componentValuePrepared = false;
+                return prepared;
+            }
         });
         element.dataset.liveFormatted = 'true';
 
         if (numericTextBox.value != null && numericTextBox.value !== '') {
-            element.value = formatNumber(numericTextBox.value);
+            syncNumericDisplay(numericTextBox);
         }
     }
 
@@ -334,31 +350,45 @@
                     return originalHandler.call(this, event);
                 }
 
-                const { digitOffset } = normalizeElementForComponent(this.element);
-                const result = originalHandler.call(this, event);
-
-                if (handlerName === 'inputHandler' || handlerName === 'keyUpHandler') {
-                    queueMicrotask(() => {
-                        if (document.activeElement !== this.element) {
-                            return;
-                        }
-
-                        syncNumericDisplay(this);
-                        restoreCaret(this.element, digitOffset);
-                    });
+                if (handlerName === 'keyPressHandler'
+                    && Number(this.decimals ?? 0) > 0
+                    && ((event?.key === DECIMAL_SEPARATOR || event?.key === '.')
+                        && !splitEditableNumber(this.element.value).hasDecimalSeparator
+                        || /^\d$/.test(event?.key ?? '')
+                        && splitEditableNumber(this.element.value).hasDecimalSeparator)) {
+                    return;
                 }
 
-                return result;
+                if (handlerName !== 'keyPressHandler'
+                    && !numericInputHandlers.get(this.element)?.consumePreparedValue()) {
+                    normalizeElementForComponent(this.element);
+                }
+                return originalHandler.call(this, event);
             };
         };
 
-        ['keyDownHandler', 'keyPressHandler', 'inputHandler', 'keyUpHandler', 'changeHandler']
+        ['keyPressHandler', 'inputHandler']
             .forEach(normalizeBeforeComponentHandler);
+
+        const originalChangeHandler = numericTextBox.prototype.changeHandler;
+        if (originalChangeHandler) {
+            numericTextBox.prototype.changeHandler = function (event) {
+                const preparedValue = this.element?.dataset.liveFormatted === 'true' ? this.value : null;
+                const result = originalChangeHandler.call(this, event);
+                if (preparedValue != null && this.value !== preparedValue) {
+                    this.setProperties({ value: preparedValue }, true);
+                    if (typeof this.change === 'function') this.change({ value: preparedValue });
+                }
+                return result;
+            };
+        }
 
         const originalAppendTo = numericTextBox.prototype.appendTo;
         numericTextBox.prototype.appendTo = function (selector) {
-            normalizeMoneyNumericTextBox(this);
+            const moneyInput = isMoneyNumericTextBox(this);
+            normalizeDecimalNumericTextBox(this);
             const result = originalAppendTo.call(this, selector);
+            if (moneyInput && this.element) this.element.dataset.moneyFormat = 'true';
             attachLiveFormatting(this);
             return result;
         };
@@ -376,8 +406,15 @@
         const originalFocusOut = numericTextBox.prototype.focusOutHandler;
         if (originalFocusOut) {
             numericTextBox.prototype.focusOutHandler = function (e) {
+                const preparedValue = this.value
+                    ?? numericInputHandlers.get(this.element)?.getPreparedBlurValue()
+                    ?? parseLocaleNumber(this.element?.value);
                 originalFocusOut.call(this, e);
                 if (this.element && this.element.dataset.liveFormatted === 'true') {
+                    if (preparedValue != null && this.value !== preparedValue) {
+                        this.setProperties({ value: preparedValue }, true);
+                        if (typeof this.change === 'function') this.change({ value: preparedValue });
+                    }
                     setTimeout(() => syncNumericDisplay(this), 0);
                 }
             };
@@ -429,23 +466,24 @@
             return;
         }
 
-        normalizeElementForComponent(element);
-    }, true);
-
-    document.addEventListener('keyup', event => {
-        const element = event.target;
-        const numericHandlers = element instanceof HTMLInputElement
-            ? numericInputHandlers.get(element)
-            : null;
-        if (!numericHandlers || document.activeElement !== element) {
+        const hasDecimalSeparator = splitEditableNumber(element.value).hasDecimalSeparator;
+        if (event.key === DECIMAL_SEPARATOR
+            && Number(element.ej2_instances?.[0]?.decimals ?? 0) > 0
+            && !hasDecimalSeparator) {
+            normalizeElementForComponent(element);
+            element.setRangeText(
+                DECIMAL_SEPARATOR,
+                element.selectionStart ?? element.value.length,
+                element.selectionEnd ?? element.value.length,
+                'end');
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            numericInputHandlers.get(element)?.prepareInputForComponent();
             return;
         }
 
-        const { digitOffset } = normalizeElementForComponent(element);
-        queueMicrotask(() => {
-            syncNumericDisplay(element.ej2_instances?.[0]);
-            restoreCaret(element, digitOffset);
-        });
+        if (hasDecimalSeparator) return;
+        normalizeElementForComponent(element);
     }, true);
 
     document.addEventListener('blur', event => {
@@ -493,6 +531,7 @@
         currency: DEFAULT_CURRENCY,
         moneyFormat: MONEY_FORMAT,
         formatToLocale: formatNumber,
+        formatMoneyToLocale: formatMoney,
         formatCurrencyToLocale: formatCurrency,
         formatEditableValue,
         normalizeNumberString,

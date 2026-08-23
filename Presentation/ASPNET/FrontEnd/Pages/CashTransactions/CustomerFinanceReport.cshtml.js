@@ -71,9 +71,9 @@ const App = {
                         transactionDate: DateFormatManager.parseBusinessDate(item.transactionDate),
                         sourceTypeName: sourceTypeLabels[item.sourceType] ?? 'Chứng từ nghiệp vụ'
                     }));
-                    state.summary.revenueText = NumberFormatManager.formatToLocale(content.revenue ?? 0);
-                    state.summary.projectCostText = NumberFormatManager.formatToLocale(content.projectCost ?? 0);
-                    state.summary.profitText = NumberFormatManager.formatToLocale(content.profit ?? 0);
+                    state.summary.revenueText = NumberFormatManager.formatMoneyToLocale(content.revenue ?? 0);
+                    state.summary.projectCostText = NumberFormatManager.formatMoneyToLocale(content.projectCost ?? 0);
+                    state.summary.profitText = NumberFormatManager.formatMoneyToLocale(content.profit ?? 0);
                     mainGrid.refresh();
                 } catch (error) {
                     if (requestNumber !== currentRequest) return;

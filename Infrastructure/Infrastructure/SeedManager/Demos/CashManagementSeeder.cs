@@ -58,19 +58,19 @@ public class CashManagementSeeder
             "TKCN",
             CashAccountType.Bank,
             "Tài khoản ngân hàng cá nhân",
-            initialBalance: 0d);
+            initialBalance: 0m);
 
         var companyAccount = await GetOrCreateAccountAsync(
             "TKCT",
             CashAccountType.Bank,
             "Tài khoản ngân hàng công ty",
-            initialBalance: 50_000_000d);
+            initialBalance: 50_000_000m);
 
         var cashFundAccount = await GetOrCreateAccountAsync(
             "QTM",
             CashAccountType.Cash,
             "Quỹ tiền mặt",
-            initialBalance: 0d);
+            initialBalance: 0m);
 
         var demoAlreadySeeded = await _queryContext
             .Set<CashTransaction>()
@@ -103,7 +103,7 @@ public class CashManagementSeeder
                 date: (demoSalesOrder.OrderDate ?? new DateTime(2026, 4, 6)).AddDays(1),
                 type: CashTransactionType.Debit,
                 status: CashTransactionStatus.Paid,
-                amount: demoSalesOrder.AfterTaxAmount ?? demoSalesOrder.BeforeTaxAmount ?? 0d,
+                amount: demoSalesOrder.AfterTaxAmount ?? demoSalesOrder.BeforeTaxAmount ?? 0m,
                 description: $"{DemoPrefix}Thu tiền đơn {demoSalesOrder.Number}",
                 cashAccountId: index % 2 == 0 ? personalAccount.Id : companyAccount.Id,
                 cashCategoryId: categories["Bán hàng"].Id,
@@ -119,7 +119,7 @@ public class CashManagementSeeder
                 date: (demoPurchaseOrder.OrderDate ?? new DateTime(2026, 4, 3)).AddDays(2),
                 type: CashTransactionType.Credit,
                 status: CashTransactionStatus.Unpaid,
-                amount: demoPurchaseOrder.AfterTaxAmount ?? demoPurchaseOrder.BeforeTaxAmount ?? 0d,
+                amount: demoPurchaseOrder.AfterTaxAmount ?? demoPurchaseOrder.BeforeTaxAmount ?? 0m,
                 description: $"{DemoPrefix}Nháp chi tiền đơn {demoPurchaseOrder.Number}",
                 cashAccountId: null,
                 cashCategoryId: categories["Mua hàng"].Id,
@@ -136,9 +136,9 @@ public class CashManagementSeeder
         var partialReceivable = await _cashTransactionRepository.GetQuery()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.SourceModule == nameof(SalesOrder)
                 && x.SourceModuleId == serialSaleId);
-        if (partialReceivable != null && (partialReceivable.PaidAmount ?? 0d) == 0d)
+        if (partialReceivable != null && (partialReceivable.PaidAmount ?? 0m) == 0m)
         {
-            var partialAmount = Math.Min(1_000_000d, (partialReceivable.Amount ?? 0d) / 2d);
+            var partialAmount = Math.Min(1_000_000m, (partialReceivable.Amount ?? 0m) / 2m);
             partialReceivable.CashAccountId = companyAccount.Id;
             partialReceivable.PaidAmount = partialAmount;
             partialReceivable.Status = CashTransactionStatus.PartiallyPaid;
@@ -160,7 +160,7 @@ public class CashManagementSeeder
             date: DemoSeedData.BaseDate.AddDays(20),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Paid,
-            amount: 50_000d,
+            amount: 50_000m,
             description: $"{DemoPrefix}chi tiền xăng xe giao hàng",
             cashAccountId: personalAccount.Id,
             cashCategoryId: categories["Xăng xe"].Id);
@@ -169,7 +169,7 @@ public class CashManagementSeeder
             date: DemoSeedData.BaseDate.AddDays(21),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Paid,
-            amount: 2_500_000d,
+            amount: 2_500_000m,
             description: $"{DemoPrefix}chi phí gia công tủ điện mẫu",
             cashAccountId: companyAccount.Id,
             cashCategoryId: categories["Gia công"].Id);
@@ -178,7 +178,7 @@ public class CashManagementSeeder
             date: DemoSeedData.BaseDate.AddDays(22),
             type: CashTransactionType.Credit,
             status: CashTransactionStatus.Unpaid,
-            amount: 8_000_000d,
+            amount: 8_000_000m,
             description: $"{DemoPrefix}nháp chi lương nhân viên tháng 4",
             cashAccountId: personalAccount.Id,
             cashCategoryId: categories["Lương nhân viên"].Id);
@@ -187,7 +187,7 @@ public class CashManagementSeeder
             date: DemoSeedData.BaseDate.AddDays(23),
             type: CashTransactionType.Debit,
             status: CashTransactionStatus.Paid,
-            amount: 5_000_000d,
+            amount: 5_000_000m,
             description: $"{DemoPrefix}thu tiền cho thuê mặt bằng",
             cashAccountId: companyAccount.Id,
             cashCategoryId: categories["Cho thuê mặt bằng"].Id);
@@ -220,7 +220,7 @@ public class CashManagementSeeder
         string name,
         CashAccountType accountType,
         string description,
-        double initialBalance)
+        decimal initialBalance)
     {
         var account = await _queryContext
             .Set<CashAccount>()
@@ -248,7 +248,7 @@ public class CashManagementSeeder
         DateTime date,
         CashTransactionType type,
         CashTransactionStatus status,
-        double amount,
+        decimal amount,
         string description,
         string? cashAccountId,
         string? cashCategoryId,
@@ -298,14 +298,14 @@ public class CashManagementSeeder
         await _cashTransactionRepository.CreateAsync(entity);
         await _unitOfWork.SaveAsync();
 
-        if ((entity.PaidAmount ?? 0d) > 0d)
+        if ((entity.PaidAmount ?? 0m) > 0m)
         {
             await _cashTransactionPaymentRepository.CreateAsync(new CashTransactionPayment
             {
                 CashTransactionId = entity.Id,
                 CashAccountId = entity.CashAccountId,
                 PaymentDate = entity.TransactionDate ?? DateTime.Today,
-                Amount = entity.PaidAmount ?? 0d,
+                Amount = entity.PaidAmount ?? 0m,
                 Description = entity.Description
             });
             await _unitOfWork.SaveAsync();

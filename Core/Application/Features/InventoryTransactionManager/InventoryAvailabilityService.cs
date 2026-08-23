@@ -15,7 +15,7 @@ public class InventoryAvailabilityService
         _context = context;
     }
 
-    public async Task<double> GetAvailableStockAsync(
+    public async Task<decimal> GetAvailableStockAsync(
         string productId,
         string warehouseId,
         string? currentSalesOrderItemId,
@@ -50,7 +50,7 @@ public class InventoryAvailabilityService
                 x.Status == InventoryTransactionStatus.Confirmed &&
                 x.ProductId == productId &&
                 x.WarehouseId == warehouseId)
-            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+            .SumAsync(x => x.Stock ?? 0m, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(currentSalesOrderItemId))
         {
@@ -63,7 +63,7 @@ public class InventoryAvailabilityService
                     x.ModuleItemId == currentSalesOrderItemId &&
                     x.ProductId == productId &&
                     x.WarehouseId == warehouseId)
-                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+                .SumAsync(x => x.Stock ?? 0m, cancellationToken);
 
             availableStock -= currentIssuedStock;
         }

@@ -3,6 +3,7 @@ using Application.Common.Repositories;
 using Application.Features.PurchaseOrderManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,8 +26,8 @@ public class UpdatePurchaseOrderItemRequest : IRequest<UpdatePurchaseOrderItemRe
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
     public int? SupplierWarrantyMonths { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? Quantity { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -100,7 +101,7 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
         entity.UnitPrice = request.UnitPrice;
         if (tracking.Physical == true
             && tracking.SerialTrackingMode != SerialTrackingMode.None
-            && Math.Abs((request.Quantity ?? 0d) - Math.Round(request.Quantity ?? 0d)) > 0.000001d)
+            && Math.Abs((request.Quantity ?? 0m) - Math.Round(request.Quantity ?? 0m)) > 0.000001m)
             throw new InvalidOperationException("Serial-tracked products require a whole-number quantity.");
         if (tracking.Physical == true && tracking.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
         {
@@ -110,7 +111,7 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             if (manufacturerSerials.Any(string.IsNullOrWhiteSpace)
                 || manufacturerSerials.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manufacturerSerials.Count)
                 throw new InvalidOperationException("Manufacturer serial numbers must be non-empty and unique.");
-            if (Math.Abs((request.Quantity ?? 0d) - manufacturerSerials.Count) > 0.000001d)
+            if (Math.Abs((request.Quantity ?? 0m) - manufacturerSerials.Count) > 0.000001m)
                 throw new InvalidOperationException("Manufacturer serial number count must match quantity.");
             entity.ManufacturerSerialNumbersJson = JsonSerializer.Serialize(manufacturerSerials);
             entity.Quantity = manufacturerSerials.Count;
@@ -121,10 +122,10 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             entity.ManufacturerSerialNumbersJson = null;
         }
 
-        entity.Total = (entity.UnitPrice ?? 0d) * (entity.Quantity ?? 0d);
+        entity.Total = AccountingMath.RoundVnd((entity.UnitPrice ?? 0m) * (entity.Quantity ?? 0m));
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
-        entity.TaxAmount = (entity.Total ?? 0d) * taxPercentage / 100d;
-        entity.AfterTaxAmount = (entity.Total ?? 0d) + (entity.TaxAmount ?? 0d);
+        entity.TaxAmount = AccountingMath.RoundVnd((entity.Total ?? 0m) * taxPercentage / 100m);
+        entity.AfterTaxAmount = (entity.Total ?? 0m) + (entity.TaxAmount ?? 0m);
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -155,7 +156,7 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private async Task<double> ResolveTaxPercentageAsync(string? taxId, CancellationToken cancellationToken)
+    private async Task<decimal> ResolveTaxPercentageAsync(string? taxId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(taxId))
         {

@@ -3,6 +3,7 @@ using Application.Features.InventoryTransactionManager;
 using Application.Common.CQS.Queries;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -67,6 +68,7 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                 || !Enum.IsDefined(typeof(StockCountStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu kiểm kê không hợp lệ.");
             var requestedStatus = (StockCountStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.CountDate, requestedStatus == StockCountStatus.Confirmed);
             if (entity.Status == StockCountStatus.Draft)
             {
                 if (requestedStatus is StockCountStatus.Cancelled or StockCountStatus.Archived)

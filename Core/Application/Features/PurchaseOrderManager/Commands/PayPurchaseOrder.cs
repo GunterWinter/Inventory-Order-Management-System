@@ -1,7 +1,9 @@
 using Application.Common.Repositories;
+using Application.Features.CashTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -15,16 +17,16 @@ public class PayPurchaseOrderResult
     public string? PaymentId { get; set; }
     public string? CashAccountId { get; set; }
     public string? CashAccountName { get; set; }
-    public double Amount { get; set; }
-    public double PaidAmount { get; set; }
-    public double RemainingAmount { get; set; }
+    public decimal Amount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal RemainingAmount { get; set; }
     public string? Status { get; set; }
 }
 
 public class PayPurchaseOrderRequest : IRequest<PayPurchaseOrderResult>
 {
     public string? PurchaseOrderId { get; init; }
-    public double? PaymentAmount { get; init; }
+    public decimal? PaymentAmount { get; init; }
     public string? CashAccountId { get; init; }
     public DateTime? PaymentDate { get; init; }
     public string? Description { get; init; }
@@ -38,6 +40,9 @@ public class PayPurchaseOrderValidator : AbstractValidator<PayPurchaseOrderReque
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
         RuleFor(x => x.PaymentAmount).NotNull().GreaterThan(0);
         RuleFor(x => x.CashAccountId).NotEmpty();
+        RuleFor(x => x.PaymentDate)
+            .Must(value => !value.HasValue || value.Value.Date <= AppDateTime.VietnamNow().Date)
+            .WithMessage("Ngày thanh toán không được lớn hơn ngày hiện tại.");
     }
 }
 
@@ -49,6 +54,7 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
     private readonly ICommandRepository<CashAccount> _cashAccountRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
+    private readonly CashBalanceService _cashBalanceService;
 
     public PayPurchaseOrderHandler(
         ICommandRepository<CashTransaction> cashTransactionRepository,
@@ -56,7 +62,8 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
         ICommandRepository<CashTransactionPayment> paymentRepository,
         ICommandRepository<CashAccount> cashAccountRepository,
         IUnitOfWork unitOfWork,
-        NumberSequenceService numberSequenceService)
+        NumberSequenceService numberSequenceService,
+        CashBalanceService cashBalanceService)
     {
         _cashTransactionRepository = cashTransactionRepository;
         _purchaseOrderRepository = purchaseOrderRepository;
@@ -64,17 +71,19 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
         _cashAccountRepository = cashAccountRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
+        _cashBalanceService = cashBalanceService;
     }
 
     public async Task<PayPurchaseOrderResult> Handle(
         PayPurchaseOrderRequest request,
         CancellationToken cancellationToken)
     {
-        var paymentAmount = request.PaymentAmount ?? 0d;
-        var paymentDate = request.PaymentDate ?? DateTime.UtcNow;
+        var paymentAmount = request.PaymentAmount ?? 0m;
+        var paymentDate = request.PaymentDate ?? AppDateTime.VietnamNow();
         CashTransaction? transaction = null;
         CashTransactionPayment? payment = null;
         CashAccount? selectedAccount = null;
+        string? previousAccountId = null;
 
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -101,7 +110,7 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
                 }
 
                 var orderAmount = purchaseOrder.AfterTaxAmount
-                    ?? purchaseOrder.PurchaseOrderItemList.Sum(item => item.AfterTaxAmount ?? 0d);
+                    ?? purchaseOrder.PurchaseOrderItemList.Sum(item => item.AfterTaxAmount ?? 0m);
                 transaction = new CashTransaction
                 {
                     Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), string.Empty, "CT"),
@@ -109,7 +118,7 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
                     TransactionType = CashTransactionType.Credit,
                     Status = CashTransactionStatus.Unpaid,
                     Amount = orderAmount,
-                    PaidAmount = 0d,
+                    PaidAmount = 0m,
                     Description = $"{purchaseOrder.Vendor?.Name} - {purchaseOrder.Number}".Trim(' ', '-'),
                     VendorId = purchaseOrder.VendorId,
                     SourceModule = nameof(PurchaseOrder),
@@ -120,6 +129,10 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
                 await _cashTransactionRepository.CreateAsync(transaction, ct);
                 await _unitOfWork.SaveAsync(ct);
             }
+            else
+            {
+                previousAccountId = transaction.CashAccountId;
+            }
 
             var cashAccount = await _cashAccountRepository.GetAsync(request.CashAccountId!, ct);
             if (cashAccount == null)
@@ -128,19 +141,13 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
             }
             selectedAccount = cashAccount;
 
-            if (!string.IsNullOrWhiteSpace(transaction.CashAccountId)
-                && !string.Equals(transaction.CashAccountId, request.CashAccountId, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("All payments for a cash transaction must use the same cash account.");
-            }
-
             var recordedPaidAmount = await _paymentRepository.GetQuery()
                 .Where(x => !x.IsDeleted && x.CashTransactionId == transaction.Id)
                 .SumAsync(x => x.Amount, ct);
 
-            var amount = transaction.Amount ?? 0d;
+            var amount = transaction.Amount ?? 0m;
             var remainingAmount = amount - recordedPaidAmount;
-            if (paymentAmount > remainingAmount + 0.000001d)
+            if (paymentAmount > remainingAmount + 0.000001m)
             {
                 throw new InvalidOperationException($"Payment amount cannot exceed the remaining amount ({remainingAmount:N2}).");
             }
@@ -165,11 +172,12 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
             _cashTransactionRepository.Update(transaction);
 
             await _unitOfWork.SaveAsync(ct);
-            await RecalculateAccountBalanceAsync(cashAccount, ct);
+            await _cashBalanceService.RecalculateManyAsync(
+                new[] { previousAccountId, request.CashAccountId }, ct);
         }, cancellationToken);
 
-        var finalAmount = transaction!.Amount ?? 0d;
-        var finalPaidAmount = transaction.PaidAmount ?? 0d;
+        var finalAmount = transaction!.Amount ?? 0m;
+        var finalPaidAmount = transaction.PaidAmount ?? 0m;
         return new PayPurchaseOrderResult
         {
             Success = true,
@@ -179,41 +187,16 @@ public class PayPurchaseOrderHandler : IRequestHandler<PayPurchaseOrderRequest, 
             CashAccountName = selectedAccount?.Name,
             Amount = finalAmount,
             PaidAmount = finalPaidAmount,
-            RemainingAmount = Math.Max(0d, finalAmount - finalPaidAmount),
+            RemainingAmount = Math.Max(0m, finalAmount - finalPaidAmount),
             Status = transaction.Status?.ToString()
         };
     }
 
-    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    private static CashTransactionStatus ComputePaymentStatus(decimal paidAmount, decimal amount)
     {
         if (amount <= 0 || paidAmount >= amount) return CashTransactionStatus.Paid;
         if (paidAmount > 0) return CashTransactionStatus.PartiallyPaid;
         return CashTransactionStatus.Unpaid;
     }
 
-    private async Task RecalculateAccountBalanceAsync(
-        CashAccount account,
-        CancellationToken cancellationToken)
-    {
-        var directBalance = await _cashTransactionRepository.GetQuery()
-            .Where(x => !x.IsDeleted
-                && x.CashAccountId == account.Id
-                && !x.PaymentList.Any(payment => !payment.IsDeleted))
-            .SumAsync(x => x.TransactionType == CashTransactionType.Debit
-                ? (x.PaidAmount ?? 0d)
-                : -(x.PaidAmount ?? 0d), cancellationToken);
-
-        var paymentBalance = await _paymentRepository.GetQuery()
-            .Where(x => !x.IsDeleted
-                && x.CashAccountId == account.Id
-                && x.CashTransaction != null
-                && !x.CashTransaction.IsDeleted)
-            .SumAsync(x => x.CashTransaction!.TransactionType == CashTransactionType.Debit
-                ? x.Amount
-                : -x.Amount, cancellationToken);
-
-        account.CurrentBalance = (account.InitialBalance ?? 0d) + directBalance + paymentBalance;
-        _cashAccountRepository.Update(account);
-        await _unitOfWork.SaveAsync(cancellationToken);
-    }
 }

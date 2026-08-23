@@ -9,8 +9,8 @@ public class CashTransaction : BaseEntity
     public DateTime? TransactionDate { get; set; }
     public CashTransactionType? TransactionType { get; set; }
     public CashTransactionStatus? Status { get; set; }
-    public double? Amount { get; set; }
-    public double? PaidAmount { get; set; }
+    public decimal? Amount { get; set; }
+    public decimal? PaidAmount { get; set; }
     public string? Description { get; set; }
     public string? CashAccountId { get; set; }
     public CashAccount? CashAccount { get; set; }

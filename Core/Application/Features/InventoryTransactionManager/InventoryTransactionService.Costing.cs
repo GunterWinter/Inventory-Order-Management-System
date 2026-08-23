@@ -9,13 +9,13 @@ public partial class InventoryTransactionService
         string? updatedById,
         CancellationToken cancellationToken = default)
     {
-        var quantity = salesOrderItem.Quantity ?? 0d;
-        var salesUnitPrice = salesOrderItem.UnitPrice ?? 0d;
+        var quantity = salesOrderItem.Quantity ?? 0m;
+        var salesUnitPrice = salesOrderItem.UnitPrice ?? 0m;
 
-        if (quantity <= 0d)
+        if (quantity <= 0m)
         {
-            salesOrderItem.CogsAmount = 0d;
-            salesOrderItem.ProfitAmount = 0d;
+            salesOrderItem.CogsAmount = 0m;
+            salesOrderItem.ProfitAmount = 0m;
             return;
         }
 
@@ -37,7 +37,7 @@ public partial class InventoryTransactionService
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 
-    private async Task<double> GetUnitCostAsync(
+    private async Task<decimal> GetUnitCostAsync(
         string? salesOrderItemId,
         string? productId,
         string? warehouseId,

@@ -14,8 +14,8 @@ public record GetCashTransactionListDto
     public DateTime? TransactionDate { get; init; }
     public CashTransactionType? TransactionType { get; init; }
     public CashTransactionStatus? Status { get; init; }
-    public double? Amount { get; init; }
-    public double? PaidAmount { get; init; }
+    public decimal? Amount { get; init; }
+    public decimal? PaidAmount { get; init; }
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashAccountName { get; init; }
@@ -34,7 +34,7 @@ public record GetCashTransactionListDto
 public class CashTransactionAllocationDto
 {
     public string? CustomerId { get; init; }
-    public double Amount { get; init; }
+    public decimal Amount { get; init; }
     public string? Description { get; init; }
 }
 
@@ -63,10 +63,6 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
             .CashTransaction
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
-            .Include(x => x.CashAccount)
-            .Include(x => x.CashCategory)
-            .Include(x => x.Customer)
-            .Include(x => x.Vendor)
             .AsQueryable();
 
         var entities = await query

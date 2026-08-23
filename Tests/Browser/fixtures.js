@@ -42,6 +42,8 @@ async function login(page) {
     await page.locator('#Password').fill('123456');
     await page.locator('button[type="submit"]').click({ noWaitAfter: true });
     await page.waitForURL('**/Dashboards/DefaultDashboard', { waitUntil: 'commit' });
+    await page.waitForFunction(() => Boolean(window.UiLocalization?.setLocale));
+    await page.evaluate(() => window.UiLocalization.setLocale('en'));
 }
 
 async function waitForVuePage(page) {

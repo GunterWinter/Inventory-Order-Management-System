@@ -58,9 +58,9 @@ const App = {
                         ...item,
                         rowId: item.cashCategoryId || '__uncategorized__'
                     }));
-                    state.summary.receiptText = NumberFormatManager.formatToLocale(content.totalReceipt ?? 0);
-                    state.summary.expenseText = NumberFormatManager.formatToLocale(content.totalExpense ?? 0);
-                    state.summary.netText = NumberFormatManager.formatToLocale(content.netCashFlow ?? 0);
+                    state.summary.receiptText = NumberFormatManager.formatMoneyToLocale(content.totalReceipt ?? 0);
+                    state.summary.expenseText = NumberFormatManager.formatMoneyToLocale(content.totalExpense ?? 0);
+                    state.summary.netText = NumberFormatManager.formatMoneyToLocale(content.netCashFlow ?? 0);
                     mainGrid.refresh();
                 } catch (error) {
                     if (requestNumber !== currentRequest) return;

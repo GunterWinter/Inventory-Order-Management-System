@@ -194,7 +194,7 @@ public class ProductSerialService
                     CurrentWarehouseId = transaction?.Status == InventoryTransactionStatus.Confirmed ? item.WarehouseId : null,
                     PurchaseOrderItemId = item.Id,
                     SupplierWarrantyEndDate = supplierWarrantyEndDate,
-                    UnitCost = item.UnitPrice ?? 0d
+                    UnitCost = item.UnitPrice ?? 0m
                 }, cancellationToken);
             }
             await _unitOfWork.SaveAsync(cancellationToken);
@@ -206,7 +206,7 @@ public class ProductSerialService
             .ToListAsync(cancellationToken);
         for (var i = 0; i < existing.Count; i++)
         {
-            existing[i].UnitCost = item.UnitPrice ?? 0d;
+            existing[i].UnitCost = item.UnitPrice ?? 0m;
             if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
             {
                 existing[i].ManufacturerSerialNumber = manufacturerNumbers[i];
@@ -806,12 +806,12 @@ public class ProductSerialService
         return RequireWholeQuantity(transaction.Movement, "Movement");
     }
 
-    private static int RequireWholeQuantity(double? quantity, string fieldName, bool allowZero = false)
+    private static int RequireWholeQuantity(decimal? quantity, string fieldName, bool allowZero = false)
     {
         if (quantity == null ||
             quantity < 0 ||
             (!allowZero && quantity <= 0) ||
-            Math.Abs(quantity.Value % 1) > 0.000001)
+            Math.Abs(quantity.Value % 1) > 0.000001m)
         {
             var requirement = allowZero ? "a non-negative whole number" : "a positive whole number";
             throw new Exception($"{fieldName} for serial-tracked products must be {requirement}.");

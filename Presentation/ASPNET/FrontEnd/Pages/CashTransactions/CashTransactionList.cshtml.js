@@ -15,6 +15,7 @@ const App = {
             cashCategoryId: null,
             partnerId: null,
             paidAmount: null,
+            originalPaidAmount: 0,
             sourceModule: null,
             sourceModuleId: null,
             sourceModuleNumber: null,
@@ -97,8 +98,16 @@ const App = {
             if (!state.transactionDate) { state.errors.transactionDate = 'Transaction Date is required.'; isValid = false; }
             if (state.transactionType === null || state.transactionType === undefined) { state.errors.transactionType = 'Transaction Type is required.'; isValid = false; }
             if (!state.amount || state.amount <= 0) { state.errors.amount = 'Amount must be greater than 0.'; isValid = false; }
+            if (Number(state.paidAmount ?? 0) < Number(state.originalPaidAmount ?? 0)) {
+                state.errors.paidAmount = 'Không được giảm số tiền đã trả; hãy lập nghiệp vụ hoàn/hủy riêng.';
+                isValid = false;
+            }
             if (state.paidAmount !== null && state.paidAmount !== undefined && Number(state.paidAmount) > Number(state.amount)) {
                 state.errors.paidAmount = 'Paid amount cannot exceed the original amount.';
+                isValid = false;
+            }
+            if (Number(state.paidAmount ?? 0) > Number(state.originalPaidAmount ?? 0) && !state.cashAccountId) {
+                state.errors.cashAccountId = 'Phải chọn tài khoản quỹ khi ghi nhận thanh toán.';
                 isValid = false;
             }
 
@@ -112,6 +121,7 @@ const App = {
             state.transactionType = null;
             state.amount = null;
             state.paidAmount = null;
+            state.originalPaidAmount = 0;
             state.description = '';
             state.cashAccountId = null;
             state.cashCategoryId = null;
@@ -198,7 +208,7 @@ const App = {
         };
 
         const methods = {
-            formatMoney: value => NumberFormatManager.formatToLocale(value ?? 0),
+            formatMoney: value => NumberFormatManager.formatMoneyToLocale(value ?? 0),
             formatNumber: value => NumberFormatManager.formatToLocale(value ?? 0),
             formatDate: value => DateFormatManager.formatToLocale(value),
             populateMainData: async () => {
@@ -281,7 +291,8 @@ const App = {
             isFormReadOnly: () => state.viewMode || state.deleteMode,
             canEditPrimaryFields: () => !state.viewMode && !state.deleteMode && !state.sourceModule,
             canEditRestrictedFields: () => !state.viewMode && !state.deleteMode,
-            canEditPaidAmount: () => !state.viewMode && !state.deleteMode
+            canEditPaidAmount: () => !state.viewMode && !state.deleteMode,
+            canEditCashAccount: () => !state.viewMode && !state.deleteMode
             ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
             ,validateAllocations: () => {
                 if (state.allocationRows.length === 0 || !methods.canEditPrimaryFields()) return true;
@@ -363,7 +374,7 @@ const App = {
             refresh: () => {
                 if (cashAccountDropDown.obj) {
                     cashAccountDropDown.obj.value = state.cashAccountId;
-                    cashAccountDropDown.obj.enabled = methods.canEditPrimaryFields();
+                    cashAccountDropDown.obj.enabled = methods.canEditCashAccount();
                     cashAccountDropDown.obj.dataBind();
                 }
             }
@@ -513,7 +524,6 @@ const App = {
                     placeholder: 'Paid Amount',
                     format: 'N0',
                     min: 0,
-                    max: state.amount || 0,
                     change: (args) => { state.paidAmount = args.value; }
                 });
                 paidAmountInput.obj.appendTo(paidAmountRef.value);
@@ -541,9 +551,6 @@ const App = {
             state.errors.amount = '';
             if (document.activeElement !== amountInput.obj?.element) {
                 amountInput.refresh();
-            }
-            if (paidAmountInput.obj) {
-                paidAmountInput.obj.max = state.amount || 0;
             }
         });
         Vue.watch(() => state.paidAmount, () => {
@@ -611,6 +618,7 @@ const App = {
                         transactionType: state.transactionType,
                         amount: state.amount,
                         paidAmount: state.paidAmount,
+                        paymentDate: DateFormatManager.formatForApiDate(new Date()),
                         description: state.description,
                         cashAccountId: state.cashAccountId,
                         cashCategoryId: state.cashCategoryId,
@@ -647,6 +655,7 @@ const App = {
                             state.transactionType = data.transactionType;
                             state.amount = data.amount;
                             state.paidAmount = data.paidAmount;
+                            state.originalPaidAmount = Number(data.paidAmount ?? 0);
                             state.description = data.description ?? '';
                             state.cashAccountId = data.cashAccountId;
                             state.cashCategoryId = data.cashCategoryId;
@@ -871,6 +880,7 @@ const App = {
                             state.transactionType = args.rowData.transactionType;
                             state.amount = args.rowData.amount;
                             state.paidAmount = args.rowData.paidAmount;
+                            state.originalPaidAmount = Number(args.rowData.paidAmount ?? 0);
                             state.description = args.rowData.description ?? '';
                             state.cashAccountId = args.rowData.cashAccountId;
                             state.cashCategoryId = args.rowData.cashCategoryId;
@@ -912,6 +922,7 @@ const App = {
                                 state.transactionType = r.transactionType;
                                 state.amount = r.amount;
                                 state.paidAmount = r.paidAmount;
+                                state.originalPaidAmount = Number(r.paidAmount ?? 0);
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;
@@ -937,6 +948,7 @@ const App = {
                                 state.transactionType = r.transactionType;
                                 state.amount = r.amount;
                                 state.paidAmount = r.paidAmount;
+                                state.originalPaidAmount = Number(r.paidAmount ?? 0);
                                 state.description = r.description ?? '';
                                 state.cashAccountId = r.cashAccountId;
                                 state.cashCategoryId = r.cashCategoryId;

@@ -11,7 +11,7 @@ public partial class InventoryTransactionService
         string? moduleId,
         string? warehouseId,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? createdById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
@@ -55,7 +55,7 @@ public partial class InventoryTransactionService
         string? id,
         string? warehouseId,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? updatedById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null

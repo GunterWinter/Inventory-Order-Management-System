@@ -13,7 +13,7 @@ public class StockCountUpdateInvenTransRequest : IRequest<StockCountUpdateInvenT
 {
     public string? Id { get; init; }
     public string? ProductId { get; init; }
-    public double? QtySCCount { get; init; }
+    public decimal? QtySCCount { get; init; }
     public string? UpdatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
 

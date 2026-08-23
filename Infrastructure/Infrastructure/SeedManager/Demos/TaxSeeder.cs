@@ -21,9 +21,9 @@ public class TaxSeeder
     {
         var taxes = new List<Tax>
         {
-            new Tax { Name = "Không thuế", Percentage = 0.0 },
-            new Tax { Name = "VAT 8%", Percentage = 8.0 },
-            new Tax { Name = "VAT 10%", Percentage = 10.0 }
+            new Tax { Name = "Không thuế", Percentage = 0m },
+            new Tax { Name = "VAT 8%", Percentage = 8m },
+            new Tax { Name = "VAT 10%", Percentage = 10m }
         };
 
         foreach (var tax in taxes)

@@ -44,9 +44,9 @@ public class ProjectAllocationDemoSeeder
             if (customers.Count < 2) return;
             var demoCosts = new[]
             {
-                (Description: "Công thợ", Amount: 800_000d, ProjectA: 250_000d, ProjectB: 550_000d),
-                (Description: "Gia công ván", Amount: 600_000d, ProjectA: 150_000d, ProjectB: 450_000d),
-                (Description: "Vận chuyển", Amount: 100_000d, ProjectA: 100_000d, ProjectB: 0d)
+                (Description: "Công thợ", Amount: 800_000m, ProjectA: 250_000m, ProjectB: 550_000m),
+                (Description: "Gia công ván", Amount: 600_000m, ProjectA: 150_000m, ProjectB: 450_000m),
+                (Description: "Vận chuyển", Amount: 100_000m, ProjectA: 100_000m, ProjectB: 0m)
             };
             foreach (var cost in demoCosts)
             {
@@ -55,7 +55,7 @@ public class ProjectAllocationDemoSeeder
                     TransactionDate = DemoSeedData.BaseDate.AddDays(8),
                     TransactionType = (int)CashTransactionType.Credit,
                     Amount = cost.Amount,
-                    PaidAmount = 0d,
+                    PaidAmount = 0m,
                     Description = $"{accrualPrefix} - {cost.Description}",
                     VendorId = contractorVendorId,
                     CreatedById = "demo-seeder",
@@ -73,7 +73,7 @@ public class ProjectAllocationDemoSeeder
                             Amount = cost.ProjectB,
                             Description = $"{cost.Description} công trình B"
                         }
-                    }.Where(x => x.Amount > 0d).ToList()
+                    }.Where(x => x.Amount > 0m).ToList()
                 });
             }
         }

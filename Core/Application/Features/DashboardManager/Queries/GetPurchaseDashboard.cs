@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
@@ -22,7 +22,7 @@ public sealed record RecentPurchaseOrderDashboardDto
     public DateTime? OrderDate { get; init; }
     public string? Number { get; init; }
     public string? ProductName { get; init; }
-    public double Total { get; init; }
+    public decimal Total { get; init; }
 }
 
 public class GetPurchaseDashboardResult
@@ -62,7 +62,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                 OrderDate = x.PurchaseOrder.OrderDate,
                 Number = x.PurchaseOrder.Number,
                 ProductName = x.Product != null ? x.Product.Name : null,
-                Total = x.Total ?? 0d
+                Total = x.Total ?? 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -76,7 +76,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                 VendorGroupName = x.PurchaseOrder!.Vendor != null && x.PurchaseOrder.Vendor.VendorGroup != null
                     ? x.PurchaseOrder.Vendor.VendorGroup.Name
                     : null,
-                Quantity = x.Quantity ?? 0d
+                Quantity = x.Quantity ?? 0m
             })
             .GroupBy(x => new { x.Status, x.VendorGroupName })
             .Select(g => new
@@ -97,7 +97,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                 VendorCategoryName = x.PurchaseOrder!.Vendor != null && x.PurchaseOrder.Vendor.VendorCategory != null
                     ? x.PurchaseOrder.Vendor.VendorCategory.Name
                     : null,
-                Quantity = x.Quantity ?? 0d
+                Quantity = x.Quantity ?? 0m
             })
             .GroupBy(x => new { x.Status, x.VendorCategoryName })
             .Select(g => new
@@ -124,7 +124,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                         Width = 2,
                         YName = "y",
                         Name = Enum.GetName(typeof(PurchaseOrderStatus), status)!,
-                        ColumnSpacing = 0.1,
+                        ColumnSpacing = 0.1m,
                         TooltipMappingName = "tooltipMappingName",
                         DataSource = purchaseByVendorGroupData
                             .Where(x => x.Status == status)
@@ -146,7 +146,7 @@ public class GetPurchaseDashboardHandler : IRequestHandler<GetPurchaseDashboardR
                         Width = 2,
                         YName = "y",
                         Name = Enum.GetName(typeof(PurchaseOrderStatus), status)!,
-                        ColumnSpacing = 0.1,
+                        ColumnSpacing = 0.1m,
                         TooltipMappingName = "tooltipMappingName",
                         DataSource = purchaseByVendorCategoryDate
                             .Where(x => x.Status == status)

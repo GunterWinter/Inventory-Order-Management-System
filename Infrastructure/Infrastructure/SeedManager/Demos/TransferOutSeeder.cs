@@ -44,7 +44,7 @@ public class TransferOutSeeder
             ModuleId = transfer.Id, ModuleName = nameof(TransferOut), ModuleCode = "TO-OUT", ModuleNumber = transfer.Number,
             MovementDate = transfer.TransferReleaseDate, Status = InventoryTransactionStatus.Confirmed,
             WarehouseId = from.Id, WarehouseFromId = from.Id, WarehouseToId = to.Id,
-            ProductId = product.Id, Movement = 1d };
+            ProductId = product.Id, Movement = 1m };
         _inventory.CalculateInvenTrans(line);
         await _transactions.CreateAsync(line);
         await _unitOfWork.SaveAsync();

@@ -22,13 +22,13 @@ public record GetSalesOrderItemBySalesOrderIdListDto
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
     public string? TaxName { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; }
-    public double? Total { get; init; }
-    public double? TaxAmount { get; init; }
-    public double? AfterTaxAmount { get; init; }
-    public double? CogsAmount { get; init; }
-    public double? ProfitAmount { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? Quantity { get; init; }
+    public decimal? Total { get; init; }
+    public decimal? TaxAmount { get; init; }
+    public decimal? AfterTaxAmount { get; init; }
+    public decimal? CogsAmount { get; init; }
+    public decimal? ProfitAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
     public List<string>? ProductSerialIds { get; set; }
     public string? ProductSerialNumbers { get; set; }

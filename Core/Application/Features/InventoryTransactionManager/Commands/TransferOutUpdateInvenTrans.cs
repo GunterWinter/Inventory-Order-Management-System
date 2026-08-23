@@ -13,7 +13,7 @@ public class TransferOutUpdateInvenTransRequest : IRequest<TransferOutUpdateInve
 {
     public string? Id { get; init; }
     public string? ProductId { get; init; }
-    public double? Movement { get; init; }
+    public decimal? Movement { get; init; }
     public string? UpdatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
 

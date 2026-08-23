@@ -80,8 +80,7 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'stock',
-                                    groupCaptionTemplate: 'Stock: ${Sum}',
-                                    format: 'N0'
+                                    groupCaptionTemplate: data => `Stock: ${NumberFormatManager.formatToLocale(data.Sum)}`
                                 }
                             ]
                         }

@@ -1,6 +1,6 @@
 (function (window, document) {
     const SUPPORTED_LOCALES = ['en', 'vi'];
-    const DEFAULT_LOCALE = 'en';
+    const DEFAULT_LOCALE = 'vi';
     const textNodeOriginals = new WeakMap();
     const attributeOriginals = new WeakMap();
     const localizedTextWrites = new WeakSet();
@@ -181,6 +181,7 @@
         'Uncategorized': 'Chưa Phân Loại',
         'Only actual payments are included. Internal fund transfers are excluded.': 'Chỉ tính số tiền thực tế đã thanh toán. Không tính điều chuyển quỹ nội bộ.',
         'Customer Profit Report': 'Báo Cáo Lợi Nhuận Khách Hàng',
+        'Inventory Profit Report': 'Báo Cáo Lợi Nhuận Kho',
         'Actual Received': 'Thực Thu',
         'Project Cost': 'Chi Phí Công Trình',
         'Select Customer': 'Chọn Khách Hàng',
@@ -316,6 +317,8 @@
         'Import validation failed': 'Dữ Liệu Import Không Hợp Lệ',
         'Importing...': 'Đang Nhập Dữ Liệu...',
         'No data found': 'Không Tìm Thấy Dữ Liệu',
+        'The Excel file does not contain any import rows.': 'File Excel không chứa dòng dữ liệu nào để nhập.',
+        'The workbook does not contain any import rows.': 'File Excel không chứa dòng dữ liệu nào để nhập.',
         'Excel import is not ready': 'Chức Năng Nhập Excel Chưa Sẵn Sàng',
         'Template download failed': 'Tải File Mẫu Thất Bại',
         'Import failed': 'Nhập Excel Thất Bại',
@@ -397,6 +400,7 @@
         'Save': 'Lưu',
         'Delete': 'Xóa',
         'Search': 'Tìm Kiếm',
+        'Excel Export': 'Xuất Excel',
         'Add': 'Thêm',
         'Edit': 'Sửa',
         'Update': 'Cập Nhật',
@@ -846,6 +850,8 @@
         'movement report': 'báo cáo lãi theo lô',
         'movement reports': 'báo cáo lãi theo lô',
         'batch profit report': 'báo cáo lãi theo lô',
+        'inventory profit report': 'báo cáo lợi nhuận kho',
+        'excel export': 'xuất Excel',
         'inventory cost layers': 'lớp giá vốn nhập kho',
         'inventory issue allocations': 'phân bổ xuất kho theo lô',
         'todo': 'công việc',

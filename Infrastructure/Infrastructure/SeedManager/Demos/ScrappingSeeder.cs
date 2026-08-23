@@ -41,7 +41,7 @@ public class ScrappingSeeder
         var line = new InventoryTransaction { Number = _numbers.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
             ModuleId = document.Id, ModuleName = nameof(Scrapping), ModuleCode = "SCRP", ModuleNumber = document.Number,
             MovementDate = document.ScrappingDate, Status = InventoryTransactionStatus.Draft,
-            WarehouseId = warehouse.Id, ProductId = product.Id, Movement = 1d };
+            WarehouseId = warehouse.Id, ProductId = product.Id, Movement = 1m };
         _inventory.CalculateInvenTrans(line);
         await _transactions.CreateAsync(line);
         await _unitOfWork.SaveAsync();

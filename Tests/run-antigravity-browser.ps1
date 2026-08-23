@@ -26,6 +26,7 @@ $runDirectory = Join-Path $artifactRoot "antigravity_$runKey"
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
 $stdoutPath = Join-Path $runDirectory 'application.stdout.log'
 $stderrPath = Join-Path $runDirectory 'application.stderr.log'
+$buildArtifacts = Join-Path $runDirectory 'build'
 $appProcess = $null
 $testExitCode = 1
 $locationPushed = $false
@@ -40,10 +41,10 @@ try {
     # and avoids signature endpoint failures during an otherwise --no-restore build.
     $offlineNuGetSource = Join-Path $runDirectory 'nuget-offline-source'
     New-Item -ItemType Directory -Force -Path $offlineNuGetSource | Out-Null
-    & dotnet restore Indotalent.sln --source $offlineNuGetSource --ignore-failed-sources -p:NuGetAudit=false
+    & dotnet restore Indotalent.sln --artifacts-path $buildArtifacts --source $offlineNuGetSource --ignore-failed-sources -p:NuGetAudit=false
     if ($LASTEXITCODE -ne 0) { throw "Offline dotnet restore failed with exit code $LASTEXITCODE." }
 
-    & dotnet build Indotalent.sln --no-restore
+    & dotnet build Indotalent.sln --no-restore --artifacts-path $buildArtifacts
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE." }
 
     $env:ConnectionStrings__DefaultConnection = "Server=localhost;Database=$DatabaseName;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;"
@@ -53,7 +54,7 @@ try {
     $env:BASE_URL = "http://localhost:$Port"
 
     $appProcess = Start-Process -FilePath dotnet `
-        -ArgumentList @('bin/Debug/net9.0/ASPNET.dll') `
+        -ArgumentList @(Join-Path $buildArtifacts 'bin/ASPNET/debug/ASPNET.dll') `
         -WorkingDirectory (Join-Path $repositoryRoot 'Presentation/ASPNET') `
         -WindowStyle Hidden `
         -RedirectStandardOutput $stdoutPath `

@@ -12,9 +12,9 @@ public sealed record CashTransactionSourceItemDto
     public string? ProductName { get; init; }
     public string? CustomerName { get; init; }
     public string? WarehouseName { get; init; }
-    public double Quantity { get; init; }
-    public double UnitPrice { get; init; }
-    public double Total { get; init; }
+    public decimal Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+    public decimal Total { get; init; }
     public string? ProductSerialNumbers { get; init; }
 }
 
@@ -72,9 +72,9 @@ public sealed class GetCashTransactionSourceItemsHandler
                         ? x.Warehouse.Name
                         : x.PurchaseOrderItem != null && x.PurchaseOrderItem.Warehouse != null
                             ? x.PurchaseOrderItem.Warehouse.Name : null,
-                    Quantity = x.Quantity ?? 0d,
-                    UnitPrice = x.UnitPrice ?? 0d,
-                    Total = x.Amount ?? (x.Quantity ?? 0d) * (x.UnitPrice ?? 0d)
+                    Quantity = x.Quantity ?? 0m,
+                    UnitPrice = x.UnitPrice ?? 0m,
+                    Total = x.Amount ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m)
                 })
                 .ToListAsync(cancellationToken);
 
@@ -88,9 +88,9 @@ public sealed class GetCashTransactionSourceItemsHandler
                     {
                         ProductName = x.Product != null ? x.Product.Name : null,
                         WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
-                        Quantity = x.Quantity ?? 0d,
-                        UnitPrice = x.UnitPrice ?? 0d,
-                        Total = x.Total ?? (x.Quantity ?? 0d) * (x.UnitPrice ?? 0d)
+                        Quantity = x.Quantity ?? 0m,
+                        UnitPrice = x.UnitPrice ?? 0m,
+                        Total = x.Total ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m)
                     })
                     .ToListAsync(cancellationToken);
             }
@@ -112,9 +112,9 @@ public sealed class GetCashTransactionSourceItemsHandler
                 ProductName = x.Product?.Name,
                 CustomerName = x.SalesOrder?.Customer?.Name,
                 WarehouseName = x.Warehouse?.Name,
-                Quantity = x.Quantity ?? 0d,
-                UnitPrice = x.UnitPrice ?? 0d,
-                Total = x.Total ?? (x.Quantity ?? 0d) * (x.UnitPrice ?? 0d),
+                Quantity = x.Quantity ?? 0m,
+                UnitPrice = x.UnitPrice ?? 0m,
+                Total = x.Total ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m),
                 ProductSerialNumbers = string.Join(", ", x.ProductSerials
                     .OrderBy(serial => serial.InternalSerialNumber)
                     .Select(serial => string.IsNullOrWhiteSpace(serial.ManufacturerSerialNumber)
@@ -129,7 +129,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                 transaction.SourceModule,
                 transaction.SourceModuleId,
                 transaction.SourceDetailId,
-                transaction.Amount ?? 0d,
+                transaction.Amount ?? 0m,
                 cancellationToken);
         }
 
@@ -145,7 +145,7 @@ public sealed class GetCashTransactionSourceItemsHandler
         string moduleName,
         string moduleId,
         string? sourceDetailId,
-        double sourceAmount,
+        decimal sourceAmount,
         CancellationToken cancellationToken)
     {
         var lines = await _context.Set<InventoryTransaction>()
@@ -189,12 +189,12 @@ public sealed class GetCashTransactionSourceItemsHandler
                 movement.InventoryTransactionId,
                 serial.InternalSerialNumber,
                 serial.ManufacturerSerialNumber,
-                UnitCost = serial.UnitCost ?? 0d,
+                UnitCost = serial.UnitCost ?? 0m,
                 serial.PurchaseOrderItemId
             })
             .ToListAsync(cancellationToken);
 
-        Dictionary<string, double> sourcePrices = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, decimal> sourcePrices = new(StringComparer.OrdinalIgnoreCase);
         if (moduleName == nameof(SalesReturn))
         {
             var salesOrderId = await _context.Set<SalesReturn>().AsNoTracking()
@@ -204,7 +204,7 @@ public sealed class GetCashTransactionSourceItemsHandler
             sourcePrices = await _context.Set<SalesOrderItem>().AsNoTracking()
                 .Where(x => !x.IsDeleted && x.SalesOrderId == salesOrderId && x.ProductId != null)
                 .GroupBy(x => x.ProductId!)
-                .ToDictionaryAsync(x => x.Key, x => x.First().UnitPrice ?? 0d, StringComparer.OrdinalIgnoreCase, cancellationToken);
+                .ToDictionaryAsync(x => x.Key, x => x.First().UnitPrice ?? 0m, StringComparer.OrdinalIgnoreCase, cancellationToken);
         }
         else if (moduleName == nameof(PurchaseReturn))
         {
@@ -215,15 +215,15 @@ public sealed class GetCashTransactionSourceItemsHandler
             sourcePrices = await _context.Set<PurchaseOrderItem>().AsNoTracking()
                 .Where(x => !x.IsDeleted && x.PurchaseOrderId == purchaseOrderId && x.ProductId != null)
                 .GroupBy(x => x.ProductId!)
-                .ToDictionaryAsync(x => x.Key, x => x.First().UnitPrice ?? 0d, StringComparer.OrdinalIgnoreCase, cancellationToken);
+                .ToDictionaryAsync(x => x.Key, x => x.First().UnitPrice ?? 0m, StringComparer.OrdinalIgnoreCase, cancellationToken);
         }
 
         var result = new List<CashTransactionSourceItemDto>();
         foreach (var line in lines)
         {
-            var quantity = Math.Abs(line.Movement ?? line.Stock ?? 0d);
+            var quantity = Math.Abs(line.Movement ?? line.Stock ?? 0m);
             var serials = movementSerials.Where(x => x.InventoryTransactionId == line.Id).ToList();
-            double unitPrice;
+            decimal unitPrice;
             if (serials.Count > 0)
             {
                 unitPrice = serials.Average(x => x.UnitCost);
@@ -232,13 +232,13 @@ public sealed class GetCashTransactionSourceItemsHandler
             {
                 unitPrice = sourcePrice;
             }
-            else if (lines.Count == 1 && quantity > 0d && sourceAmount > 0d)
+            else if (lines.Count == 1 && quantity > 0m && sourceAmount > 0m)
             {
                 unitPrice = sourceAmount / quantity;
             }
             else
             {
-                unitPrice = line.Product?.CostPrice ?? 0d;
+                unitPrice = line.Product?.CostPrice ?? 0m;
             }
 
             result.Add(new CashTransactionSourceItemDto

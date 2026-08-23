@@ -2,6 +2,7 @@ using Application.Common.Repositories;
 using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -17,9 +18,10 @@ public class UpdateCashTransactionRequest : IRequest<UpdateCashTransactionResult
 {
     public string? Id { get; init; }
     public DateTime? TransactionDate { get; init; }
+    public DateTime? PaymentDate { get; init; }
     public int? TransactionType { get; init; }
-    public double? Amount { get; init; }
-    public double? PaidAmount { get; init; }
+    public decimal? Amount { get; init; }
+    public decimal? PaidAmount { get; init; }
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
@@ -47,6 +49,9 @@ public class UpdateCashTransactionValidator : AbstractValidator<UpdateCashTransa
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)
             .When(x => x.PaidAmount.HasValue);
+        RuleFor(x => x.PaymentDate)
+            .Must(value => !value.HasValue || value.Value.Date <= AppDateTime.VietnamNow().Date)
+            .WithMessage("Ngày thanh toán không được lớn hơn ngày hiện tại.");
     }
 }
 
@@ -113,27 +118,48 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
                 }
             }
 
-            var amount = entity.Amount ?? 0d;
-            var requestedPaidAmount = request.PaidAmount ?? entity.PaidAmount ?? 0d;
-            if (requestedPaidAmount < 0d || requestedPaidAmount > amount)
+            var amount = entity.Amount ?? 0m;
+            var previousPaidAmount = entity.PaidAmount ?? 0m;
+            var requestedPaidAmount = request.PaidAmount ?? previousPaidAmount;
+            if (requestedPaidAmount < 0m || requestedPaidAmount > amount)
             {
-                throw new InvalidOperationException("Paid amount must be between zero and the transaction amount.");
+                throw new InvalidOperationException("Số tiền đã trả phải nằm trong khoảng từ 0 đến tổng giao dịch.");
+            }
+            if (requestedPaidAmount < previousPaidAmount - 0.000001m)
+            {
+                throw new InvalidOperationException("Không được giảm số tiền đã trả. Hãy dùng nghiệp vụ hoàn/hủy riêng.");
             }
             var recordedPaidAmount = await _paymentRepository.GetQuery()
                 .Where(x => !x.IsDeleted && x.CashTransactionId == entity.Id)
                 .SumAsync(x => x.Amount, ct);
-            var adjustmentAmount = requestedPaidAmount - recordedPaidAmount;
-            if (Math.Abs(adjustmentAmount) > 0.000001d)
+            var missingHistoryAmount = previousPaidAmount - recordedPaidAmount;
+            if (missingHistoryAmount > 0.000001m)
             {
                 await _paymentRepository.CreateAsync(new CashTransactionPayment
                 {
                     CashTransactionId = entity.Id,
-                    CashAccountId = entity.CashAccountId,
-                    PaymentDate = request.TransactionDate ?? DateTime.Today,
-                    Amount = adjustmentAmount,
+                    CashAccountId = previousAccountId,
+                    PaymentDate = entity.TransactionDate ?? AppDateTime.VietnamNow(),
+                    Amount = missingHistoryAmount,
+                    Description = entity.Description,
+                    CreatedById = request.UpdatedById
+                }, ct);
+            }
+            var installmentAmount = requestedPaidAmount - previousPaidAmount;
+            if (installmentAmount > 0.000001m)
+            {
+                if (string.IsNullOrWhiteSpace(request.CashAccountId))
+                    throw new InvalidOperationException("Phải chọn tài khoản quỹ khi tăng số tiền đã trả.");
+                await _paymentRepository.CreateAsync(new CashTransactionPayment
+                {
+                    CashTransactionId = entity.Id,
+                    CashAccountId = request.CashAccountId,
+                    PaymentDate = request.PaymentDate ?? AppDateTime.VietnamNow(),
+                    Amount = installmentAmount,
                     Description = request.Description,
                     CreatedById = request.UpdatedById
                 }, ct);
+                entity.CashAccountId = request.CashAccountId;
             }
             entity.PaidAmount = requestedPaidAmount;
             entity.Status = ComputePaymentStatus(requestedPaidAmount, amount);
@@ -144,7 +170,7 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
                 var existing = await _allocationRepository.GetQuery().Where(a => !a.IsDeleted && a.CashTransactionId == entity.Id).ToListAsync(ct);
                 foreach (var allocation in existing) _allocationRepository.Delete(allocation);
                 var total = request.Allocations.Where(a => a.Amount > 0).Sum(a => a.Amount);
-                if (request.Allocations.Count > 0 && Math.Abs(total - (entity.Amount ?? 0d)) > 0.000001d)
+                if (request.Allocations.Count > 0 && Math.Abs(total - (entity.Amount ?? 0m)) > 0.000001m)
                     throw new InvalidOperationException("Allocation total must equal transaction amount.");
                 foreach (var input in request.Allocations.Where(a => a.Amount > 0))
                 {
@@ -154,15 +180,8 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
             }
             await _unitOfWork.SaveAsync(ct);
 
-            if (!string.IsNullOrEmpty(entity.CashAccountId))
-            {
-                await _cashBalanceService.RecalculateAsync(entity.CashAccountId, ct);
-            }
-
-            if (!string.IsNullOrEmpty(previousAccountId) && previousAccountId != entity.CashAccountId)
-            {
-                await _cashBalanceService.RecalculateAsync(previousAccountId, ct);
-            }
+            await _cashBalanceService.RecalculateManyAsync(
+                new[] { previousAccountId, request.CashAccountId }, ct);
         }, cancellationToken);
 
         return new UpdateCashTransactionResult
@@ -171,7 +190,7 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
         };
     }
 
-    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    private static CashTransactionStatus ComputePaymentStatus(decimal paidAmount, decimal amount)
     {
         if (amount <= 0) return CashTransactionStatus.Paid;
         if (paidAmount >= amount) return CashTransactionStatus.Paid;

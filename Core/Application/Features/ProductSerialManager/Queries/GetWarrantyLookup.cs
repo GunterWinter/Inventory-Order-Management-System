@@ -23,9 +23,9 @@ public record WarrantyLookupMovementDto
     public string? AllocationCustomerName { get; init; }
     public string? AllocationProductName { get; init; }
     public string? AllocationWarehouseName { get; init; }
-    public double? AllocationQuantity { get; init; }
-    public double? AllocationUnitPrice { get; init; }
-    public double? AllocationTotal { get; init; }
+    public decimal? AllocationQuantity { get; init; }
+    public decimal? AllocationUnitPrice { get; init; }
+    public decimal? AllocationTotal { get; init; }
 }
 
 public record WarrantyLookupDto
@@ -150,7 +150,7 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
                         ? x.PurchaseOrderItem.Warehouse.Name : null,
                 x.Quantity,
                 x.UnitPrice,
-                Total = x.Amount ?? (x.Quantity ?? 0d) * (x.UnitPrice ?? 0d)
+                Total = x.Amount ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m)
             })
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 

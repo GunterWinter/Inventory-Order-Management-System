@@ -355,6 +355,15 @@ So sánh tổng hai tab với Dashboard. Các tổng phải dùng cùng công th
 
 Mọi file tải xuống chỉ lưu trong thư mục artifact tạm của lượt test. Xóa artifact khi test thành công và chỉ giữ file/trace/video của ca thất bại.
 
+## 17.1. Luồng hồi quy bắt buộc sau sửa lỗi kế toán/UI
+
+1. Sales Order: gõ tuần tự Giá vốn `234000,25`, Giá bán `345000.75`, tồn mở đầu `2,5` và số lượng bán `1,25`; request, database và dữ liệu tải lại phải giữ đúng phần thập phân. Ô Hàng hóa hiển thị tên/mã thay vì UUID, cột `Tồn khả dụng` hiển thị `2,5`. Lưu ảnh tại `artifacts/screenshots/sales-order-stock-and-lookup.png`.
+2. Sales Order có serial: chọn 2 trong 3 serial khả dụng; số lượng trên dòng, batch thay đổi và dữ liệu lưu phải cùng bằng `2` và chứa đúng 2 serial đã chọn.
+3. Thu chi: tăng `Số tiền đã trả` khi chưa chọn tài khoản quỹ phải bị chặn; chọn tài khoản rồi lưu phải thành công trong dưới 10 giây. Với giao dịch nguồn Sales/Purchase còn nợ, tài khoản quỹ phải cho phép chọn ngay tại màn hình Thu chi. Thanh toán trực tiếp từ SO/PO phải đổi trạng thái trên grid ngay, không cần F5.
+4. Nhóm nhà cung cấp: nhấn một lần vào dòng phải chọn dòng; Ctrl+click chọn hai dòng, xóa một lần; sau đó chọn và xóa dòng còn lại để xác nhận selection cũ đã được dọn. Khi xóa khách hàng/nhóm khách hàng đang được sử dụng, UI phải hiện `Xóa thất bại` và lý do nghiệp vụ thay vì chỉ có lỗi console.
+5. File mẫu import: sheet nhập chính không chứa dữ liệu mẫu. Các sheet `Example-Data`, `Example-Documents`, `Example-Items`, `Example-Allocations` chỉ dùng tham khảo, có tiêu đề tiếng Việt và ít nhất một dòng ví dụ thực tế; importer không đọc các sheet này. File không có dòng nhập phải báo `File Excel không chứa dòng dữ liệu nào để nhập.` khi dùng tiếng Việt.
+6. Định dạng số: kiểm tra đồng thời tiền nguyên `10.000.000,00`, tiền lẻ `12.350,231` và số lượng tồn thập phân; không được làm tròn mất phần lẻ ở UI, request, database, Excel hoặc PDF.
+
 ## 18. Mẫu báo cáo lỗi
 
 ```text

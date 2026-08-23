@@ -13,7 +13,7 @@ public class TransferInCreateInvenTransRequest : IRequest<TransferInCreateInvenT
 {
     public string? ModuleId { get; init; }
     public string? ProductId { get; init; }
-    public double? Movement { get; init; }
+    public decimal? Movement { get; init; }
     public string? CreatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
 }

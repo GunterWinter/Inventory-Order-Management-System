@@ -546,11 +546,11 @@ const App = {
             obj: null,
             create: () => {
                 costPriceNumber.obj = new ej.inputs.NumericTextBox({
-                    format: 'n0',
+                    format: 'n6',
                     placeholder: 'Enter Cost Price',
                     min: 0,
-                    step: 1000,
-                    decimals: 0,
+                    step: 0.01,
+                    decimals: 6,
                     validateDecimalOnType: false,
                     change: (e) => {
                         state.costPrice = e.value ?? '';
@@ -570,11 +570,11 @@ const App = {
             obj: null,
             create: () => {
                 unitPriceNumber.obj = new ej.inputs.NumericTextBox({
-                    format: 'n0',
+                    format: 'n6',
                     placeholder: 'Enter Unit Price',
                     min: 0,
-                    step: 1000,
-                    decimals: 0,
+                    step: 0.01,
+                    decimals: 6,
                     validateDecimalOnType: false,
                     change: (e) => {
                         state.unitPrice = e.value ?? '';

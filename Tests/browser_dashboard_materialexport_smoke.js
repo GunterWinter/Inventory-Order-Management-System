@@ -30,6 +30,10 @@ const { chromium } = require('playwright');
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('.dashboard-hero');
     await page.waitForSelector('.e-grid');
+    const defaultLocale = await page.evaluate(() => UiLocalization.getLocale());
+    if (defaultLocale !== 'vi') throw new Error(`Vietnamese must be the default locale, received ${defaultLocale}.`);
+    await page.evaluate(() => UiLocalization.setLocale('en'));
+    await page.waitForSelector('text=Operations Overview');
 
     const dashboardScriptUrl = await page.evaluate(() => performance.getEntriesByType('resource')
         .map(item => item.name)
@@ -100,7 +104,7 @@ const { chromium } = require('playwright');
     if (!/[?&]v=/.test(financeScriptUrl)) throw new Error(`Customer profit report script is not versioned: ${financeScriptUrl}`);
     await page.waitForFunction(() => {
         const values = [...document.querySelectorAll('.card h4')].slice(0, 3)
-            .map(node => Number(node.textContent.replace(/[^\d-]/g, '')));
+            .map(node => NumberFormatManager.parseLocaleNumber(node.textContent));
         return values.length === 3 && values[0] !== 0 && values[1] !== 0;
     }, null, { timeout: 15000 });
     const summaryValues = await page.locator('.card h4').evaluateAll(nodes => nodes.slice(0, 3).map(node => node.textContent.trim()));
@@ -127,7 +131,7 @@ const { chromium } = require('playwright');
     }, demoRevenue.customerId);
     await page.waitForFunction(() => {
         const values = [...document.querySelectorAll('.card h4')].slice(0, 3)
-            .map(node => Number(node.textContent.replace(/[^\d-]/g, '')));
+            .map(node => NumberFormatManager.parseLocaleNumber(node.textContent));
         return values[0] === 2000000 && values[1] === 500000 && values[2] === 1500000;
     });
     const demoSummaryValues = await page.locator('.card h4').evaluateAll(nodes =>
@@ -164,7 +168,8 @@ const { chromium } = require('playwright');
         apiResponses,
         expectedInjectedFailureObserved,
         cashTransactionSummaryCards: 0,
-        localizationRoundTrip: true
+        localizationRoundTrip: true,
+        defaultLocale
     }, null, 2));
     await browser.close();
 })().catch(async error => {

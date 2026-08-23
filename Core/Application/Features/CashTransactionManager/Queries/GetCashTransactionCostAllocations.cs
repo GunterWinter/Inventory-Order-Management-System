@@ -10,9 +10,9 @@ public record GetCashTransactionCostAllocationsDto
 {
     public string? ProductName { get; init; }
     public string? CustomerName { get; init; }
-    public double? Quantity { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? Total { get; init; }
+    public decimal? Quantity { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? Total { get; init; }
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
 }

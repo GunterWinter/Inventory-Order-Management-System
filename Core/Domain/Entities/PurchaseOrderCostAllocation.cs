@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 
 namespace Domain.Entities;
 
@@ -17,7 +17,7 @@ public class PurchaseOrderCostAllocation : BaseEntity
     public string? CustomerId { get; set; }
     public Customer? Customer { get; set; }
     
-    public double? Quantity { get; set; } = 0;
-    public double? UnitPrice { get; set; } = 0;
-    public double? Amount { get; set; } = 0;
+    public decimal? Quantity { get; set; } = 0;
+    public decimal? UnitPrice { get; set; } = 0;
+    public decimal? Amount { get; set; } = 0;
 }

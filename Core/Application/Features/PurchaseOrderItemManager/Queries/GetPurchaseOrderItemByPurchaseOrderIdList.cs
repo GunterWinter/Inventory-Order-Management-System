@@ -24,14 +24,14 @@ public record GetPurchaseOrderItemByPurchaseOrderIdListDto
     public string? TaxId { get; init; }
     public string? TaxName { get; init; }
     public int? SupplierWarrantyMonths { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; }
-    public double? Total { get; init; }
-    public double? TaxAmount { get; init; }
-    public double? AfterTaxAmount { get; init; }
-    public double? AllocatedQuantity { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? Quantity { get; init; }
+    public decimal? Total { get; init; }
+    public decimal? TaxAmount { get; init; }
+    public decimal? AfterTaxAmount { get; init; }
+    public decimal? AllocatedQuantity { get; init; }
     public List<string> ManufacturerSerialNumbers { get; set; } = [];
-    public double? StockQuantity { get; set; }
+    public decimal? StockQuantity { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 

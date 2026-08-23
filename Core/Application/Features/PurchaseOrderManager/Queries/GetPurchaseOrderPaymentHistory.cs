@@ -12,7 +12,7 @@ public class PurchaseOrderPaymentDto
     public string? CashAccountId { get; set; }
     public string? CashAccountName { get; set; }
     public DateTime PaymentDate { get; set; }
-    public double Amount { get; set; }
+    public decimal Amount { get; set; }
     public string? Description { get; set; }
 }
 
@@ -21,9 +21,9 @@ public class GetPurchaseOrderPaymentHistoryResult
     public string? CashTransactionId { get; set; }
     public string? CashAccountId { get; set; }
     public string? CashAccountName { get; set; }
-    public double Amount { get; set; }
-    public double PaidAmount { get; set; }
-    public double RemainingAmount { get; set; }
+    public decimal Amount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal RemainingAmount { get; set; }
     public string? Status { get; set; }
     public List<PurchaseOrderPaymentDto> Data { get; set; } = new();
 }
@@ -61,8 +61,8 @@ public class GetPurchaseOrderPaymentHistoryHandler
                 x.Id,
                 x.CashAccountId,
                 CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
-                Amount = x.Amount ?? 0d,
-                PaidAmount = x.PaidAmount ?? 0d,
+                Amount = x.Amount ?? 0m,
+                PaidAmount = x.PaidAmount ?? 0m,
                 x.Status
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -95,7 +95,7 @@ public class GetPurchaseOrderPaymentHistoryHandler
             CashAccountName = transaction.CashAccountName,
             Amount = transaction.Amount,
             PaidAmount = transaction.PaidAmount,
-            RemainingAmount = Math.Max(0d, transaction.Amount - transaction.PaidAmount),
+            RemainingAmount = Math.Max(0m, transaction.Amount - transaction.PaidAmount),
             Status = transaction.Status?.ToString(),
             Data = payments
         };

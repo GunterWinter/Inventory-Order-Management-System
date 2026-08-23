@@ -16,8 +16,8 @@ public record GetProductListDto
     public string? Name { get; init; }
     public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? CostPrice { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? CostPrice { get; init; }
     public string? ImageUrl { get; init; }
     public bool? Physical { get; init; }
     public SerialTrackingMode? SerialTrackingMode { get; init; }
@@ -28,7 +28,7 @@ public record GetProductListDto
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
     public string? ProductGroupName { get; init; }
-    public double OpeningStockQuantity { get; set; }
+    public decimal OpeningStockQuantity { get; set; }
     public string? OpeningStockWarehouseId { get; set; }
     public string? OpeningStockWarehouseName { get; set; }
     public bool HasOpeningStockHistory { get; set; }
@@ -130,7 +130,7 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
             dto.HasOpeningStockHistory = true;
             dto.OpeningStockQuantity = history
                 .Where(x => x.Status == InventoryTransactionStatus.Confirmed)
-                .Sum(x => x.Stock ?? 0d);
+                .Sum(x => x.Stock ?? 0m);
             dto.OpeningStockWarehouseId = first.WarehouseId;
             dto.OpeningStockWarehouseName = first.WarehouseName;
         }

@@ -106,7 +106,7 @@ public sealed class ExcelImportController : BaseApiController
 
         if (importRows.Count == 0)
         {
-            return BadRequest(new { errors = new[] { ImportError.General("EmptyWorkbook", "The workbook does not contain any import rows.") } });
+            return BadRequest(new { errors = new[] { ImportError.General("EmptyWorkbook", "File Excel không chứa dòng dữ liệu nào để nhập.") } });
         }
 
         var importedIds = new List<string>();

@@ -17,12 +17,12 @@ public sealed record InventoryProfitReportItemDto
     public string? ProductReferenceCode { get; init; }
     public string? ProductName { get; init; }
     public string? WarehouseName { get; init; }
-    public double Quantity { get; init; }
-    public double UnitCost { get; init; }
-    public double SalesUnitPrice { get; init; }
-    public double TotalCost { get; init; }
-    public double TotalSales { get; init; }
-    public double Profit { get; init; }
+    public decimal Quantity { get; init; }
+    public decimal UnitCost { get; init; }
+    public decimal SalesUnitPrice { get; init; }
+    public decimal TotalCost { get; init; }
+    public decimal TotalSales { get; init; }
+    public decimal Profit { get; init; }
     public string CostSource { get; init; } = string.Empty;
     public bool IsFallbackCost { get; init; }
     public DateTime? SoldDate { get; init; }
@@ -73,8 +73,8 @@ public sealed class GetInventoryProfitReportHandler
                 WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
                 SalesOrderNumber = x.SalesOrder!.Number,
                 SoldDate = x.SalesOrder.OrderDate ?? x.CreatedAtUtc,
-                Quantity = x.Quantity ?? 0d,
-                SalesUnitPrice = x.UnitPrice ?? 0d
+                Quantity = x.Quantity ?? 0m,
+                SalesUnitPrice = x.UnitPrice ?? 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -94,7 +94,7 @@ public sealed class GetInventoryProfitReportHandler
             {
                 var expectedSerialCount = item.Quantity;
                 var actualSerialCount = serialCounts.GetValueOrDefault(item.Id);
-                if (Math.Abs(expectedSerialCount - Math.Round(expectedSerialCount)) > 0.000001d
+                if (Math.Abs(expectedSerialCount - Math.Round(expectedSerialCount)) > 0.000001m
                     || actualSerialCount != Convert.ToInt32(Math.Round(expectedSerialCount)))
                 {
                     throw new InvalidOperationException(

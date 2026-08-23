@@ -18,8 +18,8 @@ public class UpdateProductRequest : IRequest<UpdateProductResult>
     public string? Name { get; init; }
     public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? CostPrice { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? CostPrice { get; init; }
     public string? ImageUrl { get; init; }
     public bool? Physical { get; init; }
     public SerialTrackingMode? SerialTrackingMode { get; init; }
@@ -28,7 +28,7 @@ public class UpdateProductRequest : IRequest<UpdateProductResult>
     public int? DefaultWarrantyMonths { get; init; }
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
-    public double? OpeningStockQuantity { get; init; }
+    public decimal? OpeningStockQuantity { get; init; }
     public string? UpdatedById { get; init; }
 }
 
@@ -52,7 +52,7 @@ public class UpdateProductValidator : AbstractValidator<UpdateProductRequest>
         RuleFor(x => x.UnitMeasureName).NotEmpty();
         RuleFor(x => x.ProductGroupId).NotEmpty();
         RuleFor(x => x.OpeningStockQuantity)
-            .Must(x => !x.HasValue || (double.IsFinite(x.Value) && x.Value >= 0d))
+            .Must(x => !x.HasValue || x.Value >= 0m)
             .WithMessage("Opening stock must be a finite, non-negative number.");
         RuleFor(x => x.OpeningStockQuantity)
             .Must((request, quantity) => !quantity.HasValue

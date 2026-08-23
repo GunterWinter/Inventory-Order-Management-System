@@ -2,6 +2,7 @@
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 
@@ -61,6 +62,7 @@ public class UpdateScrappingHandler : IRequestHandler<UpdateScrappingRequest, Up
                 || !Enum.IsDefined(typeof(ScrappingStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu hủy hàng không hợp lệ.");
             var requestedStatus = (ScrappingStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.ScrappingDate, requestedStatus == ScrappingStatus.Confirmed);
             if (entity.Status == ScrappingStatus.Draft)
             {
                 if (requestedStatus is ScrappingStatus.Cancelled or ScrappingStatus.Archived)

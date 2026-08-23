@@ -4,6 +4,7 @@ using Application.Common.Repositories;
 using Infrastructure.DataAccessManager.EFCore.Contexts;
 using Infrastructure.DataAccessManager.EFCore.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -100,6 +101,8 @@ public static class DI
             return;
         }
 
+        EnsureDecimalColumns(dataContext);
+
         var duplicatePurchaseOrderProducts = dataContext.PurchaseOrderItem
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.PurchaseOrderId != null && x.ProductId != null)
@@ -127,22 +130,24 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[SalesOrderItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrderItem', N'WarehouseId') IS NULL ALTER TABLE [dbo].[SalesOrderItem] ADD [WarehouseId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'CustomerId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [CustomerId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'VendorId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [VendorId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'PaidAmount') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [PaidAmount] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'PaidAmount') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [PaidAmount] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.CashTransaction', N'SourceDetailId') IS NULL ALTER TABLE [dbo].[CashTransaction] ADD [SourceDetailId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'CostPrice') IS NULL ALTER TABLE [dbo].[Product] ADD [CostPrice] float NULL ELSE IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'CostPrice') IS NOT NULL ALTER TABLE [dbo].[Product] ALTER COLUMN [CostPrice] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'CostPrice') IS NULL ALTER TABLE [dbo].[Product] ADD [CostPrice] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[Product]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Product', N'ImageUrl') IS NULL ALTER TABLE [dbo].[Product] ADD [ImageUrl] nvarchar(500) NULL;",
             "IF OBJECT_ID(N'[dbo].[SalesOrder]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesOrder', N'SalesType') IS NULL ALTER TABLE [dbo].[SalesOrder] ADD [SalesType] int NOT NULL DEFAULT 1;",
             "IF OBJECT_ID(N'[dbo].[SalesReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.SalesReturn', N'SalesOrderId') IS NULL ALTER TABLE [dbo].[SalesReturn] ADD [SalesOrderId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[PurchaseReturn]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.PurchaseReturn', N'PurchaseOrderId') IS NULL ALTER TABLE [dbo].[PurchaseReturn] ADD [PurchaseOrderId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] float NULL;",
-            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.InventoryTransaction', N'UnitCost') IS NULL ALTER TABLE [dbo].[InventoryTransaction] ADD [UnitCost] float NULL;",
+            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] decimal(19,6) NULL;",
+            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.InventoryTransaction', N'UnitCost') IS NULL ALTER TABLE [dbo].[InventoryTransaction] ADD [UnitCost] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_StockLookup] ON [dbo].[InventoryTransaction] ([IsDeleted], [Status], [ProductId], [WarehouseId]) INCLUDE ([Stock], [CreatedAtUtc]);",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) CREATE INDEX [IX_ProductSerial_StockLookup] ON [dbo].[ProductSerial] ([IsDeleted], [Status], [ProductId], [CurrentWarehouseId]) INCLUDE ([CreatedAtUtc]);",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_ManufacturerSerialNumber' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[ProductSerial] WHERE [IsDeleted] = 0 AND [ManufacturerSerialNumber] IS NOT NULL GROUP BY [ManufacturerSerialNumber] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_ProductSerial_ManufacturerSerialNumber] ON [dbo].[ProductSerial] ([ManufacturerSerialNumber]) WHERE [ManufacturerSerialNumber] IS NOT NULL AND [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_PurchaseOrderItem_PurchaseOrderId_ProductId' AND [object_id] = OBJECT_ID(N'[dbo].[PurchaseOrderItem]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[PurchaseOrderItem] WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL GROUP BY [PurchaseOrderId], [ProductId] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_PurchaseOrderItem_PurchaseOrderId_ProductId] ON [dbo].[PurchaseOrderItem] ([PurchaseOrderId], [ProductId]) WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExport', N'WarehouseId') IS NULL ALTER TABLE [dbo].[MaterialExport] ADD [WarehouseId] nvarchar(50) NULL;",
-            "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NULL BEGIN CREATE TABLE [dbo].[CashTransactionPayment] ([Id] nvarchar(50) NOT NULL, [IsDeleted] bit NOT NULL CONSTRAINT [DF_CashTransactionPayment_IsDeleted] DEFAULT 0, [CreatedAtUtc] datetime2 NULL, [CreatedById] nvarchar(450) NULL, [UpdatedAtUtc] datetime2 NULL, [UpdatedById] nvarchar(450) NULL, [CashTransactionId] nvarchar(50) NOT NULL, [CashAccountId] nvarchar(50) NULL, [PaymentDate] datetime2 NOT NULL, [Amount] float NOT NULL, [Description] nvarchar(4000) NULL, CONSTRAINT [PK_CashTransactionPayment] PRIMARY KEY ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashTransaction_CashTransactionId] FOREIGN KEY ([CashTransactionId]) REFERENCES [dbo].[CashTransaction] ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashAccount_CashAccountId] FOREIGN KEY ([CashAccountId]) REFERENCES [dbo].[CashAccount] ([Id])); CREATE INDEX [IX_CashTransactionPayment_CashTransactionId] ON [dbo].[CashTransactionPayment] ([CashTransactionId]); CREATE INDEX [IX_CashTransactionPayment_CashAccountId] ON [dbo].[CashTransactionPayment] ([CashAccountId]); CREATE INDEX [IX_CashTransactionPayment_PaymentDate] ON [dbo].[CashTransactionPayment] ([PaymentDate]); END;",
+            "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NULL BEGIN CREATE TABLE [dbo].[CashTransactionPayment] ([Id] nvarchar(50) NOT NULL, [IsDeleted] bit NOT NULL CONSTRAINT [DF_CashTransactionPayment_IsDeleted] DEFAULT 0, [CreatedAtUtc] datetime2 NULL, [CreatedById] nvarchar(450) NULL, [UpdatedAtUtc] datetime2 NULL, [UpdatedById] nvarchar(450) NULL, [CashTransactionId] nvarchar(50) NOT NULL, [CashAccountId] nvarchar(50) NULL, [PaymentDate] datetime2 NOT NULL, [Amount] decimal(19,6) NOT NULL, [Description] nvarchar(4000) NULL, CONSTRAINT [PK_CashTransactionPayment] PRIMARY KEY ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashTransaction_CashTransactionId] FOREIGN KEY ([CashTransactionId]) REFERENCES [dbo].[CashTransaction] ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashAccount_CashAccountId] FOREIGN KEY ([CashAccountId]) REFERENCES [dbo].[CashAccount] ([Id])); CREATE INDEX [IX_CashTransactionPayment_CashTransactionId] ON [dbo].[CashTransactionPayment] ([CashTransactionId]); CREATE INDEX [IX_CashTransactionPayment_CashAccountId] ON [dbo].[CashTransactionPayment] ([CashAccountId]); CREATE INDEX [IX_CashTransactionPayment_PaymentDate] ON [dbo].[CashTransactionPayment] ([PaymentDate]); END;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL ALTER TABLE [dbo].[CashTransactionPayment] ALTER COLUMN [CashAccountId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransaction_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) CREATE INDEX [IX_CashTransaction_ActiveBalance] ON [dbo].[CashTransaction] ([CashAccountId], [TransactionType]) INCLUDE ([PaidAmount]) WHERE [IsDeleted] = 0;",
+            "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransactionPayment_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransactionPayment]')) CREATE INDEX [IX_CashTransactionPayment_ActiveBalance] ON [dbo].[CashTransactionPayment] ([CashAccountId]) INCLUDE ([CashTransactionId], [Amount]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL INSERT INTO [dbo].[CashTransactionPayment] ([Id], [IsDeleted], [CreatedAtUtc], [CreatedById], [CashTransactionId], [CashAccountId], [PaymentDate], [Amount], [Description]) SELECT CONVERT(nvarchar(50), NEWID()), 0, SYSUTCDATETIME(), COALESCE(ct.[UpdatedById], ct.[CreatedById]), ct.[Id], ct.[CashAccountId], COALESCE(ct.[TransactionDate], SYSUTCDATETIME()), ISNULL(ct.[PaidAmount], 0) - ISNULL(history.[RecordedAmount], 0), N'Khôi phục lịch sử thanh toán' FROM [dbo].[CashTransaction] ct OUTER APPLY (SELECT SUM(p.[Amount]) AS [RecordedAmount] FROM [dbo].[CashTransactionPayment] p WHERE p.[CashTransactionId] = ct.[Id] AND p.[IsDeleted] = 0) history WHERE ct.[IsDeleted] = 0 AND ISNULL(ct.[PaidAmount], 0) - ISNULL(history.[RecordedAmount], 0) > 0.000001;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL UPDATE ct SET ct.[CashAccountId] = firstPayment.[CashAccountId] FROM [dbo].[CashTransaction] ct CROSS APPLY (SELECT TOP (1) pay.[CashAccountId] FROM [dbo].[CashTransactionPayment] pay WHERE pay.[CashTransactionId] = ct.[Id] AND pay.[IsDeleted] = 0 ORDER BY pay.[PaymentDate], pay.[CreatedAtUtc], pay.[Id]) firstPayment WHERE ct.[IsDeleted] = 0 AND ct.[SourceModule] = N'PurchaseOrder';",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND OBJECT_ID(N'[dbo].[PurchaseOrder]', N'U') IS NOT NULL UPDATE ct SET ct.[VendorId] = po.[VendorId] FROM [dbo].[CashTransaction] ct INNER JOIN [dbo].[PurchaseOrder] po ON po.[Id] = ct.[SourceModuleId] WHERE ct.[IsDeleted] = 0 AND ct.[SourceModule] = N'PurchaseOrder' AND ct.[VendorId] IS NULL AND po.[VendorId] IS NOT NULL;",
@@ -163,6 +168,33 @@ public static class DI
         foreach (var command in commands)
         {
             dataContext.Database.ExecuteSqlRaw(command);
+        }
+    }
+
+    private static void EnsureDecimalColumns(DataContext dataContext)
+    {
+        dataContext.Database.ExecuteSqlRaw(
+            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns c WHERE c.[object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]') AND c.[name] = N'Stock' AND (TYPE_NAME(c.[user_type_id]) <> N'decimal' OR c.[precision] <> 19 OR c.[scale] <> 6)) AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) DROP INDEX [IX_InventoryTransaction_StockLookup] ON [dbo].[InventoryTransaction]; IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns c WHERE c.[object_id] = OBJECT_ID(N'[dbo].[CashTransaction]') AND c.[name] = N'PaidAmount' AND (TYPE_NAME(c.[user_type_id]) <> N'decimal' OR c.[precision] <> 19 OR c.[scale] <> 6)) AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransaction_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) DROP INDEX [IX_CashTransaction_ActiveBalance] ON [dbo].[CashTransaction]; IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns c WHERE c.[object_id] = OBJECT_ID(N'[dbo].[CashTransactionPayment]') AND c.[name] = N'Amount' AND (TYPE_NAME(c.[user_type_id]) <> N'decimal' OR c.[precision] <> 19 OR c.[scale] <> 6)) AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransactionPayment_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransactionPayment]')) DROP INDEX [IX_CashTransactionPayment_ActiveBalance] ON [dbo].[CashTransactionPayment];");
+
+        foreach (var entityType in dataContext.Model.GetEntityTypes())
+        {
+            var tableName = entityType.GetTableName();
+            if (tableName == null) continue;
+            var schema = entityType.GetSchema() ?? "dbo";
+            var table = StoreObjectIdentifier.Table(tableName, schema);
+
+            foreach (var property in entityType.GetProperties()
+                .Where(property => Nullable.GetUnderlyingType(property.ClrType) == typeof(decimal)
+                    || property.ClrType == typeof(decimal)))
+            {
+                var columnName = property.GetColumnName(table);
+                if (columnName == null) continue;
+                var nullability = property.IsNullable ? "NULL" : "NOT NULL";
+#pragma warning disable EF1002 // Identifiers come only from the trusted EF model, never from request input.
+                dataContext.Database.ExecuteSqlRaw(
+                    $"IF OBJECT_ID(N'[{schema}].[{tableName}]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns c WHERE c.[object_id] = OBJECT_ID(N'[{schema}].[{tableName}]') AND c.[name] = N'{columnName}' AND (TYPE_NAME(c.[user_type_id]) <> N'decimal' OR c.[precision] <> 19 OR c.[scale] <> 6)) ALTER TABLE [{schema}].[{tableName}] ALTER COLUMN [{columnName}] decimal(19,6) {nullability};");
+#pragma warning restore EF1002
+            }
         }
     }
 }

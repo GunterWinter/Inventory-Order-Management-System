@@ -19,8 +19,8 @@ public class CreateProductRequest : IRequest<CreateProductResult>
     public string? Name { get; init; }
     public string? ReferenceCode { get; set; }
     public string? Description { get; init; }
-    public double? UnitPrice { get; init; }
-    public double? CostPrice { get; init; }
+    public decimal? UnitPrice { get; init; }
+    public decimal? CostPrice { get; init; }
     public string? ImageUrl { get; init; }
     public bool? Physical { get; init; } = true;
     public SerialTrackingMode? SerialTrackingMode { get; init; } = Domain.Enums.SerialTrackingMode.None;
@@ -29,7 +29,7 @@ public class CreateProductRequest : IRequest<CreateProductResult>
     public int? DefaultWarrantyMonths { get; init; }
     public string? UnitMeasureName { get; init; }
     public string? ProductGroupId { get; init; }
-    public double? OpeningStockQuantity { get; init; }
+    public decimal? OpeningStockQuantity { get; init; }
     public string? CreatedById { get; init; }
 }
 
@@ -51,32 +51,32 @@ public class CreateProductValidator : AbstractValidator<CreateProductRequest>
         RuleFor(x => x.UnitMeasureName).NotEmpty();
         RuleFor(x => x.ProductGroupId).NotEmpty();
         RuleFor(x => x.OpeningStockQuantity)
-            .Must(x => !x.HasValue || (double.IsFinite(x.Value) && x.Value >= 0d))
+            .Must(x => !x.HasValue || x.Value >= 0m)
             .WithMessage("Opening stock must be a finite, non-negative number.");
         RuleFor(x => x.OpeningStockQuantity)
             .Must((request, quantity) => !quantity.HasValue
-                || quantity.Value == 0d
+                || quantity.Value == 0m
                 || (request.Physical == true
                     && (request.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.ManufacturerSerial))
             .WithMessage("Opening stock is only supported for physical products without manufacturer serial entry.");
         RuleFor(x => x.OpeningStockQuantity)
-            .Must(x => !x.HasValue || Math.Abs(x.Value - Math.Round(x.Value)) <= 0.000001d)
+            .Must(x => !x.HasValue || Math.Abs(x.Value - Math.Round(x.Value)) <= 0.000001m)
             .When(x => x.Physical == true
                 && (x.SerialTrackingMode ?? SerialTrackingMode.None) == SerialTrackingMode.InternalAuto)
             .WithMessage("Opening stock for auto-generated internal serials must be a whole number.");
         RuleFor(x => x.CostPrice)
             .NotNull()
-            .When(x => x.OpeningStockQuantity > 0d
+            .When(x => x.OpeningStockQuantity > 0m
                 && x.Physical == true
                 && (x.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.ManufacturerSerial);
         RuleFor(x => x.DefaultWarehouseId)
             .NotEmpty()
-            .When(x => x.OpeningStockQuantity > 0d
+            .When(x => x.OpeningStockQuantity > 0m
                 && x.Physical == true
                 && (x.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.ManufacturerSerial);
         RuleFor(x => x.CreatedById)
             .NotEmpty()
-            .When(x => x.OpeningStockQuantity > 0d)
+            .When(x => x.OpeningStockQuantity > 0m)
             .WithMessage("Người xác nhận là bắt buộc khi ghi nhận tồn đầu kỳ.");
     }
 }

@@ -12,17 +12,17 @@ public sealed record CashCategorySummaryItemDto
 {
     public string? CashCategoryId { get; init; }
     public string CashCategoryName { get; init; } = "Uncategorized";
-    public double ReceiptAmount { get; init; }
-    public double ExpenseAmount { get; init; }
-    public double NetCashFlow => ReceiptAmount - ExpenseAmount;
+    public decimal ReceiptAmount { get; init; }
+    public decimal ExpenseAmount { get; init; }
+    public decimal NetCashFlow => ReceiptAmount - ExpenseAmount;
 }
 
 public sealed class GetCashCategorySummaryResult
 {
     public List<CashCategorySummaryItemDto> Data { get; init; } = [];
-    public double TotalReceipt { get; init; }
-    public double TotalExpense { get; init; }
-    public double NetCashFlow => TotalReceipt - TotalExpense;
+    public decimal TotalReceipt { get; init; }
+    public decimal TotalExpense { get; init; }
+    public decimal NetCashFlow => TotalReceipt - TotalExpense;
 }
 
 public sealed class GetCashCategorySummaryRequest : IRequest<GetCashCategorySummaryResult>
@@ -51,7 +51,7 @@ public sealed class GetCashCategorySummaryHandler
         public string? CashCategoryId { get; init; }
         public string CashCategoryName { get; init; } = "Uncategorized";
         public CashTransactionType? TransactionType { get; init; }
-        public double Amount { get; init; }
+        public decimal Amount { get; init; }
     }
 
     private readonly IQueryContext _queryContext;
@@ -95,7 +95,7 @@ public sealed class GetCashCategorySummaryHandler
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SourceModule != "CashTransfer"
-                && (x.PaidAmount ?? 0d) != 0d
+                && (x.PaidAmount ?? 0m) != 0m
                 && !x.PaymentList.Any(payment => !payment.IsDeleted));
 
         if (request.FromDate.HasValue)
@@ -111,7 +111,7 @@ public sealed class GetCashCategorySummaryHandler
                 CashCategoryId = x.CashCategoryId,
                 CashCategoryName = x.CashCategory != null ? x.CashCategory.Name ?? "Uncategorized" : "Uncategorized",
                 TransactionType = x.TransactionType,
-                Amount = x.PaidAmount ?? 0d
+                Amount = x.PaidAmount ?? 0m
             })
             .ToListAsync(cancellationToken);
 

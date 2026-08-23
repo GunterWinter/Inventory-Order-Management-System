@@ -6,6 +6,7 @@ using Application.Features.ProductSerialManager;
 using Application.Features.SalesOrderManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,8 +26,8 @@ public class CreateSalesOrderItemRequest : IRequest<CreateSalesOrderItemResult>
     public string? Summary { get; init; }
     public string? TaxId { get; init; }
     public int? WarrantyMonths { get; init; } = 0;
-    public double? UnitPrice { get; init; }
-    public double? Quantity { get; init; } = 1;
+    public decimal? UnitPrice { get; init; }
+    public decimal? Quantity { get; init; } = 1;
     public List<string>? ProductSerialIds { get; init; }
     public string? CreatedById { get; init; }
 }
@@ -42,7 +43,8 @@ public class CreateSalesOrderItemValidator : AbstractValidator<CreateSalesOrderI
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.WarrantyMonths).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.UnitPrice).NotEmpty();
-        RuleFor(x => x.Quantity).NotNull().GreaterThan(0);
+        RuleFor(x => x.Quantity).NotNull().GreaterThan(0)
+            .When(x => x.ProductSerialIds == null || x.ProductSerialIds.Count == 0);
     }
 }
 
@@ -93,13 +95,18 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
             throw new Exception("Warehouse is required for physical products.");
 
         var quantity = request.Quantity;
-        if (await _productSerialService.IsProductSerialTrackedAsync(request.ProductId, cancellationToken))
+        var isSerialTracked = await _productSerialService.IsProductSerialTrackedAsync(request.ProductId, cancellationToken);
+        if (isSerialTracked)
         {
             if (request.ProductSerialIds == null || request.ProductSerialIds.Count == 0)
             {
                 throw new Exception("Serial-tracked products require selected serial numbers.");
             }
             quantity = request.ProductSerialIds.Count;
+        }
+        else if (quantity == null || quantity <= 0m)
+        {
+            throw new Exception("Quantity must be greater than zero.");
         }
 
         await ValidateAvailableStockAsync(
@@ -122,12 +129,12 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = quantity;
 
-        entity.Total = (entity.Quantity ?? 0d) * (entity.UnitPrice ?? 0d);
+        entity.Total = AccountingMath.RoundVnd((entity.Quantity ?? 0m) * (entity.UnitPrice ?? 0m));
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
-        entity.TaxAmount = (entity.Total ?? 0d) * taxPercentage / 100d;
-        entity.AfterTaxAmount = (entity.Total ?? 0d) + (entity.TaxAmount ?? 0d);
-        entity.CogsAmount = 0d;
-        entity.ProfitAmount = 0d;
+        entity.TaxAmount = AccountingMath.RoundVnd((entity.Total ?? 0m) * taxPercentage / 100m);
+        entity.AfterTaxAmount = (entity.Total ?? 0m) + (entity.TaxAmount ?? 0m);
+        entity.CogsAmount = 0m;
+        entity.ProfitAmount = 0m;
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -152,7 +159,7 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
     private async Task ValidateAvailableStockAsync(
         string? productId,
         string? warehouseId,
-        double? quantity,
+        decimal? quantity,
         string? currentSalesOrderItemId,
         CancellationToken cancellationToken)
     {
@@ -169,13 +176,13 @@ public class CreateSalesOrderItemHandler : IRequestHandler<CreateSalesOrderItemR
             currentSalesOrderItemId,
             cancellationToken);
 
-        if (availableStock <= 0d || quantity > availableStock)
+        if (availableStock <= 0m || quantity > availableStock)
         {
             throw new Exception($"Not enough stock for the selected warehouse. Available: {availableStock}.");
         }
     }
 
-    private async Task<double> ResolveTaxPercentageAsync(string? taxId, CancellationToken cancellationToken)
+    private async Task<decimal> ResolveTaxPercentageAsync(string? taxId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(taxId))
         {

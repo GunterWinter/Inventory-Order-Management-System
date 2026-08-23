@@ -13,7 +13,7 @@ const App = {
                         ...document,
                         documentDate: DateFormatManager.parseBusinessDate(document.documentDate),
                         paymentHistory: (document.payments ?? []).map(payment =>
-                            `${payment.paymentDate ?? ''}: ${NumberFormatManager.formatToLocale(payment.amount ?? 0)}${payment.description ? ` - ${payment.description}` : ''}`
+                            `${payment.paymentDate ?? ''}: ${NumberFormatManager.formatMoneyToLocale(payment.amount ?? 0)}${payment.description ? ` - ${payment.description}` : ''}`
                         ).join('\n')
                     }))
                 }));

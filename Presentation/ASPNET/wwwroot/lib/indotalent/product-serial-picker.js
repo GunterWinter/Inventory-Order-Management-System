@@ -189,9 +189,7 @@ window.ProductSerialPicker = (() => {
 
                     applySelectionToRow(args.rowData, selectedSerials, quantityField);
                     if (quantityObj) {
-                        if (selectedSerials.length > 0) {
-                            quantityObj.value = args.rowData[quantityField] ?? 0;
-                        }
+                        quantityObj.value = args.rowData[quantityField] ?? 0;
                         quantityObj.readonly = selectedSerials.length > 0;
                         quantityObj.dataBind();
                     }

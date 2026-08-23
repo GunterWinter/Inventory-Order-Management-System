@@ -249,9 +249,22 @@ const App = {
                             if (!selected.length) return;
                             const confirmation = await Swal.fire({ title: 'Bạn có chắc chắn muốn xóa?', text: 'Số dòng sẽ xóa: ' + selected.length, icon: 'warning', showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
                             if (!confirmation.isConfirmed) return;
-                            for (const record of selected) await services.deleteMainData(record.id, null);
-                            await methods.populateMainData();
-                            mainGrid.refresh();
+                            try {
+                                for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId());
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} nhóm khách hàng.`, heightAuto: false });
+                            } catch (error) {
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'Xóa thất bại',
+                                    text: error.response?.data?.message?.replace(/^Exception:\s*/, '') ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý',
+                                    heightAuto: false
+                                });
+                            }
                             return;
                         }
                         if (args.item.id === 'DeleteCustomLegacy') {

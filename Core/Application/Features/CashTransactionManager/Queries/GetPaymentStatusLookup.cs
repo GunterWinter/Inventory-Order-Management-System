@@ -16,8 +16,8 @@ public record GetPaymentStatusLookupDto
     public DateTime? TransactionDate { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
-    public double? Amount { get; init; }
-    public double? PaidAmount { get; init; }
+    public decimal? Amount { get; init; }
+    public decimal? PaidAmount { get; init; }
     public string? Description { get; init; }
     public bool IsSplit { get; init; }
 }

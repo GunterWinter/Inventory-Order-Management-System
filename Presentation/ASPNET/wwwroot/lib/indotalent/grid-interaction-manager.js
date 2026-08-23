@@ -3,6 +3,7 @@
 
     // Shared interaction conventions for Syncfusion grids and document forms.
     const pending = new WeakMap();
+    const configuredSelections = new WeakSet();
     const collapsingGroups = new WeakSet();
     const scheduledGroupCollapses = new WeakSet();
     const gridDiscoveryAttempts = new WeakMap();
@@ -26,6 +27,18 @@
             throw error;
         }
     };
+
+    function displayValue(column, field, value, row) {
+        if (typeof column?.valueAccessor === 'function') {
+            return column.valueAccessor(field, row, column);
+        }
+
+        if (column?.foreignKeyField && column?.foreignKeyValue && Array.isArray(column.dataSource)) {
+            return column.dataSource.find(item => item?.[column.foreignKeyField] === value)?.[column.foreignKeyValue] ?? value;
+        }
+
+        return value;
+    }
 
     function syncBatchRowValues(grid, { rowData, editorElement, values, formatters = {} } = {}) {
         if (!grid || !rowData || !values) return -1;
@@ -73,10 +86,10 @@
             if (cell.querySelector?.('input, select, textarea, button')) return;
 
             const formatter = formatters[field];
-            const displayValue = typeof formatter === 'function'
+            const renderedValue = typeof formatter === 'function'
                 ? formatter(value, actualRow ?? rowData, field)
-                : value;
-            cell.textContent = displayValue ?? '';
+                : displayValue(column, field, value, actualRow ?? rowData);
+            cell.textContent = renderedValue ?? '';
         });
 
         return rowIndex;
@@ -345,6 +358,50 @@
         return grid;
     }
 
+    function configureRowSelection(grid) {
+        if (!grid || configuredSelections.has(grid) || grid.editSettings?.mode === 'Batch') return grid;
+        configuredSelections.add(grid);
+
+        const selectionSettings = Object.assign({}, grid.selectionSettings || {}, {
+            type: 'Multiple',
+            checkboxOnly: false,
+            enableSimpleMultiRowSelection: false
+        });
+        grid.setProperties?.({ selectionSettings }, true);
+        grid.selectionSettings = selectionSettings;
+
+        // Native multiple selection already makes a plain click replace the old row and
+        // Ctrl/Shift/checkbox additive. Clearing during rowSelecting cancels the new click.
+        if (typeof grid.rowSelecting === 'function' && grid.rowSelecting.toString().includes('clearSelection')) {
+            grid.rowSelecting = undefined;
+        }
+
+        const updateToolbar = () => {
+            const count = grid.getSelectedRecords?.().length ?? 0;
+            grid.toolbarModule?.enableItems?.(['EditCustom'], count === 1);
+            grid.toolbarModule?.enableItems?.(['DeleteCustom'], count > 0);
+        };
+        const originalSelected = grid.rowSelected;
+        const originalDeselected = grid.rowDeselected;
+        grid.rowSelected = args => { originalSelected?.(args); updateToolbar(); };
+        grid.rowDeselected = args => { originalDeselected?.(args); updateToolbar(); };
+
+        const clearStaleSelection = () => {
+            const data = Array.isArray(grid.dataSource) ? grid.dataSource : grid.dataSource?.result;
+            if (!Array.isArray(data)) return;
+            const key = grid.getPrimaryKeyFieldNames?.()[0]
+                ?? grid.columns?.find(column => column?.isPrimaryKey)?.field
+                ?? 'id';
+            const liveKeys = new Set(data.map(row => row?.[key]));
+            if ((grid.getSelectedRecords?.() ?? []).some(row => !liveKeys.has(row?.[key]))) {
+                grid.clearSelection?.();
+            }
+            updateToolbar();
+        };
+        grid.addEventListener?.('dataBound', clearStaleSelection);
+        return grid;
+    }
+
     function autoConfigure() {
         document.querySelectorAll('.e-grid').forEach(element => {
             const grid = element.ej2_instances?.[0];
@@ -374,6 +431,7 @@
                 element.dataset.batchManaged = 'true';
                 configureBatch(grid);
             }
+            if (!/^secondarygrid/i.test(element.id || '')) configureRowSelection(grid);
         });
         document.querySelectorAll('form').forEach(form => {
             if (form.dataset.gridPendingWired) return;
@@ -588,7 +646,7 @@
         collapseGroupsOnDataBound(grid);
     }
 
-    window.GridInteractionManager = { configureBatch, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
+    window.GridInteractionManager = { configureBatch, configureRowSelection, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
     patchModalPopups();
     const init = () => { patchModalPopups(); wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

@@ -29,7 +29,10 @@ public class CashTransactionPaymentConfiguration : BaseEntityConfiguration<CashT
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.CashTransactionId);
-        builder.HasIndex(x => x.CashAccountId);
+        builder.HasIndex(x => x.CashAccountId)
+            .HasDatabaseName("IX_CashTransactionPayment_ActiveBalance")
+            .HasFilter("[IsDeleted] = 0")
+            .IncludeProperties(x => new { x.CashTransactionId, x.Amount });
         builder.HasIndex(x => x.PaymentDate);
     }
 }

@@ -19,7 +19,7 @@ public class CreateCashTransferRequest : IRequest<CreateCashTransferResult>
     public DateTime? TransferDate { get; init; }
     public string? FromCashAccountId { get; init; }
     public string? ToCashAccountId { get; init; }
-    public double? Amount { get; init; }
+    public decimal? Amount { get; init; }
     public string? Description { get; init; }
     public string? CashCategoryId { get; init; }
     public string? CreatedById { get; init; }

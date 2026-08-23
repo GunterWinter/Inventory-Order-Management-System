@@ -12,7 +12,7 @@ public sealed class ProductOpeningStockService
 {
     public const string OpeningStockModuleCode = "PRODUCT_OPENING";
 
-    private const double QuantityTolerance = 0.000001d;
+    private const decimal QuantityTolerance = 0.000001m;
 
     private readonly ICommandRepository<StockCount> _stockCountRepository;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
@@ -45,7 +45,7 @@ public sealed class ProductOpeningStockService
 
     public async Task ApplyAsync(
         Product product,
-        double? requestedQuantity,
+        decimal? requestedQuantity,
         bool isCreate,
         string? userId,
         CancellationToken cancellationToken = default)
@@ -56,7 +56,7 @@ public sealed class ProductOpeningStockService
         }
 
         var quantity = requestedQuantity.Value;
-        if (!double.IsFinite(quantity) || quantity < 0d)
+        if (quantity < 0m)
         {
             throw new InvalidOperationException("Tồn đầu kỳ phải là một số không âm hợp lệ.");
         }
@@ -74,7 +74,7 @@ public sealed class ProductOpeningStockService
 
         if (!physical)
         {
-            if (quantity > 0d)
+            if (quantity > 0m)
             {
                 throw new InvalidOperationException("Hàng hóa phi vật lý không được có tồn đầu kỳ.");
             }
@@ -84,7 +84,7 @@ public sealed class ProductOpeningStockService
 
         if (trackingMode == SerialTrackingMode.ManufacturerSerial)
         {
-            if (quantity > 0d)
+            if (quantity > 0m)
             {
                 throw new InvalidOperationException(
                     "Hàng theo serial nhà sản xuất chỉ được nhập tồn qua đơn mua hàng.");
@@ -121,7 +121,7 @@ public sealed class ProductOpeningStockService
 
         var currentOpeningQuantity = history
             .Where(x => x.Status == InventoryTransactionStatus.Confirmed)
-            .Sum(x => x.Stock ?? 0d);
+            .Sum(x => x.Stock ?? 0m);
         var delta = quantity - currentOpeningQuantity;
         if (Math.Abs(delta) <= QuantityTolerance)
         {
@@ -154,7 +154,7 @@ public sealed class ProductOpeningStockService
         }
 
         var openingUnitCost = firstHistory?.UnitCost ?? product.CostPrice;
-        if (!openingUnitCost.HasValue || !double.IsFinite(openingUnitCost.Value) || openingUnitCost.Value < 0d)
+        if (!openingUnitCost.HasValue || openingUnitCost.Value < 0m)
         {
             throw new InvalidOperationException(
                 "Cần nhập giá vốn không âm trước khi ghi nhận tồn đầu kỳ.");
@@ -165,7 +165,7 @@ public sealed class ProductOpeningStockService
                 && x.Status == InventoryTransactionStatus.Confirmed
                 && x.ProductId == product.Id
                 && x.WarehouseId == warehouseId)
-            .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+            .SumAsync(x => x.Stock ?? 0m, cancellationToken);
         var countedStock = currentStock + delta;
         if (countedStock < -QuantityTolerance)
         {
@@ -174,7 +174,7 @@ public sealed class ProductOpeningStockService
         }
         if (Math.Abs(countedStock) <= QuantityTolerance)
         {
-            countedStock = 0d;
+            countedStock = 0m;
         }
 
         var stockCountWarehouse = await _warehouseRepository.GetQuery()
@@ -213,10 +213,10 @@ public sealed class ProductOpeningStockService
             QtySCCount = countedStock,
             QtySCDelta = currentStock - countedStock,
             Movement = Math.Abs(delta),
-            TransType = delta > 0d ? InventoryTransType.In : InventoryTransType.Out,
+            TransType = delta > 0m ? InventoryTransType.In : InventoryTransType.Out,
             Stock = delta,
-            WarehouseFromId = delta > 0d ? stockCountWarehouse.Id : warehouseId,
-            WarehouseToId = delta > 0d ? warehouseId : stockCountWarehouse.Id,
+            WarehouseFromId = delta > 0m ? stockCountWarehouse.Id : warehouseId,
+            WarehouseToId = delta > 0m ? warehouseId : stockCountWarehouse.Id,
             UnitCost = openingUnitCost.Value
         };
         await _inventoryTransactionRepository.CreateAsync(transaction, cancellationToken);
@@ -251,7 +251,7 @@ public sealed class ProductOpeningStockService
         Product product,
         InventoryTransaction transaction,
         int quantity,
-        double unitCost,
+        decimal unitCost,
         string stockCountWarehouseId,
         string warehouseId,
         string? userId,

@@ -10,8 +10,8 @@ public class Product : BaseEntity
     public string? Number { get; set; }
     public string? ReferenceCode { get; set; }
     public string? Description { get; set; }
-    public double? UnitPrice { get; set; }
-    public double? CostPrice { get; set; } = 0;
+    public decimal? UnitPrice { get; set; }
+    public decimal? CostPrice { get; set; } = 0;
     public string? ImageUrl { get; set; }
     public bool? Physical { get; set; } = true;
     public SerialTrackingMode? SerialTrackingMode { get; set; } = Domain.Enums.SerialTrackingMode.None;

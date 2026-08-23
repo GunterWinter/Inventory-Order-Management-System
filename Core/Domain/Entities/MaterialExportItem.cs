@@ -16,7 +16,7 @@ public class MaterialExportItem : BaseEntity
     public string? WarehouseId { get; set; }
     public Warehouse? Warehouse { get; set; }
     
-    public double? Quantity { get; set; } = 0;
-    public double? UnitPrice { get; set; } = 0;
-    public double? Total { get; set; } = 0;
+    public decimal? Quantity { get; set; } = 0;
+    public decimal? UnitPrice { get; set; } = 0;
+    public decimal? Total { get; set; } = 0;
 }

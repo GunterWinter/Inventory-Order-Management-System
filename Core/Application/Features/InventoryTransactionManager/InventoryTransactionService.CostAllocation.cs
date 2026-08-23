@@ -10,7 +10,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> CostAllocationCreateInvenTrans(
         string? moduleId,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? warehouseId,
         string? moduleNumber,
         string? createdById,
@@ -45,7 +45,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> CostAllocationUpdateInvenTrans(
         string? id,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? updatedById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null

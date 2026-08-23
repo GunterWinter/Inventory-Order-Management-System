@@ -2,6 +2,7 @@ using Application.Common.Repositories;
 using Application.Features.NumberSequenceManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 using Application.Features.CashTransactionManager;
@@ -17,8 +18,8 @@ public class CreateCashTransactionRequest : IRequest<CreateCashTransactionResult
 {
     public DateTime? TransactionDate { get; init; }
     public int? TransactionType { get; init; }
-    public double? Amount { get; init; }
-    public double? PaidAmount { get; init; }
+    public decimal? Amount { get; init; }
+    public decimal? PaidAmount { get; init; }
     public string? Description { get; init; }
     public string? CashAccountId { get; init; }
     public string? CashCategoryId { get; init; }
@@ -34,7 +35,7 @@ public class CreateCashTransactionRequest : IRequest<CreateCashTransactionResult
 public class CashTransactionAllocationInput
 {
     public string? CustomerId { get; init; }
-    public double Amount { get; init; }
+    public decimal Amount { get; init; }
     public string? Description { get; init; }
 }
 
@@ -49,12 +50,19 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
             .WithMessage("Transaction Type is invalid.");
         RuleFor(x => x.Amount).NotNull().GreaterThan(0);
         RuleFor(x => x.Allocations).Must((r, a) => a == null || a.Count == 0
-                || Math.Abs(a.Where(x => x.Amount > 0d).Sum(x => x.Amount) - (r.Amount ?? 0d)) <= 0.000001d)
+                || Math.Abs(a.Where(x => x.Amount > 0m).Sum(x => x.Amount) - (r.Amount ?? 0m)) <= 0.000001m)
             .WithMessage("Allocation total must equal transaction amount.");
         RuleFor(x => x.PaidAmount)
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)
             .When(x => x.PaidAmount.HasValue);
+        RuleFor(x => x.CashAccountId)
+            .NotEmpty()
+            .When(x => (x.PaidAmount ?? 0m) > 0m)
+            .WithMessage("Phải chọn tài khoản quỹ khi nhập số tiền đã trả.");
+        RuleFor(x => x.TransactionDate)
+            .Must(value => !value.HasValue || value.Value.Date <= AppDateTime.VietnamNow().Date)
+            .WithMessage("Ngày giao dịch không được lớn hơn ngày hiện tại.");
     }
 }
 
@@ -87,64 +95,60 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
     public async Task<CreateCashTransactionResult> Handle(CreateCashTransactionRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Allocations?.Count > 0
-            && Math.Abs(request.Allocations.Where(x => x.Amount > 0d).Sum(x => x.Amount) - (request.Amount ?? 0d)) > 0.000001d)
+            && Math.Abs(request.Allocations.Where(x => x.Amount > 0m).Sum(x => x.Amount) - (request.Amount ?? 0m)) > 0.000001m)
             throw new InvalidOperationException("Allocation total must equal transaction amount.");
 
         var entity = new CashTransaction();
-        entity.CreatedById = request.CreatedById;
-
-        entity.Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT");
-        entity.TransactionDate = request.TransactionDate;
-        entity.TransactionType = (CashTransactionType?)request.TransactionType;
-        entity.Amount = request.Amount;
-        entity.PaidAmount = request.PaidAmount ?? 0;
-        entity.Status = ComputePaymentStatus(entity.PaidAmount ?? 0, entity.Amount ?? 0);
-        entity.Description = request.Description;
-        entity.CashAccountId = request.CashAccountId;
-        entity.CashCategoryId = request.CashCategoryId;
-        entity.CustomerId = request.CustomerId;
-        entity.VendorId = request.VendorId;
-        // This endpoint creates manual transactions only. Source links are reserved
-        // for the handlers that own Purchase Order, Material Export and Cash Transfer.
-        entity.SourceModule = null;
-        entity.SourceModuleId = null;
-        entity.SourceModuleNumber = null;
-
-        await _repository.CreateAsync(entity, cancellationToken);
-
-        if ((entity.PaidAmount ?? 0d) > 0d)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            await _paymentRepository.CreateAsync(new CashTransactionPayment
-            {
-                CashTransactionId = entity.Id,
-                CashAccountId = entity.CashAccountId,
-                PaymentDate = entity.TransactionDate ?? DateTime.Today,
-                Amount = entity.PaidAmount ?? 0d,
-                Description = entity.Description,
-                CreatedById = request.CreatedById
-            }, cancellationToken);
-        }
+            entity.CreatedById = request.CreatedById;
+            entity.Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT");
+            entity.TransactionDate = request.TransactionDate;
+            entity.TransactionType = (CashTransactionType?)request.TransactionType;
+            entity.Amount = request.Amount;
+            entity.PaidAmount = request.PaidAmount ?? 0;
+            entity.Status = ComputePaymentStatus(entity.PaidAmount ?? 0, entity.Amount ?? 0);
+            entity.Description = request.Description;
+            entity.CashAccountId = request.CashAccountId;
+            entity.CashCategoryId = request.CashCategoryId;
+            entity.CustomerId = request.CustomerId;
+            entity.VendorId = request.VendorId;
+            entity.SourceModule = null;
+            entity.SourceModuleId = null;
+            entity.SourceModuleNumber = null;
 
-        if (request.Allocations != null)
-        {
-            foreach (var input in request.Allocations.Where(x => x.Amount > 0))
+            await _repository.CreateAsync(entity, ct);
+
+            if ((entity.PaidAmount ?? 0m) > 0m)
             {
-                if (string.IsNullOrWhiteSpace(input.CustomerId))
-                    throw new InvalidOperationException("An allocation must target a customer.");
-                await _allocationRepository.CreateAsync(new CashTransactionCostAllocation
+                await _paymentRepository.CreateAsync(new CashTransactionPayment
                 {
-                    CashTransactionId = entity.Id, CustomerId = input.CustomerId,
-                    Amount = input.Amount, Description = input.Description, CreatedById = request.CreatedById
-                }, cancellationToken);
+                    CashTransactionId = entity.Id,
+                    CashAccountId = entity.CashAccountId,
+                    PaymentDate = entity.TransactionDate ?? AppDateTime.VietnamNow(),
+                    Amount = entity.PaidAmount ?? 0m,
+                    Description = entity.Description,
+                    CreatedById = request.CreatedById
+                }, ct);
             }
-        }
 
-        await _unitOfWork.SaveAsync(cancellationToken);
+            if (request.Allocations != null)
+            {
+                foreach (var input in request.Allocations.Where(x => x.Amount > 0))
+                {
+                    if (string.IsNullOrWhiteSpace(input.CustomerId))
+                        throw new InvalidOperationException("Mỗi dòng phân bổ phải chọn một khách hàng/công trình.");
+                    await _allocationRepository.CreateAsync(new CashTransactionCostAllocation
+                    {
+                        CashTransactionId = entity.Id, CustomerId = input.CustomerId,
+                        Amount = input.Amount, Description = input.Description, CreatedById = request.CreatedById
+                    }, ct);
+                }
+            }
 
-        if (!string.IsNullOrEmpty(request.CashAccountId))
-        {
-            await _cashBalanceService.RecalculateAsync(request.CashAccountId, cancellationToken);
-        }
+            await _unitOfWork.SaveAsync(ct);
+            await _cashBalanceService.RecalculateAsync(request.CashAccountId, ct);
+        }, cancellationToken);
 
         return new CreateCashTransactionResult
         {
@@ -152,7 +156,7 @@ public class CreateCashTransactionHandler : IRequestHandler<CreateCashTransactio
         };
     }
 
-    private static CashTransactionStatus ComputePaymentStatus(double paidAmount, double amount)
+    private static CashTransactionStatus ComputePaymentStatus(decimal paidAmount, decimal amount)
     {
         if (amount <= 0) return CashTransactionStatus.Paid;
         if (paidAmount >= amount) return CashTransactionStatus.Paid;

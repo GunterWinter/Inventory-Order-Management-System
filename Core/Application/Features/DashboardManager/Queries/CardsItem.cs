@@ -1,18 +1,18 @@
-﻿namespace Application.Features.DashboardManager.Queries;
+namespace Application.Features.DashboardManager.Queries;
 
 public class CardsItem
 {
-    public double? SalesTotal { get; init; }
-    public double? SalesReturnTotal { get; init; }
-    public double? PurchaseTotal { get; init; }
-    public double? PurchaseReturnTotal { get; init; }
-    public double? TransferOutTotal { get; init; }
-    public double? TransferInTotal { get; init; }
-    public double ConfirmedSalesAmount { get; init; }
-    public double ConfirmedPurchaseAmount { get; init; }
-    public double CashBalance { get; init; }
-    public double CustomerReceivable { get; init; }
-    public double VendorDebt { get; init; }
-    public double InventoryQuantity { get; init; }
+    public decimal? SalesTotal { get; init; }
+    public decimal? SalesReturnTotal { get; init; }
+    public decimal? PurchaseTotal { get; init; }
+    public decimal? PurchaseReturnTotal { get; init; }
+    public decimal? TransferOutTotal { get; init; }
+    public decimal? TransferInTotal { get; init; }
+    public decimal ConfirmedSalesAmount { get; init; }
+    public decimal ConfirmedPurchaseAmount { get; init; }
+    public decimal CashBalance { get; init; }
+    public decimal CustomerReceivable { get; init; }
+    public decimal VendorDebt { get; init; }
+    public decimal InventoryQuantity { get; init; }
     public int MaterialExportCount { get; init; }
 }

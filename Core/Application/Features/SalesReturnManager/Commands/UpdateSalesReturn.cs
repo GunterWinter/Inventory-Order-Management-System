@@ -2,6 +2,7 @@ using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using FluentValidation;
 using MediatR;
 
@@ -61,6 +62,7 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
                 || !Enum.IsDefined(typeof(SalesReturnStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu trả hàng bán không hợp lệ.");
             var requestedStatus = (SalesReturnStatus)statusValue;
+            DocumentDateGuard.EnsureCanPost(request.ReturnDate, requestedStatus == SalesReturnStatus.Confirmed);
             ValidateTransition(entity, requestedStatus, request);
 
             entity.UpdatedById = request.UpdatedById;

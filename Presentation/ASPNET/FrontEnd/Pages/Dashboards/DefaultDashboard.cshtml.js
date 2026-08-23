@@ -36,7 +36,7 @@ const App = {
         };
 
         const methods = {
-            money: value => NumberFormatManager.formatToLocale(value ?? 0),
+            money: value => NumberFormatManager.formatMoneyToLocale(value ?? 0),
             quantity: value => NumberFormatManager.formatToLocale(value ?? 0),
             date: value => DateFormatManager.formatToLocale(value),
             dateTime: value => DateFormatManager.formatDateTimeToLocale(value),

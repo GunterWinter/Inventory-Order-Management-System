@@ -50,6 +50,10 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
 
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.TransactionDate);
+        builder.HasIndex(e => new { e.CashAccountId, e.TransactionType })
+            .HasDatabaseName("IX_CashTransaction_ActiveBalance")
+            .HasFilter("[IsDeleted] = 0")
+            .IncludeProperties(e => e.PaidAmount);
         builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.SourceDetailId, e.TransactionType })
             .HasDatabaseName("UX_CashTransaction_MaterialExportOffset")
             .IsUnique()

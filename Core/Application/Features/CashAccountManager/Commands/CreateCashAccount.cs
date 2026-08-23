@@ -17,7 +17,7 @@ public class CreateCashAccountRequest : IRequest<CreateCashAccountResult>
     public string? Name { get; init; }
     public int? AccountType { get; init; }
     public string? Description { get; init; }
-    public double? InitialBalance { get; init; }
+    public decimal? InitialBalance { get; init; }
     public string? CreatedById { get; init; }
 }
 

@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
@@ -13,7 +13,7 @@ public class CreateTaxResult
 public class CreateTaxRequest : IRequest<CreateTaxResult>
 {
     public string? Name { get; init; }
-    public double? Percentage { get; init; }
+    public decimal? Percentage { get; init; }
     public string? Description { get; init; }
     public string? CreatedById { get; init; }
 }

@@ -47,7 +47,7 @@ public class SalesReturnSeeder
         var line = new InventoryTransaction { Number = _numbers.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
             ModuleId = result.Id, ModuleName = nameof(SalesReturn), ModuleCode = "SRN", ModuleNumber = result.Number,
             ModuleItemId = sourceLine.ModuleItemId, MovementDate = result.ReturnDate, Status = InventoryTransactionStatus.Draft,
-            WarehouseId = sourceLine.WarehouseId, ProductId = sourceLine.ProductId, Movement = 1d };
+            WarehouseId = sourceLine.WarehouseId, ProductId = sourceLine.ProductId, Movement = 1m };
         _inventory.CalculateInvenTrans(line);
         await _transactions.CreateAsync(line);
         await _unitOfWork.SaveAsync();

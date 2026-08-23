@@ -42,7 +42,7 @@ public class StockCountSeeder
         var line = new InventoryTransaction { Number = _numbers.GenerateNumber(nameof(InventoryTransaction), "", "IVT"),
             ModuleId = document.Id, ModuleName = nameof(StockCount), ModuleCode = "COUNT", ModuleNumber = document.Number,
             MovementDate = document.CountDate, Status = InventoryTransactionStatus.Draft,
-            WarehouseId = warehouse.Id, ProductId = product.Id, QtySCCount = Math.Max(0d, currentStock) };
+            WarehouseId = warehouse.Id, ProductId = product.Id, QtySCCount = Math.Max(0m, currentStock) };
         _inventory.CalculateInvenTrans(line);
         await _transactions.CreateAsync(line);
         await _unitOfWork.SaveAsync();

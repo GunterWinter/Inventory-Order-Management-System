@@ -15,12 +15,12 @@ public class PurchaseOrderItem : BaseEntity
     public string? Summary { get; set; }
     public string? TaxId { get; set; }
     public Tax? Tax { get; set; }
-    public double? UnitPrice { get; set; } = 0;
-    public double? Quantity { get; set; } = 1;
-    public double? Total { get; set; } = 0;
-    public double? TaxAmount { get; set; } = 0;
-    public double? AfterTaxAmount { get; set; } = 0;
-    public double? AllocatedQuantity { get; set; } = 0;
+    public decimal? UnitPrice { get; set; } = 0;
+    public decimal? Quantity { get; set; } = 1;
+    public decimal? Total { get; set; } = 0;
+    public decimal? TaxAmount { get; set; } = 0;
+    public decimal? AfterTaxAmount { get; set; } = 0;
+    public decimal? AllocatedQuantity { get; set; } = 0;
     public ICollection<PurchaseOrderCostAllocation> CostAllocations { get; set; } = new List<PurchaseOrderCostAllocation>();
-    public double RemainingQuantity => Math.Max(0d, (Quantity ?? 0d) - (AllocatedQuantity ?? 0d));
+    public decimal RemainingQuantity => Math.Max(0m, (Quantity ?? 0m) - (AllocatedQuantity ?? 0m));
 }

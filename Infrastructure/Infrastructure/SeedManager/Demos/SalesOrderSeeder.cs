@@ -53,13 +53,13 @@ public class SalesOrderSeeder
         if (tax == null) return;
 
         await CreateOrderAsync(customers, products, tax, DemoSeedData.ProjectA, "SERVICE-DESK-001",
-            1d, 2_000_000d, SalesOrderStatus.Confirmed, DemoSeedData.AccrualRevenueDescription, 4);
+            1m, 2_000_000m, SalesOrderStatus.Confirmed, DemoSeedData.AccrualRevenueDescription, 4);
         await CreateOrderAsync(customers, products, tax, DemoSeedData.ProjectB, "MAT-LED-001",
-            2d, 500_000d, SalesOrderStatus.Confirmed, DemoSeedData.PhysicalSaleDescription, 5);
+            2m, 500_000m, SalesOrderStatus.Confirmed, DemoSeedData.PhysicalSaleDescription, 5);
         await CreateOrderAsync(customers, products, tax, DemoSeedData.CustomerShowroom, "ELEC-TV-001",
-            1d, 12_500_000d, SalesOrderStatus.Confirmed, DemoSeedData.SerialSaleDescription, 6);
+            1m, 12_500_000m, SalesOrderStatus.Confirmed, DemoSeedData.SerialSaleDescription, 6);
         await CreateOrderAsync(customers, products, tax, DemoSeedData.CustomerRetail, "SERVICE-VOUCHER-001",
-            1d, 500_000d, SalesOrderStatus.Draft, "DEMO SO NHÁP", 7);
+            1m, 500_000m, SalesOrderStatus.Draft, "DEMO SO NHÁP", 7);
     }
 
     private async Task CreateOrderAsync(
@@ -68,8 +68,8 @@ public class SalesOrderSeeder
         Tax tax,
         string customerName,
         string productReference,
-        double quantity,
-        double unitPrice,
+        decimal quantity,
+        decimal unitPrice,
         SalesOrderStatus status,
         string description,
         int dayOffset)
@@ -87,7 +87,7 @@ public class SalesOrderSeeder
         };
         await _orders.CreateAsync(order);
         var total = quantity * unitPrice;
-        var taxAmount = total * (tax.Percentage ?? 0d) / 100d;
+        var taxAmount = total * (tax.Percentage ?? 0m) / 100m;
         var item = new SalesOrderItem
         {
             SalesOrderId = order.Id,

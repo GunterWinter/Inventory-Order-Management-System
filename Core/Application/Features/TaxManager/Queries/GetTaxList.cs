@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -11,7 +11,7 @@ public record GetTaxListDto
 {
     public string? Id { get; init; }
     public string? Name { get; init; }
-    public double? Percentage { get; init; }
+    public decimal? Percentage { get; init; }
     public string? Description { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }

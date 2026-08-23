@@ -20,9 +20,9 @@ public record GetSalesOrderListDto
     public string? CustomerName { get; init; }
     public SalesType? SalesType { get; init; }
     public string? SalesTypeName { get; init; }
-    public double? BeforeTaxAmount { get; init; }
-    public double? TaxAmount { get; init; }
-    public double? AfterTaxAmount { get; init; }
+    public decimal? BeforeTaxAmount { get; init; }
+    public decimal? TaxAmount { get; init; }
+    public decimal? AfterTaxAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 

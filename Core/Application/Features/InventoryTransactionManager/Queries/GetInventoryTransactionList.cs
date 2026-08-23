@@ -1,4 +1,4 @@
-﻿using Application.Common.CQS.Queries;
+using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using AutoMapper;
 using Domain.Entities;
@@ -21,9 +21,9 @@ public record GetInventoryTransactionListDto
     public string? WarehouseName { get; init; }
     public string? ProductName { get; init; }
     public string? ProductReferenceCode { get; init; }
-    public double? Movement { get; init; }
+    public decimal? Movement { get; init; }
     public string? TransTypeName { get; init; }
-    public double? Stock { get; init; }
+    public decimal? Stock { get; init; }
     public string? WarehouseFromName { get; init; }
     public string? WarehouseToName { get; init; }
     public DateTime? CreatedAtUtc { get; init; }

@@ -10,7 +10,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> MaterialExportCreateInvenTrans(
         string? moduleId,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? warehouseId,
         string? createdById,
         CancellationToken cancellationToken = default,
@@ -74,7 +74,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> MaterialExportUpdateInvenTrans(
         string? id,
         string? productId,
-        double? movement,
+        decimal? movement,
         IReadOnlyCollection<string>? productSerialIds,
         string? updatedById,
         CancellationToken cancellationToken = default
@@ -195,7 +195,7 @@ public partial class InventoryTransactionService
     private async Task ValidateMaterialExportQuantityAsync(
         MaterialExport parent,
         string? productId,
-        double? movement,
+        decimal? movement,
         string? currentLineId,
         IReadOnlyCollection<string>? productSerialIds,
         CancellationToken cancellationToken)
@@ -215,8 +215,8 @@ public partial class InventoryTransactionService
             throw new InvalidOperationException("Only physical products can be exported from a warehouse.");
         }
 
-        var requestedQuantity = movement ?? 0d;
-        if (requestedQuantity <= 0d)
+        var requestedQuantity = movement ?? 0m;
+        if (requestedQuantity <= 0m)
         {
             throw new InvalidOperationException("Material export quantity must be greater than zero.");
         }
@@ -235,7 +235,7 @@ public partial class InventoryTransactionService
                 .Where(x => x.ProductId == productId
                     && x.WarehouseId == parent.WarehouseId
                     && x.Status == InventoryTransactionStatus.Confirmed)
-                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+                .SumAsync(x => x.Stock ?? 0m, cancellationToken);
             var otherDraftQuantity = await _queryContext.Set<InventoryTransaction>()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
@@ -244,8 +244,8 @@ public partial class InventoryTransactionService
                     && x.ProductId == productId
                     && x.Id != currentLineId
                     && x.Status == InventoryTransactionStatus.Draft)
-                .SumAsync(x => x.Movement ?? 0d, cancellationToken);
-            if (otherDraftQuantity + requestedQuantity > confirmedStock + 0.000001d)
+                .SumAsync(x => x.Movement ?? 0m, cancellationToken);
+            if (otherDraftQuantity + requestedQuantity > confirmedStock + 0.000001m)
             {
                 throw new InvalidOperationException(
                     $"The total material export quantity for {product.Name ?? productId} exceeds available stock ({confirmedStock}).");
@@ -253,7 +253,7 @@ public partial class InventoryTransactionService
             return;
         }
 
-        if (Math.Abs(requestedQuantity - Math.Round(requestedQuantity)) > 0.000001d)
+        if (Math.Abs(requestedQuantity - Math.Round(requestedQuantity)) > 0.000001m)
         {
             throw new InvalidOperationException("Serial-tracked products require a positive whole-number quantity.");
         }
@@ -274,7 +274,7 @@ public partial class InventoryTransactionService
                 && x.ModuleId == parent.Id
                 && x.ProductId == productId
                 && x.Id != currentLineId)
-            .SumAsync(x => x.Movement ?? 0d, cancellationToken);
+            .SumAsync(x => x.Movement ?? 0m, cancellationToken);
 
         var ownReservedSerialIds = await _queryContext.Set<ProductSerialMovement>()
             .AsNoTracking()
@@ -295,7 +295,7 @@ public partial class InventoryTransactionService
                     || (x.Status == ProductSerialStatus.Reserved && ownReservedSerialIds.Contains(x.Id))),
                 cancellationToken);
 
-        if (otherQuantity + requestedQuantity > availableQuantity + 0.000001d)
+        if (otherQuantity + requestedQuantity > availableQuantity + 0.000001m)
         {
             throw new InvalidOperationException(
                 $"The total material export quantity for {product.Name ?? productId} exceeds available serial stock ({availableQuantity}).");

@@ -51,19 +51,19 @@ const App = {
                 state.items = (pdfData.salesOrderItemList || []).map(item => ({
                     ...item,
                     taxName: item?.tax?.name || '',
-                    unitPrice: NumberFormatManager.formatToLocale(item?.unitPrice || 0),
+                    unitPrice: NumberFormatManager.formatMoneyToLocale(item?.unitPrice || 0),
                     quantity: NumberFormatManager.formatToLocale(item?.quantity || 0),
-                    total: NumberFormatManager.formatToLocale(item?.total || 0),
-                    taxAmount: NumberFormatManager.formatToLocale(item?.taxAmount || 0),
-                    afterTaxAmount: NumberFormatManager.formatToLocale(item?.afterTaxAmount || 0),
+                    total: NumberFormatManager.formatMoneyToLocale(item?.total || 0),
+                    taxAmount: NumberFormatManager.formatMoneyToLocale(item?.taxAmount || 0),
+                    afterTaxAmount: NumberFormatManager.formatMoneyToLocale(item?.afterTaxAmount || 0),
                 }));
                 state.customer = pdfData.customer || {};
                 state.orderNumber = pdfData.number || '';
                 state.orderDate = DateFormatManager.formatToLocale(pdfData.orderDate) || '';
     state.orderCurrency = StorageManager.getCompany()?.currency || 'VND';
-                state.subTotal = NumberFormatManager.formatToLocale(pdfData.beforeTaxAmount) || '';
-                state.tax = NumberFormatManager.formatToLocale(pdfData.taxAmount) || '';
-                state.totalAmount = NumberFormatManager.formatToLocale(pdfData.afterTaxAmount) || '';
+                state.subTotal = NumberFormatManager.formatMoneyToLocale(pdfData.beforeTaxAmount) || '';
+                state.tax = NumberFormatManager.formatMoneyToLocale(pdfData.taxAmount) || '';
+                state.totalAmount = NumberFormatManager.formatMoneyToLocale(pdfData.afterTaxAmount) || '';
                 methods.bindPDFControls();
             },
 

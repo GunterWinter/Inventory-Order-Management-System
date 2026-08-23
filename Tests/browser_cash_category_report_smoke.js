@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 
 function parseMoney(value) {
-    const normalized = String(value ?? '').replace(/[^\d-]/g, '');
+    const normalized = String(value ?? '').replace(/[^\d,.-]/g, '').replaceAll('.', '').replace(',', '.');
     return normalized ? Number(normalized) : 0;
 }
 
@@ -14,6 +14,7 @@ function parseMoney(value) {
     const uniqueDescription = `BROWSER ALLOCATION ${Date.now()}`;
     let createdTransactionId = null;
     let lastCreateRequest = null;
+    let lastUpdateRequest = null;
 
     page.on('console', message => {
         if (message.type() === 'error') consoleErrors.push(message.text());
@@ -26,6 +27,9 @@ function parseMoney(value) {
     page.on('request', request => {
         if (request.url().includes('/api/CashTransaction/CreateCashTransaction')) {
             lastCreateRequest = request.postDataJSON();
+        }
+        if (request.url().includes('/api/CashTransaction/UpdateCashTransaction')) {
+            lastUpdateRequest = request.postDataJSON();
         }
     });
 
@@ -142,6 +146,106 @@ function parseMoney(value) {
     await page.locator('#MainModal .btn-close').click();
     await page.waitForSelector('#MainModal', { state: 'hidden' });
 
+    // A row click must select the record. Increasing Paid Amount without a cash
+    // account must stay blocked; selecting an account then posts in one UI flow.
+    await page.locator('#MainGrid .e-row').first().click();
+    const selectedAfterRowClick = await page.evaluate(() =>
+        document.querySelector('#MainGrid').ej2_instances[0].getSelectedRecords().length);
+    if (selectedAfterRowClick !== 1) throw new Error('A single row click did not select the cash transaction.');
+    await page.locator('#EditCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    const paidAmount = page.locator('#PaidAmountInput');
+    await paidAmount.click();
+    await paidAmount.press('Control+A');
+    await paidAmount.pressSequentially('200.000');
+    await paidAmount.press('Tab');
+    const partialPaymentInput = await page.evaluate(() => {
+        const element = document.querySelector('#PaidAmountInput');
+        return { display: element?.value, value: element?.ej2_instances?.[0]?.value };
+    });
+    if (partialPaymentInput.value !== 200000 || partialPaymentInput.display !== '200.000') {
+        throw new Error(`Vietnamese paid amount was parsed incorrectly: ${JSON.stringify(partialPaymentInput)}`);
+    }
+    await page.locator('#MainSaveButton').click();
+    await page.waitForFunction(() => document.body.textContent.includes('Phải chọn tài khoản quỹ'));
+    const accountEnabled = await page.evaluate(() =>
+        document.querySelector('#CashAccountDropDown')?.ej2_instances?.[0]?.enabled === true);
+    if (!accountEnabled) throw new Error('Cash account is disabled while recording a payment from Cash Transactions.');
+    await page.evaluate(() => document.querySelector('#CashAccountDropDown').ej2_instances[0].showPopup());
+    const accountOption = page.locator('.e-ddl.e-popup.e-popup-open .e-list-item').first();
+    await accountOption.waitFor();
+    await accountOption.click();
+    const paymentStartedAt = Date.now();
+    const updateResponsePromise = page.waitForResponse(response =>
+        response.url().includes('/api/CashTransaction/UpdateCashTransaction'));
+    await page.locator('#MainSaveButton').click();
+    const updateResponse = await updateResponsePromise;
+    if (updateResponse.status() !== 200) throw new Error(`Cash payment returned HTTP ${updateResponse.status()}.`);
+    if (Number(lastUpdateRequest?.paidAmount) !== 200000) {
+        throw new Error(`Partial payment payload was not 200000: ${JSON.stringify(lastUpdateRequest)}`);
+    }
+    if (Date.now() - paymentStartedAt > 10000) throw new Error('Cash payment took longer than 10 seconds.');
+    await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10000 });
+
+    const partialTransaction = await page.evaluate(async description => {
+        const response = await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
+        return (response?.data?.content?.data ?? []).find(item => item.description === description) ?? null;
+    }, uniqueDescription);
+    if (Number(partialTransaction?.paidAmount) !== 200000 || Number(partialTransaction?.status) !== 1) {
+        throw new Error(`Partial payment was not persisted: ${JSON.stringify(partialTransaction)}`);
+    }
+
+    await page.evaluate(description => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.search(description), uniqueDescription);
+    await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getCurrentViewRecords?.().some(item => item.id === id), partialTransaction.id);
+    await page.evaluate(id => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        grid.clearSelection();
+        grid.selectRow(grid.getCurrentViewRecords().findIndex(item => item.id === id));
+    }, partialTransaction.id);
+    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getSelectedRecords?.().length === 1);
+    await page.locator('#EditCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    await paidAmount.click();
+    await paidAmount.press('Control+A');
+    await paidAmount.pressSequentially('300.000');
+    await paidAmount.press('Tab');
+    const fullResponsePromise = page.waitForResponse(response =>
+        response.url().includes('/api/CashTransaction/UpdateCashTransaction'));
+    await page.locator('#MainSaveButton').click();
+    if ((await fullResponsePromise).status() !== 200 || Number(lastUpdateRequest?.paidAmount) !== 300000) {
+        throw new Error(`Full payment request failed: ${JSON.stringify(lastUpdateRequest)}`);
+    }
+    await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10000 });
+    const fullTransaction = await page.evaluate(async description => {
+        const response = await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
+        return (response?.data?.content?.data ?? []).find(item => item.description === description) ?? null;
+    }, uniqueDescription);
+    if (Number(fullTransaction?.paidAmount) !== 300000 || Number(fullTransaction?.status) !== 2) {
+        throw new Error(`Full payment was not persisted: ${JSON.stringify(fullTransaction)}`);
+    }
+
+    const sourceTransaction = await page.evaluate(async () => {
+        const response = await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
+        return (response?.data?.content?.data ?? []).find(item =>
+            item.sourceModule && Number(item.paidAmount ?? 0) < Number(item.amount ?? 0)) ?? null;
+    });
+    if (!sourceTransaction?.number) throw new Error('No unpaid Sales/Purchase source transaction was seeded.');
+    await page.evaluate(number => document.querySelector('#MainGrid').ej2_instances[0].search(number), sourceTransaction.number);
+    await page.waitForFunction(number => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getCurrentViewRecords?.().some(item => item.number === number), sourceTransaction.number);
+    await page.locator('#MainGrid .e-row').first().click();
+    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getSelectedRecords?.().length === 1);
+    await page.locator('#EditCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    const sourceAccountEnabled = await page.evaluate(() =>
+        document.querySelector('#CashAccountDropDown')?.ej2_instances?.[0]?.enabled === true);
+    if (!sourceAccountEnabled) throw new Error('Cash account is disabled for a Sales/Purchase source transaction.');
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+
     await page.goto(`${baseUrl}/SalesOrders/SalesOrderList`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
     await page.waitForSelector('#MainGrid.e-grid');
@@ -153,6 +257,16 @@ function parseMoney(value) {
     if (salesOrderDateFormat !== 'dd/MM/yyyy') {
         throw new Error(`Sales order date column is not formatted for the active locale: ${JSON.stringify(salesOrderDateState)}`);
     }
+    const salesPaymentTarget = await page.evaluate(() => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        const record = grid.dataSource.find(item => item.paymentStatusClass === 'unpaid');
+        if (!record) return null;
+        grid.search(record.number);
+        return { id: record.id, number: record.number };
+    });
+    if (!salesPaymentTarget) throw new Error('No unpaid Sales Order is available for immediate payment refresh testing.');
+    await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getCurrentViewRecords?.().some(item => item.id === id), salesPaymentTarget.id);
     const salesPaymentButton = page.locator('#MainGrid .payment-status-action:visible').first();
     await salesPaymentButton.waitFor();
     await salesPaymentButton.click();
@@ -168,15 +282,45 @@ function parseMoney(value) {
     if ((await page.locator('.sales-order-payment-popup .swal2-title').textContent()).includes('Sales Order Payment')) {
         throw new Error('Sales payment title remained in English while Vietnamese is active.');
     }
-    await page.locator('.sales-order-payment-popup .swal2-cancel').click();
+    await page.locator('.sales-order-payment-popup #swal-account').selectOption({ index: 1 });
+    const salesPaymentResponsePromise = page.waitForResponse(response =>
+        response.url().includes('/api/SalesOrder/UpsertSalesOrderPayment'));
+    await page.locator('.sales-order-payment-popup .swal2-confirm').click();
+    if ((await salesPaymentResponsePromise).status() !== 200) throw new Error('Sales Order payment failed.');
+    await page.waitForFunction(id => {
+        const row = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.find(item => item.id === id);
+        return row?.paymentStatusClass === 'paid';
+    }, salesPaymentTarget.id);
+    if (!(await page.locator('#MainGrid .payment-status-action:visible').first().textContent()).includes('Đã thanh toán')) {
+        throw new Error('Sales Order payment status did not update until refresh.');
+    }
+    await page.waitForSelector('.swal2-container', { state: 'hidden', timeout: 5000 });
 
     await page.goto(`${baseUrl}/PurchaseOrders/PurchaseOrderList`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
     await page.waitForSelector('#MainGrid.e-grid');
     await page.waitForFunction(() => Array.isArray(document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource));
-    const purchasePaymentButton = page.locator('#MainGrid .payment-status-action:visible').first();
-    if (await purchasePaymentButton.count()) {
-        await purchasePaymentButton.click();
+    const purchasePaymentTarget = await page.evaluate(() => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        const record = grid.dataSource.find(item => item.paymentStatusClass === 'unpaid');
+        if (!record) return null;
+        grid.search(record.number);
+        return { id: record.id, number: record.number };
+    });
+    if (purchasePaymentTarget) {
+        await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+            ?.getCurrentViewRecords?.().some(item => item.id === id), purchasePaymentTarget.id);
+        await page.evaluate(() => {
+            const content = document.querySelector('#MainGrid .e-content');
+            if (content) content.scrollLeft = content.scrollWidth;
+        });
+        await page.evaluate(id => {
+            const grid = document.querySelector('#MainGrid').ej2_instances[0];
+            const rowIndex = grid.getCurrentViewRecords().findIndex(item => item.id === id);
+            const button = grid.getRowByIndex(rowIndex)?.querySelector('.payment-status-action');
+            if (!button) throw new Error('The Purchase Order payment button was not rendered.');
+            button.click();
+        }, purchasePaymentTarget.id);
         await page.waitForSelector('.purchase-order-payment-popup');
         const purchasePopupStyle = await page.locator('.purchase-order-payment-popup #swal-account').evaluate(select => ({
             compatibleClass: select.classList.contains('form-control'),
@@ -189,8 +333,71 @@ function parseMoney(value) {
         if ((await page.locator('.purchase-order-payment-popup .swal2-title').textContent()).startsWith('Payment ')) {
             throw new Error('Purchase payment title remained in English while Vietnamese is active.');
         }
-        await page.locator('.purchase-order-payment-popup .swal2-cancel').click();
+        await page.locator('.purchase-order-payment-popup #swal-account').selectOption({ index: 1 });
+        const purchaseRemaining = await page.locator('.purchase-payment-summary__row strong.text-danger')
+            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.textContent) ?? 0);
+        await page.locator('.purchase-order-payment-popup #swal-amount').fill(String(purchaseRemaining));
+        const purchasePaymentResponsePromise = page.waitForResponse(response =>
+            response.url().includes('/api/PurchaseOrder/PayPurchaseOrder'));
+        await page.locator('.purchase-order-payment-popup .swal2-confirm').click();
+        if ((await purchasePaymentResponsePromise).status() !== 200) throw new Error('Purchase Order payment failed.');
+        await page.waitForFunction(id => {
+            const row = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.find(item => item.id === id);
+            return row?.paymentStatusClass === 'paid';
+        }, purchasePaymentTarget.id);
+        const purchaseStatusText = await page.evaluate(id => {
+            const grid = document.querySelector('#MainGrid').ej2_instances[0];
+            const rowIndex = grid.getCurrentViewRecords().findIndex(item => item.id === id);
+            return grid.getRowByIndex(rowIndex)?.querySelector('.payment-status-action')?.textContent ?? '';
+        }, purchasePaymentTarget.id);
+        if (!['paid', 'đã thanh toán'].includes(purchaseStatusText.trim().toLocaleLowerCase('vi'))) {
+            throw new Error(`Purchase Order payment status did not update until refresh: ${purchaseStatusText}`);
+        }
+        await page.waitForSelector('.swal2-container', { state: 'hidden', timeout: 5000 });
     }
+
+    const vendorGroupKey = `BROWSER MULTI DELETE ${Date.now()}`;
+    await page.evaluate(async key => {
+        for (let index = 1; index <= 3; index += 1) {
+            const response = await AxiosManager.post('/VendorGroup/CreateVendorGroup', {
+                name: `${key} ${index}`,
+                description: key,
+                createdById: StorageManager.getUserId()
+            });
+            if (response?.data?.code !== 200) throw new Error(`Unable to seed vendor group ${index}.`);
+        }
+    }, vendorGroupKey);
+    await page.goto(`${baseUrl}/VendorGroups/VendorGroupList`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
+    await page.waitForSelector('#MainGrid.e-grid');
+    await page.evaluate(key => document.querySelector('#MainGrid').ej2_instances[0].search(key), vendorGroupKey);
+    await page.waitForFunction(() => document.querySelectorAll('#MainGrid .e-row').length === 3);
+    const vendorRows = page.locator('#MainGrid .e-row');
+    await vendorRows.nth(0).click();
+    await vendorRows.nth(1).click({ modifiers: ['Control'] });
+    const multiSelected = await page.evaluate(() =>
+        document.querySelector('#MainGrid').ej2_instances[0].getSelectedRecords().length);
+    if (multiSelected !== 2) throw new Error(`Ctrl+click selected ${multiSelected} vendor groups instead of 2.`);
+    await page.locator('#DeleteCustom').click();
+    await page.locator('.swal2-confirm').click();
+    await page.waitForFunction(async key => {
+        const response = await AxiosManager.get('/VendorGroup/GetVendorGroupList', {});
+        return (response?.data?.content?.data ?? []).filter(item => item.name?.startsWith(key)).length === 1;
+    }, vendorGroupKey);
+    await page.waitForFunction(() =>
+        document.querySelector('#MainGrid').ej2_instances[0].getSelectedRecords().length === 0);
+    await page.evaluate(key => document.querySelector('#MainGrid').ej2_instances[0].search(key), vendorGroupKey);
+    await page.waitForFunction(() => document.querySelectorAll('#MainGrid .e-row').length === 1);
+    await page.locator('#MainGrid .e-row').click();
+    const selectedAfterDelete = await page.evaluate(() =>
+        document.querySelector('#MainGrid').ej2_instances[0].getSelectedRecords().length);
+    if (selectedAfterDelete !== 1) throw new Error('The deleted vendor-group selection leaked into the next selection.');
+    await page.locator('#DeleteCustom').click();
+    await page.locator('.swal2-confirm').click();
+    await page.waitForFunction(async key => {
+        const response = await AxiosManager.get('/VendorGroup/GetVendorGroupList', {});
+        return !(response?.data?.content?.data ?? []).some(item => item.name?.startsWith(key));
+    }, vendorGroupKey);
 
     await page.goto(`${baseUrl}/CashTransactions/CashCategoryReport`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
@@ -275,6 +482,9 @@ function parseMoney(value) {
         categoryTotals: cardValues,
         groupedState,
         afterSingleExpand,
+        paymentFromCashTransaction: true,
+        sourcePaymentAccountEnabled: true,
+        vendorGroupMultiDelete: true,
         localization: true
     }, null, 2));
     await browser.close();

@@ -11,8 +11,8 @@ public class PurchaseOrder : BaseEntity
     public string? Description { get; set; }
     public string? VendorId { get; set; }
     public Vendor? Vendor { get; set; }
-    public double? BeforeTaxAmount { get; set; }
-    public double? TaxAmount { get; set; }
-    public double? AfterTaxAmount { get; set; }
+    public decimal? BeforeTaxAmount { get; set; }
+    public decimal? TaxAmount { get; set; }
+    public decimal? AfterTaxAmount { get; set; }
     public ICollection<PurchaseOrderItem> PurchaseOrderItemList { get; set; } = new List<PurchaseOrderItem>();
 }

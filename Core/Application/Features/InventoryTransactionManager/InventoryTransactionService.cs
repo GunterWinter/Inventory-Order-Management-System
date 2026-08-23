@@ -47,7 +47,7 @@ public partial class InventoryTransactionService
         _inventoryCostResolver = inventoryCostResolver;
     }
 
-    public double GetStock(string? warehouseId, string? productId, string? currentId = null)
+    public decimal GetStock(string? warehouseId, string? productId, string? currentId = null)
     {
         var query = _queryContext
             .Set<InventoryTransaction>()
@@ -64,7 +64,7 @@ public partial class InventoryTransactionService
             query = query.Where(x => x.Id != currentId);
         }
 
-        return query.Sum(x => x.Stock ?? 0.0);
+        return query.Sum(x => x.Stock ?? 0m);
     }
 
     public async Task PropagateParentUpdate(
@@ -164,12 +164,12 @@ public partial class InventoryTransactionService
                 ProductId = x.ProductId!,
                 WarehouseId = warehouseOverrideId ?? x.WarehouseId,
                 ProductName = x.Product!.Name,
-                Quantity = x.Movement ?? 0d
+                Quantity = x.Movement ?? 0m
             })
             .ToListAsync(cancellationToken);
 
         var requestedGroups = requestedLines
-            .Where(x => !string.IsNullOrWhiteSpace(x.WarehouseId) && x.Quantity > 0d)
+            .Where(x => !string.IsNullOrWhiteSpace(x.WarehouseId) && x.Quantity > 0m)
             .GroupBy(x => new { x.ProductId, x.WarehouseId, x.ProductName })
             .Select(group => new
             {
@@ -189,9 +189,9 @@ public partial class InventoryTransactionService
                     && x.ProductId == requested.ProductId
                     && x.WarehouseId == requested.WarehouseId
                     && !(x.ModuleId == moduleId && x.ModuleName == moduleName))
-                .SumAsync(x => x.Stock ?? 0d, cancellationToken);
+                .SumAsync(x => x.Stock ?? 0m, cancellationToken);
 
-            if (requested.Quantity > availableStock + 0.000001d)
+            if (requested.Quantity > availableStock + 0.000001m)
             {
                 throw new InvalidOperationException(
                     $"Không đủ tồn kho cho {requested.ProductName ?? requested.ProductId}. " +
@@ -235,13 +235,13 @@ public partial class InventoryTransactionService
 
         var moduleName = transaction.ModuleName;
 
-        if (moduleName != nameof(StockCount) && transaction.Movement <= 0.0)
+        if (moduleName != nameof(StockCount) && transaction.Movement <= 0m)
         {
             throw new Exception("Quantity must not zero and should be positive.");
         }
 
         if (moduleName == nameof(StockCount)
-            && (transaction.QtySCCount == null || transaction.QtySCCount < 0.0))
+            && (transaction.QtySCCount == null || transaction.QtySCCount < 0m))
         {
             throw new Exception("Stock count quantity must be zero or a positive number.");
         }
@@ -434,9 +434,9 @@ public partial class InventoryTransactionService
 
         transaction.QtySCSys = GetStock(transaction.WarehouseId, transaction.ProductId, transaction.Id);
         transaction.QtySCDelta = transaction.QtySCSys - transaction.QtySCCount;
-        transaction.Movement = Math.Abs(transaction.QtySCDelta ?? 0.0);
+        transaction.Movement = Math.Abs(transaction.QtySCDelta ?? 0m);
 
-        if (transaction.QtySCDelta < 0.0)
+        if (transaction.QtySCDelta < 0m)
         {
 
             transaction.TransType = InventoryTransType.In;

@@ -10,7 +10,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> StockCountCreateInvenTrans(
         string? moduleId,
         string? productId,
-        double? qtySCCount,
+        decimal? qtySCCount,
         string? createdById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null
@@ -58,7 +58,7 @@ public partial class InventoryTransactionService
     public async Task<InventoryTransaction> StockCountUpdateInvenTrans(
         string? id,
         string? productId,
-        double? qtySCCount,
+        decimal? qtySCCount,
         string? updatedById,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? productSerialIds = null

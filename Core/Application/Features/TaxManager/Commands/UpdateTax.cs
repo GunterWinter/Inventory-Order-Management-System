@@ -1,4 +1,4 @@
-﻿using Application.Common.Repositories;
+using Application.Common.Repositories;
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
@@ -14,7 +14,7 @@ public class UpdateTaxRequest : IRequest<UpdateTaxResult>
 {
     public string? Id { get; init; }
     public string? Name { get; init; }
-    public double? Percentage { get; init; }
+    public decimal? Percentage { get; init; }
     public string? Description { get; init; }
     public string? UpdatedById { get; init; }
 }

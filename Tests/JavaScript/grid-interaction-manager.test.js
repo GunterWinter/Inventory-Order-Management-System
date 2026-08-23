@@ -187,20 +187,22 @@ test('Syncfusion Update toolbar persists changes captured by beforeBatchSave', a
     assert.deepEqual(calls, ['edit:product-1']);
 });
 
-test('product selection synchronizes a detached Batch editor row immediately', () => {
+test('product selection renders the lookup name instead of its UUID', () => {
     const manager = loadManager();
     const editorData = { id: 'new-1', productId: null, unitPrice: 0 };
     const actualData = { id: 'new-1', productId: null, unitPrice: 0 };
     const addedRecord = { id: 'new-1', productId: null, unitPrice: 0 };
     const priceCell = { textContent: '', contains: () => false, querySelector: () => null };
-    const productCell = { textContent: '', contains: element => element === editorElement, querySelector: () => ({}) };
+    const productCell = { textContent: '', contains: () => false, querySelector: () => null };
     const rowElement = {};
     const editorElement = { closest: selector => selector === 'tr' ? rowElement : null };
     const grid = {
         getRows: () => [rowElement],
         getRowsObject: () => [{ data: actualData }],
         getBatchChanges: () => ({ addedRecords: [addedRecord], changedRecords: [], deletedRecords: [] }),
-        getColumnByField: field => ({ field }),
+        getColumnByField: field => field === 'productId'
+            ? { field, valueAccessor: (_, data) => data.productId === 'product-1' ? 'Dây điện 2.5mm' : '' }
+            : { field },
         getColumnIndexByField: field => field === 'productId' ? 0 : 1,
         getCellFromIndex: (rowIndex, columnIndex) => columnIndex === 0 ? productCell : priceCell
     };
@@ -219,7 +221,51 @@ test('product selection synchronizes a detached Batch editor row immediately', (
     assert.equal(addedRecord.productId, 'product-1');
     assert.equal(addedRecord.unitPrice, 345000);
     assert.equal(priceCell.textContent, 'formatted:345000');
-    assert.equal(productCell.textContent, '');
+    assert.equal(productCell.textContent, 'Dây điện 2.5mm');
+});
+
+test('main grid delegates plain and additive row clicks to native multiple selection', () => {
+    const manager = loadManager();
+    let clears = 0;
+    const enabled = [];
+    const grid = {
+        editSettings: { mode: 'Normal' },
+        selectionSettings: { checkboxOnly: true, persistSelection: true },
+        setProperties(properties) { this.selectionSettings = properties.selectionSettings; },
+        clearSelection() { clears += 1; },
+        rowSelecting() { grid.clearSelection(); },
+        getSelectedRecords: () => [{ id: 1 }, { id: 2 }],
+        toolbarModule: { enableItems: (items, value) => enabled.push([items[0], value]) }
+    };
+
+    manager.configureRowSelection(grid);
+    grid.rowSelected({});
+
+    assert.equal(grid.selectionSettings.checkboxOnly, false);
+    assert.equal(grid.selectionSettings.enableSimpleMultiRowSelection, false);
+    assert.equal(grid.rowSelecting, undefined);
+    assert.equal(clears, 0);
+    assert.deepEqual(enabled, [['EditCustom', false], ['DeleteCustom', true]]);
+});
+
+test('main grid clears deleted records from persisted selection after reload', () => {
+    const manager = loadManager();
+    let dataBound;
+    let cleared = 0;
+    const grid = {
+        editSettings: { mode: 'Normal' },
+        dataSource: [{ id: 'live' }],
+        columns: [{ field: 'id', isPrimaryKey: true }],
+        setProperties() { },
+        addEventListener: (name, handler) => { if (name === 'dataBound') dataBound = handler; },
+        getSelectedRecords: () => [{ id: 'deleted' }],
+        clearSelection: () => { cleared += 1; }
+    };
+
+    manager.configureRowSelection(grid);
+    dataBound();
+
+    assert.equal(cleared, 1);
 });
 
 test('grouped grid collapses after every data bind without re-entrant loops', () => {

@@ -13,7 +13,7 @@ public class StockCountCreateInvenTransRequest : IRequest<StockCountCreateInvenT
 {
     public string? ModuleId { get; init; }
     public string? ProductId { get; init; }
-    public double? QtySCCount { get; init; }
+    public decimal? QtySCCount { get; init; }
     public string? CreatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
 }

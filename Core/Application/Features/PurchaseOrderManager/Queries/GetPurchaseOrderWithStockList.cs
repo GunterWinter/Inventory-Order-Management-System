@@ -19,9 +19,9 @@ public record GetPurchaseOrderWithStockListDto
     public string? Description { get; init; }
     public string? VendorId { get; init; }
     public string? VendorName { get; init; }
-    public double? BeforeTaxAmount { get; init; }
-    public double? TaxAmount { get; init; }
-    public double? AfterTaxAmount { get; init; }
+    public decimal? BeforeTaxAmount { get; init; }
+    public decimal? TaxAmount { get; init; }
+    public decimal? AfterTaxAmount { get; init; }
     public DateTime? CreatedAtUtc { get; init; }
 }
 

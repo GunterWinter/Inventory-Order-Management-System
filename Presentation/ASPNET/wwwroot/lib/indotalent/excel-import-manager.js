@@ -26,7 +26,7 @@
 
     const toDisplayText = (value) => `${value ?? ''}`.trim();
 
-    const getActiveLocale = () => window.UiLocalization?.getLocale?.() ?? 'en';
+    const getActiveLocale = () => window.UiLocalization?.getLocale?.() ?? 'vi';
 
     const translateHeader = (value, locale = getActiveLocale()) =>
         window.UiLocalization?.translateText?.(value, locale) ?? value;
@@ -637,18 +637,28 @@
         return column.example ?? column.defaultValue ?? '';
     };
 
-    const buildInstructions = (config, lookups, locale = getActiveLocale()) => [
-        [translateHeader('Instruction', locale)],
-        [`Fill the "${config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME}" sheet, then import this file from the ${config.title} page.`],
-        ['Required columns are marked with "*".'],
-        ['For lookup columns, use the name, number, reference code, or id from the reference sheets.'],
-        ['Do not rename the header row.'],
-        ['The whole workbook is atomic: if one row is invalid, no rows are imported.'],
-        [],
-        ['Example only - do not copy this row unless you intend to import it.'],
-        [config.columns.map(column => translateHeader(column.header, locale)).join(' | ')],
-        [config.columns.map(column => getSampleValue(column, lookups)).join(' | ')]
+    const buildExampleRows = (columns, lookups, locale = getActiveLocale()) => [
+        getTemplateHeaders(columns, locale),
+        columns.map(column => getSampleValue(column, lookups))
     ];
+
+    const buildInstructions = (config, lookups, locale = getActiveLocale()) => locale === 'vi'
+        ? [
+            ['HƯỚNG DẪN NHẬP EXCEL'],
+            [`Nhập dữ liệu vào sheet "${config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME}", sau đó chọn "Nhập Excel" tại màn hình ${translateHeader(config.title, locale)}.`],
+            ['Cột bắt buộc được đánh dấu "*"; không đổi tên hàng tiêu đề.'],
+            ['Cột danh mục: dùng tên, mã chứng từ, mã tham khảo hoặc ID trong các sheet tra cứu.'],
+            ['Các sheet bắt đầu bằng "Example-" chỉ để tham khảo và không được nhập.'],
+            ['File được lưu nguyên tử: chỉ một dòng sai thì toàn bộ file không được lưu.']
+        ]
+        : [
+            ['IMPORT INSTRUCTIONS'],
+            [`Fill the "${config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME}" sheet, then import this file from the ${config.title} page.`],
+            ['Required columns are marked with "*"; do not rename the header row.'],
+            ['For lookup columns, use the name, number, reference code, or id from the reference sheets.'],
+            ['Sheets beginning with "Example-" are reference-only and are not imported.'],
+            ['The whole workbook is atomic: if one row is invalid, no rows are imported.']
+        ];
 
     const appendLookupSheets = (workbook, lookups, locale = getActiveLocale()) => {
         Object.values(lookups).forEach((lookup) => {
@@ -685,6 +695,11 @@
             const appendEmptyInputSheet = (columns, sheetName) => {
                 const headers = getTemplateHeaders(columns, locale);
                 XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers]), sheetName);
+                XLSX.utils.book_append_sheet(
+                    workbook,
+                    XLSX.utils.aoa_to_sheet(buildExampleRows(columns, lookups, locale)),
+                    `Example-${sheetName}`
+                );
             };
 
             appendEmptyInputSheet(config.columns, config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME);
@@ -981,7 +996,9 @@
         const mainSheetName = config.itemColumns ? DOCUMENT_SHEET_NAME : DATA_SHEET_NAME;
         const rows = readDataRows(workbook, mainSheetName);
         if (!rows.length) {
-            showInfo('No data found', 'The Excel file does not contain any import rows.');
+            showInfo(
+                translateHeader('No data found'),
+                translateHeader('The Excel file does not contain any import rows.'));
             return;
         }
 
@@ -1267,6 +1284,8 @@
             getTemplateHeaders,
             getLookupHeaders,
             validateConditionalColumns,
+            buildExampleRows,
+            buildInstructions,
             pageConfigs
         }
     };

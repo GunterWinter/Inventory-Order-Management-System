@@ -17,17 +17,17 @@ public sealed record CustomerProfitReportItemDto
     public string? Description { get; init; }
     public string? SourceType { get; init; }
     public string? SourceModuleId { get; init; }
-    public double Revenue { get; init; }
-    public double ProjectCost { get; init; }
-    public double Profit => Revenue - ProjectCost;
+    public decimal Revenue { get; init; }
+    public decimal ProjectCost { get; init; }
+    public decimal Profit => Revenue - ProjectCost;
 }
 
 public sealed class GetCustomerProfitReportResult
 {
     public List<CustomerProfitReportItemDto> Data { get; init; } = [];
-    public double Revenue { get; init; }
-    public double ProjectCost { get; init; }
-    public double Profit { get; init; }
+    public decimal Revenue { get; init; }
+    public decimal ProjectCost { get; init; }
+    public decimal Profit { get; init; }
 }
 
 public sealed class GetCustomerProfitReportRequest : IRequest<GetCustomerProfitReportResult>
@@ -64,7 +64,7 @@ public sealed class GetCustomerProfitReportHandler
                 Description = x.Description,
                 SourceType = nameof(SalesOrder),
                 SourceModuleId = x.Id,
-                Revenue = x.BeforeTaxAmount ?? 0d
+                Revenue = x.BeforeTaxAmount ?? 0m
             })
             .ToListAsync(cancellationToken);
         rows.AddRange(sales);
@@ -83,7 +83,7 @@ public sealed class GetCustomerProfitReportHandler
                 ProductId = x.ProductId!,
                 x.ModuleNumber,
                 x.MovementDate,
-                Quantity = x.Movement ?? 0d
+                Quantity = x.Movement ?? 0m
             })
             .ToListAsync(cancellationToken);
         var salesReturnIds = salesReturnLines.Select(x => x.ReturnId).Distinct().ToList();
@@ -100,7 +100,7 @@ public sealed class GetCustomerProfitReportHandler
                 || salesReturn.SalesOrder?.CustomerId == null)
                 continue;
             var unitPrice = salesReturn.SalesOrder.SalesOrderItemList
-                .FirstOrDefault(x => !x.IsDeleted && x.ProductId == line.ProductId)?.UnitPrice ?? 0d;
+                .FirstOrDefault(x => !x.IsDeleted && x.ProductId == line.ProductId)?.UnitPrice ?? 0m;
             rows.Add(new CustomerProfitReportItemDto
             {
                 Id = line.Id,
@@ -131,9 +131,9 @@ public sealed class GetCustomerProfitReportHandler
                 Description = x.PurchaseOrderItem != null ? x.PurchaseOrderItem.Summary : null,
                 SourceType = "PurchaseOrderAllocation",
                 SourceModuleId = x.PurchaseOrderId,
-                ProjectCost = (x.Quantity ?? 0d) * (x.PurchaseOrderItem != null
-                    ? x.PurchaseOrderItem.UnitPrice ?? 0d
-                    : x.UnitPrice ?? 0d)
+                ProjectCost = (x.Quantity ?? 0m) * (x.PurchaseOrderItem != null
+                    ? x.PurchaseOrderItem.UnitPrice ?? 0m
+                    : x.UnitPrice ?? 0m)
             })
             .ToListAsync(cancellationToken);
         rows.AddRange(purchaseAllocations);
@@ -155,7 +155,7 @@ public sealed class GetCustomerProfitReportHandler
                 Description = x.Description,
                 SourceType = nameof(MaterialExport),
                 SourceModuleId = x.SourceModuleId,
-                ProjectCost = x.Amount ?? 0d
+                ProjectCost = x.Amount ?? 0m
             })
             .ToListAsync(cancellationToken);
         rows.AddRange(materialCosts);

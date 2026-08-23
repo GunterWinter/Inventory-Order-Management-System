@@ -1,5 +1,4 @@
 using Application.Common.Repositories;
-using Application.Common.CQS.Queries;
 using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -33,7 +32,6 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
     private readonly ICommandRepository<CashTransaction> _repository;
     private readonly ICommandRepository<CashTransactionPayment> _paymentRepository;
     private readonly ICommandRepository<CashTransactionCostAllocation> _allocationRepository;
-    private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly CashBalanceService _cashBalanceService;
 
@@ -41,7 +39,6 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         ICommandRepository<CashTransaction> repository,
         ICommandRepository<CashTransactionPayment> paymentRepository,
         ICommandRepository<CashTransactionCostAllocation> allocationRepository,
-        IQueryContext queryContext,
         IUnitOfWork unitOfWork,
         CashBalanceService cashBalanceService
         )
@@ -49,7 +46,6 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
         _repository = repository;
         _paymentRepository = paymentRepository;
         _allocationRepository = allocationRepository;
-        _queryContext = queryContext;
         _unitOfWork = unitOfWork;
         _cashBalanceService = cashBalanceService;
     }
@@ -87,8 +83,7 @@ public class DeleteCashTransactionHandler : IRequestHandler<DeleteCashTransactio
             // Xóa một vế chuyển quỹ phải xóa cả vế đối ứng trong cùng transaction.
             if (entity.SourceModule == "CashTransfer" && !string.IsNullOrEmpty(entity.SourceModuleId))
             {
-                var siblingId = await _queryContext
-                    .CashTransaction
+                var siblingId = await _repository.GetQuery()
                     .AsNoTracking()
                     .Where(x => !x.IsDeleted
                         && x.SourceModule == "CashTransfer"

@@ -12,16 +12,16 @@ public class SalesOrderItem : BaseEntity
     public string? WarehouseId { get; set; }
     public Warehouse? Warehouse { get; set; }
     public int? WarrantyMonths { get; set; }
-    public double? CogsAmount { get; set; }   // tổng giá vốn thực xuất
-    public double? ProfitAmount { get; set; } // tổng lãi
+    public decimal? CogsAmount { get; set; }   // tổng giá vốn thực xuất
+    public decimal? ProfitAmount { get; set; } // tổng lãi
     public string? Summary { get; set; }
     public string? TaxId { get; set; }
     public Tax? Tax { get; set; }
-    public double? UnitPrice { get; set; } = 0;
-    public double? Quantity { get; set; } = 1;
-    public double? Total { get; set; } = 0;
-    public double? TaxAmount { get; set; } = 0;
-    public double? AfterTaxAmount { get; set; } = 0;
+    public decimal? UnitPrice { get; set; } = 0;
+    public decimal? Quantity { get; set; } = 1;
+    public decimal? Total { get; set; } = 0;
+    public decimal? TaxAmount { get; set; } = 0;
+    public decimal? AfterTaxAmount { get; set; } = 0;
     public ICollection<ProductSerial> ProductSerials { get; set; } = new List<ProductSerial>();
 
 }

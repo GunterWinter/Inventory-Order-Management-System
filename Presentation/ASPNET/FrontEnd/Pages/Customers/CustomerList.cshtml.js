@@ -873,54 +873,27 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            const selected = mainGrid.obj.getSelectedRecords(); if (!selected.length) return; const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} khách hàng đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false }); if (!result.isConfirmed) return; for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId()); await methods.populateMainData(); mainGrid.refresh(); Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} khách hàng.`, heightAuto: false }); return;
-                            if (mainGrid.obj.getSelectedRecords().length) {
-                                const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
-                                Swal.fire({
-                                    title: 'Xóa Khách Hàng?',
-                                    text: `Bạn có chắc chắn muốn xóa khách hàng: ${selectedRecord.name}?`,
-                                    icon: 'warning',
-                                    showCancelButton: true,
-                                    confirmButtonColor: '#d33',
-                                    cancelButtonColor: '#3085d6',
+                            const selected = mainGrid.obj.getSelectedRecords();
+                            if (!selected.length) return;
+                            const result = await Swal.fire({ icon: 'warning', title: 'Xác nhận xóa', text: `Bạn có chắc chắn muốn xóa ${selected.length} khách hàng đã chọn không?`, showCancelButton: true, confirmButtonText: 'Xóa', cancelButtonText: 'Hủy', heightAuto: false });
+                            if (!result.isConfirmed) return;
+                            try {
+                                for (const record of selected) await services.deleteMainData(record.id, StorageManager.getUserId());
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await Swal.fire({ icon: 'success', title: 'Đã xóa', text: `Đã xóa ${selected.length} khách hàng.`, heightAuto: false });
+                            } catch (error) {
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'Xóa thất bại',
+                                    text: error.response?.data?.message?.replace(/^Exception:\s*/, '') ?? 'Vui lòng thử lại.',
                                     confirmButtonText: 'Đồng ý',
-                                    cancelButtonText: 'Hủy',
                                     heightAuto: false
-                                }).then(async (result) => {
-                                    if (result.isConfirmed) {
-                                        try {
-                                            const response = await services.deleteMainData(selectedRecord.id, StorageManager.getUserId());
-                                            if (response.data.code === 200) {
-                                                Swal.fire({
-                                                    icon: 'success',
-                                                    title: 'Xóa thành công',
-                                                    showConfirmButton: false,
-                                                    timer: 2000,
-                                                    heightAuto: false
-                                                });
-                                                await methods.populateMainData();
-                                                mainGrid.refresh();
-                                            } else {
-                                                Swal.fire({
-                                                    icon: 'error',
-                                                    title: 'Xóa thất bại',
-                                                    text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
-                                                    confirmButtonText: 'Thử lại',
-                                                    heightAuto: false
-                                                });
-                                            }
-                                        } catch (error) {
-                                            Swal.fire({
-                                                icon: 'error',
-                                                title: 'Đã xảy ra lỗi',
-                                                text: error.response?.data?.message ?? 'Vui lòng thử lại.',
-                                                confirmButtonText: 'Đồng ý',
-                                                heightAuto: false
-                                            });
-                                        }
-                                    }
                                 });
                             }
+                            return;
                         }
 
                         if (args.item.id === 'ManageContactCustom') {
