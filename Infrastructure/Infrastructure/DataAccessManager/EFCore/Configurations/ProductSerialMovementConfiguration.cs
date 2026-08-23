@@ -1,5 +1,6 @@
 using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
 
@@ -34,5 +35,9 @@ public class ProductSerialMovementConfiguration : BaseEntityConfiguration<Produc
         builder.HasIndex(x => x.ModuleId);
         builder.HasIndex(x => x.ModuleItemId);
         builder.HasIndex(x => new { x.ProductSerialId, x.ReversedAtUtc, x.MovementDate });
+        builder.HasIndex(x => new { x.InventoryTransactionId, x.ReversedAtUtc, x.Status })
+            .HasDatabaseName("IX_ProductSerialMovement_ActiveInventoryTransaction")
+            .HasFilter("[IsDeleted] = 0")
+            .IncludeProperties(x => new { x.ProductSerialId, x.CreatedAtUtc });
     }
 }

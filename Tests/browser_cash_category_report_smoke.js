@@ -157,13 +157,13 @@ function parseMoney(value) {
     const paidAmount = page.locator('#PaidAmountInput');
     await paidAmount.click();
     await paidAmount.press('Control+A');
-    await paidAmount.pressSequentially('200.000');
+    await paidAmount.pressSequentially('200.000,22');
     await paidAmount.press('Tab');
     const partialPaymentInput = await page.evaluate(() => {
         const element = document.querySelector('#PaidAmountInput');
         return { display: element?.value, value: element?.ej2_instances?.[0]?.value };
     });
-    if (partialPaymentInput.value !== 200000 || partialPaymentInput.display !== '200.000') {
+    if (partialPaymentInput.value !== 200000.22 || partialPaymentInput.display !== '200.000,22') {
         throw new Error(`Vietnamese paid amount was parsed incorrectly: ${JSON.stringify(partialPaymentInput)}`);
     }
     await page.locator('#MainSaveButton').click();
@@ -181,8 +181,8 @@ function parseMoney(value) {
     await page.locator('#MainSaveButton').click();
     const updateResponse = await updateResponsePromise;
     if (updateResponse.status() !== 200) throw new Error(`Cash payment returned HTTP ${updateResponse.status()}.`);
-    if (Number(lastUpdateRequest?.paidAmount) !== 200000) {
-        throw new Error(`Partial payment payload was not 200000: ${JSON.stringify(lastUpdateRequest)}`);
+    if (Number(lastUpdateRequest?.paidAmount) !== 200000.22) {
+        throw new Error(`Partial payment payload was not 200000.22: ${JSON.stringify(lastUpdateRequest)}`);
     }
     if (Date.now() - paymentStartedAt > 10000) throw new Error('Cash payment took longer than 10 seconds.');
     await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10000 });
@@ -191,7 +191,7 @@ function parseMoney(value) {
         const response = await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
         return (response?.data?.content?.data ?? []).find(item => item.description === description) ?? null;
     }, uniqueDescription);
-    if (Number(partialTransaction?.paidAmount) !== 200000 || Number(partialTransaction?.status) !== 1) {
+    if (Number(partialTransaction?.paidAmount) !== 200000.22 || Number(partialTransaction?.status) !== 1) {
         throw new Error(`Partial payment was not persisted: ${JSON.stringify(partialTransaction)}`);
     }
 
@@ -224,6 +224,14 @@ function parseMoney(value) {
     }, uniqueDescription);
     if (Number(fullTransaction?.paidAmount) !== 300000 || Number(fullTransaction?.status) !== 2) {
         throw new Error(`Full payment was not persisted: ${JSON.stringify(fullTransaction)}`);
+    }
+    const paymentHistory = await page.evaluate(async id => (
+        (await AxiosManager.get(`/PurchaseOrder/GetPurchaseOrderPaymentHistory?cashTransactionId=${encodeURIComponent(id)}`, {}))
+            ?.data?.content?.data ?? []
+    ), fullTransaction.id);
+    const paymentAmounts = paymentHistory.map(payment => Number(payment.amount));
+    if (paymentAmounts.length !== 2 || paymentAmounts[0] !== 200000.22 || paymentAmounts[1] !== 99999.78) {
+        throw new Error(`Payment installments are incorrect: ${JSON.stringify(paymentAmounts)}`);
     }
 
     const sourceTransaction = await page.evaluate(async () => {

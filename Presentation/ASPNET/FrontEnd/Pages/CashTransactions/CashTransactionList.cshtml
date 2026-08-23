@@ -88,7 +88,7 @@
     </div>
 
     <div class="modal fade" ref="mainModalRef" id="MainModal" aria-hidden="true" tabindex="-1" data-bs-focus="false" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">{{ state.mainTitle }}</h5>
@@ -219,7 +219,7 @@
                                     <div class="card-body table-responsive">
                                         <div v-if="state.sourceDetailsLoading" class="text-center text-muted py-3">Đang tải chi tiết hàng hóa...</div>
                                         <div v-else-if="state.sourceDetailsError" class="alert alert-danger mb-2">{{ state.sourceDetailsError }}</div>
-                                        <table v-else class="table table-sm table-bordered mb-0">
+                                        <table v-else class="table table-sm table-bordered mb-0 source-goods-table">
                                             <thead><tr><th>Hàng hóa</th><th>Khách hàng</th><th>Kho</th><th class="text-end">Số lượng</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th>Serial</th></tr></thead>
                                             <tbody>
                                                 <tr v-for="item in state.allocationDetails" v-bind:key="`${item.productName}-${item.customerName}-${item.warehouseName}`">

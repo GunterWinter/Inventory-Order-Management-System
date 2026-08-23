@@ -364,6 +364,10 @@ Mọi file tải xuống chỉ lưu trong thư mục artifact tạm của lượ
 5. File mẫu import: sheet nhập chính không chứa dữ liệu mẫu. Các sheet `Example-Data`, `Example-Documents`, `Example-Items`, `Example-Allocations` chỉ dùng tham khảo, có tiêu đề tiếng Việt và ít nhất một dòng ví dụ thực tế; importer không đọc các sheet này. File không có dòng nhập phải báo `File Excel không chứa dòng dữ liệu nào để nhập.` khi dùng tiếng Việt.
 6. Định dạng số: kiểm tra đồng thời tiền nguyên `10.000.000,00`, tiền lẻ `12.350,231` và số lượng tồn thập phân; không được làm tròn mất phần lẻ ở UI, request, database, Excel hoặc PDF.
 
+7. Thu chi thập phân: nhập `200.000,22`, rời focus và lưu; UI, payload và database phải cùng là `200000.22`. Sau đó thay bằng tổng lũy kế `300.000`; lịch sử phải có đúng hai lần `200000.22` và `99999.78`, không nối thêm chữ số từ giá trị cũ.
+8. Sales Order có serial: sau khi chọn serial, đổi Thuế và kiểm tra ngay trước khi lưu; số lượng trên row và ô hiển thị vẫn phải bằng số serial đã chọn.
+9. UI responsive: kiểm tra các trang Product, SO, PO, Thu chi và ba báo cáo tại `1366x768` và `390x844`; body không tràn ngang, modal cuộn trong thân và footer nút luôn nhìn thấy.
+
 ## 18. Mẫu báo cáo lỗi
 
 ```text

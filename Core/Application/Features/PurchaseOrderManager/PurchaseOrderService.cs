@@ -151,6 +151,7 @@ public class PurchaseOrderService
                     ModuleNumber = order.Number, ModuleItemId = item.Id
                 };
                 await _inventoryRepository.CreateAsync(transaction, ct);
+                transactions.Add(transaction);
             }
             else { transaction.UpdatedById = userId; _inventoryRepository.Update(transaction); }
             transaction.MovementDate = order.OrderDate;
@@ -164,8 +165,7 @@ public class PurchaseOrderService
 
         foreach (var item in physicalItems)
         {
-            var transaction = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
-                .SingleAsync(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleId == order.Id && x.ModuleItemId == item.Id, ct);
+            var transaction = transactions.Single(x => x.ModuleItemId == item.Id);
             item.PurchaseOrder = order;
             await _serialService.SyncPurchaseOrderItemSerialsAsync(item, transaction, userId, ct);
         }

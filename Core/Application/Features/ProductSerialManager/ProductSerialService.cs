@@ -146,7 +146,7 @@ public class ProductSerialService
         }
         if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
         {
-            var duplicateExists = await _queryContext.Set<ProductSerial>()
+            var duplicateExists = await _productSerialRepository.GetQuery()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
                 .AnyAsync(x => x.PurchaseOrderItemId != item.Id
@@ -218,8 +218,8 @@ public class ProductSerialService
 
         if (transaction != null)
         {
-            var alreadyApplied = await _queryContext
-                .Set<ProductSerialMovement>()
+            var alreadyApplied = await _productSerialMovementRepository
+                .GetQuery()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
                 .AnyAsync(x => x.InventoryTransactionId == transaction.Id
@@ -235,8 +235,8 @@ public class ProductSerialService
                 return;
             }
 
-            var serialIds = await _queryContext
-                .Set<ProductSerial>()
+            var serialIds = await _productSerialRepository
+                .GetQuery()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
                 .Where(x => x.PurchaseOrderItemId == item.Id)

@@ -10,7 +10,6 @@
             <button class="btn" v-bind:class="state.partyType === 'Customer' ? 'btn-primary' : 'btn-outline-primary'" v-on:click="handler.selectParty('Customer')">Customers</button>
             <button class="btn" v-bind:class="state.partyType === 'Vendor' ? 'btn-primary' : 'btn-outline-primary'" v-on:click="handler.selectParty('Vendor')">Vendors</button>
         </div>
-        <div class="alert alert-info">Confirmed document value is shown after tax. Payments change paid and remaining debt only.</div>
         <div class="grid-container"><div id="MainGrid" ref="mainGridRef"></div></div>
     </div></div>
 </div>

@@ -114,7 +114,11 @@ const App = {
             if (rowIndex >= 0) secondaryGrid.obj.updateCell(rowIndex, field, value);
         };
         const getSalesOrderItemAmounts = (row, overrides = {}) => {
-            const quantity = Number(overrides.quantity ?? row?.quantity ?? 0) || 0;
+            const productId = normalizeLookupId(overrides.productId ?? row?.productId);
+            const serialIds = overrides.productSerialIds ?? row?.productSerialIds ?? [];
+            const quantity = isSerialTrackedProduct(productId) && serialIds.length > 0
+                ? serialIds.length
+                : Number(overrides.quantity ?? row?.quantity ?? 0) || 0;
             const unitPrice = Number(overrides.unitPrice ?? row?.unitPrice ?? 0) || 0;
             const taxId = normalizeLookupId(overrides.taxId ?? row?.taxId);
             const taxPercentage = Number(state.taxListLookupData.find(item =>

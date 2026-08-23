@@ -21,10 +21,20 @@ async function selectTaxAndSaveItem(page, taxName) {
     ).ej2_instances[0].showPopup());
     await selectOpenDropdownOption(page, taxName);
 
+    const quantityAfterTax = await page.evaluate(() => {
+        const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+        const cell = grid.getCellFromIndex(0, grid.getColumnIndexByField('quantity'));
+        return {
+            row: Number(grid.getRowsObject()[0]?.data?.quantity),
+            rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
+        };
+    });
+
     const saved = await page.evaluate(async () => (
         GridInteractionManager.save(document.querySelector('#SecondaryGrid').ej2_instances[0])
     ));
     expect(saved).toBe(true);
+    return quantityAfterTax;
 }
 
 async function reloadAndReadItem(page, route, documentId) {
@@ -195,7 +205,8 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await expect(salesQuantityInput).toHaveValue('1,25');
     expect(await salesQuantityInput.evaluate(element => element.ej2_instances?.[0]?.value)).toBe(expectedSalesQuantity);
 
-    await selectTaxAndSaveItem(page, lookup.tax.name);
+    const salesQuantityAfterTax = await selectTaxAndSaveItem(page, lookup.tax.name);
+    expect(salesQuantityAfterTax).toEqual({ row: expectedSalesQuantity, rendered: expectedSalesQuantity });
     const renderedSalesRow = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
         const productCell = grid.getCellFromIndex(0, grid.getColumnIndexByField('productId'));
@@ -389,7 +400,8 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
         renderedQuantity: 2
     });
 
-    await selectTaxAndSaveItem(page, fixture.tax.name);
+    const quantityAfterTax = await selectTaxAndSaveItem(page, fixture.tax.name);
+    expect(quantityAfterTax).toEqual({ row: 2, rendered: 2 });
     const persisted = await page.evaluate(async id => (
         (await AxiosManager.get(`/SalesOrderItem/GetSalesOrderItemBySalesOrderIdList?salesOrderId=${encodeURIComponent(id)}`, {}))
             ?.data?.content?.data ?? []

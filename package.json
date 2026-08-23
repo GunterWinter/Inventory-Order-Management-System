@@ -8,8 +8,9 @@
     "test:browser:sales-items": "playwright test Tests/Browser/product-purchase-sales.spec.js",
     "test:browser:gate:purchase-sales": "npm run test:browser:sales-items",
     "test:browser:cash": "node Tests/browser_cash_category_report_smoke.js",
+    "test:browser:ui": "playwright test Tests/Browser/responsive-shell.spec.js",
     "test:browser:files": "node Tests/browser_file_workflows_smoke.js",
-    "test:browser:all": "npm run test:browser && npm run test:browser:documents && npm run test:browser:sales-items && npm run test:browser:cash && npm run test:browser:files",
+    "test:browser:all": "npm run test:browser && npm run test:browser:documents && npm run test:browser:sales-items && npm run test:browser:cash && npm run test:browser:ui && npm run test:browser:files",
     "test:browser:isolated": "powershell -NoProfile -ExecutionPolicy Bypass -File Tests/run-antigravity-browser.ps1"
   },
   "devDependencies": {

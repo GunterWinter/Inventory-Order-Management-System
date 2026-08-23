@@ -2628,7 +2628,8 @@ const App = {
 
                     await methods.populateMainData();
                     mainGrid.refresh();
-                    mainGrid.obj.refresh();
+                    const refreshedRecord = state.mainData.find(item => item.id === orderId);
+                    if (refreshedRecord) mainGrid.obj.setRowData(orderId, refreshedRecord);
                     Swal.fire({ icon: 'success', title: 'Payment successful', timer: 1000, showConfirmButton: false });
                 } catch (err) {
                     Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message ?? err.message ?? 'Please try again.' });

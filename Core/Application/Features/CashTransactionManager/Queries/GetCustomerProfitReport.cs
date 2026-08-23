@@ -49,11 +49,17 @@ public sealed class GetCustomerProfitReportHandler
         CancellationToken cancellationToken)
     {
         var rows = new List<CustomerProfitReportItemDto>();
+        var customerId = string.IsNullOrWhiteSpace(request.CustomerId) ? null : request.CustomerId;
+        var fromDate = request.FromDate?.Date;
+        var toDateExclusive = request.ToDate?.Date.AddDays(1);
 
         var sales = await _queryContext.Set<SalesOrder>().AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => (x.OrderStatus == SalesOrderStatus.Confirmed || x.OrderStatus == SalesOrderStatus.Archived)
-                && x.CustomerId != null)
+                && x.CustomerId != null
+                && (customerId == null || x.CustomerId == customerId)
+                && (!fromDate.HasValue || x.OrderDate >= fromDate.Value)
+                && (!toDateExclusive.HasValue || x.OrderDate < toDateExclusive.Value))
             .Select(x => new CustomerProfitReportItemDto
             {
                 Id = x.Id,
@@ -69,10 +75,34 @@ public sealed class GetCustomerProfitReportHandler
             .ToListAsync(cancellationToken);
         rows.AddRange(sales);
 
+        var salesReturnSources = await _queryContext.Set<SalesReturn>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.SalesOrder != null
+                && x.SalesOrder.CustomerId != null
+                && (x.Status == SalesReturnStatus.Confirmed || x.Status == SalesReturnStatus.Archived)
+                && (customerId == null || x.SalesOrder.CustomerId == customerId)
+                && (!fromDate.HasValue || (x.ReturnDate ?? x.CreatedAtUtc) >= fromDate.Value)
+                && (!toDateExclusive.HasValue || (x.ReturnDate ?? x.CreatedAtUtc) < toDateExclusive.Value))
+            .Select(x => new
+            {
+                x.Id,
+                x.Number,
+                x.ReturnDate,
+                x.Description,
+                CustomerId = x.SalesOrder!.CustomerId!,
+                CustomerName = x.SalesOrder.Customer != null ? x.SalesOrder.Customer.Name : null,
+                Items = x.SalesOrder.SalesOrderItemList
+                    .Where(item => !item.IsDeleted && item.ProductId != null)
+                    .Select(item => new { item.ProductId, UnitPrice = item.UnitPrice ?? 0m })
+                    .ToList()
+            })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var salesReturnIds = salesReturnSources.Keys.ToList();
         var salesReturnLines = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.ModuleName == nameof(SalesReturn)
                 && x.ModuleId != null
+                && salesReturnIds.Contains(x.ModuleId)
                 && x.ProductId != null
                 && (x.Status == InventoryTransactionStatus.Confirmed
                     || x.Status == InventoryTransactionStatus.Archived))
@@ -86,26 +116,16 @@ public sealed class GetCustomerProfitReportHandler
                 Quantity = x.Movement ?? 0m
             })
             .ToListAsync(cancellationToken);
-        var salesReturnIds = salesReturnLines.Select(x => x.ReturnId).Distinct().ToList();
-        var salesReturnSources = await _queryContext.Set<SalesReturn>().AsNoTracking()
-            .ApplyIsDeletedFilter(false)
-            .Include(x => x.SalesOrder).ThenInclude(x => x!.Customer)
-            .Include(x => x.SalesOrder).ThenInclude(x => x!.SalesOrderItemList)
-            .Where(x => salesReturnIds.Contains(x.Id)
-                && (x.Status == SalesReturnStatus.Confirmed || x.Status == SalesReturnStatus.Archived))
-            .ToDictionaryAsync(x => x.Id, cancellationToken);
         foreach (var line in salesReturnLines)
         {
-            if (!salesReturnSources.TryGetValue(line.ReturnId, out var salesReturn)
-                || salesReturn.SalesOrder?.CustomerId == null)
+            if (!salesReturnSources.TryGetValue(line.ReturnId, out var salesReturn))
                 continue;
-            var unitPrice = salesReturn.SalesOrder.SalesOrderItemList
-                .FirstOrDefault(x => !x.IsDeleted && x.ProductId == line.ProductId)?.UnitPrice ?? 0m;
+            var unitPrice = salesReturn.Items.FirstOrDefault(x => x.ProductId == line.ProductId)?.UnitPrice ?? 0m;
             rows.Add(new CustomerProfitReportItemDto
             {
                 Id = line.Id,
-                CustomerId = salesReturn.SalesOrder.CustomerId,
-                CustomerName = salesReturn.SalesOrder.Customer?.Name,
+                CustomerId = salesReturn.CustomerId,
+                CustomerName = salesReturn.CustomerName,
                 Number = salesReturn.Number ?? line.ModuleNumber,
                 TransactionDate = salesReturn.ReturnDate ?? line.MovementDate,
                 Description = salesReturn.Description,
@@ -120,7 +140,10 @@ public sealed class GetCustomerProfitReportHandler
             .Where(x => x.CustomerId != null
                 && x.PurchaseOrder != null
                 && (x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed
-                    || x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Archived))
+                    || x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Archived)
+                && (customerId == null || x.CustomerId == customerId)
+                && (!fromDate.HasValue || x.PurchaseOrder.OrderDate >= fromDate.Value)
+                && (!toDateExclusive.HasValue || x.PurchaseOrder.OrderDate < toDateExclusive.Value))
             .Select(x => new CustomerProfitReportItemDto
             {
                 Id = x.Id,
@@ -144,7 +167,10 @@ public sealed class GetCustomerProfitReportHandler
             .ApplyIsDeletedFilter(false)
             .Where(x => x.TransactionType == CashTransactionType.Credit
                 && x.SourceModule == nameof(MaterialExport)
-                && x.CustomerId != null)
+                && x.CustomerId != null
+                && (customerId == null || x.CustomerId == customerId)
+                && (!fromDate.HasValue || x.TransactionDate >= fromDate.Value)
+                && (!toDateExclusive.HasValue || x.TransactionDate < toDateExclusive.Value))
             .Select(x => new CustomerProfitReportItemDto
             {
                 Id = x.Id,
@@ -169,7 +195,10 @@ public sealed class GetCustomerProfitReportHandler
                 && !x.CashTransaction.IsDeleted
                 && x.CashTransaction.TransactionType == CashTransactionType.Credit
                 && x.CashTransaction.SourceModule != nameof(MaterialExport)
-                && x.CashTransaction.SourceModule != nameof(PurchaseOrder))
+                && x.CashTransaction.SourceModule != nameof(PurchaseOrder)
+                && (customerId == null || x.CustomerId == customerId)
+                && (!fromDate.HasValue || x.CashTransaction.TransactionDate >= fromDate.Value)
+                && (!toDateExclusive.HasValue || x.CashTransaction.TransactionDate < toDateExclusive.Value))
             .Select(x => new CustomerProfitReportItemDto
             {
                 Id = x.Id,
@@ -184,13 +213,6 @@ public sealed class GetCustomerProfitReportHandler
             })
             .ToListAsync(cancellationToken);
         rows.AddRange(manualAllocations);
-
-        if (!string.IsNullOrWhiteSpace(request.CustomerId))
-            rows = rows.Where(x => x.CustomerId == request.CustomerId).ToList();
-        if (request.FromDate.HasValue)
-            rows = rows.Where(x => x.TransactionDate >= request.FromDate.Value.Date).ToList();
-        if (request.ToDate.HasValue)
-            rows = rows.Where(x => x.TransactionDate < request.ToDate.Value.Date.AddDays(1)).ToList();
 
         rows = rows.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id).ToList();
         var revenue = rows.Sum(x => x.Revenue);

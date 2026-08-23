@@ -11,13 +11,16 @@ namespace ASPNET.BackEnd;
 
 public static class BackEndConfiguration
 {
-    public static IServiceCollection AddBackEndServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddBackEndServices(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         //>>> Application Layer
         services.AddApplicationServices();
 
         //>>> Infrastructure Layer
-        services.AddInfrastructureServices(configuration);
+        services.AddInfrastructureServices(configuration, environment);
 
         services.AddExceptionHandler<CustomExceptionHandler>();
 

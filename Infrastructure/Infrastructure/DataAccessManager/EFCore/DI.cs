@@ -17,7 +17,10 @@ namespace Infrastructure.DataAccessManager.EFCore;
 
 public static class DI
 {
-    public static IServiceCollection RegisterDataAccess(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection RegisterDataAccess(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         var databaseProvider = configuration["DatabaseProvider"];
@@ -45,21 +48,22 @@ public static class DI
 
             case "SqlServer":
             default:
-                services.AddDbContext<DataContext>(options =>
-                    options.UseSqlServer(connectionString)
-                    .LogTo(Log.Information, LogLevel.Information)
-                    .EnableSensitiveDataLogging()
-                );
-                services.AddDbContext<CommandContext>(options =>
-                    options.UseSqlServer(connectionString)
-                    .LogTo(Log.Information, LogLevel.Information)
-                    .EnableSensitiveDataLogging()
-                );
-                services.AddDbContext<QueryContext>(options =>
-                    options.UseSqlServer(connectionString)
-                    .LogTo(Log.Information, LogLevel.Information)
-                    .EnableSensitiveDataLogging()
-                );
+                void ConfigureSqlServer(DbContextOptionsBuilder options)
+                {
+                    options.UseSqlServer(connectionString);
+                    if (environment.IsDevelopment() && configuration.GetValue<bool>("DataAccess:LogSql"))
+                    {
+                        options.LogTo(Log.Information, LogLevel.Information);
+                    }
+                    if (environment.IsDevelopment() && configuration.GetValue<bool>("DataAccess:EnableSensitiveDataLogging"))
+                    {
+                        options.EnableSensitiveDataLogging();
+                    }
+                }
+
+                services.AddDbContext<DataContext>(ConfigureSqlServer);
+                services.AddDbContext<CommandContext>(ConfigureSqlServer);
+                services.AddDbContext<QueryContext>(ConfigureSqlServer);
                 break;
         }
 
@@ -140,7 +144,10 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.InventoryTransaction', N'UnitCost') IS NULL ALTER TABLE [dbo].[InventoryTransaction] ADD [UnitCost] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_StockLookup] ON [dbo].[InventoryTransaction] ([IsDeleted], [Status], [ProductId], [WarehouseId]) INCLUDE ([Stock], [CreatedAtUtc]);",
+            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_ActiveModuleItem' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_ActiveModuleItem] ON [dbo].[InventoryTransaction] ([ModuleName], [ModuleId], [ModuleItemId]) INCLUDE ([Status], [ProductId], [WarehouseId], [Movement], [Stock]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) CREATE INDEX [IX_ProductSerial_StockLookup] ON [dbo].[ProductSerial] ([IsDeleted], [Status], [ProductId], [CurrentWarehouseId]) INCLUDE ([CreatedAtUtc]);",
+            "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_ActivePurchaseOrderItem' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) CREATE INDEX [IX_ProductSerial_ActivePurchaseOrderItem] ON [dbo].[ProductSerial] ([PurchaseOrderItemId], [CreatedAtUtc]) INCLUDE ([Status], [InternalSerialNumber], [ManufacturerSerialNumber]) WHERE [IsDeleted] = 0;",
+            "IF OBJECT_ID(N'[dbo].[ProductSerialMovement]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerialMovement_ActiveInventoryTransaction' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerialMovement]')) CREATE INDEX [IX_ProductSerialMovement_ActiveInventoryTransaction] ON [dbo].[ProductSerialMovement] ([InventoryTransactionId], [ReversedAtUtc], [Status]) INCLUDE ([ProductSerialId], [CreatedAtUtc]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_ManufacturerSerialNumber' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[ProductSerial] WHERE [IsDeleted] = 0 AND [ManufacturerSerialNumber] IS NOT NULL GROUP BY [ManufacturerSerialNumber] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_ProductSerial_ManufacturerSerialNumber] ON [dbo].[ProductSerial] ([ManufacturerSerialNumber]) WHERE [ManufacturerSerialNumber] IS NOT NULL AND [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_PurchaseOrderItem_PurchaseOrderId_ProductId' AND [object_id] = OBJECT_ID(N'[dbo].[PurchaseOrderItem]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[PurchaseOrderItem] WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL GROUP BY [PurchaseOrderId], [ProductId] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_PurchaseOrderItem_PurchaseOrderId_ProductId] ON [dbo].[PurchaseOrderItem] ([PurchaseOrderId], [ProductId]) WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExport', N'WarehouseId') IS NULL ALTER TABLE [dbo].[MaterialExport] ADD [WarehouseId] nvarchar(50) NULL;",
@@ -148,6 +155,7 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL ALTER TABLE [dbo].[CashTransactionPayment] ALTER COLUMN [CashAccountId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransaction_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) CREATE INDEX [IX_CashTransaction_ActiveBalance] ON [dbo].[CashTransaction] ([CashAccountId], [TransactionType]) INCLUDE ([PaidAmount]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransactionPayment_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransactionPayment]')) CREATE INDEX [IX_CashTransactionPayment_ActiveBalance] ON [dbo].[CashTransactionPayment] ([CashAccountId]) INCLUDE ([CashTransactionId], [Amount]) WHERE [IsDeleted] = 0;",
+            "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransactionPayment_ActiveTransactionDate' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransactionPayment]')) CREATE INDEX [IX_CashTransactionPayment_ActiveTransactionDate] ON [dbo].[CashTransactionPayment] ([CashTransactionId], [PaymentDate]) INCLUDE ([Amount], [CashAccountId], [CreatedAtUtc]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL INSERT INTO [dbo].[CashTransactionPayment] ([Id], [IsDeleted], [CreatedAtUtc], [CreatedById], [CashTransactionId], [CashAccountId], [PaymentDate], [Amount], [Description]) SELECT CONVERT(nvarchar(50), NEWID()), 0, SYSUTCDATETIME(), COALESCE(ct.[UpdatedById], ct.[CreatedById]), ct.[Id], ct.[CashAccountId], COALESCE(ct.[TransactionDate], SYSUTCDATETIME()), ISNULL(ct.[PaidAmount], 0) - ISNULL(history.[RecordedAmount], 0), N'Khôi phục lịch sử thanh toán' FROM [dbo].[CashTransaction] ct OUTER APPLY (SELECT SUM(p.[Amount]) AS [RecordedAmount] FROM [dbo].[CashTransactionPayment] p WHERE p.[CashTransactionId] = ct.[Id] AND p.[IsDeleted] = 0) history WHERE ct.[IsDeleted] = 0 AND ISNULL(ct.[PaidAmount], 0) - ISNULL(history.[RecordedAmount], 0) > 0.000001;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL UPDATE ct SET ct.[CashAccountId] = firstPayment.[CashAccountId] FROM [dbo].[CashTransaction] ct CROSS APPLY (SELECT TOP (1) pay.[CashAccountId] FROM [dbo].[CashTransactionPayment] pay WHERE pay.[CashTransactionId] = ct.[Id] AND pay.[IsDeleted] = 0 ORDER BY pay.[PaymentDate], pay.[CreatedAtUtc], pay.[Id]) firstPayment WHERE ct.[IsDeleted] = 0 AND ct.[SourceModule] = N'PurchaseOrder';",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND OBJECT_ID(N'[dbo].[PurchaseOrder]', N'U') IS NOT NULL UPDATE ct SET ct.[VendorId] = po.[VendorId] FROM [dbo].[CashTransaction] ct INNER JOIN [dbo].[PurchaseOrder] po ON po.[Id] = ct.[SourceModuleId] WHERE ct.[IsDeleted] = 0 AND ct.[SourceModule] = N'PurchaseOrder' AND ct.[VendorId] IS NULL AND po.[VendorId] IS NOT NULL;",

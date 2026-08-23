@@ -34,5 +34,9 @@ public class CashTransactionPaymentConfiguration : BaseEntityConfiguration<CashT
             .HasFilter("[IsDeleted] = 0")
             .IncludeProperties(x => new { x.CashTransactionId, x.Amount });
         builder.HasIndex(x => x.PaymentDate);
+        builder.HasIndex(x => new { x.CashTransactionId, x.PaymentDate })
+            .HasDatabaseName("IX_CashTransactionPayment_ActiveTransactionDate")
+            .HasFilter("[IsDeleted] = 0")
+            .IncludeProperties(x => new { x.Amount, x.CashAccountId, x.CreatedAtUtc });
     }
 }

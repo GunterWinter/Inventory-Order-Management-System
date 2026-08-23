@@ -261,6 +261,151 @@
 
 
 </style>
+
+<style>
+    /* Shared ERP shell: keep dense data screens readable on desktop and usable on mobile. */
+    html,
+    body,
+    .wrapper,
+    .content-wrapper {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .content-wrapper {
+        padding: 1.25rem !important;
+        background: #f4f6f9;
+    }
+
+    .grid-container {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.65rem;
+        background: #fff;
+        box-shadow: 0 0.125rem 0.375rem rgba(31, 45, 61, 0.05);
+    }
+
+    .grid-container .e-grid {
+        border: 0;
+    }
+
+    .e-grid .e-toolbar,
+    .e-grid .e-gridheader,
+    .e-grid .e-gridpager {
+        border-color: #e2e8f0;
+    }
+
+    .e-grid .e-toolbar-items,
+    .e-grid .e-toolbar-left,
+    .e-grid .e-toolbar-right {
+        display: flex;
+        flex-wrap: wrap;
+        height: auto !important;
+    }
+
+    .e-grid .e-rowcell,
+    .e-grid .e-headercell {
+        vertical-align: middle;
+    }
+
+    .card,
+    .modal-content {
+        border-color: #e2e8f0;
+        border-radius: 0.65rem;
+        box-shadow: 0 0.125rem 0.5rem rgba(31, 45, 61, 0.06);
+    }
+
+    .card-header,
+    .modal-header,
+    .modal-footer {
+        border-color: #e2e8f0;
+        background: #fff;
+    }
+
+    form label:not(.text-danger),
+    .modal-body > label {
+        margin-bottom: 0.3rem;
+        color: #334155;
+        font-weight: 600;
+    }
+
+    .form-control:focus,
+    .e-input-group.e-input-focus,
+    .e-input-group.e-control-wrapper.e-input-focus {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 0.15rem rgba(27, 132, 255, 0.15) !important;
+    }
+
+    .modal-dialog:not(.modal-fullscreen) {
+        max-height: calc(100vh - 2rem);
+    }
+
+    .modal-dialog .modal-content {
+        max-height: calc(100vh - 2rem);
+        overflow: hidden;
+    }
+
+    .modal-dialog .modal-body {
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .modal-dialog .modal-header,
+    .modal-dialog .modal-footer {
+        position: relative;
+        z-index: 2;
+        flex-shrink: 0;
+    }
+
+    .table-responsive .source-goods-table {
+        min-width: 760px;
+    }
+
+    .source-goods-table td:nth-child(4),
+    .source-goods-table td:nth-child(5),
+    .source-goods-table td:nth-child(6) {
+        white-space: nowrap;
+    }
+
+    .source-goods-table td:last-child {
+        min-width: 11rem;
+        overflow-wrap: anywhere;
+    }
+
+    @@media (max-width: 767.98px) {
+        .content-wrapper {
+            padding: 0.75rem !important;
+        }
+
+        .grid-container {
+            border-radius: 0.5rem;
+        }
+
+        .modal-dialog {
+            margin: 0.5rem;
+            max-height: calc(100vh - 1rem) !important;
+        }
+
+        .modal-dialog .modal-content {
+            max-height: calc(100vh - 1rem);
+        }
+
+        .modal-body,
+        .modal-header,
+        .modal-footer {
+            padding: 0.75rem;
+        }
+
+        .modal-footer {
+            flex-wrap: wrap;
+        }
+
+        .modal-footer .btn {
+            min-width: 6rem;
+        }
+    }
+</style>
 <style>
     /* CSS scrollbar sidebar */
     #navbarnav::-webkit-scrollbar {

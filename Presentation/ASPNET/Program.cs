@@ -13,7 +13,7 @@ if (!Directory.Exists(logPath))
     Directory.CreateDirectory(logPath);
 }
 
-builder.Services.AddBackEndServices(builder.Configuration);
+builder.Services.AddBackEndServices(builder.Configuration, builder.Environment);
 builder.Services.AddFrontEndServices();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

@@ -117,9 +117,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                 Total = x.Total ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m),
                 ProductSerialNumbers = string.Join(", ", x.ProductSerials
                     .OrderBy(serial => serial.InternalSerialNumber)
-                    .Select(serial => string.IsNullOrWhiteSpace(serial.ManufacturerSerialNumber)
-                        ? serial.InternalSerialNumber
-                        : $"{serial.InternalSerialNumber} / {serial.ManufacturerSerialNumber}")
+                    .Select(serial => serial.InternalSerialNumber)
                     .Where(number => !string.IsNullOrWhiteSpace(number)))
             }).ToList();
         }
@@ -249,10 +247,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                 Quantity = quantity,
                 UnitPrice = unitPrice,
                 Total = quantity * unitPrice,
-                ProductSerialNumbers = string.Join(", ", serials.Select(x =>
-                        string.IsNullOrWhiteSpace(x.ManufacturerSerialNumber)
-                            ? x.InternalSerialNumber
-                            : $"{x.InternalSerialNumber} / {x.ManufacturerSerialNumber}")
+                ProductSerialNumbers = string.Join(", ", serials.Select(x => x.InternalSerialNumber)
                     .Where(x => !string.IsNullOrWhiteSpace(x)))
             });
         }

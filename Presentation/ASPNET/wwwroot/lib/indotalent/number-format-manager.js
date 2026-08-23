@@ -320,6 +320,11 @@
             prepareInputForComponent,
             prepareBlurForComponent,
             getPreparedBlurValue: () => preparedBlurValue,
+            consumePreparedBlurValue: () => {
+                const prepared = preparedBlurValue;
+                preparedBlurValue = null;
+                return prepared;
+            },
             consumePreparedValue: () => {
                 const prepared = componentValuePrepared;
                 componentValuePrepared = false;
@@ -373,9 +378,14 @@
         const originalChangeHandler = numericTextBox.prototype.changeHandler;
         if (originalChangeHandler) {
             numericTextBox.prototype.changeHandler = function (event) {
-                const preparedValue = this.element?.dataset.liveFormatted === 'true' ? this.value : null;
+                const handlers = numericInputHandlers.get(this.element);
+                const preparedValue = handlers?.getPreparedBlurValue()
+                    ?? parseLocaleNumber(this.element?.value)
+                    ?? this.value;
                 const result = originalChangeHandler.call(this, event);
-                if (preparedValue != null && this.value !== preparedValue) {
+                if (this.element?.dataset.liveFormatted === 'true'
+                    && preparedValue != null
+                    && this.value !== preparedValue) {
                     this.setProperties({ value: preparedValue }, true);
                     if (typeof this.change === 'function') this.change({ value: preparedValue });
                 }
@@ -406,10 +416,11 @@
         const originalFocusOut = numericTextBox.prototype.focusOutHandler;
         if (originalFocusOut) {
             numericTextBox.prototype.focusOutHandler = function (e) {
-                const preparedValue = this.value
-                    ?? numericInputHandlers.get(this.element)?.getPreparedBlurValue()
+                const handlers = numericInputHandlers.get(this.element);
+                const preparedValue = handlers?.getPreparedBlurValue()
                     ?? parseLocaleNumber(this.element?.value);
                 originalFocusOut.call(this, e);
+                handlers?.consumePreparedBlurValue();
                 if (this.element && this.element.dataset.liveFormatted === 'true') {
                     if (preparedValue != null && this.value !== preparedValue) {
                         this.setProperties({ value: preparedValue }, true);

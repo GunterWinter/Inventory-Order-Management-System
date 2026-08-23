@@ -41,5 +41,9 @@ public class ProductSerialConfiguration : BaseEntityConfiguration<ProductSerial>
         builder.HasIndex(x => x.CostAllocationId);
         builder.HasIndex(x => new { x.IsDeleted, x.Status, x.ProductId, x.CurrentWarehouseId })
             .HasDatabaseName("IX_ProductSerial_StockLookup");
+        builder.HasIndex(x => new { x.PurchaseOrderItemId, x.CreatedAtUtc })
+            .HasDatabaseName("IX_ProductSerial_ActivePurchaseOrderItem")
+            .HasFilter("[IsDeleted] = 0")
+            .IncludeProperties(x => new { x.Status, x.InternalSerialNumber, x.ManufacturerSerialNumber });
     }
 }

@@ -8,16 +8,20 @@ using Infrastructure.SecurityManager.Tokens;
 using Infrastructure.SeedManager;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Infrastructure;
 
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructureServices(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         //>>> DataAccess
-        services.RegisterDataAccess(configuration);
+        services.RegisterDataAccess(configuration, environment);
 
         //>>> Serilog
         services.RegisterSerilog(configuration);
