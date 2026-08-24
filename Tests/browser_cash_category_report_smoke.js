@@ -5,6 +5,29 @@ function parseMoney(value) {
     return normalized ? Number(normalized) : 0;
 }
 
+function normalizeSearchText(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D');
+}
+
+async function selectSearchableNativeOption(page, select, optionSelector) {
+    const option = await select.locator('option').nth(optionSelector.index).evaluate(element => ({
+        value: element.value,
+        text: element.textContent.trim()
+    }));
+    await select.evaluate(element => element.ej2_instances[0].showPopup());
+    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+    await popup.waitFor({ state: 'visible' });
+    const filterInput = popup.locator('.e-filter-parent input.e-input-filter');
+    await filterInput.fill(normalizeSearchText(option.text));
+    await popup.locator('.e-list-item', { hasText: option.text }).first().click();
+    await popup.waitFor({ state: 'hidden' });
+    return option.value;
+}
+
 (async () => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
     const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -81,16 +104,29 @@ function parseMoney(value) {
     const allocationRows = page.locator('#MainModal .allocation-row');
     await allocationRows.first().waitFor();
     if (await allocationRows.count() !== 2) throw new Error('The allocation panel did not create two detail rows.');
-    const customerSelects = allocationRows.locator('select');
+    const customerSelects = allocationRows.locator('select[data-searchable-dropdown]');
     if (!await customerSelects.first().evaluate(select => select.classList.contains('form-control'))) {
         throw new Error('Allocation customer select is not using the Bootstrap 4 compatible form control style.');
+    }
+    const allocationDropdownState = await customerSelects.first().evaluate(select => {
+        const dropdown = select.ej2_instances?.[0];
+        const wrapper = dropdown?.inputWrapper?.container ?? dropdown?.element?.parentElement;
+        return {
+            allowFiltering: dropdown?.allowFiltering,
+            placeholder: dropdown?.filterBarPlaceholder,
+            wrapperVisible: !!wrapper && getComputedStyle(wrapper).display !== 'none'
+        };
+    });
+    if (!allocationDropdownState.allowFiltering || allocationDropdownState.placeholder !== 'Tìm kiếm'
+        || !allocationDropdownState.wrapperVisible) {
+        throw new Error(`Allocation customer dropdown is not searchable: ${JSON.stringify(allocationDropdownState)}`);
     }
     const firstOptions = await customerSelects.nth(0).locator('option').evaluateAll(options => options
         .map(option => option.value)
         .filter(value => value && value !== 'null'));
     if (firstOptions.length < 2) throw new Error('The demo data does not contain two customers for allocation testing.');
-    await customerSelects.nth(0).selectOption(firstOptions[0]);
-    await customerSelects.nth(1).selectOption(firstOptions[1]);
+    await selectSearchableNativeOption(page, customerSelects.nth(0), { index: 1 });
+    await selectSearchableNativeOption(page, customerSelects.nth(1), { index: 2 });
     const selectedCustomers = await customerSelects.evaluateAll(selects => selects.map(select => select.value));
     if (selectedCustomers.some(value => !value)) {
         throw new Error(`Customer allocation selection did not bind: ${JSON.stringify(selectedCustomers)}`);
@@ -198,13 +234,12 @@ function parseMoney(value) {
     await page.evaluate(description => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.search(description), uniqueDescription);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
         ?.getCurrentViewRecords?.().some(item => item.id === id), partialTransaction.id);
-    await page.evaluate(id => {
-        const grid = document.querySelector('#MainGrid').ej2_instances[0];
-        grid.clearSelection();
-        grid.selectRow(grid.getCurrentViewRecords().findIndex(item => item.id === id));
-    }, partialTransaction.id);
-    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.getSelectedRecords?.().length === 1);
+    await page.evaluate(() => document.querySelector('#MainGrid').ej2_instances[0].clearSelection());
+    const partialTransactionRow = page.locator('#MainGrid .e-row', { hasText: uniqueDescription }).first();
+    await partialTransactionRow.waitFor({ state: 'visible' });
+    await partialTransactionRow.click();
+    await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.getSelectedRecords?.().some(item => item.id === id), partialTransaction.id);
     await page.locator('#EditCustom').click();
     await page.waitForSelector('#MainModal.show');
     await paidAmount.click();
@@ -279,18 +314,26 @@ function parseMoney(value) {
     await salesPaymentButton.waitFor();
     await salesPaymentButton.click();
     await page.waitForSelector('.sales-order-payment-popup');
-    const salesPopupStyle = await page.locator('.sales-order-payment-popup #swal-account').evaluate(select => ({
-        compatibleClass: select.classList.contains('form-control'),
-        width: getComputedStyle(select).width,
-        display: getComputedStyle(select).display
-    }));
-    if (!salesPopupStyle.compatibleClass || salesPopupStyle.display !== 'block' || Number.parseFloat(salesPopupStyle.width) < 200) {
+    const salesPopupStyle = await page.locator('.sales-order-payment-popup #swal-account').evaluate(select => {
+        const dropdown = select.ej2_instances?.[0];
+        const wrapper = dropdown?.inputWrapper?.container ?? dropdown?.element?.parentElement;
+        return {
+            compatibleClass: select.classList.contains('form-control'),
+            allowFiltering: dropdown?.allowFiltering,
+            placeholder: dropdown?.filterBarPlaceholder,
+            width: wrapper ? getComputedStyle(wrapper).width : '0',
+            display: wrapper ? getComputedStyle(wrapper).display : 'none'
+        };
+    });
+    if (!salesPopupStyle.compatibleClass || !salesPopupStyle.allowFiltering
+        || salesPopupStyle.placeholder !== 'Tìm kiếm' || salesPopupStyle.display === 'none'
+        || Number.parseFloat(salesPopupStyle.width) < 200) {
         throw new Error(`Sales payment account control is not styled correctly: ${JSON.stringify(salesPopupStyle)}`);
     }
     if ((await page.locator('.sales-order-payment-popup .swal2-title').textContent()).includes('Sales Order Payment')) {
         throw new Error('Sales payment title remained in English while Vietnamese is active.');
     }
-    await page.locator('.sales-order-payment-popup #swal-account').selectOption({ index: 1 });
+    await selectSearchableNativeOption(page, page.locator('.sales-order-payment-popup #swal-account'), { index: 1 });
     const salesPaymentResponsePromise = page.waitForResponse(response =>
         response.url().includes('/api/SalesOrder/UpsertSalesOrderPayment'));
     await page.locator('.sales-order-payment-popup .swal2-confirm').click();
@@ -299,9 +342,11 @@ function parseMoney(value) {
         const row = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.find(item => item.id === id);
         return row?.paymentStatusClass === 'paid';
     }, salesPaymentTarget.id);
-    if (!(await page.locator('#MainGrid .payment-status-action:visible').first().textContent()).includes('Đã thanh toán')) {
-        throw new Error('Sales Order payment status did not update until refresh.');
-    }
+    await page.waitForFunction(id => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        const rowIndex = grid.getCurrentViewRecords().findIndex(item => item.id === id);
+        return grid.getRowByIndex(rowIndex)?.querySelector('.payment-status-action')?.textContent?.includes('Đã thanh toán');
+    }, salesPaymentTarget.id);
     await page.waitForSelector('.swal2-container', { state: 'hidden', timeout: 5000 });
 
     await page.goto(`${baseUrl}/PurchaseOrders/PurchaseOrderList`, { waitUntil: 'domcontentloaded' });
@@ -330,18 +375,26 @@ function parseMoney(value) {
             button.click();
         }, purchasePaymentTarget.id);
         await page.waitForSelector('.purchase-order-payment-popup');
-        const purchasePopupStyle = await page.locator('.purchase-order-payment-popup #swal-account').evaluate(select => ({
-            compatibleClass: select.classList.contains('form-control'),
-            width: getComputedStyle(select).width,
-            display: getComputedStyle(select).display
-        }));
-        if (!purchasePopupStyle.compatibleClass || purchasePopupStyle.display !== 'block' || Number.parseFloat(purchasePopupStyle.width) < 200) {
+        const purchasePopupStyle = await page.locator('.purchase-order-payment-popup #swal-account').evaluate(select => {
+            const dropdown = select.ej2_instances?.[0];
+            const wrapper = dropdown?.inputWrapper?.container ?? dropdown?.element?.parentElement;
+            return {
+                compatibleClass: select.classList.contains('form-control'),
+                allowFiltering: dropdown?.allowFiltering,
+                placeholder: dropdown?.filterBarPlaceholder,
+                width: wrapper ? getComputedStyle(wrapper).width : '0',
+                display: wrapper ? getComputedStyle(wrapper).display : 'none'
+            };
+        });
+        if (!purchasePopupStyle.compatibleClass || !purchasePopupStyle.allowFiltering
+            || purchasePopupStyle.placeholder !== 'Tìm kiếm' || purchasePopupStyle.display === 'none'
+            || Number.parseFloat(purchasePopupStyle.width) < 200) {
             throw new Error(`Purchase payment account control is not styled correctly: ${JSON.stringify(purchasePopupStyle)}`);
         }
         if ((await page.locator('.purchase-order-payment-popup .swal2-title').textContent()).startsWith('Payment ')) {
             throw new Error('Purchase payment title remained in English while Vietnamese is active.');
         }
-        await page.locator('.purchase-order-payment-popup #swal-account').selectOption({ index: 1 });
+        await selectSearchableNativeOption(page, page.locator('.purchase-order-payment-popup #swal-account'), { index: 1 });
         const purchaseRemaining = await page.locator('.purchase-payment-summary__row strong.text-danger')
             .evaluate(element => NumberFormatManager.parseLocaleNumber(element.textContent) ?? 0);
         await page.locator('.purchase-order-payment-popup #swal-amount').fill(String(purchaseRemaining));

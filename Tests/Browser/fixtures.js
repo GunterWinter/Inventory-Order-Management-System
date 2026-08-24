@@ -54,6 +54,7 @@ async function selectOpenDropdownOption(page, text) {
     const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
     await popup.waitFor({ state: 'visible' });
     await popup.locator('.e-list-item', { hasText: text }).first().click();
+    await popup.waitFor({ state: 'hidden' });
 }
 
 async function openSelectedDocument(page, gridSelector, documentId, actionId = 'EditCustom') {

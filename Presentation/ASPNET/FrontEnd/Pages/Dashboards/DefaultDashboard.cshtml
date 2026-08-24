@@ -119,14 +119,6 @@
 </div>
 
 @section scripts {
-    @{
-        var dashboardScriptPath = System.IO.Path.Combine(
-            System.IO.Directory.GetCurrentDirectory(),
-            "FrontEnd", "Pages", "Dashboards", "DefaultDashboard.cshtml.js");
-        var dashboardScriptVersion = System.IO.File.Exists(dashboardScriptPath)
-            ? System.IO.File.GetLastWriteTimeUtc(dashboardScriptPath).Ticks
-            : DateTime.UtcNow.Ticks;
-    }
     <script>
         window.showDashboardBootError = function () {
             const errorPanel = document.getElementById('DashboardBootError');
@@ -137,6 +129,7 @@
             if (dashboardApp?.hasAttribute('v-cloak')) window.showDashboardBootError();
         }, 5000);
     </script>
-    <script src="~/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js?v=@dashboardScriptVersion"
+    <script src="~/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js"
+            asp-append-version="true"
             onerror="window.showDashboardBootError()"></script>
 }

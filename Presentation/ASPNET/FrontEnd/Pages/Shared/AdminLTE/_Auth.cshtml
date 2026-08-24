@@ -7,11 +7,11 @@
 
     <!-- Google Font: Source Sans Pro -->
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="~/adminlte/plugins/fontawesome-free/css/all.min.css">
+    <link rel="stylesheet" href="~/adminlte/plugins/fontawesome-free/css/all.min.css" asp-append-version="true">
     <!-- icheck bootstrap -->
-    <link rel="stylesheet" href="~/adminlte/plugins/icheck-bootstrap/icheck-bootstrap.min.css">
+    <link rel="stylesheet" href="~/adminlte/plugins/icheck-bootstrap/icheck-bootstrap.min.css" asp-append-version="true">
     <!-- Theme style -->
-    <link rel="stylesheet" href="~/adminlte/css/adminlte.min.css">
+    <link rel="stylesheet" href="~/adminlte/css/adminlte.min.css" asp-append-version="true">
 
     @await RenderSectionAsync("styles", required: false)
 
@@ -23,15 +23,15 @@
     </style>
 
     @* vue *@
-    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script src="~/lib/vue/vue.global.prod.js" asp-append-version="true"></script>
 
     <!-- JavaScript Libraries -->
-    <script src="~/lib/bootstrap/dist/js/bootstrap.min.js" defer></script>
-    <script src="~/lib/axios/axios.min.js" defer></script>
-    <script src="~/lib/sweetalert/sweetalert2v11.js" defer></script>
-    <script src="~/lib/indotalent/storage-manager.js" defer></script>
-    <script src="~/lib/indotalent/security-manager.js" defer></script>
-    <script src="~/lib/indotalent/axios-manager.js" defer></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.min.js" defer asp-append-version="true"></script>
+    <script src="~/lib/axios/axios.min.js" defer asp-append-version="true"></script>
+    <script src="~/lib/sweetalert/sweetalert2v11.js" defer asp-append-version="true"></script>
+    <script src="~/lib/indotalent/storage-manager.js" defer asp-append-version="true"></script>
+    <script src="~/lib/indotalent/security-manager.js" defer asp-append-version="true"></script>
+    <script src="~/lib/indotalent/axios-manager.js" defer asp-append-version="true"></script>
     <script src="~/lib/indotalent/ui-localization.js" asp-append-version="true" defer></script>
 
 
@@ -55,11 +55,11 @@
     </div>
     <!-- /.login-box -->
     <!-- jQuery -->
-    <script src="~/adminlte/plugins/jquery/jquery.min.js"></script>
+    <script src="~/adminlte/plugins/jquery/jquery.min.js" asp-append-version="true"></script>
     <!-- Bootstrap 4 -->
-    <script src="~/adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="~/adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
     <!-- AdminLTE App -->
-    <script src="~/adminlte/js/adminlte.min.js"></script>
+    <script src="~/adminlte/js/adminlte.min.js" asp-append-version="true"></script>
 
      @await RenderSectionAsync("scripts", required: false)
 </body>

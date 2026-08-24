@@ -306,18 +306,27 @@ const App = {
                 Vue.nextTick(() => methods.syncAmountFromAllocations());
             }
             ,partnerOptions: () => state.partnerList
+            ,refreshAllocationDropdowns: () => Vue.nextTick(() => {
+                window.DropdownSearchManager?.refresh(mainModalRef.value);
+            })
             ,toggleAllocationDetails: () => {
                 state.showAllocationDetails = !state.showAllocationDetails;
                 partnerDropDown.refresh();
+                methods.refreshAllocationDropdowns();
             }
             ,setAllocationRows: (allocations) => {
                 state.allocationRows = (allocations ?? []).map(allocation => ({ ...allocation }));
                 state.showAllocationDetails = state.allocationRows.length > 0;
+                methods.refreshAllocationDropdowns();
             }
-            ,addAllocation: () => state.allocationRows.push({ customerId: null, amount: 0, description: '' })
+            ,addAllocation: () => {
+                state.allocationRows.push({ customerId: null, amount: 0, description: '' });
+                methods.refreshAllocationDropdowns();
+            }
             ,removeAllocation: (index) => {
                 state.allocationRows.splice(index, 1);
                 methods.syncAmountFromAllocations();
+                methods.refreshAllocationDropdowns();
             }
         };
 

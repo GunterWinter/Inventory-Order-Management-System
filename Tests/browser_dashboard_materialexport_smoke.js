@@ -5,12 +5,14 @@ const { chromium } = require('playwright');
     const browser = await chromium.launch({ channel: 'msedge', headless: true });
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     const consoleErrors = [];
+    const pageErrors = [];
     const failedRequests = [];
     const apiResponses = [];
 
     page.on('console', message => {
         if (message.type() === 'error') consoleErrors.push(message.text());
     });
+    page.on('pageerror', error => pageErrors.push(error.message));
     page.on('requestfailed', request => {
         if (request.url().startsWith(baseUrl)) {
             failedRequests.push(`${request.url()} :: ${request.failure()?.errorText}`);
@@ -59,7 +61,9 @@ const { chromium } = require('playwright');
 
     await page.goto(`${baseUrl}/SalesOrders/SalesOrderList`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
-    await page.waitForSelector('#MainGrid.e-grid');
+    await page.waitForSelector('#MainGrid.e-grid').catch(error => {
+        throw new Error(`${error.message}\nSales Order console errors: ${consoleErrors.join(' | ')}\nSales Order page errors: ${pageErrors.join(' | ')}`);
+    });
     await page.waitForSelector('#SecondaryGrid.e-grid', { state: 'attached' });
 
     await page.goto(`${baseUrl}/CashTransactions/CashTransactionList`, { waitUntil: 'domcontentloaded' });
@@ -155,6 +159,7 @@ const { chromium } = require('playwright');
         !message.includes('Failed to load resource: the server responded with a status of 500') &&
         message !== 'Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED');
     if (unexpectedConsoleErrors.length) throw new Error(`Unexpected Console errors: ${unexpectedConsoleErrors.join(' | ')}`);
+    if (pageErrors.length) throw new Error(`Page errors: ${pageErrors.join(' | ')}`);
     if (failedRequests.length) throw new Error(`Failed browser requests: ${failedRequests.join(' | ')}`);
     const expectedInjectedFailureObserved = apiResponses.some(item => item.startsWith('500 ') && item.includes('GetPurchaseDashboard'));
     if (!expectedInjectedFailureObserved) throw new Error('The isolated Dashboard failure scenario was not observed.');

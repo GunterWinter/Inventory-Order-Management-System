@@ -122,7 +122,10 @@ const App = {
                 controls.stockChart = new ej.charts.Chart({
                     primaryXAxis: { valueType: 'Category', labelRotation: -25, majorGridLines: { width: 0 } },
                     primaryYAxis: { title: 'Quantity', lineStyle: { width: 0 }, majorTickLines: { width: 0 } },
-                    series: state.inventory.inventoryStockDashboard ?? [],
+                    series: (state.inventory.inventoryStockDashboard ?? []).map(series => ({
+                        ...series,
+                        animation: { ...series.animation, enable: false }
+                    })),
                     tooltip: { enable: true, shared: true },
                     legendSettings: { visible: true },
                     chartArea: { border: { width: 0 } },

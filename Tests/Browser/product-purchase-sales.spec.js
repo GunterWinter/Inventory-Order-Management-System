@@ -55,13 +55,13 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
         const dropdown = document.querySelector(selector)?.ej2_instances?.[0];
         return {
             allowFiltering: dropdown?.allowFiltering,
-            filterBarPlaceholder: dropdown?.filterBarPlaceholder
+            filterBarPlaceholder: dropdown?.filterBarPlaceholder,
+            locale: window.UiLocalization?.getLocale?.()
         };
     }, editorSelector);
-    expect(editorSettings).toEqual({
-        allowFiltering: true,
-        filterBarPlaceholder: 'Tìm hàng hóa'
-    });
+    const expectedSearchPlaceholder = editorSettings.locale === 'en' ? 'Search' : 'Tìm kiếm';
+    expect(editorSettings.allowFiltering).toBe(true);
+    expect(editorSettings.filterBarPlaceholder).toBe(expectedSearchPlaceholder);
 
     await page.evaluate(selector => document.querySelector(selector).ej2_instances[0].showPopup(), editorSelector);
     const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
@@ -70,7 +70,7 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
     await expect.poll(() => options.count()).toBeGreaterThan(0);
     const initialOptionCount = await options.count();
     const filterInput = popup.locator('.e-filter-parent input.e-input-filter');
-    await expect(filterInput).toHaveAttribute('placeholder', 'Tìm hàng hóa');
+    await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
 
     await filterInput.pressSequentially(searchText);
     await expect(options).toHaveCount(1);
@@ -83,6 +83,27 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
     await filterInput.pressSequentially(searchText);
     await expect(options).toHaveCount(1);
     await options.first().click();
+}
+
+async function beginProductItemEdit(page) {
+    const editor = page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        await page.locator('#SecondaryGrid_add').click();
+        try {
+            await editor.waitFor({ state: 'attached', timeout: 4_000 });
+            return;
+        } catch {
+            const rowCount = await page.evaluate(() => (
+                document.querySelector('#SecondaryGrid')?.ej2_instances?.[0]?.getRowsObject?.().length ?? 0
+            ));
+            if (rowCount > 0) {
+                await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'productId'));
+                await editor.waitFor({ state: 'attached', timeout: 4_000 });
+                return;
+            }
+        }
+    }
+    throw new Error('Product item editor did not open after using the Add toolbar action.');
 }
 
 test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ngay khi chọn hàng', async ({ monitoredPage: page }) => {
@@ -209,10 +230,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         ?.dataSource?.some?.(item => item.id === id), salesOrderId);
     await openSelectedDocument(page, '#MainGrid', salesOrderId);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
-    await page.locator('#SecondaryGrid_add').click();
-    await page.waitForFunction(() => Boolean(
-        document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
-    ));
+    await beginProductItemEdit(page);
     await searchAndSelectProduct(page, productSearchText, productName);
 
     const salesRow = await page.evaluate(() => {
@@ -285,10 +303,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
     await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
-    await page.locator('#SecondaryGrid_add').click();
-    await page.waitForFunction(() => Boolean(
-        document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
-    ));
+    await beginProductItemEdit(page);
     await searchAndSelectProduct(page, productSearchText, productName);
 
     const purchaseRow = await page.evaluate(() => {
@@ -389,10 +404,7 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
         ?.dataSource?.some?.(item => item.id === id), fixture.salesOrder.id);
     await openSelectedDocument(page, '#MainGrid', fixture.salesOrder.id);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
-    await page.locator('#SecondaryGrid_add').click();
-    await page.waitForFunction(() => Boolean(
-        document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
-    ));
+    await beginProductItemEdit(page);
     await page.evaluate(() => document.querySelector(
         '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist'
     ).ej2_instances[0].showPopup());

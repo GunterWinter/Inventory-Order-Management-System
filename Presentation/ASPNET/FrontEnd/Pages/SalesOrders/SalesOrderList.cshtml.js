@@ -1355,7 +1355,7 @@ const App = {
                                         value: normalizeLookupId(args.rowData.productId),
                                         allowFiltering: true,
                                         filterBarPlaceholder: 'Tìm hàng hóa',
-                                        filtering: ProductDropdownSearch.createFilteringHandler(productOptions),
+                                        filtering: DropdownSearchManager.createFilteringHandler(productOptions, { textField: 'name' }),
                                         change: (e) => {
                                             applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
                                         },
@@ -2273,7 +2273,7 @@ const App = {
                         <div class="payment-form-card">
                             <div class="form-group mb-3">
                                 <label for="swal-account" class="d-block font-weight-bold mb-2">${text('Tài khoản quỹ', 'Cash Account')}</label>
-                                <select id="swal-account" class="form-control"><option value="">${text('Chọn tài khoản quỹ', 'Select Cash Account')}</option>${accountOptions}</select>
+                                <select id="swal-account" class="form-control" data-searchable-dropdown><option value="">${text('Chọn tài khoản quỹ', 'Select Cash Account')}</option>${accountOptions}</select>
                             </div>
                             <div class="form-group mb-3">
                                 <label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Thanh toán lần này', 'Payment This Time')}</label>

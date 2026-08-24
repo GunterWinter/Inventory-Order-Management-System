@@ -171,6 +171,7 @@ const QuickAddHelper = (() => {
                     option.textContent = data.name || name;
                     select.appendChild(option);
                     select.value = newId;
+                    window.DropdownSearchManager?.refreshNativeSelect(select);
                     await _notifyLookupCreated({ id: newId, name: data?.name || name, data, apiUrl });
                 }
                 inlineForm.style.display = 'none';
@@ -348,6 +349,17 @@ const QuickAddHelper = (() => {
                 }
                 .qa-form .qa-fixedcode-section .qa-input {
                     width: 120px;
+                }
+                .qa-form .qa-help-text {
+                    display: block;
+                    margin-top: 4px;
+                    color: #6c757d;
+                    font-size: 0.75rem;
+                    line-height: 1.35;
+                }
+                .qa-form .qa-input:disabled {
+                    background-color: #e9ecef;
+                    cursor: not-allowed;
                 }
                 /* Row layout for quick add forms */
                 .qa-form .qa-row {
@@ -530,7 +542,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field">
                             <label class="qa-label">Vendor Group <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-v-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select>
+                                <select id="qa-v-group" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${grpOptions}</select>
                                 <button type="button" id="qa-v-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -539,7 +551,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field">
                             <label class="qa-label">Vendor Category <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-v-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select>
+                                <select id="qa-v-category" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${catOptions}</select>
                                 <button type="button" id="qa-v-category-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -679,7 +691,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field">
                             <label class="qa-label">Customer Group <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-c-group" class="qa-input"><option value="">-- Select --</option>${grpOptions}</select>
+                                <select id="qa-c-group" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${grpOptions}</select>
                                 <button type="button" id="qa-c-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -688,7 +700,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field">
                             <label class="qa-label">Customer Category <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-c-category" class="qa-input"><option value="">-- Select --</option>${catOptions}</select>
+                                <select id="qa-c-category" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${catOptions}</select>
                                 <button type="button" id="qa-c-category-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -831,7 +843,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field">
                             <label class="qa-label">Product Group <span class="text-danger">*</span></label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-p-group" class="qa-input"><option value="">-- Select --</option>${pgOptions}</select>
+                                <select id="qa-p-group" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${pgOptions}</select>
                                 <button type="button" id="qa-p-group-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -843,7 +855,7 @@ const QuickAddHelper = (() => {
                         <div class="qa-field qa-col-4">
                             <label class="qa-label">Warehouse</label>
                             <div class="quick-add-wrapper">
-                                <select id="qa-p-warehouse" class="qa-input"><option value="">-- Select --</option>${whOptions}</select>
+                                <select id="qa-p-warehouse" class="qa-input" data-searchable-dropdown><option value="">-- Select --</option>${whOptions}</select>
                                 <button type="button" id="qa-p-warehouse-add" class="btn btn-sm btn-outline-primary quick-add-btn"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
@@ -861,14 +873,27 @@ const QuickAddHelper = (() => {
                         <label class="qa-label">Device Code Management</label>
                         <div class="qa-radio-group">
                             <div class="qa-radio-item">
-                                <input type="radio" name="qa-p-serial" id="qa-p-serial-auto" value="1" checked>
+                                <input type="radio" name="qa-p-serial" id="qa-p-serial-none" value="0" checked>
+                                <label for="qa-p-serial-none">No serial tracking</label>
+                            </div>
+                            <div class="qa-radio-item">
+                                <input type="radio" name="qa-p-serial" id="qa-p-serial-auto" value="1">
                                 <label for="qa-p-serial-auto">Auto-generate Internal Code</label>
                             </div>
-                            <div class="qa-fixedcode-section" id="qa-p-fixedcode-section">
+                            <div class="qa-fixedcode-section" id="qa-p-fixedcode-section" style="display:none;">
                                 <label class="qa-label">Fixed Code</label>
                                 <input id="qa-p-fixedcode" class="qa-input" maxlength="4" placeholder="CAM" value="CAM" style="width:120px;">
                             </div>
+                            <div class="qa-radio-item">
+                                <input type="radio" name="qa-p-serial" id="qa-p-serial-manufacturer" value="2">
+                                <label for="qa-p-serial-manufacturer">Manufacturer Serial Entry</label>
+                            </div>
                         </div>
+                    </div>
+                    <div class="qa-field">
+                        <label class="qa-label" for="qa-p-opening-stock">Opening Stock</label>
+                        <input id="qa-p-opening-stock" class="qa-input" type="text" inputmode="decimal" value="0" placeholder="0">
+                        <small id="qa-p-opening-stock-help" class="qa-help-text">Opening stock uses the default warehouse when first entered.</small>
                     </div>
                     <div class="qa-field">
                         <label class="qa-label">Description</label>
@@ -889,18 +914,58 @@ const QuickAddHelper = (() => {
                 if (!productGroupId) { Swal.showValidationMessage('Select a Product Group.'); return false; }
                 const physical = document.getElementById('qa-p-physical').checked;
                 const serialRadio = document.querySelector('input[name="qa-p-serial"]:checked');
-                const serialTrackingMode = physical ? (serialRadio ? parseInt(serialRadio.value) : 1) : 0;
+                const serialTrackingMode = physical ? (serialRadio ? parseInt(serialRadio.value, 10) : 0) : 0;
                 const fixedCode = (document.getElementById('qa-p-fixedcode')?.value ?? 'CAM').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
+                const openingStockInput = document.getElementById('qa-p-opening-stock');
+                const openingStockApplies = physical && serialTrackingMode !== 2;
+                const openingStockRaw = openingStockInput?.value?.trim() ?? '';
+                const openingStockQuantity = openingStockApplies
+                    ? (openingStockRaw === '' ? 0 : NumberFormatManager.parseLocaleNumber(openingStockRaw))
+                    : null;
+                const costPriceRaw = document.getElementById('qa-p-costprice').value.trim();
+                const costPrice = costPriceRaw === '' ? null : parseFloat(costPriceRaw);
+
+                if (physical && serialTrackingMode === 1 && (fixedCode.length < 2 || fixedCode.length > 4)) {
+                    Swal.showValidationMessage('Fixed Code must be 2-4 letters or digits.');
+                    return false;
+                }
+                if (openingStockApplies && openingStockQuantity == null) {
+                    Swal.showValidationMessage('Opening stock must be a valid number.');
+                    return false;
+                }
+                if (openingStockApplies && openingStockQuantity < 0) {
+                    Swal.showValidationMessage('Opening stock must be zero or greater.');
+                    return false;
+                }
+                if (openingStockApplies && serialTrackingMode === 1 && !Number.isInteger(openingStockQuantity)) {
+                    Swal.showValidationMessage('Opening stock must be a whole number for auto-generated internal codes.');
+                    return false;
+                }
+                const decimalPart = openingStockRaw.includes(',') ? openingStockRaw.split(',').pop().replace(/\D/g, '') : '';
+                if (openingStockApplies && serialTrackingMode === 0 && decimalPart.length > 6) {
+                    Swal.showValidationMessage('Opening stock supports up to 6 decimal places.');
+                    return false;
+                }
+                const defaultWarehouseId = physical ? (document.getElementById('qa-p-warehouse').value || null) : null;
+                if (openingStockQuantity > 0 && !defaultWarehouseId) {
+                    Swal.showValidationMessage('Default warehouse is required when opening stock is greater than zero.');
+                    return false;
+                }
+                if (openingStockQuantity > 0 && costPrice == null) {
+                    Swal.showValidationMessage('Cost price is required when opening stock is greater than zero.');
+                    return false;
+                }
                 return {
                     name, productGroupId, unitMeasureName,
                     referenceCode: document.getElementById('qa-p-refcode').value.trim(),
-                    costPrice: parseFloat(document.getElementById('qa-p-costprice').value) || 0,
+                    costPrice,
                     unitPrice: parseFloat(document.getElementById('qa-p-unitprice').value) || 0,
-                    defaultWarehouseId: document.getElementById('qa-p-warehouse').value || null,
+                    defaultWarehouseId,
                     defaultWarrantyMonths: parseInt(document.getElementById('qa-p-warranty').value) || 0,
                     physical,
                     serialTrackingMode,
                     internalSerialFixedCode: serialTrackingMode === 1 ? fixedCode : null,
+                    openingStockQuantity,
                     description: document.getElementById('qa-p-desc').value.trim(),
                     createdById: StorageManager.getUserId()
                 };
@@ -911,14 +976,54 @@ const QuickAddHelper = (() => {
                 _attachInlineQuickAdd('qa-p-group-add', 'qa-p-group', '/ProductGroup/CreateProductGroup');
                 _attachInlineQuickAdd('qa-p-warehouse-add', 'qa-p-warehouse', '/Warehouse/CreateWarehouse');
 
-                // Toggle serial section visibility based on physical checkbox
                 const physCb = document.getElementById('qa-p-physical');
                 const serialSection = document.getElementById('qa-p-serial-section');
-                if (physCb && serialSection) {
-                    physCb.addEventListener('change', () => {
-                        serialSection.style.display = physCb.checked ? '' : 'none';
-                    });
-                }
+                const serialRadios = Array.from(document.querySelectorAll('input[name="qa-p-serial"]'));
+                const serialNone = document.getElementById('qa-p-serial-none');
+                const fixedCodeSection = document.getElementById('qa-p-fixedcode-section');
+                const fixedCodeInput = document.getElementById('qa-p-fixedcode');
+                const openingStockInput = document.getElementById('qa-p-opening-stock');
+                const openingStockHelp = document.getElementById('qa-p-opening-stock-help');
+
+                const refreshProductTrackingFields = () => {
+                    const physical = physCb?.checked === true;
+                    if (!physical && serialNone) {
+                        serialNone.checked = true;
+                        if (fixedCodeInput) fixedCodeInput.value = '';
+                    }
+
+                    const selectedMode = physical
+                        ? parseInt(document.querySelector('input[name="qa-p-serial"]:checked')?.value ?? '0', 10)
+                        : 0;
+                    if (serialSection) serialSection.style.display = physical ? '' : 'none';
+                    if (fixedCodeSection) fixedCodeSection.style.display = physical && selectedMode === 1 ? '' : 'none';
+
+                    if (!openingStockInput || !openingStockHelp) return;
+                    const openingStockEnabled = physical && selectedMode !== 2;
+                    openingStockInput.disabled = !openingStockEnabled;
+                    openingStockInput.setAttribute('inputmode', selectedMode === 1 ? 'numeric' : 'decimal');
+                    if (!openingStockEnabled) openingStockInput.value = '0';
+
+                    if (!physical) {
+                        openingStockHelp.textContent = 'Non-physical products do not have stock.';
+                    } else if (selectedMode === 2) {
+                        openingStockHelp.textContent = 'Opening stock for manufacturer serial products must be entered through a Purchase Order.';
+                    } else {
+                        openingStockHelp.textContent = 'Opening stock uses the default warehouse when first entered.';
+                    }
+                };
+
+                physCb?.addEventListener('change', refreshProductTrackingFields);
+                serialRadios.forEach(radio => radio.addEventListener('change', refreshProductTrackingFields));
+                fixedCodeInput?.addEventListener('input', () => {
+                    fixedCodeInput.value = fixedCodeInput.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
+                });
+                openingStockInput?.addEventListener('blur', () => {
+                    if (openingStockInput.disabled || openingStockInput.value.trim() === '') return;
+                    const parsed = NumberFormatManager.parseLocaleNumber(openingStockInput.value);
+                    if (parsed != null) openingStockInput.value = NumberFormatManager.formatToLocale(parsed);
+                });
+                refreshProductTrackingFields();
             },
             willClose: () => {
                 _restoreModalFocusTrap();

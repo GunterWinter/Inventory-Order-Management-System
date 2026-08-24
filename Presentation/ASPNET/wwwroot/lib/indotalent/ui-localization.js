@@ -294,6 +294,8 @@
         'Opening stock for auto-generated internal codes can only be entered when the product is created.': 'Tồn đầu kỳ của hàng tự sinh mã nội bộ chỉ được nhập khi tạo hàng hóa.',
         'Changing the default warehouse does not move opening stock.': 'Đổi kho mặc định không di chuyển tồn đầu kỳ.',
         'Opening stock must be zero or greater.': 'Tồn đầu kỳ phải lớn hơn hoặc bằng 0.',
+        'Opening stock must be a valid number.': 'Tồn đầu kỳ phải là một số hợp lệ.',
+        'Opening stock supports up to 6 decimal places.': 'Tồn đầu kỳ hỗ trợ tối đa 6 chữ số thập phân.',
         'Opening stock must be a whole number for auto-generated internal codes.': 'Tồn đầu kỳ phải là số nguyên đối với hàng tự sinh mã nội bộ.',
         'Cost price is required when opening stock is greater than zero.': 'Giá vốn là bắt buộc khi tồn đầu kỳ lớn hơn 0.',
         'Default warehouse is required when opening stock is greater than zero.': 'Kho mặc định là bắt buộc khi tồn đầu kỳ lớn hơn 0.',

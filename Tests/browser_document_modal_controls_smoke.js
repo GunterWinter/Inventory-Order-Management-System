@@ -58,8 +58,19 @@ async function assertDatePickerUsable(page, pageName, locale) {
 
     await input.locator('xpath=..').locator('.e-date-icon').click();
 
-    const popup = page.locator('body > .e-popup.e-popup-open').filter({ has: page.locator('.e-calendar') }).last();
-    await popup.waitFor();
+    await page.waitForFunction(() => {
+        const picker = document.querySelector('#MainModal .e-datepicker')?.ej2_instances?.[0];
+        if (!picker || picker.isDestroyed) return false;
+        picker.show?.();
+        const element = picker.popupObj?.element;
+        if (!element?.classList.contains('e-popup-open')) return false;
+        document.querySelectorAll('[data-browser-date-popup]').forEach(popup => {
+            popup.removeAttribute('data-browser-date-popup');
+        });
+        element.setAttribute('data-browser-date-popup', 'active');
+        return true;
+    });
+    const popup = page.locator('[data-browser-date-popup="active"]');
     const stacking = await popup.evaluate(element => ({
         popup: Number.parseInt(getComputedStyle(element).zIndex, 10) || 0,
         modal: Number.parseInt(getComputedStyle(document.querySelector('#MainModal')).zIndex, 10) || 0
@@ -155,15 +166,23 @@ async function assertItemGridUsable(page, pageName) {
 
         const popupState = {
             items: popup.querySelectorAll('.e-list-item').length,
+            allowFiltering: editor.allowFiltering,
+            filterPlaceholder: editor.filterBarPlaceholder,
+            hasSearchInput: !!popup.querySelector('.e-filter-parent input.e-input-filter'),
             popupZIndex: Number.parseInt(getComputedStyle(popup).zIndex, 10) || 0,
             modalZIndex: Number.parseInt(getComputedStyle(document.querySelector('#MainModal')).zIndex, 10) || 0
         };
-        return popupState.items > 0 && popupState.popupZIndex > popupState.modalZIndex
+        return popupState.items > 0
+            && popupState.allowFiltering
+            && popupState.filterPlaceholder === (window.UiLocalization?.getLocale?.() === 'en' ? 'Search' : 'Tìm kiếm')
+            && popupState.hasSearchInput
+            && popupState.popupZIndex > popupState.modalZIndex
             ? popupState
             : false;
     });
     const popupState = await popupStateHandle.jsonValue();
-    if (!popupState.items || popupState.popupZIndex <= popupState.modalZIndex) {
+    if (!popupState.items || !popupState.allowFiltering || !popupState.hasSearchInput
+        || popupState.popupZIndex <= popupState.modalZIndex) {
         throw new Error(`${pageName} Item dropdown is hidden behind the modal: ${JSON.stringify(popupState)}`);
     }
 }

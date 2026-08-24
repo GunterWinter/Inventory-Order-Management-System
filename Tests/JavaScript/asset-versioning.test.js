@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const pagesRoot = path.resolve(__dirname, '../../Presentation/ASPNET/FrontEnd');
+
+function findRazorFiles(directory) {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) return findRazorFiles(fullPath);
+        return entry.name.endsWith('.cshtml') ? [fullPath] : [];
+    });
+}
+
+test('local Razor assets use content-based cache versioning', () => {
+    const missingVersion = [];
+    const manualVersions = [];
+    const localAssetTag = /<(?:script|link)\b(?=[^>]*(?:src|href)="~\/)[^>]*>/g;
+
+    for (const file of findRazorFiles(pagesRoot)) {
+        const source = fs.readFileSync(file, 'utf8');
+        for (const tag of source.match(localAssetTag) ?? []) {
+            const relativePath = path.relative(pagesRoot, file);
+            if (!/\basp-append-version="true"/.test(tag)) {
+                missingVersion.push(`${relativePath}: ${tag}`);
+            }
+            if (/(?:src|href)="~\/[^\"]*[?&]v=/.test(tag)) {
+                manualVersions.push(`${relativePath}: ${tag}`);
+            }
+        }
+    }
+
+    assert.deepEqual(missingVersion, [], 'Local assets must use asp-append-version="true".');
+    assert.deepEqual(manualVersions, [], 'Use content hashes instead of manually maintained version query strings.');
+});

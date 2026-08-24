@@ -185,7 +185,7 @@
                                                 <div v-for="(row, index) in state.allocationRows" v-bind:key="index" class="allocation-row row align-items-end mx-0">
                                                     <div class="col-md-4 px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Khách hàng / Công trình</label>
-                                                        <select class="form-control" v-bind:value="row.customerId || ''" v-on:change="row.customerId = $event.target.value || null" v-bind:disabled="!methods.canEditPrimaryFields()">
+                                                        <select class="form-control" data-searchable-dropdown v-bind:value="row.customerId || ''" v-on:change="row.customerId = $event.target.value || null" v-bind:disabled="!methods.canEditPrimaryFields()">
                                                             <option value="">Chọn khách hàng / công trình</option>
                                                             <option v-for="c in state.partnerList.filter(p => p.customerId)" v-bind:key="c.customerId" v-bind:value="c.customerId">{{ c.name }}</option>
                                                         </select>
