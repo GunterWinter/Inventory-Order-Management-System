@@ -48,11 +48,32 @@
     };
 
     const createFilteringHandler = (source, options = {}) => {
-        const handler = event => {
+        const handler = function (event) {
             event.preventDefaultAction = true;
-            const filtered = filterItems(source, event.text, options.textField || 'name');
+            const textField = options.textField || 'name';
+            const items = resolveSource(source);
+            const instance = options.instance?.() ?? this;
+            if (options.preserveEditor) {
+                const searchText = normalizeText(event.text);
+                Array.from(instance?.liCollections ?? []).forEach(item => {
+                    const visible = !searchText || normalizeText(item.textContent).includes(searchText);
+                    item.hidden = !visible;
+                    item.style.display = visible ? '' : 'none';
+                    item.setAttribute?.('aria-hidden', String(!visible));
+                });
+                return;
+            }
             const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
-            event.updateData(filtered, query);
+            event.updateData(filterItems(items, event.text, textField), query,
+                { text: textField, value: options.valueField || 'id' });
+            root?.requestAnimationFrame?.(() => {
+                const popup = instance?.popupObj?.element;
+                if (!instance?.isDestroyed && popup && !popup.classList.contains('e-popup-open')) instance.showPopup?.();
+                if (instance?.filterInput) {
+                    instance.filterInput.value = event.text ?? '';
+                    instance.filterInput.focus?.();
+                }
+            });
         };
         handler.__dropdownSearchManagerHandler = true;
         return handler;
@@ -89,7 +110,7 @@
                 if (Array.isArray(source)) {
                     event.preventDefaultAction = true;
                     const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
-                    return originalUpdateData(filterItems(source, event.text, getTextField(instance)), query);
+                    return originalUpdateData(filterItems(source, event.text, getTextField(instance)), query, instance.fields);
                 }
                 return originalUpdateData(source, query, fields);
             };
@@ -99,7 +120,7 @@
                 if (!updateCalled && Array.isArray(instance.dataSource)) {
                     event.preventDefaultAction = true;
                     const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
-                    originalUpdateData(filterItems(instance.dataSource, event.text, getTextField(instance)), query);
+                    originalUpdateData(filterItems(instance.dataSource, event.text, getTextField(instance)), query, instance.fields);
                 }
                 return result;
             } finally {
@@ -111,19 +132,6 @@
         instance.filtering = wrappedHandler;
     };
 
-    const addDefaultFilteringHandler = instance => {
-        if (typeof instance.filtering === 'function') return;
-
-        const handler = event => {
-            const source = Array.isArray(instance.dataSource) ? instance.dataSource : [];
-            event.preventDefaultAction = true;
-            const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
-            event.updateData(filterItems(source, event.text, getTextField(instance)), query);
-        };
-        handler.__dropdownSearchManagerHandler = true;
-        instance.filtering = handler;
-    };
-
     const configureInstance = (instance, context = root) => {
         if (!instance) return instance;
 
@@ -132,7 +140,6 @@
         instance.ignoreAccent = true;
         instance.filterBarPlaceholder = getSearchPlaceholder(context);
         wrapExistingFilteringHandler(instance);
-        addDefaultFilteringHandler(instance);
         trackedInstances.add(instance);
         return instance;
     };
@@ -236,7 +243,10 @@
             instance: null,
             syncing: false,
             nativeChangeHandler: null,
-            originalDisplay: select.style?.display ?? ''
+            originalDisplay: select.style?.display ?? '',
+            originalHidden: !!select.hidden,
+            originalAriaHidden: select.getAttribute?.('aria-hidden') ?? null,
+            originalTabIndex: select.getAttribute?.('tabindex') ?? null
         };
         const instance = new DropDownList({
             dataSource: optionDataSource(select),
@@ -272,7 +282,12 @@
         select.addEventListener?.('change', record.nativeChangeHandler);
         nativeInstances.set(select, record);
         nativeRecords.add(record);
-        if (usesSeparateHost && select.style) select.style.display = 'none';
+        if (usesSeparateHost) {
+            select.hidden = true;
+            select.setAttribute?.('aria-hidden', 'true');
+            select.setAttribute?.('tabindex', '-1');
+            if (select.style) select.style.display = 'none';
+        }
         record.syncing = true;
         try {
             instance.appendTo(host);
@@ -292,6 +307,11 @@
         record.instance?.destroy?.();
         if (record.host !== select) {
             record.host?.remove?.();
+            select.hidden = record.originalHidden;
+            if (record.originalAriaHidden === null) select.removeAttribute?.('aria-hidden');
+            else select.setAttribute?.('aria-hidden', record.originalAriaHidden);
+            if (record.originalTabIndex === null) select.removeAttribute?.('tabindex');
+            else select.setAttribute?.('tabindex', record.originalTabIndex);
             if (select.style) select.style.display = record.originalDisplay;
             if (select.ej2_instances?.[0] === record.instance) delete select.ej2_instances;
         }

@@ -68,7 +68,6 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
             query = query.Where(x => x.CurrentWarehouseId == request.WarehouseId || x.Status == ProductSerialStatus.Sold || x.Status == ProductSerialStatus.InTransfer);
         }
 
-
         if (request.ModuleName == nameof(TransferIn) && !string.IsNullOrWhiteSpace(request.ModuleId))
         {
             var transferOutSerialIds = await _context

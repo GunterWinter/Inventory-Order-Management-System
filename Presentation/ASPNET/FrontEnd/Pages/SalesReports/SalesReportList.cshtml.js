@@ -99,7 +99,6 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                         mainGrid.obj.autoFitColumns(['customerName', 'salesOrderNumber', 'productNumber', 'productReferenceCode', 'productName', 'unitPrice', 'quantity', 'total', 'taxName', 'taxAmount', 'afterTaxAmount', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },

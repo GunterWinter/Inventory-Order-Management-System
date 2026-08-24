@@ -868,6 +868,7 @@
                         ProductSerialPicker.validateGridSave(args, {
                             productListGetter: () => state.productListLookupData,
                             quantityField: 'movement',
+                            warehouseField: 'warehouseId',
                             allowEmptySelection: false
                         });
                     },

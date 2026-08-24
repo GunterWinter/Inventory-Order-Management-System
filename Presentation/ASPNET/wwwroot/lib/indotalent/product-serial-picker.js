@@ -122,11 +122,19 @@ window.ProductSerialPicker = (() => {
         rowData[quantityField] = selectedSerials.length;
     };
 
+    const serialText = value => (Array.isArray(value) ? value : [value])
+        .map(item => typeof item === 'string'
+            ? item
+            : item?.internalSerialNumber ?? item?.manufacturerSerialNumber ?? item?.serialNumber ?? '')
+        .filter(Boolean)
+        .join(', ');
+
     const createGridColumn = (options) => ({
         field: 'productSerialNumbers',
         headerText: options.headerText ?? 'Device Serials',
         width: options.width ?? 220,
-        valueAccessor: (field, data) => data.productSerialNumbers || (data.productSerialIds?.length ? `${data.productSerialIds.length} serials` : ''),
+        valueAccessor: (field, data) => serialText(data.productSerialNumbers)
+            || (data.productSerialIds?.length ? `${data.productSerialIds.length} serials` : ''),
         edit: {
             create: () => {
                 const wrapper = document.createElement('div');
@@ -200,27 +208,40 @@ window.ProductSerialPicker = (() => {
     });
 
     const validateGridSave = (args, options) => {
-        if (args.requestType !== 'save') {
+        if (String(args.requestType ?? '').toLowerCase() !== 'save' || args.managedBatch !== true) {
             return true;
         }
 
         const data = args.data ?? {};
+        const fail = text => {
+            args.cancel = true;
+            Swal.fire({ icon: 'warning', title: 'Thiếu thông tin bắt buộc', text, confirmButtonText: 'Đồng ý' });
+            return false;
+        };
+        if (!data.productId) return fail('Vui lòng chọn hàng hóa trước khi lưu.');
+
+        if (options.warehouseField && !data[options.warehouseField]) {
+            return fail('Vui lòng chọn kho hàng trước khi lưu.');
+        }
+
+        const quantityField = options.quantityField ?? 'movement';
+        const quantity = Number(data[quantityField]);
+        const invalidQuantity = !Number.isFinite(quantity)
+            || (options.allowZeroQuantity === true ? quantity < 0 : quantity <= 0);
+        if (invalidQuantity) {
+            return fail(options.allowZeroQuantity === true
+                ? 'Số lượng không được nhỏ hơn 0.'
+                : 'Số lượng phải lớn hơn 0.');
+        }
+
         const productList = options.productListGetter?.() ?? [];
         if (!isSerialTrackedProduct(productList, data.productId)) {
             return true;
         }
 
-        const quantityField = options.quantityField ?? 'movement';
         const selectedCount = data.productSerialIds?.length ?? 0;
         if (selectedCount === 0 && options.allowEmptySelection !== true) {
-            args.cancel = true;
-            Swal.fire({
-                icon: 'warning',
-                title: 'Lưu thất bại',
-                text: 'Làm ơn chọn số seri thiết bị trước khi lưu.',
-                confirmButtonText: 'OK'
-            });
-            return false;
+            return fail('Vui lòng chọn serial thiết bị trước khi lưu.');
         }
 
         if (selectedCount > 0) {

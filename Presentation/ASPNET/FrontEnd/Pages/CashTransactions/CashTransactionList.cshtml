@@ -182,7 +182,7 @@
                                                 <div v-if="state.allocationRows.length === 0" class="text-center text-muted py-3">
                                                     Chưa có dòng phân bổ. Bấm “Thêm dòng” để phân bổ theo khách hàng hoặc công trình.
                                                 </div>
-                                                <div v-for="(row, index) in state.allocationRows" v-bind:key="index" class="allocation-row row align-items-end mx-0">
+                                                <div v-for="(row, index) in state.allocationRows" v-bind:key="row.__uiKey" class="allocation-row row align-items-end mx-0">
                                                     <div class="col-md-4 px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Khách hàng / Công trình</label>
                                                         <select class="form-control" data-searchable-dropdown v-bind:value="row.customerId || ''" v-on:change="row.customerId = $event.target.value || null" v-bind:disabled="!methods.canEditPrimaryFields()">
@@ -192,7 +192,7 @@
                                                     </div>
                                                     <div class="col-md-3 px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Số tiền</label>
-                                                        <input type="number" min="0" class="form-control" v-model.number="row.amount" v-on:input="methods.onAllocationAmountInput()" placeholder="Nhập số tiền" v-bind:disabled="!methods.canEditPrimaryFields()" />
+                                                        <input type="text" inputmode="decimal" data-number-format="true" class="form-control" v-bind:value="row.amount" v-on:input="methods.onAllocationAmountInput(row, $event)" placeholder="Nhập số tiền" v-bind:disabled="!methods.canEditPrimaryFields()" />
                                                     </div>
                                                     <div class="col px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Diễn giải</label>

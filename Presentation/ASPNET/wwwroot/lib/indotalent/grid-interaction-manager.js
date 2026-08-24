@@ -4,12 +4,10 @@
     // Shared interaction conventions for Syncfusion grids and document forms.
     const pending = new WeakMap();
     const configuredSelections = new WeakSet();
-    const collapsingGroups = new WeakSet();
-    const scheduledGroupCollapses = new WeakSet();
+    const deferredBatchValidation = new WeakSet();
     const gridDiscoveryAttempts = new WeakMap();
     const modalStack = [];
     const MODAL_POPUP_Z_INDEX = 2000;
-    const MAX_GROUP_COLLAPSE_ATTEMPTS = 4;
     const isGrid = value => value && typeof value.endEdit === 'function';
     const requestTypeOf = args => String(args?.requestType ?? '').toLowerCase();
     const batchChangeCount = changes => (changes?.addedRecords?.length || 0)
@@ -153,6 +151,7 @@
             persisting: Promise.resolve(),
             persistError: null,
             validationFailed: false,
+            validationFailure: null,
             batchPrepared: false,
             batchStarted: 0,
             batchCompleted: 0
@@ -165,6 +164,7 @@
         const prepareBatch = (args, changes) => {
             if (state.batchPrepared) return true;
             state.validationFailed = false;
+            state.validationFailure = null;
             state.batchChanges = {
                 addedRecords: [...(changes?.addedRecords || [])],
                 changedRecords: [...(changes?.changedRecords || [])],
@@ -182,6 +182,11 @@
                     if (validation.cancel) {
                         if (args) args.cancel = true;
                         state.validationFailed = true;
+                        state.validationFailure = {
+                            data: save.data,
+                            field: validation.invalidField,
+                            feedback: validation.validationFeedback
+                        };
                         state.batchChanges = null;
                         state.batchPrepared = false;
                         return false;
@@ -277,6 +282,19 @@
         return !grid.isEdit;
     }
 
+    async function restoreInvalidBatchEditor(grid, failure) {
+        if (!failure?.field || grid?.isDestroyed) return;
+        if (failure.feedback) await Promise.resolve(failure.feedback);
+
+        const id = failure.data?.id;
+        let rowIndex = id == null ? -1 : (grid.getRowIndexByPrimaryKey?.(id) ?? -1);
+        if (rowIndex < 0) {
+            rowIndex = (grid.getRowsObject?.() ?? []).findIndex(row => row?.data === failure.data
+                || (id != null && String(row?.data?.id) === String(id)));
+        }
+        if (rowIndex >= 0) grid.editCell?.(rowIndex, failure.field);
+    }
+
     async function save(grid) {
         if (!isGrid(grid)) return true;
         const state = pending.get(grid);
@@ -286,7 +304,10 @@
         const hadPendingChanges = pendingChanges(grid);
         const previousBatchStarted = state.batchStarted;
         if (hadPendingChanges) {
-            if (!state.prepareBatch?.({}, grid.getBatchChanges?.() || {})) return false;
+            if (!state.prepareBatch?.({}, grid.getBatchChanges?.() || {})) {
+                await restoreInvalidBatchEditor(grid, state.validationFailure);
+                return false;
+            }
             if (typeof grid.editModule?.batchSave === 'function') {
                 grid.editModule.batchSave();
             } else if (typeof grid.editModule?.editModule?.batchSave === 'function') {
@@ -341,10 +362,18 @@
 
     function configureBatch(grid, options = {}) {
         if (!grid) return grid;
+        // Syncfusion validates a Batch cell on blur. Document rows are validated
+        // together in prepareBatch, so blur must remain free for lookups/quick-add.
+        if (!deferredBatchValidation.has(grid)) {
+            (grid.columns || []).forEach(column => {
+                if (column?.validationRules) column.validationRules = {};
+            });
+            deferredBatchValidation.add(grid);
+        }
         grid.editSettings = Object.assign(
             {},
-            grid.editSettings || {},
             { allowEditing: true, mode: 'Batch', allowAdding: true, allowDeleting: true, showConfirmDialog: false },
+            grid.editSettings || {},
             options.editSettings || {},
             { mode: 'Batch', showConfirmDialog: false }
         );
@@ -416,14 +445,6 @@
                     }, Math.min(25 * attempts, 250));
                 }
             }
-            if (grid?.groupSettings?.columns?.length && !element.dataset.groupCollapseWired) {
-                element.dataset.groupCollapseWired = 'true';
-                const collapseWhenRendered = () => collapseGroupsOnDataBound(grid);
-                if (typeof grid.addEventListener === 'function') {
-                    grid.addEventListener('dataBound', collapseWhenRendered);
-                }
-                collapseWhenRendered();
-            }
             window.GridExportManager?.configure?.(grid);
             // Item grids are mounted with id="SecondaryGrid" across all document pages.
             // Normalize them even when a legacy page still declares Normal mode.
@@ -455,12 +476,6 @@
         const getTopModal = () => [...modalStack].reverse().find(modal => modal.classList.contains('show'))
             ?? [...document.querySelectorAll('.modal.show')].pop()
             ?? null;
-        const getBatchGrids = host => [...(host?.querySelectorAll?.('.e-grid') ?? [])]
-            .map(element => element.ej2_instances?.[0])
-            .filter(grid => grid?.editSettings?.mode === 'Batch');
-        const getModalSubmitButton = modal => modal?.querySelector?.(
-            '#MainSaveButton:not([disabled]), button[data-action="submit"]:not([disabled]), button[type="submit"]:not([disabled]), .modal-footer .btn-primary:not([disabled])'
-        );
         const isOpenDropDownInteraction = target => {
             const popup = target?.closest?.('.e-ddl.e-popup.e-popup-open, .e-multi-select-list-wrapper.e-popup-open');
             if (popup) return true;
@@ -503,37 +518,27 @@
             const target = event.target;
             const topModal = getTopModal();
 
-            if (event.key === 'Enter' && topModal && !window.Swal?.isVisible?.()) {
-                if (isOpenDropDownInteraction(target)) return;
+            if (event.key === 'Enter' && window.Swal?.isVisible?.()) {
+                const popup = document.querySelector?.('.swal2-popup');
+                const interactive = popup?.querySelector?.('.qa-form, .qa-inline-form');
+                if (interactive && popup.contains?.(target)) return;
 
-                // Bootstrap focus is deliberately relaxed for nested dialogs, so focus can
-                // remain on the main grid behind the modal. Always consume Enter at the
-                // topmost modal to prevent Syncfusion from toggling an underlying row.
-                if (topModal.contains(target) && target?.closest?.('textarea')) return;
                 event.preventDefault();
                 event.stopImmediatePropagation();
-
-                const modalGrids = getBatchGrids(topModal);
-                const targetGridElement = topModal.contains(target) ? target?.closest?.('.e-grid') : null;
-                const targetGrid = targetGridElement?.ej2_instances?.[0];
-                const activeGrid = targetGrid?.editSettings?.mode === 'Batch'
-                    ? targetGrid
-                    : modalGrids.find(grid => grid.isEdit || pendingChanges(grid));
-
-                const hadGridWork = Boolean(activeGrid && (activeGrid.isEdit || pendingChanges(activeGrid)));
-                if (hadGridWork) {
-                    void save(activeGrid);
-                    return;
-                }
-
-                const pendingGrid = modalGrids.find(pendingChanges);
-                if (pendingGrid) {
-                    void save(pendingGrid);
-                    return;
-                }
-
-                getModalSubmitButton(topModal)?.click?.();
+                if (!interactive) window.Swal.close();
                 return;
+            }
+
+            if (event.key === 'Enter' && topModal) {
+                if (isOpenDropDownInteraction(target)) return;
+
+                // Focus can remain behind a nested modal because its Bootstrap focus trap
+                // is relaxed. Consume that stale Enter without touching the active form.
+                if (!topModal.contains(target)) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    return;
+                }
             }
 
             if (event.key === 'Enter' && target?.closest('.e-grid') && !target.closest('textarea')) {
@@ -579,74 +584,7 @@
         else grid.groupModule.expandAll?.();
     }
 
-    function groupRowsAreRendered(grid) {
-        if (grid?.isDestroyed || grid?.element?.isConnected === false) return false;
-        if (typeof grid?.getRowsObject !== 'function' || typeof grid?.getRowElementByUID !== 'function') return true;
-
-        try {
-            return (grid.getRowsObject() || []).every(row => !row?.isDataRow || Boolean(grid.getRowElementByUID(row.uid)));
-        } catch {
-            return false;
-        }
-    }
-
-    function isTransientGroupRenderError(error) {
-        if (error?.name !== 'TypeError') return false;
-        const details = `${error.message || ''}\n${error.stack || ''}`;
-        return details.includes('updateVisibleexpandCollapseRows')
-            || /Cannot read properties of (?:null|undefined) \(reading ['"]style['"]\)/.test(details);
-    }
-
-    function collapseGroupsOnDataBound(grid) {
-        if (!grid || collapsingGroups.has(grid) || scheduledGroupCollapses.has(grid)) return;
-
-        scheduledGroupCollapses.add(grid);
-        const attemptCollapse = attempt => window.requestAnimationFrame(() => {
-            if (!scheduledGroupCollapses.has(grid)) return;
-            if (!grid.groupSettings?.columns?.length || !grid.groupModule?.collapseAll || grid.isDestroyed) {
-                scheduledGroupCollapses.delete(grid);
-                return;
-            }
-
-            // Syncfusion can publish dataBound before its row objects and row elements
-            // are in sync. collapseAll assumes every data row already has an element.
-            if (!groupRowsAreRendered(grid)) {
-                if (attempt < MAX_GROUP_COLLAPSE_ATTEMPTS) attemptCollapse(attempt + 1);
-                else scheduledGroupCollapses.delete(grid);
-                return;
-            }
-
-            collapsingGroups.add(grid);
-            try {
-                grid.groupModule.collapseAll();
-            } catch (error) {
-                collapsingGroups.delete(grid);
-                if (isTransientGroupRenderError(error) && attempt < MAX_GROUP_COLLAPSE_ATTEMPTS) {
-                    attemptCollapse(attempt + 1);
-                    return;
-                }
-                scheduledGroupCollapses.delete(grid);
-                if (!isTransientGroupRenderError(error)) throw error;
-                return;
-            }
-
-            // collapseAll can synchronously raise dataBound again. Keep both guards
-            // until the following frame so re-entrant callbacks cannot schedule a loop.
-            window.requestAnimationFrame(() => {
-                collapsingGroups.delete(grid);
-                scheduledGroupCollapses.delete(grid);
-            });
-        });
-
-        attemptCollapse(1);
-    }
-
-    // Compatibility alias for pages that have not yet moved to the data-bound name.
-    function collapseGroupsOnFirstLoad(grid) {
-        collapseGroupsOnDataBound(grid);
-    }
-
-    window.GridInteractionManager = { configureBatch, configureRowSelection, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, collapseGroupsOnDataBound, collapseGroupsOnFirstLoad, autoConfigure, patchModalPopups, refreshModalGrids };
+    window.GridInteractionManager = { configureBatch, configureRowSelection, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, autoConfigure, patchModalPopups, refreshModalGrids };
     patchModalPopups();
     const init = () => { patchModalPopups(); wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

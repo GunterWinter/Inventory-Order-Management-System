@@ -200,9 +200,6 @@ const App = {
                     },
                     toolbarClick: (args) => {
                         if (args.item.id === 'MainGrid_excelexport') mainGrid.obj.excelExport();
-                    },
-                    dataBound: () => {
-                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                     }
                 });
                 mainGrid.obj.appendTo(mainGridRef.value);

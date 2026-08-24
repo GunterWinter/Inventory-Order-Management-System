@@ -80,14 +80,14 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'stock',
-                                    groupCaptionTemplate: data => `Stock: ${NumberFormatManager.formatToLocale(data.Sum)}`
+                                    groupCaptionTemplate: 'Stock: ${Sum}',
+                                    format: 'N2'
                                 }
                             ]
                         }
                     ],
                     toolbar: ['ExcelExport', 'Search'],
                     dataBound: function () {
-                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
                         mainGrid.obj.autoFitColumns(['stock', 'statusName', 'createdAtUtc']);
                     },
                     toolbarClick: (args) => {

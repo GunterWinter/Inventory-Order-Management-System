@@ -13,7 +13,7 @@ public record GetWarehouseProductStockDto
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ReferenceCode { get; init; }
-    public int StockQuantity { get; init; }
+    public decimal StockQuantity { get; init; }
     public int SerialTrackingMode { get; init; }
 }
 
@@ -54,51 +54,56 @@ public class GetWarehouseProductStockHandler : IRequestHandler<GetWarehouseProdu
                 .ApplyIsDeletedFilter(false)
                 .Where(x => x.ModuleName == nameof(MaterialExport)
                     && x.ModuleId == request.MaterialExportId
+                    && x.ReversedAtUtc == null
                     && x.ProductSerialId != null)
                 .Select(x => x.ProductSerialId!)
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
-        var stockData = await _context.Set<ProductSerial>()
+        var nonSerialStock = await _context.Set<InventoryTransaction>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.WarehouseId == request.WarehouseId
+                && x.Status == InventoryTransactionStatus.Confirmed
+                && x.Product != null
+                && x.Product.Physical == true
+                && (x.Product.SerialTrackingMode == null || x.Product.SerialTrackingMode == SerialTrackingMode.None))
+            .GroupBy(x => new { x.ProductId, x.Product!.Name, x.Product.ReferenceCode, x.Product.SerialTrackingMode })
+            .Select(g => new GetWarehouseProductStockDto
+            {
+                ProductId = g.Key.ProductId,
+                ProductName = g.Key.Name,
+                ReferenceCode = g.Key.ReferenceCode,
+                StockQuantity = g.Sum(x => x.Stock ?? 0m),
+                SerialTrackingMode = (int)(g.Key.SerialTrackingMode ?? SerialTrackingMode.None)
+            })
+            .Where(x => x.StockQuantity > 0)
+            .ToListAsync(cancellationToken);
+
+        var serialStock = await _context.Set<ProductSerial>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.CurrentWarehouseId == request.WarehouseId
+                && x.Product != null
+                && x.Product.Physical == true
+                && x.Product.SerialTrackingMode != SerialTrackingMode.None
                 && (x.Status == ProductSerialStatus.InStock
+                    || x.Status == ProductSerialStatus.ReturnedByCustomer
                     || (x.Status == ProductSerialStatus.Reserved && ownReservedSerialIds.Contains(x.Id))))
-            .GroupBy(x => x.ProductId)
-            .Select(g => new
+            .GroupBy(x => new { x.ProductId, x.Product!.Name, x.Product.ReferenceCode, x.Product.SerialTrackingMode })
+            .Select(g => new GetWarehouseProductStockDto
             {
-                ProductId = g.Key,
-                StockQuantity = g.Count()
+                ProductId = g.Key.ProductId,
+                ProductName = g.Key.Name,
+                ReferenceCode = g.Key.ReferenceCode,
+                StockQuantity = g.Count(),
+                SerialTrackingMode = (int)(g.Key.SerialTrackingMode ?? SerialTrackingMode.None)
             })
             .ToListAsync(cancellationToken);
 
-        if (!stockData.Any())
-        {
-            return new GetWarehouseProductStockResult { Data = new List<GetWarehouseProductStockDto>() };
-        }
-
-        var productIds = stockData.Select(x => x.ProductId).ToList();
-
-        var products = await _context.Set<Product>()
-            .AsNoTracking()
-            .Where(x => productIds.Contains(x.Id))
-            .ToDictionaryAsync(x => x.Id!, cancellationToken);
-
-        var dtos = stockData
-            .Where(s => products.ContainsKey(s.ProductId!))
-            .Select(s =>
-            {
-                var product = products[s.ProductId!];
-                return new GetWarehouseProductStockDto
-                {
-                    ProductId = s.ProductId,
-                    ProductName = product.Name,
-                    ReferenceCode = product.ReferenceCode,
-                    StockQuantity = s.StockQuantity,
-                    SerialTrackingMode = (int)(product.SerialTrackingMode ?? Domain.Enums.SerialTrackingMode.None)
-                };
-            })
+        var dtos = nonSerialStock
+            .Concat(serialStock)
+            .Where(x => x.StockQuantity > 0)
             .OrderBy(x => x.ProductName)
             .ToList();
 

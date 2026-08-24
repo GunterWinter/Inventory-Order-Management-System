@@ -67,6 +67,12 @@ const App = {
         const fromAccountRef = Vue.ref(null);
         const toAccountRef = Vue.ref(null);
         const transferAmountRef = Vue.ref(null);
+        let allocationRowSequence = 0;
+        const createAllocationRow = allocation => ({
+            ...allocation,
+            amount: allocation?.amount == null ? '' : NumberFormatManager.formatToLocale(allocation.amount),
+            __uiKey: allocation?.__uiKey ?? `allocation-${++allocationRowSequence}`
+        });
 
         const transactionTypeOptions = [
             { value: 0, text: 'Debit' },
@@ -293,7 +299,7 @@ const App = {
             canEditRestrictedFields: () => !state.viewMode && !state.deleteMode,
             canEditPaidAmount: () => !state.viewMode && !state.deleteMode,
             canEditCashAccount: () => !state.viewMode && !state.deleteMode
-            ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
+            ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (NumberFormatManager.parseLocaleNumber(row.amount) || 0), 0)
             ,validateAllocations: () => {
                 if (state.allocationRows.length === 0 || !methods.canEditPrimaryFields()) return true;
                 return Math.abs(methods.allocationTotal() - (Number(state.amount) || 0)) <= 0.000001;
@@ -302,7 +308,8 @@ const App = {
                 if (!methods.shouldShowAllocationPanel() || !methods.canEditPrimaryFields()) return;
                 state.amount = methods.allocationTotal();
             }
-            ,onAllocationAmountInput: () => {
+            ,onAllocationAmountInput: (row, event) => {
+                row.amount = event?.target?.value ?? '';
                 Vue.nextTick(() => methods.syncAmountFromAllocations());
             }
             ,partnerOptions: () => state.partnerList
@@ -315,12 +322,12 @@ const App = {
                 methods.refreshAllocationDropdowns();
             }
             ,setAllocationRows: (allocations) => {
-                state.allocationRows = (allocations ?? []).map(allocation => ({ ...allocation }));
+                state.allocationRows = (allocations ?? []).map(createAllocationRow);
                 state.showAllocationDetails = state.allocationRows.length > 0;
                 methods.refreshAllocationDropdowns();
             }
             ,addAllocation: () => {
-                state.allocationRows.push({ customerId: null, amount: 0, description: '' });
+                state.allocationRows.push(createAllocationRow({ customerId: null, amount: 0, description: '' }));
                 methods.refreshAllocationDropdowns();
             }
             ,removeAllocation: (index) => {
@@ -636,7 +643,7 @@ const App = {
                         sourceModule: state.sourceModule,
                         sourceModuleId: state.sourceModuleId,
                         sourceModuleNumber: state.sourceModuleNumber,
-                        allocations: state.allocationRows.map(row => ({ customerId: row.customerId || null, amount: Number(row.amount) || 0, description: row.description || null })).filter(row => row.amount > 0),
+                        allocations: state.allocationRows.map(row => ({ customerId: row.customerId || null, amount: NumberFormatManager.parseLocaleNumber(row.amount) || 0, description: row.description || null })).filter(row => row.amount > 0),
                     };
 
                     let response;

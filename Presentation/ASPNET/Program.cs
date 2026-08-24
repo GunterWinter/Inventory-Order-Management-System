@@ -32,7 +32,16 @@ app.RegisterBackEndBuilder(app.Environment, app, builder.Configuration);
 // Serve wwwroot through the regular static-file middleware. The generated
 // ASP.NET 9 static-asset manifest can contain an unusable gzip variant when the
 // application is started from bin/Debug, which otherwise returns an empty body.
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (!context.Context.Request.Path.StartsWithSegments("/FrontEnd")) return;
+        context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+        context.Context.Response.Headers.Pragma = "no-cache";
+        context.Context.Response.Headers.Expires = "0";
+    }
+});
 
 var frontEndAssetsPath = Path.Combine(app.Environment.ContentRootPath, "FrontEnd");
 if (Directory.Exists(frontEndAssetsPath))
@@ -40,7 +49,13 @@ if (Directory.Exists(frontEndAssetsPath))
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new PhysicalFileProvider(frontEndAssetsPath),
-        RequestPath = "/FrontEnd"
+        RequestPath = "/FrontEnd",
+        OnPrepareResponse = context =>
+        {
+            context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            context.Context.Response.Headers.Pragma = "no-cache";
+            context.Context.Response.Headers.Expires = "0";
+        }
     });
 }
 

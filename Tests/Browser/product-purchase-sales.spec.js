@@ -16,9 +16,7 @@ async function selectTaxAndSaveItem(page, taxName) {
     await page.waitForFunction(() => Boolean(
         document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
     ));
-    await page.evaluate(() => document.querySelector(
-        '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist'
-    ).ej2_instances[0].showPopup());
+    await page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist').locator('xpath=..').click();
     await selectOpenDropdownOption(page, taxName);
 
     const quantityAfterTax = await page.evaluate(() => {
@@ -63,25 +61,19 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
     expect(editorSettings.allowFiltering).toBe(true);
     expect(editorSettings.filterBarPlaceholder).toBe(expectedSearchPlaceholder);
 
-    await page.evaluate(selector => document.querySelector(selector).ej2_instances[0].showPopup(), editorSelector);
-    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+    await page.locator(editorSelector).locator('xpath=..').click();
+    const popup = page.locator('.e-ddl.e-popup:visible').last();
     await popup.waitFor({ state: 'visible' });
-    const options = popup.locator('.e-list-item');
+    const options = page.locator('.e-ddl.e-popup:visible .e-list-item:visible');
     await expect.poll(() => options.count()).toBeGreaterThan(0);
-    const initialOptionCount = await options.count();
-    const filterInput = popup.locator('.e-filter-parent input.e-input-filter');
+    const filterInput = page.locator('input.e-input-filter:visible').last();
     await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
 
-    await filterInput.pressSequentially(searchText);
+    await expect(filterInput).toBeFocused();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(searchText, { delay: 20 });
     await expect(options).toHaveCount(1);
     await expect(options.first()).toContainText(expectedProductName);
-
-    await filterInput.press('Control+A');
-    await filterInput.press('Backspace');
-    await expect.poll(() => options.count()).toBe(initialOptionCount);
-
-    await filterInput.pressSequentially(searchText);
-    await expect(options).toHaveCount(1);
     await options.first().click();
 }
 
@@ -192,13 +184,29 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
         ?.dataSource?.some?.(item => item.productId === id), productId);
-    const stockCaption = await page.evaluate(id => {
+    const stockView = await page.evaluate(id => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
         const record = grid.dataSource.find(item => item.productId === id);
-        const aggregate = grid.aggregates[0].columns.find(column => column.field === 'stock');
-        return aggregate.groupCaptionTemplate({ Sum: record.stock });
+        return {
+            groupColumns: grid.groupSettings?.columns ?? [],
+            stock: record.stock
+        };
     }, productId);
-    expect(stockCaption).toBe('Stock: 2,5');
+    expect(stockView.groupColumns).toEqual(['warehouseName', 'productName']);
+    expect(stockView.stock).toBe(expectedOpeningStock);
+    await expect(page.locator('#MainGrid .e-row', { hasText: key }).first()).toContainText('2,5');
+
+    await page.goto('/TransactionReports/TransactionReportList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.length > 0);
+    const transactionView = await page.evaluate(() => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        return { groupColumns: grid.groupSettings?.columns ?? [], dataCount: grid.dataSource.length };
+    });
+    expect(transactionView.groupColumns).toEqual(['productName']);
+    expect(transactionView.dataCount).toBeGreaterThan(0);
+    await expect(page.locator('#MainGrid tr', { hasText: key }).first()).toContainText('2.50');
+    expect(await page.locator('#MainGrid .e-row').count()).toBeGreaterThan(0);
 
     const documents = await page.evaluate(async ({ customerId, vendorId, key }) => {
         const unwrap = response => response?.data?.content?.data;

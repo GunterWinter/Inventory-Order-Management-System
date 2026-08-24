@@ -9,16 +9,19 @@ const managerPath = path.resolve(
     '../../Presentation/ASPNET/wwwroot/lib/indotalent/grid-interaction-manager.js'
 );
 
-function loadManager(requestAnimationFrame = callback => callback()) {
+function loadManager(requestAnimationFrame = callback => callback(), windowOverrides = {}, documentOverrides = {}) {
     const document = {
         readyState: 'loading',
-        addEventListener() { }
+        addEventListener() { },
+        querySelectorAll: () => [],
+        ...documentOverrides
     };
     const window = {
         console,
         setTimeout,
         clearTimeout,
-        requestAnimationFrame
+        requestAnimationFrame,
+        ...windowOverrides
     };
     vm.runInNewContext(fs.readFileSync(managerPath, 'utf8'), {
         window,
@@ -66,6 +69,7 @@ function loadInteractiveManager() {
 function createBatchGrid({ invalid = false, persistFails = false } = {}) {
     let changes = { addedRecords: [], changedRecords: [], deletedRecords: [] };
     const calls = [];
+    const reopenedEditors = [];
     const grid = {
         isEdit: true,
         editSettings: { mode: 'Batch' },
@@ -79,7 +83,7 @@ function createBatchGrid({ invalid = false, persistFails = false } = {}) {
             saveCell() {
                 setTimeout(() => {
                     changes = {
-                        addedRecords: [{ productId: 'product-1', warehouseId: 'warehouse-1', quantity: 2, unitPrice: 100 }],
+                        addedRecords: [{ id: 'new-1', productId: 'product-1', warehouseId: 'warehouse-1', quantity: 2, unitPrice: 100 }],
                         changedRecords: [],
                         deletedRecords: []
                     };
@@ -98,8 +102,14 @@ function createBatchGrid({ invalid = false, persistFails = false } = {}) {
                 setTimeout(() => grid.actionComplete({ requestType: 'batchsave', batchChanges }), 10);
             }
         },
+        getRowIndexByPrimaryKey: id => id === 'new-1' ? 0 : -1,
+        editCell: (rowIndex, field) => reopenedEditors.push([rowIndex, field]),
         actionBegin(args) {
-            if (invalid && args.requestType === 'save') args.cancel = true;
+            if (invalid && args.requestType === 'save') {
+                args.cancel = true;
+                args.invalidField = 'taxId';
+                args.validationFeedback = Promise.resolve();
+            }
         },
         async actionComplete(args) {
             if (args.requestType !== 'save') return;
@@ -116,7 +126,7 @@ function createBatchGrid({ invalid = false, persistFails = false } = {}) {
             deletedRecords: []
         };
     };
-    return { grid, calls, stageQuantityChange };
+    return { grid, calls, reopenedEditors, stageQuantityChange };
 }
 
 test('save commits the active cell and waits for lowercase batchsave CRUD completion', async () => {
@@ -139,13 +149,14 @@ test('save commits the active cell and waits for lowercase batchsave CRUD comple
 
 test('save blocks the parent document when item validation cancels batchsave', async () => {
     const manager = loadManager();
-    const { grid, calls } = createBatchGrid({ invalid: true });
+    const { grid, calls, reopenedEditors } = createBatchGrid({ invalid: true });
     manager.track(grid);
 
     const saved = await manager.save(grid);
 
     assert.equal(saved, false);
     assert.deepEqual(calls, []);
+    assert.deepEqual(reopenedEditors, [[0, 'taxId']]);
 });
 
 test('save blocks the parent document when asynchronous item persistence fails', async () => {
@@ -268,92 +279,98 @@ test('main grid clears deleted records from persisted selection after reload', (
     assert.equal(cleared, 1);
 });
 
-test('grouped grid collapses after every data bind without re-entrant loops', () => {
+test('batch configuration defers required rules until final save and preserves read-only mode', () => {
     const manager = loadManager();
-    let collapseCalls = 0;
     const grid = {
-        groupSettings: { columns: ['customerName'] },
+        columns: [{ field: 'productId', validationRules: { required: true } }],
+        editSettings: { mode: 'Batch', allowEditing: false, allowAdding: false, allowDeleting: false },
+        selectionSettings: {},
+        toolbar: ['Add']
+    };
+
+    manager.configureBatch(grid);
+
+    assert.equal(Object.keys(grid.columns[0].validationRules).length, 0);
+    assert.equal(grid.editSettings.allowEditing, false);
+    assert.equal(grid.editSettings.allowAdding, false);
+    assert.equal(grid.editSettings.allowDeleting, false);
+});
+
+test('Enter inside interactive Quick Add stays with SweetAlert and does not save the parent batch', () => {
+    const input = {};
+    const popup = {
+        querySelector: selector => selector.includes('.qa-form') ? input : null,
+        contains: target => target === input
+    };
+    const manager = loadManager(undefined, { Swal: { isVisible: () => true } }, {
+        querySelector: selector => selector === '.swal2-popup' ? popup : null
+    });
+    const handlers = {};
+    const root = {
+        addEventListener: (name, handler) => { handlers[name] = handler; }
+    };
+    let prevented = false;
+
+    manager.wireKeyboard(root);
+    handlers.keydown({
+        key: 'Enter',
+        target: input,
+        preventDefault: () => { prevented = true; },
+        stopImmediatePropagation() { }
+    });
+
+    assert.equal(prevented, false);
+});
+
+test('Enter closes a passive validation warning without reaching or closing the document modal', () => {
+    let closed = 0;
+    const popup = { querySelector: () => null, contains: () => false };
+    const manager = loadManager(undefined, {
+        Swal: { isVisible: () => true, close: () => { closed += 1; } }
+    }, {
+        querySelector: selector => selector === '.swal2-popup' ? popup : null
+    });
+    const handlers = {};
+    const root = { addEventListener: (name, handler) => { handlers[name] = handler; } };
+    let prevented = 0;
+    let stopped = 0;
+
+    manager.wireKeyboard(root);
+    handlers.keydown({
+        key: 'Enter',
+        target: { closest: () => null },
+        preventDefault: () => { prevented += 1; },
+        stopImmediatePropagation: () => { stopped += 1; }
+    });
+
+    assert.equal(prevented, 1);
+    assert.equal(stopped, 1);
+    assert.equal(closed, 1);
+});
+
+test('automatic grid setup leaves grouped rows and user collapse state untouched', () => {
+    let collapseCalls = 0;
+    let expandCalls = 0;
+    const actionComplete = () => {};
+    const grid = {
+        groupSettings: { columns: ['warehouseName'] },
+        actionComplete,
+        selectionSettings: {},
         groupModule: {
-            collapseAll: () => {
-                collapseCalls += 1;
-                manager.collapseGroupsOnDataBound(grid);
-            }
+            collapseAll: () => { collapseCalls += 1; },
+            expandAll: () => { expandCalls += 1; }
         }
     };
+    const element = { id: 'MainGrid', dataset: {}, ej2_instances: [grid] };
+    const manager = loadManager(undefined, {}, {
+        querySelectorAll: selector => selector === '.e-grid' ? [element] : []
+    });
 
-    manager.collapseGroupsOnDataBound(grid);
-    assert.equal(collapseCalls, 1);
-
-    manager.collapseGroupsOnDataBound(grid);
-    assert.equal(collapseCalls, 2);
-
-    manager.collapseGroupsOnFirstLoad(grid);
-    assert.equal(collapseCalls, 3);
-});
-
-test('grouped grid waits until Syncfusion row objects have matching DOM rows', () => {
-    const animationFrames = [];
-    const manager = loadManager(callback => animationFrames.push(callback));
-    let collapseCalls = 0;
-    let rowElement = null;
-    const grid = {
-        element: { isConnected: true },
-        groupSettings: { columns: ['customerName'] },
-        getRowsObject: () => [{ isDataRow: true, uid: 'row-1' }],
-        getRowElementByUID: () => rowElement,
-        groupModule: { collapseAll: () => { collapseCalls += 1; } }
-    };
-
-    manager.collapseGroupsOnDataBound(grid);
-    animationFrames.shift()();
-    assert.equal(collapseCalls, 0);
-
-    rowElement = { style: {} };
-    animationFrames.shift()();
-    assert.equal(collapseCalls, 1);
-    animationFrames.shift()();
-});
-
-test('queued group collapse is discarded when the grid is ungrouped', () => {
-    const animationFrames = [];
-    const manager = loadManager(callback => animationFrames.push(callback));
-    let collapseCalls = 0;
-    const grid = {
-        groupSettings: { columns: ['customerName'] },
-        groupModule: { collapseAll: () => { collapseCalls += 1; } }
-    };
-
-    manager.collapseGroupsOnDataBound(grid);
-    grid.groupSettings.columns = [];
-    animationFrames.shift()();
+    manager.autoConfigure();
 
     assert.equal(collapseCalls, 0);
-});
-
-test('group collapse retries the known Syncfusion transient row-style failure', () => {
-    const animationFrames = [];
-    const manager = loadManager(callback => animationFrames.push(callback));
-    let collapseCalls = 0;
-    const grid = {
-        groupSettings: { columns: ['customerName'] },
-        groupModule: {
-            collapseAll: () => {
-                collapseCalls += 1;
-                if (collapseCalls === 1) {
-                    const error = new TypeError("Cannot read properties of null (reading 'style')");
-                    error.stack = `${error.stack}\nGroup.updateVisibleexpandCollapseRows`;
-                    throw error;
-                }
-            }
-        }
-    };
-
-    manager.collapseGroupsOnDataBound(grid);
-    animationFrames.shift()();
-    animationFrames.shift()();
-    animationFrames.shift()();
-
-    assert.equal(collapseCalls, 2);
+    assert.equal(expandCalls, 0);
+    assert.equal(grid.actionComplete, actionComplete);
 });
 
 test('modal date and Item popups are raised above the Bootstrap dialog', () => {

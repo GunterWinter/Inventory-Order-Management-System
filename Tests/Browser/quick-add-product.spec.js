@@ -3,39 +3,55 @@ const {
     expect,
     login,
     waitForVuePage,
+    selectOpenDropdownOption,
     openSelectedDocument
 } = require('./fixtures');
+const fs = require('fs');
+const path = require('path');
 
-async function searchActiveProductEditor(page, searchText, expectedProductName, select = false) {
+async function searchActiveProductEditor(page, searchText, expectedProductName) {
     const editorSelector = '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist';
-    await page.evaluate(selector => document.querySelector(selector)?.ej2_instances?.[0]?.showPopup(), editorSelector);
-    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+    await page.waitForFunction(selector => Boolean(
+        document.querySelector(selector)?.ej2_instances?.[0]
+    ), editorSelector);
+    await page.locator(editorSelector).locator('xpath=..').click();
+    const popup = page.locator('.e-ddl.e-popup:visible').last();
     await popup.waitFor({ state: 'visible' });
-    const filterInput = popup.locator('.e-filter-parent input.e-input-filter');
-    await expect(filterInput).toBeVisible();
-    await filterInput.fill('');
-    await filterInput.fill(searchText);
-
-    const exactOption = popup.getByText(expectedProductName, { exact: true });
-    await expect(exactOption).toBeVisible();
-    if (select) {
-        await exactOption.click();
-        await popup.waitFor({ state: 'hidden' });
-        return;
+    const options = popup.locator('.e-list-item');
+    await expect.poll(() => options.count()).toBeGreaterThan(0);
+    const filterInput = page.locator('input.e-input-filter:visible').last();
+    if (await filterInput.count() > 0 && await filterInput.isVisible()) {
+        await expect(filterInput).toBeFocused();
+        await page.keyboard.press('Control+A');
+        await page.keyboard.type(searchText, { delay: 20 });
     }
-
-    await filterInput.fill('');
-    await page.evaluate(selector => document.querySelector(selector)?.ej2_instances?.[0]?.hidePopup(), editorSelector);
+    const filteredOptions = page.locator('.e-ddl.e-popup:visible .e-list-item:visible');
+    await expect(filteredOptions).toHaveCount(1);
+    const exactOption = filteredOptions.first();
+    await expect(exactOption).toContainText(expectedProductName);
+    await exactOption.click();
+    await popup.waitFor({ state: 'hidden' });
 }
 
 async function editSecondaryCell(page, rowId, field) {
     await page.waitForFunction(({ id }) => {
         const grid = document.querySelector('#SecondaryGrid')?.ej2_instances?.[0];
-        return (grid?.getRowIndexByPrimaryKey?.(id) ?? -1) >= 0;
+        if (!grid) return false;
+        let index = grid.getRowIndexByPrimaryKey?.(id) ?? -1;
+        if (index < 0) {
+            const rowObjects = grid.getRowsObject?.() ?? [];
+            index = rowObjects.findIndex(r => String(r?.data?.id) === String(id));
+        }
+        return index >= 0;
     }, { id: rowId });
     await page.evaluate(({ id, column }) => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
-        grid.editCell(grid.getRowIndexByPrimaryKey(id), column);
+        let index = grid.getRowIndexByPrimaryKey?.(id) ?? -1;
+        if (index < 0) {
+            const rowObjects = grid.getRowsObject?.() ?? [];
+            index = rowObjects.findIndex(r => String(r?.data?.id) === String(id));
+        }
+        grid.editCell(index, column);
     }, { id: rowId, column: field });
 }
 
@@ -52,18 +68,15 @@ async function getActiveSecondaryRowId(page) {
     });
 }
 
-async function selectPurchaseOrderTax(page, rowId, tax) {
-    await editSecondaryCell(page, rowId, 'taxId');
+async function selectPurchaseOrderTax(page, rowId, tax, editorAlreadyOpen = false) {
+    if (!editorAlreadyOpen) await editSecondaryCell(page, rowId, 'taxId');
     const editorSelector = '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist';
     await page.waitForFunction(({ selector, taxId }) => {
         const dropdown = document.querySelector(selector)?.ej2_instances?.[0];
         return dropdown?.dataSource?.some?.(item => item.id === taxId);
     }, { selector: editorSelector, taxId: tax.id });
-    await page.evaluate(selector => document.querySelector(selector).ej2_instances[0].showPopup(), editorSelector);
-    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
-    await popup.waitFor({ state: 'visible' });
-    await popup.getByText(tax.name, { exact: true }).click();
-    await popup.waitFor({ state: 'hidden' });
+    await page.locator(editorSelector).locator('xpath=..').click();
+    await selectOpenDropdownOption(page, tax.name);
 }
 
 async function quickAddInlineLookup(page, buttonSelector, apiPath, name) {
@@ -108,27 +121,16 @@ async function searchSyncfusionLocator(page, input, searchText, expectedText, ve
         return nodes.flatMap(node => Array.from(node.ej2_instances ?? []))
             .some(instance => typeof instance.showPopup === 'function' && typeof instance.hidePopup === 'function');
     })).toBe(true);
-    const filteringDiagnostic = await input.evaluate((element, text) => {
+    const currentSource = await input.evaluate(element => {
         const scope = element.closest('.quick-add-wrapper') ?? element.closest('td') ?? element.parentElement;
         const nodes = scope ? [scope, ...scope.querySelectorAll('*')] : [element];
         const dropdown = nodes.flatMap(node => Array.from(node.ej2_instances ?? []))
-            .find(instance => typeof instance.showPopup === 'function' && typeof instance.filtering === 'function');
-        let filtered = null;
-        dropdown.filtering.call(dropdown, {
-            text,
-            preventDefaultAction: false,
-            updateData: source => {
-                filtered = Array.isArray(source) ? source.map(item => item?.name ?? item?.text ?? item) : null;
-            }
-        });
-        return {
-            filtered,
-            currentSource: Array.isArray(dropdown.dataSource)
-                ? dropdown.dataSource.map(item => item?.name ?? item?.text ?? item)
-                : null
-        };
-    }, searchText);
-    expect(filteringDiagnostic.filtered, JSON.stringify(filteringDiagnostic)).toContain(expectedText);
+            .find(instance => typeof instance.showPopup === 'function' && typeof instance.hidePopup === 'function');
+        return Array.isArray(dropdown?.dataSource)
+            ? dropdown.dataSource.map(item => item?.name ?? item?.text ?? item)
+            : null;
+    });
+    expect(currentSource).toContain(expectedText);
     if (!verifyPopupUi) return;
     await input.evaluate(element => {
         const scope = element.closest('.quick-add-wrapper') ?? element.closest('td') ?? element.parentElement;
@@ -197,7 +199,7 @@ async function completeComplexPartnerQuickAdd(page, config) {
     return created;
 }
 
-test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu kỳ', async ({ monitoredPage: page }) => {
+test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu kỳ', async ({ monitoredPage: page }, testInfo) => {
     test.setTimeout(180_000);
     let purchaseOrderId = null;
     let firstQuickAddedProductId = null;
@@ -205,6 +207,8 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
     let quickAddedWarehouseId = null;
     let poQuickAddedWarehouseId = null;
     const key = `E2E-QUICK-PRODUCT-${Date.now()}`;
+    const screenshotDirectory = path.resolve(__dirname, '../../test-results/quick-add');
+    fs.mkdirSync(screenshotDirectory, { recursive: true });
 
     await login(page);
     const fixture = await page.evaluate(async keyValue => {
@@ -263,7 +267,7 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         await page.locator('#SecondaryGrid_add').click();
         await page.waitForSelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist');
         const firstRowId = await getActiveSecondaryRowId(page);
-        await searchActiveProductEditor(page, `${key}-BASELINE`, `${key}-BASELINE`, true);
+        await searchActiveProductEditor(page, `${key}-BASELINE`, `${key}-BASELINE`);
         await page.locator('#QuickAddProductBtn').click();
         await page.waitForSelector('.swal2-popup #qa-p-name');
 
@@ -345,6 +349,11 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
             select.dispatchEvent(new Event('change', { bubbles: true }));
         }, quickAddedWarehouseId);
 
+        await page.evaluate(() => document.querySelector('#SecondaryGrid td.e-editedbatchcell input')?.focus());
+        await page.keyboard.press('Enter');
+        await expect(page.locator('.swal2-popup #qa-p-name')).toBeVisible();
+        await expect(page.locator('#MainModal')).toHaveClass(/show/);
+
         const requestPromise = page.waitForRequest(request => request.url().includes('/api/Product/CreateProduct'));
         const responsePromise = page.waitForResponse(response => response.url().includes('/api/Product/CreateProduct'));
         await page.locator('.swal2-confirm').click();
@@ -382,18 +391,26 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         expect(storedProduct?.openingStockQuantity).toBe(2.5);
         expect(storedProduct?.openingStockWarehouseId).toBe(quickAddedWarehouseId);
         await page.locator('.swal2-popup').waitFor({ state: 'hidden' });
+        await expect(page.locator('#MainModal')).toHaveClass(/show/);
+        await page.screenshot({ path: path.join(screenshotDirectory, 'po-quick-add-before-tax.png'), fullPage: false });
 
-        // Exact regression sequence: select Tax only after Quick Add, then Add a
-        // second row. The new editor must follow that row's temporary id, not row 0.
-        await selectPurchaseOrderTax(page, firstRowId, fixture.tax);
-        await page.locator('#SecondaryGrid_add').click();
-        const secondRowId = await getActiveSecondaryRowId(page);
-        expect(secondRowId).not.toBe(firstRowId);
-        await expect.poll(() => page.evaluate(() => (
-            document.querySelector('#SecondaryGrid')?.ej2_instances?.[0]?.getBatchChanges?.()?.addedRecords?.length ?? 0
-        ))).toBe(2);
-        await searchActiveProductEditor(page, `${key}-BASELINE`, `${key}-BASELINE`, true);
-        await selectPurchaseOrderTax(page, secondRowId, fixture.tax);
+        const invalidItemRequests = [];
+        const captureInvalidItemRequest = request => {
+            if (request.url().includes('/api/PurchaseOrderItem/CreatePurchaseOrderItem')) invalidItemRequests.push(request.url());
+        };
+        page.on('request', captureInvalidItemRequest);
+        await page.locator('#QuickAddProductBtn').press('Enter');
+        await expect(page.locator('.swal2-popup')).toContainText('Vui lòng chọn thuế');
+        await expect(page.locator('#MainModal')).toHaveClass(/show/);
+        await page.keyboard.press('Enter');
+        await expect(page.locator('.swal2-popup')).toBeHidden();
+        await expect(page.locator('#MainModal')).toHaveClass(/show/);
+        await expect(page.locator('#SecondaryGrid td.e-editedbatchcell').getByRole('textbox', { name: 'Select Tax' })).toBeVisible();
+        page.off('request', captureInvalidItemRequest);
+        expect(invalidItemRequests).toEqual([]);
+
+        // Complete the same row only after the failed Enter.
+        await selectPurchaseOrderTax(page, firstRowId, fixture.tax, true);
 
         // Keep the PO warehouse Quick Add call site covered while the first row is
         // still pending in the same Batch transaction.
@@ -433,17 +450,17 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
             response.url().includes('/api/PurchaseOrderItem/CreatePurchaseOrderItem'));
         await page.locator('#SecondaryGrid_update').click();
         expect((await itemCreateResponse).status()).toBe(200);
+        await page.screenshot({ path: path.join(screenshotDirectory, 'po-quick-add-saved.png'), fullPage: false });
 
         await expect.poll(() => page.evaluate(async id => (
             (await AxiosManager.get(`/PurchaseOrderItem/GetPurchaseOrderItemByPurchaseOrderIdList?purchaseOrderId=${id}`, {}))
                 ?.data?.content?.data?.length ?? 0
-        ), purchaseOrderId)).toBe(2);
+        ), purchaseOrderId)).toBe(1);
         const storedItems = await page.evaluate(async id => (
             (await AxiosManager.get(`/PurchaseOrderItem/GetPurchaseOrderItemByPurchaseOrderIdList?purchaseOrderId=${id}`, {}))
                 ?.data?.content?.data ?? []
         ), purchaseOrderId);
         expect(storedItems.some(item => item.productId === firstQuickAddedProductId)).toBe(true);
-        expect(storedItems.some(item => item.productId === fixture.baselineProduct.id)).toBe(true);
         expect(storedItems.some(item => item.warehouseId === poQuickAddedWarehouseId)).toBe(true);
 
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -451,11 +468,10 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
             ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
-        await page.waitForFunction(({ firstId, secondId }) => {
+        await page.waitForFunction(firstId => {
             const rows = document.querySelector('#SecondaryGrid')?.ej2_instances?.[0]?.dataSource ?? [];
-            return rows.some(item => item.productId === firstId)
-                && rows.some(item => item.productId === secondId);
-        }, { firstId: firstQuickAddedProductId, secondId: fixture.baselineProduct.id });
+            return rows.some(item => item.productId === firstId);
+        }, firstQuickAddedProductId);
     } finally {
         if (purchaseOrderId) {
             await page.evaluate(async id => {

@@ -36,14 +36,14 @@ const test = base.extend({
     }
 });
 
-async function login(page) {
+async function login(page, locale = 'en') {
     await page.goto('/Accounts/Login', { waitUntil: 'domcontentloaded' });
     await page.locator('#Email').fill('admin@root.com');
     await page.locator('#Password').fill('123456');
     await page.locator('button[type="submit"]').click({ noWaitAfter: true });
     await page.waitForURL('**/Dashboards/DefaultDashboard', { waitUntil: 'commit' });
     await page.waitForFunction(() => Boolean(window.UiLocalization?.setLocale));
-    await page.evaluate(() => window.UiLocalization.setLocale('en'));
+    await page.evaluate(value => window.UiLocalization.setLocale(value), locale);
 }
 
 async function waitForVuePage(page) {

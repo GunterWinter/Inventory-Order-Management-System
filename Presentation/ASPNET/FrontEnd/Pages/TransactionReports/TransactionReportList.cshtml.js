@@ -96,7 +96,8 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'stock',
-                                    groupCaptionTemplate: data => `Stock: ${NumberFormatManager.formatToLocale(data.Sum)}`
+                                    groupCaptionTemplate: 'Stock: ${Sum}',
+                                    format: 'N2'
                                 }
                             ]
                         }
@@ -106,9 +107,6 @@ const App = {
                         { type: 'Separator' },
                     ],
                     beforeDataBound: () => { },
-                    dataBound: function () {
-                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
-                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {

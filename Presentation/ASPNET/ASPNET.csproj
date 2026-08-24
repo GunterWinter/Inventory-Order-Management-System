@@ -19,4 +19,8 @@
     <ProjectReference Include="..\..\Infrastructure\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="FrontEnd\**\*.js" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

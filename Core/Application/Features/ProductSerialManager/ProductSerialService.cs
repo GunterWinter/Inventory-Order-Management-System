@@ -16,6 +16,7 @@ public class ProductSerialService
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
     private readonly ICommandRepository<ProductSerialMovement> _productSerialMovementRepository;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
+    private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
     private readonly IQueryContext _queryContext;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -23,12 +24,14 @@ public class ProductSerialService
         ICommandRepository<ProductSerial> productSerialRepository,
         ICommandRepository<ProductSerialMovement> productSerialMovementRepository,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
+        ICommandRepository<SalesOrderItem> salesOrderItemRepository,
         IQueryContext queryContext,
         IUnitOfWork unitOfWork)
     {
         _productSerialRepository = productSerialRepository;
         _productSerialMovementRepository = productSerialMovementRepository;
         _inventoryTransactionRepository = inventoryTransactionRepository;
+        _salesOrderItemRepository = salesOrderItemRepository;
         _queryContext = queryContext;
         _unitOfWork = unitOfWork;
     }
@@ -633,6 +636,18 @@ public class ProductSerialService
         CancellationToken cancellationToken)
     {
         var targetStatus = ResolveTargetStatus(transaction);
+        DateTime? warrantyEndDate = null;
+        if (transaction.ModuleName == nameof(SalesOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
+        {
+            var warranty = await _salesOrderItemRepository
+                .GetQuery()
+                .AsNoTracking()
+                .Where(x => x.Id == transaction.ModuleItemId)
+                .Select(x => new { x.SalesOrder!.OrderDate, x.WarrantyMonths })
+                .SingleOrDefaultAsync(cancellationToken);
+            warrantyEndDate = warranty?.OrderDate?.AddMonths(warranty.WarrantyMonths ?? 0);
+        }
+
         foreach (var serial in serials)
         {
             ValidateSerialForTransaction(transaction, serial);
@@ -655,12 +670,7 @@ public class ProductSerialService
             if (transaction.ModuleName == nameof(SalesOrder) && !string.IsNullOrWhiteSpace(transaction.ModuleItemId))
             {
                 serial.SalesOrderItemId = transaction.ModuleItemId;
-                var salesOrderItem = await _queryContext
-                    .Set<SalesOrderItem>()
-                    .AsNoTracking()
-                    .Include(x => x.SalesOrder)
-                    .SingleOrDefaultAsync(x => x.Id == transaction.ModuleItemId, cancellationToken);
-                serial.CustomerWarrantyEndDate = salesOrderItem?.SalesOrder?.OrderDate?.AddMonths(salesOrderItem.WarrantyMonths ?? 0);
+                serial.CustomerWarrantyEndDate = warrantyEndDate;
             }
 
             _productSerialRepository.Update(serial);

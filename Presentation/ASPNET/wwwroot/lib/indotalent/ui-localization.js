@@ -1113,6 +1113,17 @@
         'payment for order': 'chi tiền đơn'
     };
 
+    const gridTextTranslations = {
+        'total amount': 'Tổng',
+        'created': 'Ngày tạo',
+        'created at': 'Ngày tạo',
+        'created at utc': 'Ngày tạo',
+        'last updated': 'Cập nhật',
+        'serial numbers': 'Serial',
+        'manufacturer serials': 'Serial NSX',
+        'supplier warranty (months)': 'BH NCC (tháng)'
+    };
+
     Object.entries({ ...termTranslations }).forEach(([key, value]) => {
         const normalizedKey = normalizeText(key).toLowerCase();
         termTranslations[normalizedKey] = value;
@@ -1362,6 +1373,19 @@
         return rawValue.replace(normalized, translated);
     }
 
+    function translateGridText(value, locale = currentLocale) {
+        const rawValue = value ?? '';
+        const normalized = normalizeText(rawValue);
+        if (locale !== 'vi' || !normalized) return translateText(rawValue, locale);
+
+        const templateMatch = normalized.match(/^(.+?)(:\s*\$\{.+\})$/);
+        const label = templateMatch?.[1] ?? normalized;
+        const translated = gridTextTranslations[label.toLowerCase()];
+        if (!translated) return translateText(rawValue, locale);
+
+        return rawValue.replace(normalized, `${translated}${templateMatch?.[2] ?? ''}`);
+    }
+
     function getDropDownTextField(instance) {
         return instance?.fields?.text || 'text';
     }
@@ -1500,7 +1524,7 @@
         patchDropDownComponent(window.ej?.dropdowns?.ComboBox);
     }
 
-    function localizeStringProperty(owner, propertyName, originalPropertyName) {
+    function localizeStringProperty(owner, propertyName, originalPropertyName, translator = translateText) {
         if (!owner || typeof owner[propertyName] !== 'string') {
             return false;
         }
@@ -1510,7 +1534,7 @@
         }
 
         const originalValue = owner[originalPropertyName] ?? '';
-        const localizedValue = translateText(originalValue, currentLocale);
+        const localizedValue = translator(originalValue, currentLocale);
         if (owner[propertyName] === localizedValue) {
             return false;
         }
@@ -1526,7 +1550,7 @@
 
         let changed = false;
         columns.forEach(column => {
-            changed = localizeStringProperty(column, 'headerText', '__originalHeaderText') || changed;
+            changed = localizeStringProperty(column, 'headerText', '__originalHeaderText', translateGridText) || changed;
             changed = localizeGridColumnHeaders(column.columns) || changed;
         });
 
@@ -1545,8 +1569,8 @@
             }
 
             aggregate.columns.forEach(column => {
-                changed = localizeStringProperty(column, 'groupCaptionTemplate', '__originalGroupCaptionTemplate') || changed;
-                changed = localizeStringProperty(column, 'footerTemplate', '__originalFooterTemplate') || changed;
+                changed = localizeStringProperty(column, 'groupCaptionTemplate', '__originalGroupCaptionTemplate', translateGridText) || changed;
+                changed = localizeStringProperty(column, 'footerTemplate', '__originalFooterTemplate', translateGridText) || changed;
             });
         });
 

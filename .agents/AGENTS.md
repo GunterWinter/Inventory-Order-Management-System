@@ -162,7 +162,7 @@ Ví dụ bất biến: công trình có đơn bán Đã xác nhận trước thu
 - Sau mọi thay đổi code, agent phải chạy `npm.cmd run test:js` và `dotnet build Indotalent.sln --no-restore`.
 - Không giữ application test tạm trong repository. Nếu tạo application test để xác minh trong lúc sửa lỗi thì phải xóa test và project test đó sau khi kiểm tra xong; JavaScript test và browser test dùng chung vẫn được giữ lại.
 - Khi thay đổi giao diện, giao dịch Thu Chi, báo cáo tài chính, localization, menu hoặc hành vi gom nhóm, agent phải chạy ứng dụng thật bằng `npm.cmd run test:browser:isolated`. Không được kết luận hoàn tất chỉ dựa trên unit test hoặc một ứng dụng đang chạy thủ công.
-- Runner Antigravity chỉ được tạo/xóa database có tiền tố `WHMS_AntigravityTest_`, phải tự seed, chờ ứng dụng sẵn sàng, chạy tuần tự, dừng đúng process đã tạo và chỉ xóa đúng database của lượt đó. Tuyệt đối không bật `IsDemoVersion=true` trên database làm việc vì demo startup sẽ xóa và seed lại database.
+- Runner browser regression chỉ được tạo/xóa database có tiền tố `WHMS_UiRegression_`, phải tự seed, chờ ứng dụng sẵn sàng, chạy tuần tự, dừng đúng process đã tạo và chỉ xóa đúng database của lượt đó. Tuyệt đối không bật `IsDemoVersion=true` trên database làm việc vì demo startup sẽ xóa và seed lại database.
 - Trong browser test, API chỉ được dùng để dựng fixture hoặc đối chiếu kết quả. Hành vi đang kiểm thử phải thao tác qua UI thật; không được gọi API thay cho click/nhập/lưu của người dùng.
 - Không được tự điền lại giá, sửa payload, commit ô hộ người dùng hoặc chèn fallback trong test để đi qua lỗi. Mỗi lỗi UI phải có regression tái hiện thất bại trước bản vá và assertion ở đúng thời điểm lỗi xảy ra.
 - Playwright phải giám sát JavaScript error, console error, HTTP 4xx/5xx cùng origin và request failure. Trace, video và screenshot chỉ giữ khi lỗi; một gate chỉ xanh khi toàn bộ gate trước vẫn xanh.
@@ -173,4 +173,4 @@ Ví dụ bất biến: công trình có đơn bán Đã xác nhận trước thu
 - Import Excel phải kiểm tra toàn bộ workbook và lưu trong một transaction; một lỗi ở bất kỳ sheet/dòng nào phải khiến toàn file không tạo dữ liệu. Chứng từ import luôn là Nháp và chưa tác động tồn kho, serial, công nợ hoặc báo cáo.
 - Browser test Import/Export không được chỉ kiểm tra nút. Phải tải file, đọc lại workbook và đối chiếu sheet, cột, số dòng, kiểu số/ngày, bộ lọc và dữ liệu chi tiết của nhóm đang đóng.
 - Browser test PDF phải tải file thật, kiểm tra chữ ký `%PDF`, số trang và chứng từ dài không mất dòng. Các thư viện export phải được phục vụ nội bộ, không phụ thuộc CDN.
-- Hướng dẫn browser chi tiết và ma trận nghiệp vụ nằm tại `docs/ANTIGRAVITY_BROWSER_TEST_GUIDE.md`; agent phải cập nhật tài liệu này khi thêm hoặc đổi một luồng browser quan trọng.
+- Quy trình browser và ma trận vòng đời bắt buộc nằm tại `.agents/skills/inventory-browser-regression/SKILL.md`; agent phải cập nhật skill này khi thêm hoặc đổi một luồng browser quan trọng.

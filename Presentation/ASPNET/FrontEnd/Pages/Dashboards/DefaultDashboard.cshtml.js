@@ -65,7 +65,7 @@ const App = {
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     columns: [
                         { field: 'createdAtUtc', visible: false },
-                        { field: 'orderDate', headerText: 'Date', width: 100, valueAccessor: (field, row) => methods.date(row[field]) },
+                        { field: 'orderDate', headerText: 'Date', width: 100, type: 'string', valueAccessor: (field, row) => methods.date(row[field]) },
                         { field: 'number', headerText: 'Number', width: 145 },
                         { field: 'productName', headerText: 'Product', width: 190 },
                         { field: 'total', headerText: 'Total', width: 120, textAlign: 'Right', format: 'N0' }
@@ -87,7 +87,7 @@ const App = {
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     columns: [
                         { field: 'createdAtUtc', visible: false },
-                        { field: 'orderDate', headerText: 'Date', width: 100, valueAccessor: (field, row) => methods.date(row[field]) },
+                        { field: 'orderDate', headerText: 'Date', width: 100, type: 'string', valueAccessor: (field, row) => methods.date(row[field]) },
                         { field: 'number', headerText: 'Number', width: 145 },
                         { field: 'productName', headerText: 'Product', width: 190 },
                         { field: 'total', headerText: 'Total', width: 120, textAlign: 'Right', format: 'N0' }
@@ -107,7 +107,7 @@ const App = {
                     pageSettings: { pageSize: 10 }, gridLines: 'Horizontal',
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
                     columns: [
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, valueAccessor: (field, row) => methods.dateTime(row[field]) },
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, type: 'string', valueAccessor: (field, row) => methods.dateTime(row[field]) },
                         { field: 'number', headerText: 'Number', width: 145 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 150 },
                         { field: 'productName', headerText: 'Product', width: 190 },
@@ -119,17 +119,18 @@ const App = {
             },
             renderStockChart: () => {
                 controls.stockChart?.destroy();
+                const series = (state.inventory.inventoryStockDashboard ?? []).map(item => ({
+                    ...item,
+                    animation: { ...item.animation, enable: false }
+                }));
                 controls.stockChart = new ej.charts.Chart({
                     primaryXAxis: { valueType: 'Category', labelRotation: -25, majorGridLines: { width: 0 } },
                     primaryYAxis: { title: 'Quantity', lineStyle: { width: 0 }, majorTickLines: { width: 0 } },
-                    series: (state.inventory.inventoryStockDashboard ?? []).map(series => ({
-                        ...series,
-                        animation: { ...series.animation, enable: false }
-                    })),
+                    series,
                     tooltip: { enable: true, shared: true },
                     legendSettings: { visible: true },
                     chartArea: { border: { width: 0 } },
-                    height: '340px'
+                    height: `${Math.max(340, 260 + series.length * 24)}px`
                 });
                 controls.stockChart.appendTo(stockChartRef.value);
             },

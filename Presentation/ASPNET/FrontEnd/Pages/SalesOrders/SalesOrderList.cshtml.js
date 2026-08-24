@@ -1160,12 +1160,6 @@ const App = {
                 });
 
                 mainGrid.obj.appendTo(mainGridRef.value);
-                mainGrid.obj.element.dataset.groupCollapseWired = 'true';
-                window.setTimeout(() => {
-                    if (mainGrid.obj?.element?.isConnected) {
-                        GridInteractionManager.collapseGroupsOnDataBound(mainGrid.obj);
-                    }
-                }, 250);
             },
             refresh: () => {
                 mainGrid.obj.setProperties({ dataSource: state.mainData });
@@ -1369,8 +1363,10 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: normalizeLookupId(args.rowData.productId),
                                         allowFiltering: true,
+                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, {
+                                            textField: 'name', instance: () => productObj, preserveEditor: true
+                                        }),
                                         filterBarPlaceholder: 'Tìm hàng hóa',
-                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, { textField: 'name' }),
                                         change: (e) => {
                                             applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
                                         },
@@ -1932,7 +1928,7 @@ const App = {
                             return;
                         }
 
-                        if (requestType !== 'save') {
+                        if (requestType !== 'save' || args.managedBatch !== true) {
                             return;
                         }
 
@@ -1973,23 +1969,23 @@ const App = {
                             return;
                         }
 
-                        if (!data.taxId) {
-                            args.cancel = true;
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Thiếu thông tin bắt buộc',
-                                text: 'Vui lòng chọn Thuế trước khi lưu.',
-                                confirmButtonText: 'Đồng ý'
-                            });
-                            return;
-                        }
-
                         if (!data.quantity || Number(data.quantity) <= 0) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
                                 title: 'Thiếu thông tin bắt buộc',
                                 text: 'Số lượng phải lớn hơn 0.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
+                        if (!data.taxId) {
+                            args.cancel = true;
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Vui lòng chọn Thuế trước khi lưu.',
                                 confirmButtonText: 'Đồng ý'
                             });
                             return;
@@ -2180,8 +2176,7 @@ const App = {
                 });
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
                 secondaryGrid.obj.element.addEventListener('click', secondaryGrid.handleSerialPickerClick);
-                secondaryGrid.obj.element.dataset.batchManaged = 'true';
-                GridInteractionManager.track(secondaryGrid.obj, {
+                GridInteractionManager.configureBatch(secondaryGrid.obj, {
                     afterPersist: async changes => {
                         await methods.populateSecondaryData(state.id);
 
@@ -2215,6 +2210,7 @@ const App = {
                         Swal.fire({ icon: 'success', title: 'Lưu danh sách hàng hóa thành công', timer: 1200, showConfirmButton: false });
                     }
                 });
+                secondaryGrid.obj.element.dataset.batchManaged = 'true';
             },
             refresh: () => {
                 if (!secondaryGrid.obj) return;

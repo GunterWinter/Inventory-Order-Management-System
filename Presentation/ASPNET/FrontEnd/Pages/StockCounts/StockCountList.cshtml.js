@@ -929,6 +929,7 @@
                         ProductSerialPicker.validateGridSave(args, {
                             productListGetter: () => state.productListLookupData,
                             quantityField: 'qtySCCount',
+                            allowZeroQuantity: true,
                             allowEmptySelection: true
                         });
                     },

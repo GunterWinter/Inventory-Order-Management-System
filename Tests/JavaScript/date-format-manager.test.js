@@ -78,3 +78,13 @@ test('grid và DatePicker tự chuẩn hóa format theo ngôn ngữ hiện tại
     assert.equal(runtime.manager.datePickerOptions().format, 'MM/dd/yyyy');
     assert.equal(runtime.manager.datePickerOptions().locale, 'en-US');
 });
+
+test('Dashboard date value accessors stay string columns so Syncfusion does not parse localized text again', () => {
+    const dashboardSource = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js'
+    ), 'utf8');
+
+    assert.equal((dashboardSource.match(/field: 'orderDate'.*type: 'string'.*valueAccessor/g) ?? []).length, 2);
+    assert.match(dashboardSource, /field: 'createdAtUtc', headerText: 'Created At'.*type: 'string'.*valueAccessor/);
+});

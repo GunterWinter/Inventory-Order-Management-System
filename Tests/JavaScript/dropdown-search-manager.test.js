@@ -30,14 +30,36 @@ test('clearing the keyword restores the exact current eligible source', () => {
 test('filtering handler resolves a dynamic source at search time', () => {
     let eligibleProducts = products.slice(0, 2);
     let updatedProducts = null;
+    let updatedFields = null;
     const handler = search.createFilteringHandler(() => eligibleProducts, { textField: 'name' });
 
-    handler({ text: 'day dien', updateData: value => { updatedProducts = value; } });
+    handler({ text: 'day dien', updateData: (value, _query, fields) => { updatedProducts = value; updatedFields = fields; } });
     assert.deepEqual(updatedProducts.map(item => item.id), ['product-1']);
+    assert.deepEqual(updatedFields, { text: 'name', value: 'id' });
 
     eligibleProducts = products.slice(1);
     handler({ text: '', updateData: value => { updatedProducts = value; } });
     assert.strictEqual(updatedProducts, eligibleProducts);
+});
+
+test('Syncfusion filtering receives the already matched display rows without a second query filter', () => {
+    class Query {
+        where(...args) { this.whereArgs = args; return this; }
+    }
+    globalThis.ej = { data: { Query } };
+    try {
+        let update = null;
+        const handler = search.createFilteringHandler(products, { textField: 'name' });
+        handler({
+            text: 'DAY DIEN',
+            updateData: (source, query, fields) => { update = { source, query, fields }; }
+        });
+        assert.deepEqual(update.source.map(item => item.id), ['product-1']);
+        assert.equal(update.query.whereArgs, undefined);
+        assert.deepEqual(update.fields, { text: 'name', value: 'id' });
+    } finally {
+        delete globalThis.ej;
+    }
 });
 
 test('filtering handler uses the replaced eligible source and restores it when the keyword is cleared', () => {
@@ -54,7 +76,44 @@ test('filtering handler uses the replaced eligible source and restores it when t
     assert.equal(updatedProducts.some(item => item.id === 'product-1'), false);
 });
 
-test('PO and SO product editors pass a live eligible-source callback to the shared handler', () => {
+test('filtering handler restores a popup closed by Syncfusion list refresh', () => {
+    let scheduled = null;
+    globalThis.requestAnimationFrame = callback => { scheduled = callback; };
+    try {
+        const popup = { classList: { contains: () => false } };
+        const input = { value: '', focus() { this.focused = true; } };
+        const dropdown = { popupObj: { element: popup }, filterInput: input, showPopup() { this.opened = true; } };
+        search.createFilteringHandler(products, { textField: 'name', instance: () => dropdown })({
+            text: 'day dien',
+            updateData() { }
+        });
+        scheduled();
+        assert.equal(dropdown.opened, true);
+        assert.equal(input.value, 'day dien');
+        assert.equal(input.focused, true);
+    } finally {
+        delete globalThis.requestAnimationFrame;
+    }
+});
+
+test('grid editor filtering keeps the dropdown alive and hides only non-matching rows', () => {
+    const item = textContent => ({
+        textContent,
+        hidden: false,
+        style: {},
+        setAttribute(name, value) { this[name] = value; }
+    });
+    const rows = [item('Dây điện Trần Phú'), item('Ống nước Bình Minh')];
+    const dropdown = { liCollections: rows };
+    search.createFilteringHandler(products, {
+        textField: 'name', instance: () => dropdown, preserveEditor: true
+    })({ text: 'day dien', updateData() { throw new Error('must not rebuild the grid editor'); } });
+    assert.equal(rows[0].hidden, false);
+    assert.equal(rows[1].hidden, true);
+    assert.equal(rows[1].style.display, 'none');
+});
+
+test('PO and SO product editors filter the live eligible source and PO refreshes after Quick Add', () => {
     const pageFiles = [
         'PurchaseOrders/PurchaseOrderList.cshtml.js',
         'SalesOrders/SalesOrderList.cshtml.js'
@@ -64,12 +123,14 @@ test('PO and SO product editors pass a live eligible-source callback to the shar
         const source = fs.readFileSync(path.resolve(__dirname,
             `../../Presentation/ASPNET/FrontEnd/Pages/${relativeFile}`), 'utf8');
         assert.match(source,
-            /createFilteringHandler\(getCurrentProductOptions,\s*\{\s*textField:\s*'name'\s*\}\)/,
-            `${relativeFile} must resolve the eligible product source at search time.`);
-        assert.doesNotMatch(source,
-            /createFilteringHandler\(productOptions,\s*\{\s*textField:\s*'name'\s*\}\)/,
-            `${relativeFile} must not keep the pre-Quick-Add product snapshot.`);
+            /filtering:\s*DropdownSearchManager\.createFilteringHandler\(getCurrentProductOptions/,
+            `${relativeFile} must filter the current eligible products by display name.`);
+        assert.match(source, /dataSource:\s*productOptions/);
     });
+    const poSource = fs.readFileSync(path.resolve(__dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/PurchaseOrders/PurchaseOrderList.cshtml.js'), 'utf8');
+    assert.match(poSource, /productObj\.dataSource\s*=\s*getSelectableProductOptions\(productEditorRow\)/,
+        'Purchase Order Quick Add must refresh the active product editor data source.');
 });
 
 test('PO Add opens the product editor by the new temporary row id instead of a fixed row index', () => {
@@ -153,10 +214,17 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
         constructor(callback) { observedMutations = callback; }
         observe() { }
     }
+    const host = {
+        setAttribute() { },
+        contains: element => element === host,
+        focus: () => { fakeDocument.activeElement = host; },
+        remove() { this.removed = true; }
+    };
     fakeDocument = {
         querySelectorAll: () => [],
         documentElement: { lang: 'vi' },
-        activeElement: null
+        activeElement: null,
+        createElement: () => host
     };
     const context = {
         document: fakeDocument,
@@ -166,9 +234,12 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
         MutationObserver,
         addEventListener() { }
     };
+    const attributes = new Map();
     const select = {
         tagName: 'SELECT',
         dataset: {},
+        style: { display: '' },
+        hidden: false,
         multiple: false,
         disabled: false,
         value: 'cash',
@@ -181,6 +252,10 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
         closest: selector => selector === 'select[data-searchable-dropdown]' ? select : null,
         contains: element => element === select,
         focus: () => { fakeDocument.activeElement = select; },
+        getAttribute: name => attributes.get(name) ?? null,
+        setAttribute: (name, value) => attributes.set(name, value),
+        removeAttribute: name => attributes.delete(name),
+        insertAdjacentElement: (_position, element) => { select.insertedHost = element; },
         addEventListener: (name, handler) => { listeners[name] = handler; },
         removeEventListener: name => { delete listeners[name]; },
         dispatchEvent: event => {
@@ -193,6 +268,11 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
     const dropdown = search.enhanceNativeSelect(select, context);
     assert.equal(dropdown.allowFiltering, true);
     assert.equal(dropdown.value, 'cash');
+    assert.strictEqual(select.insertedHost, host);
+    assert.equal(select.hidden, true);
+    assert.equal(select.style.display, 'none');
+    assert.equal(attributes.get('aria-hidden'), 'true');
+    assert.equal(attributes.get('tabindex'), '-1');
 
     dropdown.change({ value: 'bank', isInteracted: true });
     assert.equal(select.value, 'bank');
@@ -206,12 +286,20 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
     dropdown.dropFocusOnBind = true;
     select.disabled = true;
     select.value = 'wallet';
-    fakeDocument.activeElement = select;
+    fakeDocument.activeElement = host;
     observedMutations([{ type: 'childList', target: select, addedNodes: [], removedNodes: [] }]);
     await Promise.resolve();
 
     assert.equal(dropdown.value, 'wallet');
     assert.equal(dropdown.enabled, false);
     assert.equal(dropdown.dataSource.some(item => item.value === 'wallet'), true);
-    assert.strictEqual(fakeDocument.activeElement, select);
+    assert.strictEqual(fakeDocument.activeElement, host);
+
+    search.destroyNativeSelect(select);
+    assert.equal(dropdown.destroyed, true);
+    assert.equal(host.removed, true);
+    assert.equal(select.hidden, false);
+    assert.equal(select.style.display, '');
+    assert.equal(attributes.has('aria-hidden'), false);
+    assert.equal(attributes.has('tabindex'), false);
 });

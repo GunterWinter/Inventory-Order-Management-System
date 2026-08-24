@@ -1,7 +1,6 @@
-# Test implementation plan
+# Test plan
 
-1. Extend Node tests for lookup display resolution, row-selection decisions, locale numeric parsing/formatting, workbook example sheets, and localized strings.
-2. Extend browser gates for Sales Order available stock/GUID regression, cumulative cash payment with required account/date and multiple accounts, stale-selection/multi-delete, future-date confirmation, localized template/export, and real PDF validation.
-3. Use API calls only to seed and verify isolated fixtures; all behavior under test is performed through UI controls.
-4. Run focused Node tests during implementation, then the complete JavaScript suite, full .NET build, and isolated browser suite.
-5. Re-read assertions against every acceptance item and record the final quality audit in `.testagent/status.md`.
+1. [complete] Add focused unit regressions for passive-vs-interactive SweetAlert Enter behavior, native searchable-select hiding/restoration, locale decimal parsing, and Dashboard date column configuration.
+2. [complete] Apply the smallest shared/root fixes in `grid-interaction-manager.js`, `dropdown-search-manager.js`, Cash Transactions, and Dashboard.
+3. [complete] Replace Antigravity naming and API-driven coverage with a project browser-regression skill, isolated `WHMS_UiRegression_*` runner, and Playwright UI audit/lifecycle checks with screenshots.
+4. [complete] Run focused tests, all JavaScript tests, full isolated Playwright regression, build/publish asset verification, skill validation, test-gap analysis, assertion-quality audit, and `git diff --check`.

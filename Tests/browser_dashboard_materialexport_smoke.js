@@ -34,6 +34,21 @@ const { chromium } = require('playwright');
     await page.waitForSelector('.e-grid');
     const defaultLocale = await page.evaluate(() => UiLocalization.getLocale());
     if (defaultLocale !== 'vi') throw new Error(`Vietnamese must be the default locale, received ${defaultLocale}.`);
+    const readVisibleDates = panel => panel.locator('.e-row').evaluateAll(rows => rows.map(row => (
+        [...row.querySelectorAll('td')].find(cell => getComputedStyle(cell).display !== 'none')?.textContent?.trim() ?? ''
+    )));
+    const recentOrderDates = await readVisibleDates(page.locator('.dashboard-panel').nth(0));
+    recentOrderDates.push(...await readVisibleDates(page.locator('.dashboard-panel').nth(1)));
+    if (!recentOrderDates.length || recentOrderDates.some(value => !/^\d{2}\/\d{2}\/\d{4}$/.test(value.trim()))) {
+        throw new Error(`Dashboard order dates are not valid Vietnamese dates: ${JSON.stringify(recentOrderDates)}`);
+    }
+    if (recentOrderDates.some(value => /Invalid Date|^[A-Za-z]{3}\s/.test(value))) {
+        throw new Error(`Dashboard rendered an invalid or weekday date: ${JSON.stringify(recentOrderDates)}`);
+    }
+    const inventoryDates = await readVisibleDates(page.locator('.dashboard-panel').nth(2));
+    if (!inventoryDates.length || inventoryDates.some(value => !/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}(?::\d{2})?$/.test(value.trim()))) {
+        throw new Error(`Dashboard inventory dates are not valid Vietnamese date-times: ${JSON.stringify(inventoryDates)}`);
+    }
     await page.evaluate(() => UiLocalization.setLocale('en'));
     await page.waitForSelector('text=Operations Overview');
 

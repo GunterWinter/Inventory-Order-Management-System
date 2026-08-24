@@ -1437,8 +1437,10 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         allowFiltering: true,
+                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, {
+                                            textField: 'name', instance: () => productObj, preserveEditor: true
+                                        }),
                                         filterBarPlaceholder: 'Tìm hàng hóa',
-                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, { textField: 'name' }),
                                         change: (e) => {
                                             const selectedProduct = getCurrentProductOptions().find(item => item.id === e.value)
                                                 ?? state.productListLookupData.find(item => item.id === e.value);
@@ -1922,7 +1924,7 @@ const App = {
                         });
                     },
                     actionBegin: (args) => {
-                        if (args.requestType !== 'save') {
+                        if (args.requestType !== 'save' || args.managedBatch !== true) {
                             return;
                         }
 
@@ -1930,7 +1932,8 @@ const App = {
                         applyPurchaseOrderItemAmounts(data);
                         if (!data.productId) {
                             args.cancel = true;
-                            Swal.fire({
+                            args.invalidField = 'productId';
+                            args.validationFeedback = Swal.fire({
                                 icon: 'warning',
                                 title: 'Thiếu thông tin bắt buộc',
                                 text: 'Vui lòng chọn hàng hóa trước khi lưu.',
@@ -1942,7 +1945,8 @@ const App = {
                         const selectedProduct = state.productListLookupData?.find(p => p.id === data.productId);
                         if (selectedProduct?.physical !== false && !data.warehouseId) {
                             args.cancel = true;
-                            Swal.fire({
+                            args.invalidField = 'warehouseId';
+                            args.validationFeedback = Swal.fire({
                                 icon: 'warning',
                                 title: 'Thiếu thông tin bắt buộc',
                                 text: 'Vui lòng chọn kho cho hàng hóa vật lý trước khi lưu.',
@@ -1951,9 +1955,22 @@ const App = {
                             return;
                         }
 
+                        if (!data.quantity || Number(data.quantity) <= 0) {
+                            args.cancel = true;
+                            args.invalidField = 'quantity';
+                            args.validationFeedback = Swal.fire({
+                                icon: 'warning',
+                                title: 'Thiếu thông tin bắt buộc',
+                                text: 'Số lượng phải lớn hơn 0.',
+                                confirmButtonText: 'Đồng ý'
+                            });
+                            return;
+                        }
+
                         if (!data.taxId) {
                             args.cancel = true;
-                            Swal.fire({
+                            args.invalidField = 'taxId';
+                            args.validationFeedback = Swal.fire({
                                 icon: 'warning',
                                 title: 'Thiếu thông tin bắt buộc',
                                 text: 'Vui lòng chọn thuế trước khi lưu.',
@@ -1962,21 +1979,11 @@ const App = {
                             return;
                         }
 
-                        if (!data.quantity || Number(data.quantity) <= 0) {
-                            args.cancel = true;
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Missing Required Information',
-                                text: 'Quantity must be greater than zero.',
-                                confirmButtonText: 'OK'
-                            });
-                            return;
-                        }
-
                         if (getSelectedProductIds(data.id ?? null).has(data.productId)) {
                             args.cancel = true;
+                            args.invalidField = 'productId';
                             const productName = state.productListLookupData?.find(p => p.id === data.productId)?.name ?? 'Hàng hóa này';
-                            Swal.fire({
+                            args.validationFeedback = Swal.fire({
                                 icon: 'warning',
                                 title: 'Hàng hóa bị trùng',
                                 text: `${productName} đã có trong đơn mua hàng. Mỗi hàng hóa chỉ được xuất hiện một lần trong một PO.`,
@@ -1986,7 +1993,8 @@ const App = {
                         }
                         if (!Number.isFinite(Number(data.unitPrice)) || Number(data.unitPrice) <= 0) {
                             args.cancel = true;
-                            Swal.fire({
+                            args.invalidField = 'unitPrice';
+                            args.validationFeedback = Swal.fire({
                                 icon: 'warning',
                                 title: 'Thiếu thông tin bắt buộc',
                                 text: 'Đơn giá phải lớn hơn 0 trước khi lưu.',
@@ -1999,7 +2007,8 @@ const App = {
                             const serials = (data.manufacturerSerialNumbers ?? args.rowData?.manufacturerSerialNumbers ?? []).map(x => String(x).trim()).filter(Boolean);
                             if (!serials.length || new Set(serials.map(x => x.toLowerCase())).size !== serials.length || serials.length !== Number(data.quantity)) {
                                 args.cancel = true;
-                                Swal.fire({ icon: 'warning', title: 'Invalid serial numbers', text: 'Enter unique, non-empty manufacturer serial numbers; quantity must equal the serial count.' });
+                                args.invalidField = 'manufacturerSerialNumbers';
+                                args.validationFeedback = Swal.fire({ icon: 'warning', title: 'Invalid serial numbers', text: 'Enter unique, non-empty manufacturer serial numbers; quantity must equal the serial count.' });
                                 return;
                             }
                             data.manufacturerSerialNumbers = serials;
@@ -2123,7 +2132,7 @@ const App = {
                     }
                 });
                 if (typeof GridInteractionManager !== 'undefined') {
-                    GridInteractionManager.track(secondaryGrid.obj, {
+                    GridInteractionManager.configureBatch(secondaryGrid.obj, {
                         afterPersist: async (changes) => {
                             await methods.populateSecondaryData(state.id);
 

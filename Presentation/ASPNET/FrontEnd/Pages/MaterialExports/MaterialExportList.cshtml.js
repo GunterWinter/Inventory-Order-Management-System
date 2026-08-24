@@ -364,7 +364,8 @@ const App = {
             },
             populateWarehouseListLookupData: async () => {
                 const response = await services.getWarehouseListLookupData();
-                state.warehouseListLookupData = response?.data?.content?.data || [];
+                state.warehouseListLookupData = response?.data?.content?.data
+                    ?.filter(warehouse => warehouse.systemWarehouse === false) ?? [];
             },
             populateCustomerListLookupData: async () => {
                 const response = await services.getCustomerListLookupData();
@@ -857,7 +858,7 @@ const App = {
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
                             requireWarehouse: true,
-                            allowEmptySelection: true
+                            allowEmptySelection: false
                         }),
                         {
                             field: 'movement',
@@ -938,22 +939,12 @@ const App = {
                         }
                     },
                     actionBegin: (args) => {
-                        if (args.requestType === 'save') {
+                        if (args.requestType === 'save' && args.managedBatch === true) {
                             if (!ProductSerialPicker.validateGridSave(args, {
                                 productListGetter: () => state.productListLookupData,
                                 quantityField: 'movement',
-                                allowEmptySelection: true
+                                allowEmptySelection: false
                             })) {
-                                return;
-                            }
-                            if (!args.data.productId) {
-                                args.cancel = true;
-                                Swal.fire({ icon: 'warning', title: 'Vui lòng chọn sản phẩm trước khi lưu.' });
-                                return;
-                            }
-                            if (!args.data.movement || args.data.movement <= 0) {
-                                args.cancel = true;
-                                Swal.fire({ icon: 'warning', title: 'Số lượng phải lớn hơn 0.' });
                                 return;
                             }
                             // Check against actual inventory stock

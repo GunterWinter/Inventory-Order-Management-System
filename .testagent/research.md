@@ -1,35 +1,20 @@
-# Research
+# Test research
 
-## Target inventory
+Date: 2026-08-25
 
-- `CashBalanceService`, cash transaction create/update/delete, sales/purchase payment commands, and their EF Core contexts/transactions.
-- Numeric domain/entities, EF configurations, document calculations, inventory movements, and financial/inventory reports.
-- Shared browser helpers: `grid-interaction-manager.js`, `number-format-manager.js`, `excel-import-manager.js`, and `ui-localization.js`.
-- Sales/Purchase item grids, cash transaction grid, list selection/deletion handlers, isolated Playwright runner, and browser guide.
-
-## Existing conventions
-
-- .NET 9 SDK-style solution with no persistent .NET test project. Repository rules require JavaScript tests plus the isolated Playwright suite and explicitly disallow retaining temporary application test projects.
-- JavaScript tests use Node's built-in `node:test`; browser tests use installed Playwright 1.54.2.
-- Vue 3 Composition API is embedded in CSHTML page scripts; cross-page behavior is centralized in plain JavaScript managers.
-- Browser tests must mutate only a disposable `WHMS_AntigravityTest_*` database and exercise behavior through the real UI.
+- Scope: Purchase Order Enter isolation, Cash Transaction allocation control/decimal input, Dashboard locale dates, and UI-first full-menu/lifecycle regression.
+- Root causes under test: shared grid Enter propagation through passive SweetAlert, unstable Vue allocation row keys plus incompletely hidden native selects, allocation input bypassing `NumberFormatManager`, and a Dashboard date column reparsing already-formatted text.
+- Runtime: Node `node:test`, Playwright, ASP.NET Core build/publish, and a disposable SQL database runner. Production/development databases are forbidden.
+- Required static source/test pairing was run once. It is unavailable because `tree-sitter-language-pack` is not installed; no parser dependency is added because executable browser and unit checks are authoritative for this change.
+- Existing Antigravity status/evidence is stale and must not be treated as acceptance evidence.
 
 ## Acceptance checklist
 
-- Lookup cells display product/tax/warehouse names rather than GUIDs after batch editing.
-- Sales Order displays live warehouse-specific available stock and prevents confirmed negative stock.
-- Cash payments use one EF transaction/context, never self-block, require an account for a positive delta, preserve immutable installment history, allow different accounts, and reject decreases.
-- Project material allocations remain non-cash costs and do not alter cash balances.
-- Non-serial quantities support six decimal places; serial quantities remain integers; VND line/tax totals round to whole dong.
-- Vietnamese number input/display is consistent across grids/forms/reports.
-- Future documents may be saved as Draft but cannot be confirmed; posted cash payments cannot use a future date.
-- Single-click row selection follows Windows semantics; double-click opens view; deletion clears stale selection; multi-delete is all-or-nothing wherever delete is offered.
-- Vietnamese is the default UI, English remains selectable, and import/export/PDF follow the active locale.
-- Excel templates contain Vietnamese instructions plus separate ignored example sheets; imports remain atomic and document imports remain Draft.
-- Regression commands finish cleanly: `npm.cmd run test:js`, `dotnet build Indotalent.sln --no-restore`, and `npm.cmd run test:browser:isolated`.
-
-## Static pairing result
-
-- Polyglot analyzer scanned 1,292 source files and 14 test files, reporting 142 statically paired sources and 1,150 unpaired sources.
-- Relevant shared managers already pair to neighboring JavaScript/browser tests, so those suites are the correct extension points.
-- The report is a static identifier/import heuristic, not evidence of line or branch coverage; vendor and temporary tooling files add noise.
+- A passive PO validation warning consumes Enter, closes only the warning, keeps the PO modal open, restores the invalid editor, and sends no item request.
+- Interactive Quick Add still owns Enter and never saves the unfinished parent batch.
+- Each allocation row has one visible searchable customer/project control; adding/removing rows preserves independent selections.
+- Allocation amounts accept and preserve Vietnamese decimal input up to six fractional digits and totals/payload use the parsed decimal value.
+- Dashboard recent sales and purchase dates render in the active locale and never show `Invalid Date` or weekday-formatted strings.
+- Browser regression navigates the real UI, records screenshots, checks all visible menu pages and document lifecycle states, and only uses API calls for read-only verification.
+- The isolated runner uses `WHMS_UiRegression_*`, sets `IsDemoVersion=true`, cleans up in `finally`, and promotes screenshots only after a successful run.
+- `docs/ANTIGRAVITY_BROWSER_TEST_GUIDE.md` and the API-heavy Antigravity chaos entrypoint are removed.

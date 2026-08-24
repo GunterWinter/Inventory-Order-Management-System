@@ -111,15 +111,20 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     const allocationDropdownState = await customerSelects.first().evaluate(select => {
         const dropdown = select.ej2_instances?.[0];
         const wrapper = dropdown?.inputWrapper?.container ?? dropdown?.element?.parentElement;
+        const visibleControls = [select, wrapper]
+            .filter(element => element && !element.hidden && getComputedStyle(element).display !== 'none').length;
         return {
             allowFiltering: dropdown?.allowFiltering,
             placeholder: dropdown?.filterBarPlaceholder,
-            wrapperVisible: !!wrapper && getComputedStyle(wrapper).display !== 'none'
+            wrapperVisible: !!wrapper && getComputedStyle(wrapper).display !== 'none',
+            nativeHidden: select.hidden && getComputedStyle(select).display === 'none',
+            visibleControls
         };
     });
     if (!allocationDropdownState.allowFiltering || allocationDropdownState.placeholder !== 'Tìm kiếm'
-        || !allocationDropdownState.wrapperVisible) {
-        throw new Error(`Allocation customer dropdown is not searchable: ${JSON.stringify(allocationDropdownState)}`);
+        || !allocationDropdownState.wrapperVisible || !allocationDropdownState.nativeHidden
+        || allocationDropdownState.visibleControls !== 1) {
+        throw new Error(`Each allocation row must have exactly one visible searchable dropdown: ${JSON.stringify(allocationDropdownState)}`);
     }
     const firstOptions = await customerSelects.nth(0).locator('option').evaluateAll(options => options
         .map(option => option.value)
@@ -131,8 +136,13 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     if (selectedCustomers.some(value => !value)) {
         throw new Error(`Customer allocation selection did not bind: ${JSON.stringify(selectedCustomers)}`);
     }
-    await allocationRows.nth(0).locator('input[type="number"]').fill('100000');
-    await allocationRows.nth(1).locator('input[type="number"]').fill('200000');
+    const allocationAmounts = allocationRows.locator('input[data-number-format="true"]');
+    await allocationAmounts.nth(0).fill('100000,123456');
+    await allocationAmounts.nth(1).fill('200000,654321');
+    const displayedAmounts = await allocationAmounts.evaluateAll(inputs => inputs.map(input => input.value));
+    if (displayedAmounts[0] !== '100.000,123456' || displayedAmounts[1] !== '200.000,654321') {
+        throw new Error(`Allocation decimals were not preserved in the Vietnamese UI: ${JSON.stringify(displayedAmounts)}`);
+    }
     await page.locator('#Description').fill(uniqueDescription);
 
     await page.evaluate(() => {
@@ -150,9 +160,9 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
 
     await page.evaluate(() => {
         const amount = document.querySelector('#AmountInput')?.ej2_instances?.[0];
-        amount.value = 300000;
+        amount.value = 300000.777777;
         amount.dataBind();
-        amount.change({ value: 300000 });
+        amount.change({ value: 300000.777777 });
     });
     const createResponsePromise = page.waitForResponse(response => response.url().includes('/api/CashTransaction/CreateCashTransaction'));
     await page.locator('#MainSaveButton').click();
@@ -162,6 +172,10 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         throw new Error(`Unable to create allocated receipt: ${createResponse.status()} ${JSON.stringify(createPayload)} Request: ${JSON.stringify(lastCreateRequest)}`);
     }
     createdTransactionId = createPayload?.content?.data?.id;
+    const createdAllocationAmounts = lastCreateRequest?.allocations?.map(row => row.amount) ?? [];
+    if (createdAllocationAmounts[0] !== 100000.123456 || createdAllocationAmounts[1] !== 200000.654321) {
+        throw new Error(`Allocation decimal payload changed scale: ${JSON.stringify(createdAllocationAmounts)}`);
+    }
     await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10000 });
 
     const createdListRow = await page.evaluate(async description => {
@@ -244,12 +258,12 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     await page.waitForSelector('#MainModal.show');
     await paidAmount.click();
     await paidAmount.press('Control+A');
-    await paidAmount.pressSequentially('300.000');
+    await paidAmount.pressSequentially('300.000,777777');
     await paidAmount.press('Tab');
     const fullResponsePromise = page.waitForResponse(response =>
         response.url().includes('/api/CashTransaction/UpdateCashTransaction'));
     await page.locator('#MainSaveButton').click();
-    if ((await fullResponsePromise).status() !== 200 || Number(lastUpdateRequest?.paidAmount) !== 300000) {
+    if ((await fullResponsePromise).status() !== 200 || Number(lastUpdateRequest?.paidAmount) !== 300000.777777) {
         throw new Error(`Full payment request failed: ${JSON.stringify(lastUpdateRequest)}`);
     }
     await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10000 });
@@ -257,7 +271,7 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         const response = await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
         return (response?.data?.content?.data ?? []).find(item => item.description === description) ?? null;
     }, uniqueDescription);
-    if (Number(fullTransaction?.paidAmount) !== 300000 || Number(fullTransaction?.status) !== 2) {
+    if (Number(fullTransaction?.paidAmount) !== 300000.777777 || Number(fullTransaction?.status) !== 2) {
         throw new Error(`Full payment was not persisted: ${JSON.stringify(fullTransaction)}`);
     }
     const paymentHistory = await page.evaluate(async id => (
@@ -265,7 +279,7 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
             ?.data?.content?.data ?? []
     ), fullTransaction.id);
     const paymentAmounts = paymentHistory.map(payment => Number(payment.amount));
-    if (paymentAmounts.length !== 2 || paymentAmounts[0] !== 200000.22 || paymentAmounts[1] !== 99999.78) {
+    if (paymentAmounts.length !== 2 || paymentAmounts[0] !== 200000.22 || paymentAmounts[1] !== 100000.557777) {
         throw new Error(`Payment installments are incorrect: ${JSON.stringify(paymentAmounts)}`);
     }
 
@@ -478,7 +492,10 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         expense: parseMoney(await page.locator('#TotalExpenseValue').textContent()),
         net: parseMoney(await page.locator('#NetCashFlowValue').textContent())
     };
-    if (cardValues.receipt !== report.rowReceipt || cardValues.expense !== report.rowExpense || cardValues.net !== report.rowNet) {
+    const sameDecimal = (left, right) => Number(left.toFixed(6)) === Number(right.toFixed(6));
+    if (!sameDecimal(cardValues.receipt, report.rowReceipt)
+        || !sameDecimal(cardValues.expense, report.rowExpense)
+        || !sameDecimal(cardValues.net, report.rowNet)) {
         throw new Error(`Category report cards do not reconcile with rows: ${JSON.stringify({ cardValues, report })}`);
     }
     if (!report.accountId) throw new Error('No cash account is available for the report filter test.');
@@ -510,18 +527,18 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
             toggleClasses: toggles.map(toggle => toggle.className)
         };
     });
-    if (!groupedState.groupColumns.length || !groupedState.toggleCount || groupedState.visibleRecordRows !== 0) {
-        throw new Error(`Grouped finance rows did not start collapsed: ${JSON.stringify(groupedState)}`);
+    if (!groupedState.groupColumns.length || !groupedState.toggleCount || groupedState.visibleRecordRows < 1) {
+        throw new Error(`Grouped finance rows did not stay visible: ${JSON.stringify(groupedState)}`);
     }
     await page.locator('#MainGrid [class*="e-recordplus"]').first().click();
     await page.waitForTimeout(150);
-    const afterSingleExpand = await page.evaluate(() => ({
+    const afterSingleToggle = await page.evaluate(() => ({
         visibleRecordRows: [...document.querySelectorAll('#MainGrid .e-content tr.e-row')]
             .filter(row => row.getClientRects().length > 0).length,
         toggleClasses: [...document.querySelectorAll('#MainGrid [class*="e-recordplus"]')].map(toggle => toggle.className)
     }));
-    if (afterSingleExpand.visibleRecordRows < 1) {
-        throw new Error(`Expanding one group changed other groups: ${JSON.stringify(afterSingleExpand)}`);
+    if (afterSingleToggle.visibleRecordRows < 1 || afterSingleToggle.visibleRecordRows >= groupedState.visibleRecordRows) {
+        throw new Error(`Collapsing one group changed all groups: ${JSON.stringify(afterSingleToggle)}`);
     }
 
     if (createdTransactionId) {
@@ -542,7 +559,7 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         reportGroups: groupedState.toggleCount,
         categoryTotals: cardValues,
         groupedState,
-        afterSingleExpand,
+        afterSingleToggle,
         paymentFromCashTransaction: true,
         sourcePaymentAccountEnabled: true,
         vendorGroupMultiDelete: true,

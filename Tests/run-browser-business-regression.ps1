@@ -1,32 +1,33 @@
 param(
     [int]$Port = 5127,
-    [string]$DatabaseName = ("WHMS_AntigravityTest_{0}" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    [string]$DatabaseName = ("WHMS_UiRegression_{0}" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
 )
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$databasePattern = '^WHMS_AntigravityTest_[A-Za-z0-9_]+$'
+$databasePattern = '^WHMS_UiRegression_[A-Za-z0-9_]+$'
 if ($DatabaseName -notmatch $databasePattern) {
-    throw "The test database must start with WHMS_AntigravityTest_ and contain only letters, numbers, or underscores."
+    throw 'The test database must start with WHMS_UiRegression_ and contain only letters, numbers, or underscores.'
 }
 
-$existingListener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
-if ($existingListener) {
-    throw "Port $Port is already in use; Antigravity cannot start safely."
+if (Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue) {
+    throw "Port $Port is already in use; the isolated browser runner cannot start safely."
 }
 
 $sqlcmd = Get-Command sqlcmd -ErrorAction SilentlyContinue
-if (-not $sqlcmd) {
-    throw 'sqlcmd was not found; the runner cannot guarantee cleanup of the test database.'
-}
+if (-not $sqlcmd) { throw 'sqlcmd was not found; safe test-database cleanup cannot be guaranteed.' }
 
 $runKey = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
-$artifactRoot = Join-Path $repositoryRoot 'artifacts'
-$runDirectory = Join-Path $artifactRoot "antigravity_$runKey"
-New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+$artifactRoot = Join-Path $repositoryRoot 'artifacts/browser-regression'
+$runDirectory = Join-Path $artifactRoot "runs/$runKey"
+$evidenceDirectory = Join-Path $runDirectory 'evidence'
+$latestDirectory = Join-Path $artifactRoot 'latest'
+$buildArtifacts = Join-Path $runDirectory 'build'
 $stdoutPath = Join-Path $runDirectory 'application.stdout.log'
 $stderrPath = Join-Path $runDirectory 'application.stderr.log'
-$buildArtifacts = Join-Path $runDirectory 'build'
+New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
 $appProcess = $null
 $testExitCode = 1
 $locationPushed = $false
@@ -35,10 +36,6 @@ $cleanupError = $null
 try {
     Push-Location $repositoryRoot
     $locationPushed = $true
-
-    # Rebuild project.assets.json without contacting NuGet. This is deterministic
-    # when the developer/CI machine has already restored the repository packages,
-    # and avoids signature endpoint failures during an otherwise --no-restore build.
     $offlineNuGetSource = Join-Path $runDirectory 'nuget-offline-source'
     New-Item -ItemType Directory -Force -Path $offlineNuGetSource | Out-Null
     & dotnet restore Indotalent.sln --artifacts-path $buildArtifacts --source $offlineNuGetSource --ignore-failed-sources -p:NuGetAudit=false
@@ -52,6 +49,7 @@ try {
     $env:IsDemoVersion = 'true'
     $env:ASPNETCORE_ENVIRONMENT = 'Development'
     $env:BASE_URL = "http://localhost:$Port"
+    $env:BROWSER_EVIDENCE_DIR = $evidenceDirectory
 
     $appProcess = Start-Process -FilePath dotnet `
         -ArgumentList @(Join-Path $buildArtifacts 'bin/ASPNET/debug/ASPNET.dll') `
@@ -64,9 +62,7 @@ try {
     $deadline = (Get-Date).AddSeconds(120)
     $ready = $false
     while ((Get-Date) -lt $deadline -and -not $ready) {
-        if ($appProcess.HasExited) {
-            throw "The test application exited early. See logs at $runDirectory."
-        }
+        if ($appProcess.HasExited) { throw "The test application exited early. See $runDirectory." }
         try {
             $response = Invoke-WebRequest -UseBasicParsing -Uri "$env:BASE_URL/Accounts/Login" -TimeoutSec 5
             $ready = $response.StatusCode -eq 200
@@ -93,17 +89,22 @@ try {
     }
 
     if ($locationPushed) { Pop-Location }
-    if ($testExitCode -eq 0) {
-        $resolvedRun = [System.IO.Path]::GetFullPath($runDirectory)
+    if ($testExitCode -eq 0 -and -not $cleanupError) {
         $resolvedArtifacts = [System.IO.Path]::GetFullPath($artifactRoot)
-        if ($resolvedRun.StartsWith($resolvedArtifacts, [System.StringComparison]::OrdinalIgnoreCase)) {
-            Remove-Item -LiteralPath $resolvedRun -Recurse -Force
+        $resolvedRun = [System.IO.Path]::GetFullPath($runDirectory)
+        $resolvedLatest = [System.IO.Path]::GetFullPath($latestDirectory)
+        if (-not $resolvedRun.StartsWith($resolvedArtifacts, [System.StringComparison]::OrdinalIgnoreCase) `
+            -or -not $resolvedLatest.StartsWith($resolvedArtifacts, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Resolved browser artifact paths escaped the intended artifact directory.'
         }
+        if (Test-Path -LiteralPath $resolvedLatest) { Remove-Item -LiteralPath $resolvedLatest -Recurse -Force }
+        Move-Item -LiteralPath $evidenceDirectory -Destination $resolvedLatest
+        Remove-Item -LiteralPath $resolvedRun -Recurse -Force
+        Write-Host "Latest successful browser screenshots: $resolvedLatest"
     } else {
         Write-Host "Failure artifacts retained at $runDirectory"
     }
 }
 
 if ($cleanupError) { throw $cleanupError }
-
 exit $testExitCode

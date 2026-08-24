@@ -4,6 +4,8 @@ const path = require('node:path');
 const test = require('node:test');
 
 const pagesRoot = path.resolve(__dirname, '../../Presentation/ASPNET/FrontEnd');
+const webProjectPath = path.resolve(__dirname, '../../Presentation/ASPNET/ASPNET.csproj');
+const programPath = path.resolve(__dirname, '../../Presentation/ASPNET/Program.cs');
 
 function findRazorFiles(directory) {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -33,4 +35,13 @@ test('local Razor assets use content-based cache versioning', () => {
 
     assert.deepEqual(missingVersion, [], 'Local assets must use asp-append-version="true".');
     assert.deepEqual(manualVersions, [], 'Use content hashes instead of manually maintained version query strings.');
+});
+
+test('IIS publish includes page scripts and serves them without stale caching', () => {
+    const project = fs.readFileSync(webProjectPath, 'utf8');
+    const program = fs.readFileSync(programPath, 'utf8');
+
+    assert.match(project, /Content Include="FrontEnd\\\*\*\\\*\.js" CopyToPublishDirectory="PreserveNewest"/);
+    assert.match(program, /RequestPath\s*=\s*"\/FrontEnd"/);
+    assert.match(program, /CacheControl\s*=\s*"no-cache, no-store, must-revalidate"/);
 });
