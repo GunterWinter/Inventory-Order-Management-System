@@ -143,24 +143,26 @@ async function assertItemGridUsable(page, pageName) {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
         grid.editCell(0, 'productId');
     });
-    // Resolve and open the Syncfusion editor in one browser task. During a Batch
-    // rebind the old input can be destroyed between a separate wait and evaluate.
-    await page.waitForFunction(() => {
-        if (document.querySelector('body > .e-ddl.e-popup.e-popup-open')) return true;
+    // Resolve, open and measure the current editor in one browser task. During a
+    // Batch rebind Syncfusion can replace the input or popup between separate calls.
+    const popupStateHandle = await page.waitForFunction(() => {
         const editor = document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')
             ?.ej2_instances?.[0];
         if (!editor || editor.isDestroyed) return false;
         editor.showPopup();
-        return Boolean(document.querySelector('body > .e-ddl.e-popup.e-popup-open'));
-    });
+        const popup = editor.popupObj?.element;
+        if (!popup?.classList.contains('e-popup-open')) return false;
 
-    const popup = page.locator('body > .e-ddl.e-popup.e-popup-open').last();
-    await popup.waitFor();
-    const popupState = await popup.evaluate(element => ({
-        items: element.querySelectorAll('.e-list-item').length,
-        popupZIndex: Number.parseInt(getComputedStyle(element).zIndex, 10) || 0,
-        modalZIndex: Number.parseInt(getComputedStyle(document.querySelector('#MainModal')).zIndex, 10) || 0
-    }));
+        const popupState = {
+            items: popup.querySelectorAll('.e-list-item').length,
+            popupZIndex: Number.parseInt(getComputedStyle(popup).zIndex, 10) || 0,
+            modalZIndex: Number.parseInt(getComputedStyle(document.querySelector('#MainModal')).zIndex, 10) || 0
+        };
+        return popupState.items > 0 && popupState.popupZIndex > popupState.modalZIndex
+            ? popupState
+            : false;
+    });
+    const popupState = await popupStateHandle.jsonValue();
     if (!popupState.items || popupState.popupZIndex <= popupState.modalZIndex) {
         throw new Error(`${pageName} Item dropdown is hidden behind the modal: ${JSON.stringify(popupState)}`);
     }

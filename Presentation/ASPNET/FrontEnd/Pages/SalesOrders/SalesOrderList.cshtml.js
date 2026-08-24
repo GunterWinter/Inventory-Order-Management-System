@@ -1354,6 +1354,8 @@ const App = {
                                         fields: { value: 'id', text: 'name' },
                                         value: normalizeLookupId(args.rowData.productId),
                                         allowFiltering: true,
+                                        filterBarPlaceholder: 'Tìm hàng hóa',
+                                        filtering: ProductDropdownSearch.createFilteringHandler(productOptions),
                                         change: (e) => {
                                             applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
                                         },

@@ -1359,6 +1359,9 @@ const App = {
                                         dataSource: productOptions,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
+                                        allowFiltering: true,
+                                        filterBarPlaceholder: 'Tìm hàng hóa',
+                                        filtering: ProductDropdownSearch.createFilteringHandler(productOptions),
                                         change: (e) => {
                                             const selectedProduct = productOptions.find(item => item.id === e.value)
                                                 ?? state.productListLookupData.find(item => item.id === e.value);

@@ -49,10 +49,48 @@ async function reloadAndReadItem(page, route, documentId) {
     return page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].dataSource[0]);
 }
 
+async function searchAndSelectProduct(page, searchText, expectedProductName) {
+    const editorSelector = '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist';
+    const editorSettings = await page.evaluate(selector => {
+        const dropdown = document.querySelector(selector)?.ej2_instances?.[0];
+        return {
+            allowFiltering: dropdown?.allowFiltering,
+            filterBarPlaceholder: dropdown?.filterBarPlaceholder
+        };
+    }, editorSelector);
+    expect(editorSettings).toEqual({
+        allowFiltering: true,
+        filterBarPlaceholder: 'Tìm hàng hóa'
+    });
+
+    await page.evaluate(selector => document.querySelector(selector).ej2_instances[0].showPopup(), editorSelector);
+    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+    await popup.waitFor({ state: 'visible' });
+    const options = popup.locator('.e-list-item');
+    await expect.poll(() => options.count()).toBeGreaterThan(0);
+    const initialOptionCount = await options.count();
+    const filterInput = popup.locator('.e-filter-parent input.e-input-filter');
+    await expect(filterInput).toHaveAttribute('placeholder', 'Tìm hàng hóa');
+
+    await filterInput.pressSequentially(searchText);
+    await expect(options).toHaveCount(1);
+    await expect(options.first()).toContainText(expectedProductName);
+
+    await filterInput.press('Control+A');
+    await filterInput.press('Backspace');
+    await expect.poll(() => options.count()).toBe(initialOptionCount);
+
+    await filterInput.pressSequentially(searchText);
+    await expect(options).toHaveCount(1);
+    await options.first().click();
+}
+
 test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ngay khi chọn hàng', async ({ monitoredPage: page }) => {
     let salesOrderId = null;
     let purchaseOrderId = null;
     const key = `E2E-PRICE-${Date.now()}`;
+    const productName = `Dây điện ${key}`;
+    const productSearchText = `DAY DIEN ${key.toUpperCase()}`;
     const expectedSalesPrice = 345000.75;
     const expectedCostPrice = 234000.25;
     const expectedOpeningStock = 2.5;
@@ -87,7 +125,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
 
     await page.locator('#AddCustom').click();
     await page.waitForSelector('#MainModal.show');
-    await page.locator('input[placeholder="Enter Name"]').fill(key);
+    await page.locator('input[placeholder="Enter Name"]').fill(productName);
     await page.locator('input[placeholder="Enter Reference Code (SKU/Custom)"]').fill(`${key}-REF`);
     const costPriceInput = page.locator('input[placeholder="Enter Cost Price"]');
     const salesPriceInput = page.locator('input[placeholder="Enter Unit Price"]');
@@ -175,10 +213,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.waitForFunction(() => Boolean(
         document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
     ));
-    await page.evaluate(() => document.querySelector(
-        '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist'
-    ).ej2_instances[0].showPopup());
-    await selectOpenDropdownOption(page, key);
+    await searchAndSelectProduct(page, productSearchText, productName);
 
     const salesRow = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -254,10 +289,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.waitForFunction(() => Boolean(
         document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
     ));
-    await page.evaluate(() => document.querySelector(
-        '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist'
-    ).ej2_instances[0].showPopup());
-    await selectOpenDropdownOption(page, key);
+    await searchAndSelectProduct(page, productSearchText, productName);
 
     const purchaseRow = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];

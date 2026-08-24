@@ -1,3 +1,13 @@
+const getOpeningStockWarehouseDisplay = (data) => {
+    if (!data) return '';
+
+    const openingWarehouseName = data.openingStockWarehouseName?.toString().trim();
+    if (openingWarehouseName) return openingWarehouseName;
+
+    if (!data.hasOpeningStockHistory) return '';
+    return data.defaultWarehouseName?.toString().trim() ?? '';
+};
+
 const App = {
     setup() {
         const state = Vue.reactive({
@@ -944,7 +954,14 @@ const App = {
                         { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
                         { field: 'internalSerialFixedCode', headerText: 'Device Code', width: 150, minWidth: 150 },
                         { field: 'openingStockQuantity', headerText: 'Opening Stock', width: 160, minWidth: 160, type: 'number', format: 'N2' },
-                        { field: 'openingStockWarehouseName', headerText: 'Opening Stock Warehouse', width: 220, minWidth: 220 },
+                        {
+                            field: 'openingStockWarehouseName',
+                            headerText: 'Opening Stock Warehouse',
+                            width: 220,
+                            minWidth: 220,
+                            type: 'string',
+                            valueAccessor: (_field, data) => getOpeningStockWarehouseDisplay(data)
+                        },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
                     ],
                     toolbar: [
