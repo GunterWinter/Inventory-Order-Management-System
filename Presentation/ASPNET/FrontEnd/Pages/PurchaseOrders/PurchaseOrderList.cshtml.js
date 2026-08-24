@@ -140,6 +140,21 @@ const App = {
                 }
             });
         };
+        const editNewPurchaseOrderProductCell = (temporaryId, attempt = 0) => {
+            const grid = secondaryGrid?.obj;
+            if (!grid || grid.isDestroyed) return;
+            const rowIndex = grid.getRowIndexByPrimaryKey?.(temporaryId) ?? -1;
+            const rowElement = rowIndex >= 0
+                ? (grid.getRowByIndex?.(rowIndex) ?? grid.getRows?.()[rowIndex])
+                : null;
+            if (rowIndex >= 0 && rowElement) {
+                grid.editCell(rowIndex, 'productId');
+                return;
+            }
+            if (attempt < 8) {
+                requestAnimationFrame(() => editNewPurchaseOrderProductCell(temporaryId, attempt + 1));
+            }
+        };
         const refreshPurchaseOrderItemAmountCells = (editorElement, row) => {
             const grid = secondaryGrid?.obj;
             const tableRow = editorElement?.closest?.('tr');
@@ -206,6 +221,9 @@ const App = {
             state.taxAmount = '0';
             state.totalAmount = '0';
             state.showComplexDiv = false;
+            productEditorRow = null;
+            productEditorElement = null;
+            warehouseEditorRow = null;
         };
 
         const services = {
@@ -419,7 +437,7 @@ const App = {
                     Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
                     return null;
                 }
-                return await QuickAddHelper.complexQuickAddVendor({
+                const created = await QuickAddHelper.complexQuickAddVendor({
                     dropdownObj: vendorListLookup.obj,
                     refreshLookup: methods.populateVendorListLookupData,
                     refreshLookups: [methods.populateWarehouseListLookupData],
@@ -427,6 +445,22 @@ const App = {
                     stateKey: 'vendorId',
                     lookupKey: 'vendorListLookupData'
                 });
+                if (created) {
+                    const currentSource = Array.isArray(vendorListLookup.obj?.dataSource)
+                        ? [...vendorListLookup.obj.dataSource]
+                        : [...(state.vendorListLookupData ?? [])];
+                    if (!currentSource.some(item => item.id === created.id)) {
+                        currentSource.push(created.data ?? created);
+                    }
+                    currentSource.sort((left, right) => String(left?.name ?? '').localeCompare(String(right?.name ?? '')));
+                    vendorListLookup.searchSource = currentSource;
+                    state.vendorListLookupData = currentSource;
+                    if (vendorListLookup.obj && vendorListLookup.obj.isDestroyed !== true) {
+                        vendorListLookup.obj.dataSource = currentSource;
+                        vendorListLookup.obj.dataBind();
+                    }
+                }
+                return created;
             },
             populateTaxListLookupData: async () => {
                 const response = await services.getTaxListLookupData();
@@ -660,6 +694,9 @@ const App = {
                 state.errors.vendorId = '';
                 state.errors.orderStatus = '';
                 state.isViewMode = false;
+                productEditorRow = null;
+                productEditorElement = null;
+                warehouseEditorRow = null;
             },
             populateCustomerListLookupData: async () => {
                 const response = await services.getCustomerListLookupData();
@@ -876,23 +913,21 @@ const App = {
 
         const vendorListLookup = {
             obj: null,
+            searchSource: [],
             create: () => {
                 if (state.vendorListLookupData && Array.isArray(state.vendorListLookupData)) {
+                    vendorListLookup.searchSource = [...state.vendorListLookupData]
+                        .sort((left, right) => String(left?.name ?? '').localeCompare(String(right?.name ?? '')));
                     vendorListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.vendorListLookupData,
+                        dataSource: vendorListLookup.searchSource,
                         fields: { value: 'id', text: 'name' },
                         placeholder: 'Select Vendor',
                         filterBarPlaceholder: 'Search',
-                        sortOrder: 'Ascending',
                         allowFiltering: true,
-                        filtering: (e) => {
-                            e.preventDefaultAction = true;
-                            let query = new ej.data.Query();
-                            if (e.text !== '') {
-                                query = query.where('name', 'startsWith', e.text, true);
-                            }
-                            e.updateData(state.vendorListLookupData, query);
-                        },
+                        filtering: DropdownSearchManager.createFilteringHandler(
+                            () => vendorListLookup.searchSource,
+                            { textField: 'name' }
+                        ),
                         change: (e) => {
                             state.vendorId = e.value;
                         }
@@ -1265,6 +1300,43 @@ const App = {
         let numberObj;
         let summaryObj;
         let supplierWarrantyObj;
+        let productEditorRow = null;
+        let productEditorElement = null;
+        let warehouseEditorRow = null;
+
+        const applyActiveProductSelection = (productId) => {
+            if (!productEditorRow) return null;
+            const defaults = applyPurchaseOrderProductDefaults(productEditorRow, productId, true);
+            if (!defaults) return null;
+
+            writePurchaseOrderBatchFields(productEditorRow, defaults, productEditorElement);
+            if (warehouseObj) {
+                warehouseObj.value = productEditorRow.warehouseId;
+                warehouseObj.dataBind();
+            }
+            if (numberObj) {
+                numberObj.value = productEditorRow.productNumber;
+                numberObj.dataBind();
+            }
+            if (priceObj) {
+                priceObj.value = productEditorRow.unitPrice;
+                priceObj.dataBind();
+            }
+            if (summaryObj) {
+                summaryObj.value = productEditorRow.summary;
+                summaryObj.dataBind();
+            }
+            if (quantityObj) {
+                quantityObj.value = productEditorRow.quantity;
+                quantityObj.dataBind();
+            }
+            refreshPurchaseOrderItemAmountCells(productEditorElement, productEditorRow);
+            if (supplierWarrantyObj) {
+                supplierWarrantyObj.value = productEditorRow.supplierWarrantyMonths;
+                supplierWarrantyObj.dataBind();
+            }
+            return defaults;
+        };
 
         const getSerialTrackingMode = (productId) => Number(state.productListLookupData.find(p => p.id === productId)?.serialTrackingMode ?? 0);
         const isManufacturerSerialProduct = (productId) => {
@@ -1351,48 +1423,27 @@ const App = {
                                     return productObj.value;
                                 },
                                 destroy: () => {
-                                    productObj.destroy();
+                                    productObj?.destroy();
+                                    productObj = null;
+                                    productEditorElement = null;
                                 },
                                 write: (args) => {
-                                    const productOptions = getSelectableProductOptions(args.rowData);
+                                    productEditorRow = args.rowData;
+                                    productEditorElement = args.element;
+                                    const getCurrentProductOptions = () => getSelectableProductOptions(args.rowData);
+                                    const productOptions = getCurrentProductOptions();
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: productOptions,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         allowFiltering: true,
                                         filterBarPlaceholder: 'Tìm hàng hóa',
-                                        filtering: DropdownSearchManager.createFilteringHandler(productOptions, { textField: 'name' }),
+                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, { textField: 'name' }),
                                         change: (e) => {
-                                            const selectedProduct = productOptions.find(item => item.id === e.value)
+                                            const selectedProduct = getCurrentProductOptions().find(item => item.id === e.value)
                                                 ?? state.productListLookupData.find(item => item.id === e.value);
                                             if (selectedProduct) {
-                                                const defaults = applyPurchaseOrderProductDefaults(args.rowData, selectedProduct.id, true);
-                                                writePurchaseOrderBatchFields(args.rowData, defaults, args.element);
-                                                if (warehouseObj) {
-                                                    warehouseObj.value = args.rowData.warehouseId;
-                                                    warehouseObj.dataBind();
-                                                }
-                                                if (numberObj) {
-                                                    numberObj.value = args.rowData.productNumber;
-                                                    numberObj.dataBind();
-                                                }
-                                                if (priceObj) {
-                                                    priceObj.value = args.rowData.unitPrice;
-                                                    priceObj.dataBind();
-                                                }
-                                                if (summaryObj) {
-                                                    summaryObj.value = args.rowData.summary;
-                                                    summaryObj.dataBind();
-                                                }
-                                                if (quantityObj) {
-                                                    quantityObj.value = args.rowData.quantity;
-                                                    quantityObj.dataBind();
-                                                }
-                                                refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
-                                                if (supplierWarrantyObj) {
-                                                    supplierWarrantyObj.value = args.rowData.supplierWarrantyMonths;
-                                                    supplierWarrantyObj.dataBind();
-                                                }
+                                                applyActiveProductSelection(selectedProduct.id);
                                             }
                                         },
                                         placeholder: 'Select Product',
@@ -1427,12 +1478,19 @@ const App = {
                                     }
                                 },
                                 write: (args) => {
+                                    warehouseEditorRow = args.rowData;
                                     const selectedProduct = state.productListLookupData?.find(p => p.id === args.rowData.productId);
                                     warehouseObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.warehouseListLookupData,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.warehouseId ?? null,
                                         allowFiltering: true,
+                                        filtering: DropdownSearchManager.createFilteringHandler(
+                                            () => Array.isArray(warehouseObj?.dataSource)
+                                                ? warehouseObj.dataSource
+                                                : state.warehouseListLookupData,
+                                            { textField: 'name' }
+                                        ),
                                         showClearButton: true,
                                         placeholder: 'Select Warehouse',
                                         change: (e) => {
@@ -1782,7 +1840,7 @@ const App = {
                                 manufacturerSerialNumbers: [],
                                 summary: ''
                             }, 0);
-                            requestAnimationFrame(() => secondaryGrid.obj.editCell(0, 'productId'));
+                            requestAnimationFrame(() => editNewPurchaseOrderProductCell(temporaryId));
                             return;
                         }
 
@@ -1808,11 +1866,21 @@ const App = {
                                 stateKey: null,
                                 lookupKey: 'warehouseListLookupData'
                             });
-                            if (created && warehouseObj && warehouseObj.isDestroyed !== true) {
-                                warehouseObj.dataSource = state.warehouseListLookupData;
-                                warehouseObj.dataBind();
-                                warehouseObj.value = created.id;
-                                warehouseObj.dataBind();
+                            if (created && warehouseEditorRow) {
+                                const selectedProduct = state.productListLookupData.find(item => item.id === warehouseEditorRow?.productId);
+                                const warehouseEnabled = selectedProduct?.physical !== false;
+                                if (warehouseObj && warehouseObj.isDestroyed !== true) {
+                                    warehouseObj.dataSource = state.warehouseListLookupData;
+                                    warehouseObj.enabled = warehouseEnabled;
+                                    warehouseObj.dataBind();
+                                    warehouseObj.value = warehouseEnabled ? created.id : null;
+                                    warehouseObj.dataBind();
+                                }
+                                warehouseEditorRow.warehouseId = warehouseEnabled ? created.id : null;
+                                warehouseEditorRow.warehouseName = warehouseEnabled ? created.name : '';
+                                writePurchaseOrderBatchFields(warehouseEditorRow, {
+                                    warehouseId: warehouseEditorRow.warehouseId
+                                });
                             }
                         }
 
@@ -1827,11 +1895,14 @@ const App = {
                                 state: state,
                                 lookupKey: 'productListLookupData'
                             });
-                            if (created && productObj && productObj.isDestroyed !== true) {
-                                productObj.dataSource = state.productListLookupData;
-                                productObj.dataBind();
-                                productObj.value = created.id;
-                                productObj.dataBind();
+                            if (created && productEditorRow) {
+                                if (productObj && productObj.isDestroyed !== true) {
+                                    productObj.dataSource = getSelectableProductOptions(productEditorRow);
+                                    productObj.dataBind();
+                                    productObj.value = created.id;
+                                    productObj.dataBind();
+                                }
+                                applyActiveProductSelection(created.id);
                             }
                         }
                     },

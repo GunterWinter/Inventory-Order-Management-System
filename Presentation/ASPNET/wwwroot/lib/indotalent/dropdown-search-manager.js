@@ -50,7 +50,9 @@
     const createFilteringHandler = (source, options = {}) => {
         const handler = event => {
             event.preventDefaultAction = true;
-            event.updateData(filterItems(source, event.text, options.textField || 'name'));
+            const filtered = filterItems(source, event.text, options.textField || 'name');
+            const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
+            event.updateData(filtered, query);
         };
         handler.__dropdownSearchManagerHandler = true;
         return handler;
@@ -86,7 +88,8 @@
                 updateCalled = true;
                 if (Array.isArray(source)) {
                     event.preventDefaultAction = true;
-                    return originalUpdateData(filterItems(source, event.text, getTextField(instance)));
+                    const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
+                    return originalUpdateData(filterItems(source, event.text, getTextField(instance)), query);
                 }
                 return originalUpdateData(source, query, fields);
             };
@@ -95,7 +98,8 @@
                 const result = existingHandler.call(this, event);
                 if (!updateCalled && Array.isArray(instance.dataSource)) {
                     event.preventDefaultAction = true;
-                    originalUpdateData(filterItems(instance.dataSource, event.text, getTextField(instance)));
+                    const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
+                    originalUpdateData(filterItems(instance.dataSource, event.text, getTextField(instance)), query);
                 }
                 return result;
             } finally {
@@ -113,7 +117,8 @@
         const handler = event => {
             const source = Array.isArray(instance.dataSource) ? instance.dataSource : [];
             event.preventDefaultAction = true;
-            event.updateData(filterItems(source, event.text, getTextField(instance)));
+            const query = typeof root?.ej?.data?.Query === 'function' ? new root.ej.data.Query() : undefined;
+            event.updateData(filterItems(source, event.text, getTextField(instance)), query);
         };
         handler.__dropdownSearchManagerHandler = true;
         instance.filtering = handler;
@@ -184,6 +189,13 @@
         const record = nativeInstances.get(select);
         if (!record) return enhanceNativeSelect(select, select?.ownerDocument?.defaultView ?? root);
 
+        const activeElement = record.context?.document?.activeElement;
+        const inputContainer = record.instance?.inputWrapper?.container;
+        const ownedFocus = !!activeElement && (
+            activeElement === record.host
+            || record.host?.contains?.(activeElement)
+            || inputContainer?.contains?.(activeElement)
+        );
         record.syncing = true;
         try {
             record.instance.dataSource = optionDataSource(select);
@@ -193,6 +205,9 @@
             record.instance.dataBind?.();
         } finally {
             record.syncing = false;
+        }
+        if (ownedFocus && activeElement?.isConnected !== false && record.context?.document?.activeElement !== activeElement) {
+            try { activeElement.focus?.({ preventScroll: true }); } catch (e) { activeElement.focus?.(); }
         }
         return record.instance;
     };
@@ -340,6 +355,11 @@
                         if (select.isConnected === false) destroyNativeSelect(select);
                     });
                 });
+
+                const ownerSelect = mutation.target?.matches?.(NATIVE_SELECT_SELECTOR)
+                    ? mutation.target
+                    : mutation.target?.closest?.(NATIVE_SELECT_SELECTOR);
+                if (ownerSelect && nativeInstances.has(ownerSelect)) selectsToRefresh.add(ownerSelect);
 
             });
             if (selectsToRefresh.size) queueRefresh(context, selectsToRefresh);

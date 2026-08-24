@@ -28,7 +28,7 @@ Lệnh tổng hợp chạy lần lượt:
 
 - `npm.cmd run test:browser`: Dashboard, chứng từ, bảo hành, lợi nhuận công trình và công nợ.
 - `npm.cmd run test:browser:documents`: modal SO/PO, chuyển thật EN/VI rồi chọn ngày chứng từ ở cả hai ngôn ngữ, hiển thị/cuộn Item grid và xác nhận mọi dropdown Item có ô tìm kiếm đúng ngôn ngữ.
-- `npm.cmd run test:browser:sales-items`: tạo Product có tồn đầu kỳ hoàn toàn qua UI, xác nhận giá/tồn sau lưu, chọn Product trong SO/PO và thấy giá ngay trước Enter, sau đó chọn thuế, lưu và reload item đúng giá.
+- `npm.cmd run test:browser:sales-items`: tạo Product có tồn đầu kỳ hoàn toàn qua UI, xác nhận giá/tồn sau lưu, chọn Product trong SO/PO và thấy giá ngay trước Enter, sau đó chọn thuế, lưu và reload item đúng giá. Gate này cũng chạy Quick Add Product/Group/Warehouse, tìm lại bản ghi mới trên chính dropdown đang edit và kiểm tra placeholder EN/VI.
 - `npm.cmd run test:browser:gate:purchase-sales`: alias chạy riêng gate Product/PO/SO ở trên; chỉ dùng khi ứng dụng đã chạy trên database test cô lập.
 - `npm.cmd run test:browser:cash`: phân bổ Thu/Chi, dropdown động và popup thanh toán có tìm kiếm, báo cáo Thu Chi Theo Danh Mục, localization và trạng thái đóng/mở grid gom nhóm.
 - `npm.cmd run test:browser:files`: tồn đầu kỳ Product, Import/Export Excel song ngữ, rollback toàn workbook và tải/đọc file PDF thật.

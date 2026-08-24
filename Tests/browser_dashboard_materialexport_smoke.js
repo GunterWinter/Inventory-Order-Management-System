@@ -40,7 +40,10 @@ const { chromium } = require('playwright');
     const dashboardScriptUrl = await page.evaluate(() => performance.getEntriesByType('resource')
         .map(item => item.name)
         .find(url => url.includes('/FrontEnd/Pages/Dashboards/DefaultDashboard.cshtml.js')) || '');
-    if (!/[?&]v=\d+/.test(dashboardScriptUrl)) throw new Error(`Dashboard script is not versioned: ${dashboardScriptUrl}`);
+    const dashboardAssetVersion = dashboardScriptUrl
+        ? new URL(dashboardScriptUrl).searchParams.get('v')
+        : '';
+    if (!dashboardAssetVersion) throw new Error(`Dashboard script is not versioned: ${dashboardScriptUrl}`);
     if (await page.locator('#DashboardBootError:visible').count()) throw new Error('Dashboard boot error is visible during normal load.');
     if (await page.locator('.dashboard-kpi').count() < 7) throw new Error('Dashboard KPI cards did not render.');
 

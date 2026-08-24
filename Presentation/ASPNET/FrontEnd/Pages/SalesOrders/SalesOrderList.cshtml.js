@@ -457,7 +457,7 @@ const App = {
                     Swal.fire({ icon: 'error', title: 'Quick Add is unavailable' });
                     return null;
                 }
-                return await QuickAddHelper.complexQuickAddCustomer({
+                const created = await QuickAddHelper.complexQuickAddCustomer({
                     dropdownObj: customerListLookup.obj,
                     refreshLookup: methods.populateCustomerListLookupData,
                     refreshLookups: [methods.populateWarehouseListLookupData],
@@ -465,6 +465,22 @@ const App = {
                     stateKey: 'customerId',
                     lookupKey: 'customerListLookupData'
                 });
+                if (created) {
+                    const currentSource = Array.isArray(customerListLookup.obj?.dataSource)
+                        ? [...customerListLookup.obj.dataSource]
+                        : [...(state.customerListLookupData ?? [])];
+                    if (!currentSource.some(item => item.id === created.id)) {
+                        currentSource.push(created.data ?? created);
+                    }
+                    currentSource.sort((left, right) => String(left?.name ?? '').localeCompare(String(right?.name ?? '')));
+                    customerListLookup.searchSource = currentSource;
+                    state.customerListLookupData = currentSource;
+                    if (customerListLookup.obj && customerListLookup.obj.isDestroyed !== true) {
+                        customerListLookup.obj.dataSource = currentSource;
+                        customerListLookup.obj.dataBind();
+                    }
+                }
+                return created;
             },
             populateTaxListLookupData: async () => {
                 const response = await services.getTaxListLookupData();
@@ -780,23 +796,21 @@ const App = {
 
         const customerListLookup = {
             obj: null,
+            searchSource: [],
             create: () => {
                 if (state.customerListLookupData && Array.isArray(state.customerListLookupData)) {
+                    customerListLookup.searchSource = [...state.customerListLookupData]
+                        .sort((left, right) => String(left?.name ?? '').localeCompare(String(right?.name ?? '')));
                     customerListLookup.obj = new ej.dropdowns.DropDownList({
-                        dataSource: state.customerListLookupData,
+                        dataSource: customerListLookup.searchSource,
                         fields: { value: 'id', text: 'name' },
                         placeholder: 'Chọn khách hàng',
                         filterBarPlaceholder: 'Search',
-                        sortOrder: 'Ascending',
                         allowFiltering: true,
-                        filtering: (e) => {
-                            e.preventDefaultAction = true;
-                            let query = new ej.data.Query();
-                            if (e.text !== '') {
-                                query = query.where('name', 'startsWith', e.text, true);
-                            }
-                            e.updateData(state.customerListLookupData, query);
-                        },
+                        filtering: DropdownSearchManager.createFilteringHandler(
+                            () => customerListLookup.searchSource,
+                            { textField: 'name' }
+                        ),
                         change: (e) => {
                             state.customerId = e.value;
                         }
@@ -1281,7 +1295,8 @@ const App = {
                                     }
                                 },
                                 write: (args) => {
-                                    const productOptions = getSelectableProductOptions(args.rowData);
+                                    const getCurrentProductOptions = () => getSelectableProductOptions(args.rowData);
+                                    const productOptions = getCurrentProductOptions();
                                     const resolveSelectedProduct = (valueOrItem) => {
                                         if (!valueOrItem) {
                                             return null;
@@ -1292,7 +1307,7 @@ const App = {
                                         }
 
                                         const productId = normalizeLookupId(valueOrItem);
-                                        return productOptions.find(item => normalizeLookupId(item.id) === productId)
+                                        return getCurrentProductOptions().find(item => normalizeLookupId(item.id) === productId)
                                             ?? state.productListLookupData.find(item => normalizeLookupId(item.id) === productId);
                                     };
                                     const applyProductSelection = (selectedProduct) => {
@@ -1355,7 +1370,7 @@ const App = {
                                         value: normalizeLookupId(args.rowData.productId),
                                         allowFiltering: true,
                                         filterBarPlaceholder: 'Tìm hàng hóa',
-                                        filtering: DropdownSearchManager.createFilteringHandler(productOptions, { textField: 'name' }),
+                                        filtering: DropdownSearchManager.createFilteringHandler(getCurrentProductOptions, { textField: 'name' }),
                                         change: (e) => {
                                             applyProductSelection(resolveSelectedProduct(e.itemData ?? e.value));
                                         },

@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const search = require('../../Presentation/ASPNET/wwwroot/lib/indotalent/dropdown-search-manager.js');
 
@@ -38,6 +40,63 @@ test('filtering handler resolves a dynamic source at search time', () => {
     assert.strictEqual(updatedProducts, eligibleProducts);
 });
 
+test('filtering handler uses the replaced eligible source and restores it when the keyword is cleared', () => {
+    let eligibleProducts = products.slice(0, 2);
+    const handler = search.createFilteringHandler(() => eligibleProducts, { textField: 'name' });
+    let updatedProducts = null;
+
+    eligibleProducts = [products[1], { id: 'product-4', name: 'Máy bơm Tân Tiến' }];
+    handler({ text: 'tan tien', updateData: value => { updatedProducts = value; } });
+    assert.deepEqual(updatedProducts.map(item => item.id), ['product-4']);
+
+    handler({ text: '', updateData: value => { updatedProducts = value; } });
+    assert.strictEqual(updatedProducts, eligibleProducts);
+    assert.equal(updatedProducts.some(item => item.id === 'product-1'), false);
+});
+
+test('PO and SO product editors pass a live eligible-source callback to the shared handler', () => {
+    const pageFiles = [
+        'PurchaseOrders/PurchaseOrderList.cshtml.js',
+        'SalesOrders/SalesOrderList.cshtml.js'
+    ];
+
+    pageFiles.forEach(relativeFile => {
+        const source = fs.readFileSync(path.resolve(__dirname,
+            `../../Presentation/ASPNET/FrontEnd/Pages/${relativeFile}`), 'utf8');
+        assert.match(source,
+            /createFilteringHandler\(getCurrentProductOptions,\s*\{\s*textField:\s*'name'\s*\}\)/,
+            `${relativeFile} must resolve the eligible product source at search time.`);
+        assert.doesNotMatch(source,
+            /createFilteringHandler\(productOptions,\s*\{\s*textField:\s*'name'\s*\}\)/,
+            `${relativeFile} must not keep the pre-Quick-Add product snapshot.`);
+    });
+});
+
+test('PO Add opens the product editor by the new temporary row id instead of a fixed row index', () => {
+    const poSource = fs.readFileSync(
+        path.join(__dirname, '../../Presentation/ASPNET/FrontEnd/Pages/PurchaseOrders/PurchaseOrderList.cshtml.js'),
+        'utf8'
+    );
+
+    assert.match(poSource, /getRowIndexByPrimaryKey\?\.\(temporaryId\)/);
+    assert.match(poSource, /editNewPurchaseOrderProductCell\(temporaryId\)/);
+    assert.doesNotMatch(poSource, /secondaryGrid\.obj\.editCell\(0,\s*['"]productId['"]\)/);
+});
+
+test('PO vendor and SO customer Quick Add lookups filter against the refreshed live source', () => {
+    const poSource = fs.readFileSync(
+        path.join(__dirname, '../../Presentation/ASPNET/FrontEnd/Pages/PurchaseOrders/PurchaseOrderList.cshtml.js'),
+        'utf8'
+    );
+    const soSource = fs.readFileSync(
+        path.join(__dirname, '../../Presentation/ASPNET/FrontEnd/Pages/SalesOrders/SalesOrderList.cshtml.js'),
+        'utf8'
+    );
+
+    assert.match(poSource, /createFilteringHandler\(\s*\(\) => vendorListLookup\.searchSource/);
+    assert.match(soSource, /createFilteringHandler\(\s*\(\) => customerListLookup\.searchSource/);
+});
+
 test('global Syncfusion integration enables search and preserves a custom source callback', () => {
     function DropDownList(options = {}) { Object.assign(this, options); }
     DropDownList.prototype.appendTo = function (host) { this.host = host; };
@@ -74,22 +133,37 @@ test('global Syncfusion integration enables search and preserves a custom source
     assert.equal(dropdown.bound, true);
 });
 
-test('native select enhancement keeps the original value and change contract', () => {
+test('native select enhancement keeps value, disabled state, focus and refreshed options', async () => {
+    let observedMutations = null;
+    let fakeDocument = null;
     function DropDownList(options = {}) { Object.assign(this, options); }
     DropDownList.prototype.appendTo = function (host) {
         this.host = host;
         host.ej2_instances = [this];
     };
-    DropDownList.prototype.dataBind = function () { this.boundValue = this.value; };
+    DropDownList.prototype.dataBind = function () {
+        this.boundValue = this.value;
+        if (this.dropFocusOnBind && fakeDocument) fakeDocument.activeElement = null;
+    };
     DropDownList.prototype.destroy = function () { this.destroyed = true; };
 
     const listeners = {};
     let dispatchedChange = null;
+    class MutationObserver {
+        constructor(callback) { observedMutations = callback; }
+        observe() { }
+    }
+    fakeDocument = {
+        querySelectorAll: () => [],
+        documentElement: { lang: 'vi' },
+        activeElement: null
+    };
     const context = {
-        document: { querySelectorAll: () => [], documentElement: { lang: 'vi' } },
+        document: fakeDocument,
         ej: { dropdowns: { DropDownList } },
         UiLocalization: { getLocale: () => 'vi' },
         Event: class Event { constructor(type) { this.type = type; } },
+        MutationObserver,
         addEventListener() { }
     };
     const select = {
@@ -103,6 +177,10 @@ test('native select enhancement keeps the original value and change contract', (
             { value: 'cash', textContent: 'Ti\u1ec1n m\u1eb7t', disabled: false },
             { value: 'bank', textContent: 'Ng\u00e2n h\u00e0ng', disabled: false }
         ],
+        matches: selector => selector === 'select[data-searchable-dropdown]',
+        closest: selector => selector === 'select[data-searchable-dropdown]' ? select : null,
+        contains: element => element === select,
+        focus: () => { fakeDocument.activeElement = select; },
         addEventListener: (name, handler) => { listeners[name] = handler; },
         removeEventListener: name => { delete listeners[name]; },
         dispatchEvent: event => {
@@ -123,4 +201,17 @@ test('native select enhancement keeps the original value and change contract', (
     select.value = 'cash';
     listeners.change();
     assert.equal(dropdown.boundValue, 'cash');
+
+    select.options.push({ value: 'wallet', textContent: 'Ví điện tử', disabled: false });
+    dropdown.dropFocusOnBind = true;
+    select.disabled = true;
+    select.value = 'wallet';
+    fakeDocument.activeElement = select;
+    observedMutations([{ type: 'childList', target: select, addedNodes: [], removedNodes: [] }]);
+    await Promise.resolve();
+
+    assert.equal(dropdown.value, 'wallet');
+    assert.equal(dropdown.enabled, false);
+    assert.equal(dropdown.dataSource.some(item => item.value === 'wallet'), true);
+    assert.strictEqual(fakeDocument.activeElement, select);
 });

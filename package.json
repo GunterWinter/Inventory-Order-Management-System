@@ -5,7 +5,7 @@
     "test:js": "node --test Tests/JavaScript/*.test.js",
     "test:browser": "node Tests/browser_dashboard_materialexport_smoke.js",
     "test:browser:documents": "node Tests/browser_document_modal_controls_smoke.js",
-    "test:browser:sales-items": "playwright test Tests/Browser/product-purchase-sales.spec.js",
+    "test:browser:sales-items": "playwright test Tests/Browser/product-purchase-sales.spec.js Tests/Browser/quick-add-product.spec.js",
     "test:browser:gate:purchase-sales": "npm run test:browser:sales-items",
     "test:browser:cash": "node Tests/browser_cash_category_report_smoke.js",
     "test:browser:ui": "playwright test Tests/Browser/responsive-shell.spec.js",
