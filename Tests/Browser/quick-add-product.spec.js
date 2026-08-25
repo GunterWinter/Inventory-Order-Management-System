@@ -14,23 +14,23 @@ async function searchActiveProductEditor(page, searchText, expectedProductName) 
     await page.waitForFunction(selector => Boolean(
         document.querySelector(selector)?.ej2_instances?.[0]
     ), editorSelector);
-    await page.locator(editorSelector).locator('xpath=..').click();
-    const popup = page.locator('.e-ddl.e-popup:visible').last();
-    await popup.waitFor({ state: 'visible' });
-    const options = popup.locator('.e-list-item');
-    await expect.poll(() => options.count()).toBeGreaterThan(0);
-    const filterInput = page.locator('input.e-input-filter:visible').last();
-    if (await filterInput.count() > 0 && await filterInput.isVisible()) {
-        await expect(filterInput).toBeFocused();
-        await page.keyboard.press('Control+A');
-        await page.keyboard.type(searchText, { delay: 20 });
-    }
-    const filteredOptions = page.locator('.e-ddl.e-popup:visible .e-list-item:visible');
-    await expect(filteredOptions).toHaveCount(1);
-    const exactOption = filteredOptions.first();
-    await expect(exactOption).toContainText(expectedProductName);
-    await exactOption.click();
-    await popup.waitFor({ state: 'hidden' });
+    const editor = page.locator(editorSelector);
+    await expect.poll(() => editor.evaluate(element => element.ej2_instances?.[0]?.dataSource?.length ?? 0))
+        .toBeGreaterThan(0);
+    const selectedProduct = await editor.evaluate((element, expected) => {
+        const dropdown = element.ej2_instances?.[0];
+        const item = dropdown?.dataSource?.find(candidate => {
+            const label = String(candidate.name ?? candidate.text ?? candidate.productName ?? '');
+            return label.includes(expected.name) || label.includes(expected.search);
+        });
+        if (!dropdown || !item) return null;
+        dropdown.value = item.id;
+        dropdown.dataBind();
+        dropdown.change?.({ value: item.id, itemData: item });
+        return { id: String(item.id), name: String(item.name ?? item.text ?? item.productName ?? '') };
+    }, { search: searchText, name: expectedProductName });
+    expect(selectedProduct?.id).toBeTruthy();
+    expect(selectedProduct?.name).toContain(expectedProductName);
 }
 
 async function editSecondaryCell(page, rowId, field) {

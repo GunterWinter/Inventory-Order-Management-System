@@ -51,3 +51,33 @@ test('formats accounting money with Vietnamese grouping and a decimal comma', ()
     assert.equal(manager.formatMoneyToLocale(10000000), '10.000.000');
     assert.equal(manager.formatMoneyToLocale(12350.231), '12.350,231');
 });
+
+test('handles negative, empty and six-digit Vietnamese decimals', () => {
+    const manager = loadManager();
+
+    assert.equal(manager.parseLocaleNumber('1.234'), 1234);
+    assert.equal(manager.parseLocaleNumber('1.234,56'), 1234.56);
+    assert.equal(manager.parseLocaleNumber('0,25'), 0.25);
+    assert.equal(manager.parseLocaleNumber('-1.234,5'), -1234.5);
+    assert.equal(manager.parseLocaleNumber('2,1234567'), 2.123456);
+    assert.equal(manager.parseLocaleNumber(12.5), 12.5);
+    assert.equal(manager.parseLocaleNumber(''), null);
+    assert.equal(manager.parseLocaleNumber('không phải số'), null);
+});
+
+test('explicit numeric policies distinguish money decimals and integers', () => {
+    const manager = loadManager();
+    const money = {};
+    const integer = {};
+
+    manager.configureNumericTextBox(money, { kind: manager.numericKind.money, step: 0.01 });
+    manager.configureNumericTextBox(integer, { kind: manager.numericKind.integer, min: 0 });
+
+    assert.equal(money.format, 'n6');
+    assert.equal(money.decimals, 6);
+    assert.equal(money.step, 0.01);
+    assert.equal(integer.format, 'n0');
+    assert.equal(integer.decimals, 0);
+    assert.equal(integer.validateDecimalOnType, true);
+    assert.equal(manager.createGridValueAccessor(manager.numericKind.money)('amount', { amount: 1234.5 }), '1.234,5');
+});

@@ -32,6 +32,11 @@ const { chromium } = require('playwright');
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 15000 });
     await page.waitForSelector('.dashboard-hero');
     await page.waitForSelector('.e-grid');
+    await page.waitForFunction(() => {
+        const panels = [...document.querySelectorAll('.dashboard-panel')];
+        const rowCount = index => panels[index]?.querySelectorAll('.e-row').length ?? 0;
+        return rowCount(0) + rowCount(1) > 0 && rowCount(2) > 0;
+    }, null, { timeout: 15000 });
     const defaultLocale = await page.evaluate(() => UiLocalization.getLocale());
     if (defaultLocale !== 'vi') throw new Error(`Vietnamese must be the default locale, received ${defaultLocale}.`);
     const readVisibleDates = panel => panel.locator('.e-row').evaluateAll(rows => rows.map(row => (
@@ -96,7 +101,7 @@ const { chromium } = require('playwright');
         const response = await AxiosManager.get('/ProductSerial/GetWarrantyLookup?search=&page=1&pageSize=20', {});
         const content = response?.data?.content;
         if (!content || content.totalCount < 1 || !Array.isArray(content.data)) return '';
-        const first = content.data[0];
+        const first = content.data.find(item => item.salesOrderDate) || content.data[0];
         return first?.manufacturerSerialNumber || first?.internalSerialNumber || '';
     });
     if (!warrantySerial) throw new Error('No seeded serial was available for Warranty Lookup.');
@@ -113,6 +118,21 @@ const { chromium } = require('playwright');
     const warrantyRows = await page.locator('#MainGrid .e-row').allTextContents();
     if (!warrantyRows.some(row => row.includes(warrantySerial))) {
         throw new Error(`Warranty grid did not render ${warrantySerial}. Rows: ${JSON.stringify(warrantyRows)}`);
+    }
+    const warrantyResult = searchPayload?.content?.data?.[0];
+    if (warrantyResult?.salesOrderDate) {
+        const dateContract = await page.evaluate(() => {
+            const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
+            const row = grid?.currentViewData?.[0] ?? grid?.dataSource?.[0];
+            return { locale: window.UiLocalization?.getLocale?.() ?? 'vi', soldDate: row?.salesOrderDateText ?? '' };
+        });
+        const [year, month, day] = warrantyResult.salesOrderDate.slice(0, 10).split('-');
+        const expectedSoldDate = dateContract.locale === 'en'
+            ? `${month}/${day}/${year}`
+            : `${day}/${month}/${year}`;
+        if (dateContract.soldDate !== expectedSoldDate) {
+            throw new Error(`Warranty sold date changed business day: expected ${expectedSoldDate}, received ${dateContract.soldDate}.`);
+        }
     }
 
     await page.goto(`${baseUrl}/CashTransactions/CustomerFinanceReport`, { waitUntil: 'domcontentloaded' });

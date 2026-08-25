@@ -1,5 +1,6 @@
 ﻿const App = {
     setup() {
+        const t = (value) => window.UiLocalization?.translateText?.(value) ?? value;
         const state = Vue.reactive({
             mainData: [],
             deleteMode: false,
@@ -141,7 +142,9 @@
             },
             refresh: () => {
                 if (purchaseOrderListLookup.obj) {
-                    purchaseOrderListLookup.obj.value = state.purchaseOrderId
+                    purchaseOrderListLookup.obj.value = state.purchaseOrderId;
+                    purchaseOrderListLookup.obj.enabled = !state.id && !state.isViewMode && !state.deleteMode;
+                    purchaseOrderListLookup.obj.dataBind();
                 }
             },
         };
@@ -151,6 +154,12 @@
             async (newVal, oldVal) => {
                 purchaseOrderListLookup.refresh();
                 state.errors.purchaseOrderId = '';
+                if (newVal !== oldVal) {
+                    state.secondaryData.forEach(row => {
+                        row.productSerialIds = [];
+                        row.productSerialNumbers = '';
+                    });
+                }
                 await methods.populateProductListLookupData();
             }
         );
@@ -317,7 +326,8 @@
             },
             populatepurchaseOrderListLookupData: async () => {
                 const response = await services.getpurchaseOrderListLookupData();
-                state.purchaseOrderListLookupData = response?.data?.content?.data;
+                state.purchaseOrderListLookupData = (response?.data?.content?.data ?? [])
+                    .filter(order => Number(order.orderStatus) === 2);
             },
             populatePurchaseReturnStatusListLookupData: async () => {
                 const response = await services.getPurchaseReturnStatusListLookupData();
@@ -334,8 +344,8 @@
                                     id: item.productId,
                                     name: item.productName,
                                     referenceCode: item.productReferenceCode,
-                                    physical: true,
-                                    serialTrackingMode: 1
+                                    physical: item.physical === true,
+                                    serialTrackingMode: Number(item.serialTrackingMode ?? 0)
                                 });
                             }
                         });
@@ -402,13 +412,14 @@
                             state.mainTitle = 'Edit Purchase Return';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
+                            purchaseOrderListLookup.refresh();
                             await methods.populateSecondaryData(state.id);
                             secondaryGrid.refresh();
                             state.showComplexDiv = true;
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Save Successful',
+                                title: t('Save Successful'),
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -416,8 +427,8 @@
                         } else {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Delete Successful',
-                                text: 'Form will be closed...',
+                                title: t('Delete Successful'),
+                                text: t('Form will be closed...'),
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -431,18 +442,18 @@
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
-                            text: response.data.message ?? 'Please check your data.',
-                            confirmButtonText: 'Try Again'
+                            title: t(state.deleteMode ? 'Delete Failed' : 'Save Failed'),
+                            text: t(response.data.message ?? 'Please check your data.'),
+                            confirmButtonText: t('Try Again')
                         });
                     }
 
                 } catch (error) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'An Error Occurred',
-                        text: error.response?.data?.message ?? 'Please try again.',
-                        confirmButtonText: 'OK'
+                        title: t('An Error Occurred'),
+                        text: t(error.response?.data?.message ?? 'Please try again.'),
+                        confirmButtonText: t('OK')
                     });
                 } finally {
                     state.isSubmitting = false;
@@ -881,24 +892,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Save Successful',
+                                        title: t('Save Successful'),
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Save Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: t('Save Failed'),
+                                        text: t(response.data.message ?? 'Please check your data.'),
+                                        confirmButtonText: t('Try Again')
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: t('An Error Occurred'),
+                                    text: t(error.response?.data?.message ?? 'Please try again.'),
+                                    confirmButtonText: t('OK')
                                 });
                             }
                         }
@@ -910,24 +921,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Update Successful',
+                                        title: t('Update Successful'),
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Update Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: t('Update Failed'),
+                                        text: t(response.data.message ?? 'Please check your data.'),
+                                        confirmButtonText: t('Try Again')
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: t('An Error Occurred'),
+                                    text: t(error.response?.data?.message ?? 'Please try again.'),
+                                    confirmButtonText: t('OK')
                                 });
                             }
                         }
@@ -939,24 +950,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Delete Successful',
+                                        title: t('Delete Successful'),
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Delete Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: t('Delete Failed'),
+                                        text: t(response.data.message ?? 'Please check your data.'),
+                                        confirmButtonText: t('Try Again')
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: t('An Error Occurred'),
+                                    text: t(error.response?.data?.message ?? 'Please try again.'),
+                                    confirmButtonText: t('OK')
                                 });
                             }
                         }

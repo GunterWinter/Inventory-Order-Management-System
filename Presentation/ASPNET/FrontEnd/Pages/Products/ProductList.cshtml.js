@@ -868,7 +868,6 @@ const App = {
                 await SecurityManager.validateToken();
 
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
                 await methods.populateProductGroupListLookupData();
                 productGroupListLookup.create();
                 await methods.populateWarehouseListLookupData();
@@ -884,6 +883,7 @@ const App = {
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', resetFormState);
+                await mainGrid.create(state.mainData);
 
             } catch (e) {
                 console.error('page init error:', e);

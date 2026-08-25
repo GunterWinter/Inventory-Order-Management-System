@@ -38,6 +38,7 @@ public class CreateSalesReturnValidator : AbstractValidator<CreateSalesReturnReq
 public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest, CreateSalesReturnResult>
 {
     private readonly ICommandRepository<SalesReturn> _SalesOrderRepository;
+    private readonly ICommandRepository<SalesOrder> _sourceSalesOrderRepository;
     private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
@@ -45,6 +46,7 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
 
     public CreateSalesReturnHandler(
         ICommandRepository<SalesReturn> SalesOrderRepository,
+        ICommandRepository<SalesOrder> sourceSalesOrderRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
@@ -52,6 +54,7 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
         )
     {
         _SalesOrderRepository = SalesOrderRepository;
+        _sourceSalesOrderRepository = sourceSalesOrderRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -60,6 +63,13 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
 
     public async Task<CreateSalesReturnResult> Handle(CreateSalesReturnRequest request, CancellationToken cancellationToken = default)
     {
+        var hasConfirmedSource = await _sourceSalesOrderRepository.GetQuery()
+            .ApplyIsDeletedFilter(false)
+            .AnyAsync(x => x.Id == request.SalesOrderId
+                && x.OrderStatus == SalesOrderStatus.Confirmed, cancellationToken);
+        if (!hasConfirmedSource)
+            throw new InvalidOperationException("Chỉ được tạo phiếu hàng bán trả lại từ đơn bán hàng đã xác nhận.");
+
         var entity = new SalesReturn();
         entity.CreatedById = request.CreatedById;
 

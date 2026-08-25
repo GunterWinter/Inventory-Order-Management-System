@@ -759,8 +759,75 @@ const App = {
 
         let productElem = null;
         let productObj = null;
+        let activeProductPreviewPollId = null;
         let movementElem = null;
         let movementObj = null;
+        const syncMaterialExportBatchRow = (rowData, editorElement, values, rowIndex = -1, rowUid = null) => {
+            if (!rowData || !values) return -1;
+            if (!secondaryGrid.obj || typeof GridInteractionManager === 'undefined') {
+                Object.assign(rowData, values);
+                return -1;
+            }
+            return GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
+                rowData,
+                editorElement,
+                rowIndex,
+                rowUid,
+                values,
+                formatters: {
+                    productReferenceCode: value => value ?? '',
+                    productSerialNumbers: value => value ?? '',
+                    movement: value => NumberFormatManager.formatToLocale(value ?? 0),
+                    remainingDisplay: value => NumberFormatManager.formatToLocale(value ?? 0)
+                }
+            });
+        };
+        const updateEditorRowCell = (element, field, value) => {
+            const row = element?.closest?.('tr');
+            const rowIndex = row && secondaryGrid.obj ? secondaryGrid.obj.getRows().indexOf(row) : -1;
+            if (rowIndex >= 0) {
+                const cellIndex = secondaryGrid.obj.getColumnIndexByField(field);
+                const cell = row.cells?.[cellIndex] ?? secondaryGrid.obj.getCellFromIndex(rowIndex, cellIndex);
+                if (cell) cell.textContent = NumberFormatManager.formatToLocale(value);
+                try {
+                    secondaryGrid.obj.updateCell(rowIndex, field, value);
+                } catch (error) {
+                    // Syncfusion can reject updateCell for a read-only cell while another
+                    // cell is in batch edit; rowData and the rendered preview are already synced.
+                }
+            }
+        };
+        const syncActiveProductPreview = () => {
+            const editedCell = secondaryGrid.obj?.element?.querySelector?.('td.e-editedbatchcell');
+            const editor = editedCell?.querySelector?.('.e-dropdownlist')?.ej2_instances?.[0];
+            const selectedProduct = state.productListLookupData.find(item => item.id === editor?.value);
+            const row = editedCell?.closest?.('tr');
+            if (!selectedProduct || !row) return;
+
+            const inventoryIndex = secondaryGrid.obj.getColumnIndexByField('remainingDisplay');
+            const referenceIndex = secondaryGrid.obj.getColumnIndexByField('productReferenceCode');
+            if (row.cells?.[inventoryIndex]) {
+                row.cells[inventoryIndex].textContent = NumberFormatManager.formatToLocale(selectedProduct.stockQuantity ?? 0);
+            }
+            if (row.cells?.[referenceIndex]) {
+                row.cells[referenceIndex].textContent = selectedProduct.referenceCode ?? '';
+            }
+        };
+        const editNewMaterialExportProductCell = (temporaryId, attempt = 0) => {
+            const grid = secondaryGrid?.obj;
+            if (!grid || grid.isDestroyed) return;
+            const rowIndex = grid.getRowIndexByPrimaryKey?.(temporaryId) ?? -1;
+            const rowElement = rowIndex >= 0
+                ? (grid.getRowByIndex?.(rowIndex) ?? grid.getRows?.()[rowIndex])
+                : null;
+            if (rowIndex >= 0 && rowElement) {
+                grid.editCell(rowIndex, 'productId');
+                return;
+            }
+            if (attempt < 8) {
+                requestAnimationFrame(() => editNewMaterialExportProductCell(temporaryId, attempt + 1));
+            }
+        };
 
         const secondaryGrid = {
             obj: null,
@@ -823,23 +890,46 @@ const App = {
                                     productObj.destroy();
                                 },
                                 write: function (args) {
+                                    const applyProductSelection = (productId) => {
+                                        if (!productId) return;
+                                        const selectedProduct = state.productListLookupData.find(x => x.id === productId);
+                                        if (!selectedProduct) return;
+                                        const productChanged = args.rowData.productId !== productId;
+                                        if (args.rowData.productId === productId
+                                            && Number(args.rowData.remainingDisplay) === Number(selectedProduct.stockQuantity ?? 0)) return;
+                                        const p = selectedProduct;
+                                        const values = {
+                                            productId,
+                                            productSerialIds: productChanged
+                                                ? []
+                                                : [...(args.rowData.productSerialIds ?? [])],
+                                            productSerialNumbers: productChanged
+                                                ? ''
+                                                : (args.rowData.productSerialNumbers ?? ''),
+                                            productReferenceCode: p ? p.referenceCode || '' : '',
+                                            remainingDisplay: Number(p?.stockQuantity ?? 0),
+                                            movement: productChanged ? 1 : Number(args.rowData.movement ?? 1)
+                                        };
+                                        syncMaterialExportBatchRow(args.rowData, args.element, values);
+                                        const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
+                                        if (refCell) {
+                                            refCell.value = values.productReferenceCode;
+                                        }
+                                        updateEditorRowCell(args.element, 'remainingDisplay', values.remainingDisplay);
+                                        if (movementObj) {
+                                            movementObj.value = values.movement;
+                                            movementObj.dataBind?.();
+                                        }
+                                    };
                                     productObj = new ej.dropdowns.DropDownList({
                                         dataSource: state.productListLookupData,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
+                                        select: function (e) {
+                                            applyProductSelection(e.itemData?.id ?? e.itemData?.value ?? e.value);
+                                        },
                                         change: function (e) {
-                                            args.rowData.productId = e.value;
-                                            args.rowData.productSerialIds = [];
-                                            args.rowData.productSerialNumbers = '';
-                                            const p = state.productListLookupData.find(x => x.id === e.value);
-                                            args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
-                                            const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
-                                            if (refCell) {
-                                                refCell.value = args.rowData.productReferenceCode;
-                                            }
-                                            if (movementObj) {
-                                                movementObj.value = 1;
-                                            }
+                                            applyProductSelection(e.value);
                                         },
                                         placeholder: 'Chọn hàng hóa',
                                         floatLabelType: 'Never'
@@ -857,8 +947,16 @@ const App = {
                             moduleIdGetter: () => state.id,
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
+                            gridGetter: () => secondaryGrid.obj,
                             requireWarehouse: true,
-                            allowEmptySelection: false
+                            allowEmptySelection: false,
+                            onSelectionApplied: ({ rowData, editorElement, rowIndex, rowUid, serialIds, serialNumbers, quantity }) => {
+                                syncMaterialExportBatchRow(rowData, editorElement, {
+                                    productSerialIds: [...serialIds],
+                                    productSerialNumbers: serialNumbers,
+                                    movement: quantity
+                                }, rowIndex, rowUid);
+                            }
                         }),
                         {
                             field: 'movement',
@@ -880,7 +978,8 @@ const App = {
                                     return movementObj.value;
                                 },
                                 destroy: function () {
-                                    movementObj.destroy();
+                                    movementObj?.destroy();
+                                    movementObj = null;
                                 },
                                 write: function (args) {
                                     movementObj = new ej.inputs.NumericTextBox({
@@ -898,11 +997,12 @@ const App = {
                             headerText: 'Inventory',
                             width: 120,
                             allowEditing: false,
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', format: 'N2', textAlign: 'Right',
                             valueAccessor: (field, data, column) => {
                                 const product = state.productListLookupData.find(p => p.id === data.productId);
-                                if (!product) return '';
-                                return product.stockQuantity > 0 ? product.stockQuantity : 0;
+                                if (product) return Number(product.stockQuantity ?? 0);
+                                const previewQuantity = Number(data[field]);
+                                return Number.isFinite(previewQuantity) ? previewQuantity : '';
                             }
                         },
                     ],
@@ -934,9 +1034,39 @@ const App = {
                         }
                     },
                     toolbarClick: (args) => {
+                        if (args.item.id === 'SecondaryGrid_add') {
+                            args.cancel = true;
+                            const temporaryId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                            secondaryGrid.obj.addRecord({
+                                id: temporaryId,
+                                productId: null,
+                                productReferenceCode: '',
+                                productSerialIds: [],
+                                productSerialNumbers: '',
+                                movement: 1,
+                                remainingDisplay: 0
+                            }, 0);
+                            requestAnimationFrame(() => editNewMaterialExportProductCell(temporaryId));
+                            return;
+                        }
                         if (args.item.id === 'SecondaryGrid_excelexport') {
                             secondaryGrid.obj.excelExport();
                         }
+                    },
+                    cellSave: (args) => {
+                        const field = args.columnName ?? args.column?.field;
+                        if (field !== 'productId') return;
+                        const product = state.productListLookupData.find(item => item.id === args.value);
+                        syncMaterialExportBatchRow(args.rowData, args.cell, {
+                            productId: args.value,
+                            productReferenceCode: product?.referenceCode ?? '',
+                            remainingDisplay: Number(product?.stockQuantity ?? 0),
+                            productSerialIds: Array.isArray(args.rowData.productSerialIds)
+                                ? [...args.rowData.productSerialIds]
+                                : [],
+                            productSerialNumbers: args.rowData.productSerialNumbers ?? '',
+                            movement: Number(args.rowData.movement ?? 1)
+                        });
                     },
                     actionBegin: (args) => {
                         if (args.requestType === 'save' && args.managedBatch === true) {
@@ -959,7 +1089,7 @@ const App = {
                                     Swal.fire({
                                         icon: 'warning',
                                         title: 'Quantity exceeds stock',
-                                        text: `Total requested quantity ${requestedQuantity} exceeds available stock ${product.stockQuantity}.`
+                                        text: `Tổng số lượng ${requestedQuantity} vượt quá số lượng tồn kho ${product.stockQuantity}.`
                                     });
                                     return;
                                 }
@@ -1074,6 +1204,9 @@ const App = {
                     }
                 });
                 secondaryGrid.obj.appendTo(secondaryGridRef.value);
+                if (!activeProductPreviewPollId) {
+                    activeProductPreviewPollId = setInterval(syncActiveProductPreview, 50);
+                }
             },
             refresh: () => {
                 secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
@@ -1092,6 +1225,7 @@ const App = {
 
         Vue.onUnmounted(() => {
             mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
+            if (activeProductPreviewPollId) clearInterval(activeProductPreviewPollId);
         });
 
         return {

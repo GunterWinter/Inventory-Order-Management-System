@@ -15,6 +15,7 @@
     const NATIVE_SELECT_SELECTOR = 'select[data-searchable-dropdown]';
     let observer = null;
     let refreshQueued = false;
+    let nativeHostSequence = 0;
 
     const normalizeText = value => {
         const text = String(value ?? '');
@@ -192,6 +193,26 @@
         }
     };
 
+    const removeNativeHost = host => {
+        if (!host) return;
+        const wrapper = host.closest?.('.e-input-group.e-control-wrapper, .e-input-group');
+        if (wrapper && wrapper !== host && wrapper.contains?.(host)) wrapper.remove?.();
+        else host.remove?.();
+    };
+
+    const cleanupNativeHosts = select => {
+        const parent = select?.parentElement;
+        if (!parent?.querySelectorAll) return;
+        const ownerId = select.dataset?.dropdownSearchOwnerId;
+        parent.querySelectorAll('[data-dropdown-search-host]').forEach(host => {
+            const owner = host.__dropdownSearchOwnerSelect;
+            const sameOwner = owner === select
+                || (ownerId && host.dataset?.dropdownSearchOwnerId === ownerId);
+            const orphaned = owner && owner.isConnected === false;
+            if (sameOwner || orphaned) removeNativeHost(host);
+        });
+    };
+
     const refreshNativeSelect = select => {
         const record = nativeInstances.get(select);
         if (!record) return enhanceNativeSelect(select, select?.ownerDocument?.defaultView ?? root);
@@ -222,7 +243,11 @@
     const enhanceNativeSelect = (select, context = root) => {
         if (!select || select.multiple || select.dataset?.dropdownSearch === 'off') return null;
         if (nativeInstances.has(select)) return nativeInstances.get(select).instance;
-        if (select.ej2_instances?.length) return select.ej2_instances[0];
+        if (select.ej2_instances?.length) {
+            select.ej2_instances.forEach(instance => instance?.destroy?.());
+            delete select.ej2_instances;
+        }
+        cleanupNativeHosts(select);
 
         const DropDownList = context?.ej?.dropdowns?.DropDownList;
         if (typeof DropDownList !== 'function') return null;
@@ -233,6 +258,10 @@
         if (usesSeparateHost) {
             host.type = 'text';
             host.setAttribute('data-dropdown-search-host', '');
+            const ownerId = select.dataset?.dropdownSearchOwnerId || `dropdown-search-${++nativeHostSequence}`;
+            if (select.dataset) select.dataset.dropdownSearchOwnerId = ownerId;
+            if (host.dataset) host.dataset.dropdownSearchOwnerId = ownerId;
+            host.__dropdownSearchOwnerSelect = select;
             select.insertAdjacentElement?.('afterend', host);
         }
 
@@ -306,7 +335,7 @@
         nativeRecords.delete(record);
         record.instance?.destroy?.();
         if (record.host !== select) {
-            record.host?.remove?.();
+            removeNativeHost(record.host);
             select.hidden = record.originalHidden;
             if (record.originalAriaHidden === null) select.removeAttribute?.('aria-hidden');
             else select.setAttribute?.('aria-hidden', record.originalAriaHidden);
@@ -314,6 +343,7 @@
             else select.setAttribute?.('tabindex', record.originalTabIndex);
             if (select.style) select.style.display = record.originalDisplay;
             if (select.ej2_instances?.[0] === record.instance) delete select.ej2_instances;
+            if (select.dataset) delete select.dataset.dropdownSearchOwnerId;
         }
     };
 

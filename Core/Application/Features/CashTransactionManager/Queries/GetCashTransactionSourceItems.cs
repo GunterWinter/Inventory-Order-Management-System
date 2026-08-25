@@ -1,6 +1,7 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
+using Domain.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,7 @@ namespace Application.Features.CashTransactionManager.Queries;
 
 public sealed record CashTransactionSourceItemDto
 {
+    public string? SourceItemId { get; init; }
     public string? ProductName { get; init; }
     public string? CustomerName { get; init; }
     public string? WarehouseName { get; init; }
@@ -65,6 +67,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                 .Where(x => x.PurchaseOrderId == transaction.SourceModuleId)
                 .Select(x => new CashTransactionSourceItemDto
                 {
+                    SourceItemId = x.Id,
                     ProductName = x.PurchaseOrderItem != null && x.PurchaseOrderItem.Product != null
                         ? x.PurchaseOrderItem.Product.Name : null,
                     CustomerName = x.Customer != null ? x.Customer.Name : null,
@@ -86,6 +89,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                     .Where(x => x.PurchaseOrderId == transaction.SourceModuleId)
                     .Select(x => new CashTransactionSourceItemDto
                     {
+                        SourceItemId = x.Id,
                         ProductName = x.Product != null ? x.Product.Name : null,
                         WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
                         Quantity = x.Quantity ?? 0m,
@@ -109,6 +113,7 @@ public sealed class GetCashTransactionSourceItemsHandler
 
             items = salesItems.Select(x => new CashTransactionSourceItemDto
             {
+                SourceItemId = x.Id,
                 ProductName = x.Product?.Name,
                 CustomerName = x.SalesOrder?.Customer?.Name,
                 WarehouseName = x.Warehouse?.Name,
@@ -151,7 +156,10 @@ public sealed class GetCashTransactionSourceItemsHandler
             .ApplyIsDeletedFilter(false)
             .Include(x => x.Product)
             .Include(x => x.Warehouse)
-            .Where(x => x.ModuleName == moduleName && x.ModuleId == moduleId)
+            .Where(x => x.ModuleName == moduleName
+                && x.ModuleId == moduleId
+                && (x.Status == InventoryTransactionStatus.Confirmed
+                    || x.Status == InventoryTransactionStatus.Archived))
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -222,7 +230,11 @@ public sealed class GetCashTransactionSourceItemsHandler
             var quantity = Math.Abs(line.Movement ?? line.Stock ?? 0m);
             var serials = movementSerials.Where(x => x.InventoryTransactionId == line.Id).ToList();
             decimal unitPrice;
-            if (serials.Count > 0)
+            if (moduleName == nameof(MaterialExport) && line.UnitCost.HasValue)
+            {
+                unitPrice = line.UnitCost.Value;
+            }
+            else if (serials.Count > 0)
             {
                 unitPrice = serials.Average(x => x.UnitCost);
             }
@@ -241,6 +253,7 @@ public sealed class GetCashTransactionSourceItemsHandler
 
             result.Add(new CashTransactionSourceItemDto
             {
+                SourceItemId = line.Id,
                 ProductName = line.Product?.Name,
                 CustomerName = customerName,
                 WarehouseName = line.Warehouse?.Name,

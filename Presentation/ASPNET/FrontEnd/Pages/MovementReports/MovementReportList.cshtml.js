@@ -18,8 +18,8 @@ const App = {
                 const soldDate = item.soldDate ? DateFormatManager.parseServerDate(item.soldDate) : null;
                 const key = [
                     item.productId ?? '',
-                    unitCost.toFixed(4),
-                    salesUnitPrice.toFixed(4),
+                    String(Math.round(unitCost * 1000000)),
+                    String(Math.round(salesUnitPrice * 1000000)),
                     item.costSource ?? ''
                 ].join('|');
 

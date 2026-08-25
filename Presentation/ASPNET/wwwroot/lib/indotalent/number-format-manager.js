@@ -10,6 +10,11 @@
     const QUANTITY_FIELD_PATTERN = /(quantity|qty|stock|movement)/i;
     const DECIMAL_FIELD_PATTERN = /(quantity|qty|stock|movement|price|amount|cost|profit|cogs|subtotal|total|rate|percentage)/i;
     const INTEGER_FIELD_PATTERN = /(month|warranty|year|page|sequence|serial)/i;
+    const NUMERIC_KIND = Object.freeze({
+        money: 'money',
+        decimal: 'decimal',
+        integer: 'integer'
+    });
     const numericInputHandlers = new WeakMap();
 
     function toFiniteNumber(value) {
@@ -48,6 +53,10 @@
 
     function formatMoney(value) {
         return formatNumber(value, MONEY_MIN_FRACTION_DIGITS, MAX_FRACTION_DIGITS);
+    }
+
+    function formatInteger(value) {
+        return formatNumber(value, 0, 0);
     }
 
     function formatCurrency(value, minimumFractionDigits = MONEY_MIN_FRACTION_DIGITS, maximumFractionDigits = MAX_FRACTION_DIGITS) {
@@ -93,11 +102,41 @@
             numericTextBox?.htmlAttributes?.name,
             numericTextBox?.htmlAttributes?.id
         ].filter(Boolean).join(' ');
-        if (!DECIMAL_FIELD_PATTERN.test(identity) || INTEGER_FIELD_PATTERN.test(identity)) return;
+        const numericKind = numericTextBox.numericKind ?? numericTextBox.element?.dataset?.numericKind;
+        if (numericKind === NUMERIC_KIND.integer) {
+            numericTextBox.format = 'n0';
+            numericTextBox.decimals = 0;
+            numericTextBox.validateDecimalOnType = true;
+            return;
+        }
+        if (numericKind !== NUMERIC_KIND.money
+            && numericKind !== NUMERIC_KIND.decimal
+            && (!DECIMAL_FIELD_PATTERN.test(identity) || INTEGER_FIELD_PATTERN.test(identity))) return;
 
         numericTextBox.format = 'n6';
         numericTextBox.decimals = MAX_FRACTION_DIGITS;
         numericTextBox.validateDecimalOnType = false;
+    }
+
+    function configureNumericTextBox(numericTextBox, options = {}) {
+        if (!numericTextBox) return numericTextBox;
+        const kind = options.kind ?? NUMERIC_KIND.decimal;
+        numericTextBox.numericKind = kind;
+        if (numericTextBox.element?.dataset) numericTextBox.element.dataset.numericKind = kind;
+        normalizeDecimalNumericTextBox(numericTextBox);
+        if (options.min !== undefined) numericTextBox.min = options.min;
+        if (options.max !== undefined) numericTextBox.max = options.max;
+        if (options.step !== undefined) numericTextBox.step = options.step;
+        return numericTextBox;
+    }
+
+    function createGridValueAccessor(kind = NUMERIC_KIND.decimal) {
+        return (field, data) => {
+            if (data?.[field] === null || data?.[field] === undefined || data?.[field] === '') return '';
+            if (kind === NUMERIC_KIND.integer) return formatInteger(data[field]);
+            if (kind === NUMERIC_KIND.money) return formatMoney(data[field]);
+            return formatNumber(data[field]);
+        };
     }
 
     function normalizeMoneyGridColumn(column) {
@@ -110,16 +149,18 @@
         }
 
         const columnText = getColumnText(column);
-        const moneyColumn = isMoneyText(columnText);
+        const numericKind = column.numericKind;
+        const moneyColumn = numericKind === NUMERIC_KIND.money || isMoneyText(columnText);
+        const integerColumn = numericKind === NUMERIC_KIND.integer || INTEGER_FIELD_PATTERN.test(columnText);
         const format = `${column.format ?? ''}`.toLowerCase();
         if ((format === 'n0' || format === 'n2') && moneyColumn) {
             column.format = MONEY_FORMAT;
         }
 
-        if (!column.valueAccessor && DECIMAL_FIELD_PATTERN.test(columnText) && !INTEGER_FIELD_PATTERN.test(columnText)) {
-            column.valueAccessor = (field, data) => data?.[field] == null
-                ? ''
-                : (moneyColumn ? formatMoney(data[field]) : formatNumber(data[field]));
+        if (!column.valueAccessor
+            && (numericKind || DECIMAL_FIELD_PATTERN.test(columnText))
+            && !integerColumn) {
+            column.valueAccessor = createGridValueAccessor(moneyColumn ? NUMERIC_KIND.money : NUMERIC_KIND.decimal);
             column.format = undefined;
         }
     }
@@ -176,6 +217,9 @@
     }
 
     function parseLocaleNumber(value) {
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : null;
+        }
         const normalizedValue = normalizeNumberString(value);
         if (!normalizedValue || normalizedValue === '-') {
             return null;
@@ -451,7 +495,7 @@
         }
 
         element.dataset.numberFormat = 'true';
-        element.setAttribute('inputmode', 'numeric');
+        element.setAttribute('inputmode', element.dataset.numericKind === NUMERIC_KIND.integer ? 'numeric' : 'decimal');
         formatPlainNumericInput(element);
         return element;
     }
@@ -541,12 +585,16 @@
         locale: VI_LOCALE,
         currency: DEFAULT_CURRENCY,
         moneyFormat: MONEY_FORMAT,
+        numericKind: NUMERIC_KIND,
         formatToLocale: formatNumber,
         formatMoneyToLocale: formatMoney,
+        formatIntegerToLocale: formatInteger,
         formatCurrencyToLocale: formatCurrency,
         formatEditableValue,
         normalizeNumberString,
         parseLocaleNumber,
+        configureNumericTextBox,
+        createGridValueAccessor,
         bindNumericInput,
         refreshNumericTextBox: syncNumericDisplay
     };

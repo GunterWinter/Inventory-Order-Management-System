@@ -1295,6 +1295,7 @@ const App = {
         let productObj;
         let warehouseObj;
         let priceObj;
+        let priceEditorValue = null;
         let quantityObj;
         let taxObj;
         let numberObj;
@@ -1339,6 +1340,10 @@ const App = {
         };
 
         const getSerialTrackingMode = (productId) => Number(state.productListLookupData.find(p => p.id === productId)?.serialTrackingMode ?? 0);
+        const isSerialTrackedProduct = (productId) => {
+            const product = state.productListLookupData.find(p => p.id === productId);
+            return product?.physical === true && getSerialTrackingMode(productId) > 0;
+        };
         const isManufacturerSerialProduct = (productId) => {
             const product = state.productListLookupData.find(p => p.id === productId);
             return product?.physical === true && getSerialTrackingMode(productId) === 2;
@@ -1549,31 +1554,41 @@ const App = {
                                 required: true,
                                 custom: [(args) => Number(args.value) > 0, 'Đơn giá phải lớn hơn 0.']
                             },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', numericKind: 'money', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let priceElem = document.createElement('input');
                                     return priceElem;
                                 },
                                 read: () => {
-                                    return priceObj.value;
+                                    return Number(priceEditorValue ?? priceObj?.value ?? 0);
                                 },
                                 destroy: () => {
                                     priceObj.destroy();
                                 },
                                 write: (args) => {
+                                    priceEditorValue = Number(args.rowData.unitPrice ?? 0);
                                     priceObj = new ej.inputs.NumericTextBox({
-                                        format: 'n0',
-                                        decimals: 0,
-                                        step: 1000,
+                                        numericKind: 'money',
+                                        format: 'n6',
+                                        decimals: 6,
+                                        step: 0.01,
                                         validateDecimalOnType: false,
                                         value: args.rowData.unitPrice ?? 0,
                                         change: (e) => {
-                                            applyPurchaseOrderItemAmounts(args.rowData, { unitPrice: e.value });
+                                            priceEditorValue = Number(e.value ?? priceEditorValue ?? 0);
+                                            applyPurchaseOrderItemAmounts(args.rowData, { unitPrice: priceEditorValue });
                                             refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
                                         }
                                     });
                                     priceObj.appendTo(args.element);
+                                    priceObj.element.addEventListener('input', () => {
+                                        const typedValue = NumberFormatManager.parseLocaleNumber(priceObj.element.value);
+                                        if (typedValue == null) return;
+                                        priceEditorValue = Number(typedValue);
+                                        applyPurchaseOrderItemAmounts(args.rowData, { unitPrice: priceEditorValue });
+                                        refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
+                                    });
                                 }
                             }
                         },
@@ -1604,7 +1619,7 @@ const App = {
                                     return args['value'] > 0;
                                 }, 'Value must be greater than zero.']
                             },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', numericKind: 'decimal', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let quantityElem = document.createElement('input');
@@ -1620,9 +1635,10 @@ const App = {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
                                         min: 0,
-                                        format: 'n0',
-                                        decimals: 0,
-                                        validateDecimalOnType: true,
+                                        numericKind: isSerialTrackedProduct(args.rowData.productId) ? 'integer' : 'decimal',
+                                        format: isSerialTrackedProduct(args.rowData.productId) ? 'n0' : 'n6',
+                                        decimals: isSerialTrackedProduct(args.rowData.productId) ? 0 : 6,
+                                        validateDecimalOnType: isSerialTrackedProduct(args.rowData.productId),
                                         change: (e) => {
                                             applyPurchaseOrderItemAmounts(args.rowData, { quantity: e.value });
                                             refreshPurchaseOrderItemAmountCells(args.element, args.rowData);
@@ -1917,8 +1933,10 @@ const App = {
                             return;
                         }
                         if (!['quantity', 'unitPrice', 'taxId'].includes(field)) return;
-                        applyPurchaseOrderItemAmounts(args.rowData, { [field]: args.value });
+                        const value = field === 'unitPrice' ? priceEditorValue ?? args.value : args.value;
+                        const amounts = applyPurchaseOrderItemAmounts(args.rowData, { [field]: value });
                         requestAnimationFrame(() => {
+                            writePurchaseOrderBatchFields(args.rowData, amounts, args.cell);
                             refreshPurchaseOrderItemAmountCells(args.cell, args.rowData);
                             refreshPurchaseOrderSummaryFromItems();
                         });
@@ -2491,7 +2509,7 @@ const App = {
                                                         const rowData = costAllocationPreviewGrid.obj.getRowInfo(tr).rowData;
                                                         if (rowData && rowData.poItemId === args.rowData.poItemId) {
                                                             if (remainingCellIdx !== -1 && tr.cells[remainingCellIdx]) {
-                                                                tr.cells[remainingCellIdx].innerText = Intl.NumberFormat('en-US').format(rowData.remainingQuantity);
+                                                                tr.cells[remainingCellIdx].innerText = NumberFormatManager.formatToLocale(rowData.remainingQuantity);
                                                             }
                                                         }
                                                     });
@@ -2501,7 +2519,7 @@ const App = {
                                                 if (tr && costAllocationPreviewGrid.obj) {
                                                     const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
                                                     if (cellIndex !== -1 && tr.cells[cellIndex]) {
-                                                        tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
+                                                        tr.cells[cellIndex].innerText = NumberFormatManager.formatToLocale(newTotal);
                                                     }
                                                 }
                                             }
@@ -2552,7 +2570,7 @@ const App = {
                                                 if (tr && costAllocationPreviewGrid.obj) {
                                                     const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
                                                     if (cellIndex !== -1 && tr.cells[cellIndex]) {
-                                                        tr.cells[cellIndex].innerText = Intl.NumberFormat('en-US').format(newTotal);
+                                                        tr.cells[cellIndex].innerText = NumberFormatManager.formatToLocale(newTotal);
                                                     }
                                                 }
                                             }

@@ -1,3 +1,4 @@
+using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
@@ -5,6 +6,7 @@ using Domain.Enums;
 using Domain.Common;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.SalesReturnManager.Commands;
 
@@ -37,16 +39,19 @@ public class UpdateSalesReturnValidator : AbstractValidator<UpdateSalesReturnReq
 public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest, UpdateSalesReturnResult>
 {
     private readonly ICommandRepository<SalesReturn> _repository;
+    private readonly ICommandRepository<SalesOrder> _salesOrderRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
 
     public UpdateSalesReturnHandler(
         ICommandRepository<SalesReturn> repository,
+        ICommandRepository<SalesOrder> salesOrderRepository,
         IUnitOfWork unitOfWork,
         InventoryTransactionService inventoryTransactionService
         )
     {
         _repository = repository;
+        _salesOrderRepository = salesOrderRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
     }
@@ -56,6 +61,13 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
         SalesReturn? entity = null;
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
+            var hasConfirmedSource = await _salesOrderRepository.GetQuery()
+                .ApplyIsDeletedFilter(false)
+                .AnyAsync(x => x.Id == request.SalesOrderId
+                    && x.OrderStatus == SalesOrderStatus.Confirmed, ct);
+            if (!hasConfirmedSource)
+                throw new InvalidOperationException("Chỉ được dùng đơn bán hàng đã xác nhận làm nguồn trả hàng.");
+
             entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
                 ?? throw new InvalidOperationException("Không tìm thấy phiếu trả hàng bán cần cập nhật.");
             if (!int.TryParse(request.Status, out var statusValue)

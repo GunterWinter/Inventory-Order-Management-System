@@ -235,6 +235,107 @@ test('product selection renders the lookup name instead of its UUID', () => {
     assert.equal(productCell.textContent, 'Dây điện 2.5mm');
 });
 
+test('new keyless editor rows synchronize values into their added batch record by row position', () => {
+    const manager = loadManager();
+    const editorData = { productId: 'product-1', productSerialIds: [] };
+    const actualData = { productId: 'product-1', productSerialIds: [] };
+    const addedRecord = { productId: 'product-1', productSerialIds: [] };
+    const rowElement = {};
+    const editorElement = { closest: selector => selector === 'tr' ? rowElement : null };
+    const grid = {
+        getRows: () => [rowElement],
+        getRowsObject: () => [{ data: actualData }],
+        getBatchChanges: () => ({ addedRecords: [addedRecord], changedRecords: [], deletedRecords: [] }),
+        getColumnByField: field => ({ field }),
+        getColumnIndexByField: field => field === 'productSerialNumbers' ? 0 : 1,
+        getCellFromIndex: () => null
+    };
+
+    manager.syncBatchRowValues(grid, {
+        rowData: editorData,
+        editorElement,
+        values: {
+            productSerialIds: ['serial-1', 'serial-2'],
+            productSerialNumbers: 'SER-1, SER-2',
+            movement: 2
+        }
+    });
+
+    assert.deepEqual(actualData.productSerialIds, ['serial-1', 'serial-2']);
+    assert.deepEqual(addedRecord.productSerialIds, ['serial-1', 'serial-2']);
+    assert.equal(addedRecord.productSerialNumbers, 'SER-1, SER-2');
+    assert.equal(addedRecord.movement, 2);
+});
+
+test('detached serial editors use their stable row index to update a keyless added record', () => {
+    const manager = loadManager();
+    const editorData = { productId: 'product-1', productSerialIds: [] };
+    const actualData = { productId: 'product-1', productSerialIds: [] };
+    const addedRecord = { productId: 'product-1', productSerialIds: [] };
+    const renderedRow = { getAttribute: () => 'row-uid-1' };
+    const detachedEditor = { closest: () => null };
+    const grid = {
+        getRows: () => [renderedRow],
+        getRowsObject: () => [{ data: actualData }],
+        getBatchChanges: () => ({ addedRecords: [addedRecord], changedRecords: [], deletedRecords: [] }),
+        getColumnByField: field => ({ field }),
+        getColumnIndexByField: () => -1,
+        getCellFromIndex: () => null
+    };
+
+    const result = manager.syncBatchRowValues(grid, {
+        rowData: editorData,
+        editorElement: detachedEditor,
+        rowIndex: 0,
+        rowUid: 'row-uid-1',
+        values: {
+            productSerialIds: ['serial-1', 'serial-2'],
+            productSerialNumbers: 'SER-1, SER-2',
+            movement: 2
+        }
+    });
+
+    assert.equal(result, 0);
+    assert.deepEqual(actualData.productSerialIds, ['serial-1', 'serial-2']);
+    assert.deepEqual(addedRecord.productSerialIds, ['serial-1', 'serial-2']);
+    assert.equal(addedRecord.movement, 2);
+});
+
+test('custom modal changes register an existing row before its editor blurs', () => {
+    const manager = loadManager();
+    const editorData = { id: 'line-1', productSerialIds: ['serial-1'], movement: 1 };
+    const actualData = { id: 'line-1', productSerialIds: ['serial-1'], movement: 1 };
+    const changedRecords = [];
+    const renderedRow = { getAttribute: () => 'row-uid-1' };
+    const grid = {
+        getRows: () => [renderedRow],
+        getRowsObject: () => [{ data: actualData }],
+        getBatchChanges: () => ({ addedRecords: [], changedRecords, deletedRecords: [] }),
+        getRowIndexByPrimaryKey: () => 0,
+        getColumnByField: field => ({ field }),
+        getColumnIndexByField: () => -1,
+        getCellFromIndex: () => null,
+        updateCell: (rowIndex, field, value) => {
+            const changed = { ...actualData, [field]: value };
+            changedRecords.push(changed);
+        }
+    };
+
+    manager.syncBatchRowValues(grid, {
+        rowData: editorData,
+        rowIndex: 0,
+        values: {
+            productSerialIds: ['serial-2'],
+            productSerialNumbers: 'SER-2',
+            movement: 1
+        }
+    });
+
+    assert.equal(changedRecords.length, 1);
+    assert.deepEqual(changedRecords[0].productSerialIds, ['serial-2']);
+    assert.equal(changedRecords[0].productSerialNumbers, 'SER-2');
+});
+
 test('main grid delegates plain and additive row clicks to native multiple selection', () => {
     const manager = loadManager();
     let clears = 0;

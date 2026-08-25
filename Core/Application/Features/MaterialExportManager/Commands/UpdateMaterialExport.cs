@@ -221,7 +221,10 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             }
 
             var selectedAcrossDocument = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var purchaseOrderCosts = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            var totalProjectCost = 0m;
+            var hasFallbackCost = false;
+            var hasOpeningCost = false;
+            var hasPurchaseCost = false;
 
             foreach (var line in lines)
             {
@@ -250,12 +253,11 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         line.ProductId,
                         entity.WarehouseId,
                         cancellationToken: ct);
-                    var costKeyPrefix = costResolution.IsFallbackCost
-                        ? "FALLBACK"
-                        : costResolution.IncludesOpeningStock && !costResolution.IncludesPurchase
-                            ? "OPENING"
-                            : "WEIGHTED";
-                    purchaseOrderCosts[$"{costKeyPrefix}:{line.Id}"] = costResolution.UnitCost * movement;
+                    line.UnitCost = costResolution.UnitCost;
+                    totalProjectCost += costResolution.UnitCost * movement;
+                    hasFallbackCost |= costResolution.IsFallbackCost;
+                    hasOpeningCost |= costResolution.IncludesOpeningStock;
+                    hasPurchaseCost |= costResolution.IncludesPurchase;
 
                     line.Status = InventoryTransactionStatus.Confirmed;
                     line.WarehouseId = entity.WarehouseId;
@@ -317,6 +319,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         $"Not enough in-stock serials for {line.Product?.Name ?? line.ProductId}. Required {required}, available {selectedSerials.Count}.");
                 }
 
+                var lineTotalCost = 0m;
                 foreach (var serial in selectedSerials)
                 {
                     if (!selectedAcrossDocument.Add(serial.Id))
@@ -330,10 +333,15 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         throw new InvalidOperationException("A selected serial is no longer available in the selected warehouse.");
                     }
                     var serialCost = _inventoryCostResolver.ResolveSerial(serial);
-                    purchaseOrderCosts[serialCost.SourceKey] =
-                        purchaseOrderCosts.GetValueOrDefault(serialCost.SourceKey) + serialCost.UnitCost;
+                    lineTotalCost += serialCost.UnitCost;
+                    hasFallbackCost |= serialCost.SourceKey.StartsWith("FALLBACK:", StringComparison.Ordinal);
+                    hasOpeningCost |= serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
+                    hasPurchaseCost |= !serialCost.SourceKey.StartsWith("FALLBACK:", StringComparison.Ordinal)
+                        && !serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
                 }
 
+                line.UnitCost = lineTotalCost / required;
+                totalProjectCost += lineTotalCost;
                 line.Status = InventoryTransactionStatus.Confirmed;
                 line.WarehouseId = entity.WarehouseId;
                 line.MovementDate = entity.ExportDate;
@@ -367,17 +375,16 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 await _unitOfWork.SaveAsync(ct);
             }
 
-            foreach (var pair in purchaseOrderCosts.Where(x => x.Value > 0m))
+            if (totalProjectCost > 0m)
             {
-                var costDescription = pair.Key.StartsWith("FALLBACK:", StringComparison.Ordinal)
+                var costDescription = hasFallbackCost
                     ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn hàng hóa dự phòng)"
-                    : pair.Key.StartsWith("OPENING:", StringComparison.Ordinal)
+                    : hasOpeningCost && !hasPurchaseCost
                         ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn tồn đầu kỳ)"
                         : $"Phân bổ công trình cho {selectedCustomer.Name}";
                 await CreateProjectCostTransactionAsync(
                     entity,
-                    pair.Key,
-                    pair.Value,
+                    totalProjectCost,
                     projectAllocationCategory.Id,
                     costDescription,
                     request.UpdatedById,
@@ -394,7 +401,6 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
 
     private async Task CreateProjectCostTransactionAsync(
         MaterialExport materialExport,
-        string purchaseOrderId,
         decimal amount,
         string cashCategoryId,
         string description,
@@ -417,7 +423,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             VendorId = null,
             SourceModule = nameof(MaterialExport),
             SourceModuleId = materialExport.Id,
-            SourceDetailId = purchaseOrderId,
+            SourceDetailId = null,
             SourceModuleNumber = materialExport.Number
         }, cancellationToken);
     }

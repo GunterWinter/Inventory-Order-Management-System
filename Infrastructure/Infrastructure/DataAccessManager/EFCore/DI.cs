@@ -168,7 +168,118 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[CashCategory]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [dbo].[CashCategory] WHERE [IsDeleted] = 0 AND [Name] = N'Phân bổ công trình') INSERT INTO [dbo].[CashCategory] ([Id], [IsDeleted], [CreatedAtUtc], [Name], [Description]) VALUES (CONVERT(nvarchar(50), NEWID()), 0, SYSUTCDATETIME(), N'Phân bổ công trình', N'Chi phí vật tư phân bổ cho công trình');",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL UPDATE [dbo].[CashTransaction] SET [IsDeleted] = 1, [UpdatedAtUtc] = SYSUTCDATETIME() WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [TransactionType] = 0 AND [CashAccountId] IS NULL AND [CustomerId] IS NULL AND [Description] LIKE N'Warehouse offset - Material export %';",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND OBJECT_ID(N'[dbo].[Customer]', N'U') IS NOT NULL AND OBJECT_ID(N'[dbo].[CashCategory]', N'U') IS NOT NULL UPDATE ct SET ct.[Description] = N'Phân bổ công trình cho ' + customer.[Name], ct.[CashCategoryId] = COALESCE(ct.[CashCategoryId], category.[Id]) FROM [dbo].[CashTransaction] ct INNER JOIN [dbo].[MaterialExport] me ON me.[Id] = ct.[SourceModuleId] AND me.[IsDeleted] = 0 INNER JOIN [dbo].[Customer] customer ON customer.[Id] = me.[CustomerId] AND customer.[IsDeleted] = 0 CROSS APPLY (SELECT TOP (1) cc.[Id] FROM [dbo].[CashCategory] cc WHERE cc.[IsDeleted] = 0 AND cc.[Name] = N'Phân bổ công trình' ORDER BY cc.[CreatedAtUtc], cc.[Id]) category WHERE ct.[IsDeleted] = 0 AND ct.[SourceModule] = N'MaterialExport' AND ct.[TransactionType] = 1 AND ct.[Description] LIKE N'Customer material cost - %';",
-            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_MaterialExportOffset' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceDetailId] IS NOT NULL GROUP BY [SourceModule], [SourceModuleId], [SourceDetailId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_MaterialExportOffset] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [SourceDetailId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceDetailId] IS NOT NULL;",
+            """
+            IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL
+            BEGIN
+                ;WITH ranked AS
+                (
+                    SELECT
+                        ct.[Id],
+                        FIRST_VALUE(ct.[Id]) OVER
+                        (
+                            PARTITION BY ct.[SourceModuleId], ct.[TransactionType]
+                            ORDER BY ct.[CreatedAtUtc], ct.[Id]
+                        ) AS [KeeperId]
+                    FROM [dbo].[CashTransaction] ct
+                    WHERE ct.[IsDeleted] = 0
+                        AND ct.[SourceModule] = N'MaterialExport'
+                        AND ct.[SourceModuleId] IS NOT NULL
+                        AND NOT EXISTS
+                        (
+                            SELECT 1
+                            FROM [dbo].[CashTransaction] paid
+                            WHERE paid.[IsDeleted] = 0
+                                AND paid.[SourceModule] = N'MaterialExport'
+                                AND paid.[SourceModuleId] = ct.[SourceModuleId]
+                                AND paid.[TransactionType] = ct.[TransactionType]
+                                AND
+                                (
+                                    ABS(ISNULL(paid.[PaidAmount], 0)) > 0.000001
+                                    OR EXISTS
+                                    (
+                                        SELECT 1
+                                        FROM [dbo].[CashTransactionPayment] payment
+                                        WHERE payment.[IsDeleted] = 0
+                                            AND payment.[CashTransactionId] = paid.[Id]
+                                            AND ABS(payment.[Amount]) > 0.000001
+                                    )
+                                )
+                        )
+                )
+                SELECT ranked.[Id] AS [DuplicateId], ranked.[KeeperId]
+                INTO #MaterialExportCashMerge
+                FROM ranked
+                WHERE ranked.[Id] <> ranked.[KeeperId];
+
+                UPDATE payment
+                SET payment.[CashTransactionId] = mergeRows.[KeeperId],
+                    payment.[UpdatedAtUtc] = SYSUTCDATETIME()
+                FROM [dbo].[CashTransactionPayment] payment
+                INNER JOIN #MaterialExportCashMerge mergeRows
+                    ON mergeRows.[DuplicateId] = payment.[CashTransactionId];
+
+                IF OBJECT_ID(N'[dbo].[CashTransactionCostAllocation]', N'U') IS NOT NULL
+                BEGIN
+                    UPDATE allocation
+                    SET allocation.[CashTransactionId] = mergeRows.[KeeperId],
+                        allocation.[UpdatedAtUtc] = SYSUTCDATETIME()
+                    FROM [dbo].[CashTransactionCostAllocation] allocation
+                    INNER JOIN #MaterialExportCashMerge mergeRows
+                        ON mergeRows.[DuplicateId] = allocation.[CashTransactionId];
+                END;
+
+                UPDATE keeper
+                SET keeper.[Amount] = totals.[TotalAmount],
+                    keeper.[PaidAmount] = 0,
+                    keeper.[Status] = 0,
+                    keeper.[SourceDetailId] = NULL,
+                    keeper.[Description] = CASE
+                        WHEN customer.[Name] IS NULL THEN keeper.[Description]
+                        ELSE N'Phân bổ công trình cho ' + customer.[Name]
+                    END,
+                    keeper.[UpdatedAtUtc] = SYSUTCDATETIME()
+                FROM [dbo].[CashTransaction] keeper
+                INNER JOIN
+                (
+                    SELECT mergeRows.[KeeperId], SUM(ISNULL(sourceRow.[Amount], 0)) AS [TotalAmount]
+                    FROM
+                    (
+                        SELECT [KeeperId], [KeeperId] AS [SourceId]
+                        FROM #MaterialExportCashMerge
+                        GROUP BY [KeeperId]
+                        UNION ALL
+                        SELECT [KeeperId], [DuplicateId]
+                        FROM #MaterialExportCashMerge
+                    ) mergeRows
+                    INNER JOIN [dbo].[CashTransaction] sourceRow
+                        ON sourceRow.[Id] = mergeRows.[SourceId]
+                    GROUP BY mergeRows.[KeeperId]
+                ) totals ON totals.[KeeperId] = keeper.[Id]
+                LEFT JOIN [dbo].[MaterialExport] materialExport
+                    ON materialExport.[Id] = keeper.[SourceModuleId]
+                LEFT JOIN [dbo].[Customer] customer
+                    ON customer.[Id] = materialExport.[CustomerId];
+
+                UPDATE duplicate
+                SET duplicate.[IsDeleted] = 1,
+                    duplicate.[UpdatedAtUtc] = SYSUTCDATETIME(),
+                    duplicate.[SourceDetailId] = NULL
+                FROM [dbo].[CashTransaction] duplicate
+                INNER JOIN #MaterialExportCashMerge mergeRows
+                    ON mergeRows.[DuplicateId] = duplicate.[Id];
+
+                UPDATE activeTransaction
+                SET activeTransaction.[SourceDetailId] = NULL
+                FROM [dbo].[CashTransaction] activeTransaction
+                WHERE activeTransaction.[IsDeleted] = 0
+                    AND activeTransaction.[SourceModule] = N'MaterialExport'
+                    AND activeTransaction.[SourceDetailId] IS NOT NULL;
+
+                DROP TABLE #MaterialExportCashMerge;
+            END;
+            """,
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_MaterialExportOffset' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) DROP INDEX [UX_CashTransaction_MaterialExportOffset] ON [dbo].[CashTransaction];",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_MaterialExportObligation' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceModuleId] IS NOT NULL GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_MaterialExportObligation] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceModuleId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_PurchaseOrderObligation' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseOrder' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_PurchaseOrderObligation] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseOrder';",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_SalesOrderPayment' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_SalesOrderPayment] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder';"
         };
@@ -176,6 +287,25 @@ public static class DI
         foreach (var command in commands)
         {
             dataContext.Database.ExecuteSqlRaw(command);
+        }
+
+        var remainingMaterialExportDuplicates = dataContext.CashTransaction
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && x.SourceModule == "MaterialExport"
+                && x.SourceModuleId != null)
+            .GroupBy(x => new { x.SourceModuleId, x.TransactionType })
+            .Where(x => x.Count() > 1)
+            .Select(x => new { x.Key.SourceModuleId, x.Key.TransactionType, Count = x.Count() })
+            .Take(10)
+            .ToList();
+
+        if (remainingMaterialExportDuplicates.Count > 0)
+        {
+            Log.Warning(
+                "Không tự động hợp nhất {Count} nhóm giao dịch Material Export vì có dữ liệu thanh toán hoặc cần kiểm tra kế toán. Unique index chưa được tạo; ứng dụng vẫn chặn phát sinh nhóm trùng mới. Ví dụ: {@Duplicates}",
+                remainingMaterialExportDuplicates.Count,
+                remainingMaterialExportDuplicates);
         }
     }
 

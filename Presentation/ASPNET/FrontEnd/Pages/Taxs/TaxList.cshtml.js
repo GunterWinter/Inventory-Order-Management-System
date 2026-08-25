@@ -233,7 +233,9 @@ const App = {
             create: () => {
                 percentageText.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Enter Percentage',
-                    format: 'N0',
+                    numericKind: 'decimal',
+                    format: 'N6',
+                    decimals: 6,
                     min: 0,
                     max: 100,
                     step: 0.01,
@@ -242,7 +244,7 @@ const App = {
             },
             refresh: () => {
                 if (percentageText.obj) {
-                    percentageText.obj.value = parseFloat(state.percentage);
+                    percentageText.obj.value = NumberFormatManager.parseLocaleNumber(state.percentage);
                 }
             }
         };
@@ -258,10 +260,11 @@ const App = {
                 state.errors.name = 'Name is required.';
                 isValid = false;
             }
-            if ((state.percentage === null || state.percentage === undefined || state.percentage === '') || isNaN(parseFloat(state.percentage))) {
+            const percentageValue = NumberFormatManager.parseLocaleNumber(state.percentage);
+            if (percentageValue === null) {
                 state.errors.percentage = 'Percentage is required and must be a number.';
                 isValid = false;
-            } else if (parseFloat(state.percentage) < 0 || parseFloat(state.percentage) > 100) {
+            } else if (percentageValue < 0 || percentageValue > 100) {
                 state.errors.percentage = 'Percentage must be between 0 and 100.';
                 isValid = false;
             }

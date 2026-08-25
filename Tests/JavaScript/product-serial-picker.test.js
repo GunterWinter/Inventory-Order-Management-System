@@ -68,3 +68,29 @@ test('serial column formats object payloads without object Object', () => {
         productSerialNumbers: { internalSerialNumber: 'INT-003' }
     }), /\[object Object\]/);
 });
+
+test('serial picker exposes the editor context and Material Export syncs IDs, text and quantity into batch data', () => {
+    const pickerSource = fs.readFileSync(pickerPath, 'utf8');
+    const materialExportSource = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/MaterialExports/MaterialExportList.cshtml.js'
+    ), 'utf8');
+
+    assert.match(pickerSource, /options\.onSelectionApplied\?\.\(\{/);
+    assert.match(pickerSource, /editorElement:\s*args\.element/);
+    assert.match(pickerSource, /rowIndex:\s*stableRowIndex/);
+    assert.match(pickerSource, /read:\s*\(\)\s*=>\s*activeRowData\?\.productSerialNumbers/);
+    assert.ok(
+        pickerSource.indexOf('options.onSelectionApplied?.({') < pickerSource.indexOf('quantityObj.value ='),
+        'batch synchronization callback must run before an optional NumericTextBox update'
+    );
+    assert.match(materialExportSource, /gridGetter:\s*\(\)\s*=>\s*secondaryGrid\.obj/);
+    assert.match(materialExportSource, /onSelectionApplied:\s*\(\{\s*rowData,\s*editorElement,\s*rowIndex,\s*rowUid,\s*serialIds,\s*serialNumbers,\s*quantity\s*\}\)/);
+    assert.match(materialExportSource, /GridInteractionManager\.syncBatchRowValues\(secondaryGrid\.obj/);
+    assert.match(materialExportSource, /productSerialIds:\s*\[\.\.\.serialIds\]/);
+    assert.match(materialExportSource, /productSerialNumbers:\s*serialNumbers/);
+    assert.match(materialExportSource, /movement:\s*quantity/);
+    assert.match(materialExportSource, /productSerialIds:\s*\[\],\s*\n\s*productSerialNumbers:\s*'',\s*\n\s*movement:\s*1/);
+    assert.doesNotMatch(materialExportSource, /close:\s*function\s*\(\)\s*\{\s*requestAnimationFrame/);
+    assert.doesNotMatch(materialExportSource, /requestAnimationFrame\(\(\)\s*=>\s*\{\s*const rowIndex[^}]+updateCell\(rowIndex,\s*'productSerialNumbers'/s);
+});

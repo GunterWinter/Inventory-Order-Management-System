@@ -38,6 +38,7 @@ public class CreatePurchaseReturnValidator : AbstractValidator<CreatePurchaseRet
 public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnRequest, CreatePurchaseReturnResult>
 {
     private readonly ICommandRepository<PurchaseReturn> _purchaseReturnRepository;
+    private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
     private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
@@ -45,6 +46,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
 
     public CreatePurchaseReturnHandler(
         ICommandRepository<PurchaseReturn> purchaseReturnRepository,
+        ICommandRepository<PurchaseOrder> purchaseOrderRepository,
         ICommandRepository<InventoryTransaction> itemRepository,
         ICommandRepository<Warehouse> warehouseRepository,
         IUnitOfWork unitOfWork,
@@ -53,6 +55,7 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         )
     {
         _purchaseReturnRepository = purchaseReturnRepository;
+        _purchaseOrderRepository = purchaseOrderRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -61,6 +64,13 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
 
     public async Task<CreatePurchaseReturnResult> Handle(CreatePurchaseReturnRequest request, CancellationToken cancellationToken = default)
     {
+        var hasConfirmedSource = await _purchaseOrderRepository.GetQuery()
+            .ApplyIsDeletedFilter(false)
+            .AnyAsync(x => x.Id == request.PurchaseOrderId
+                && x.OrderStatus == PurchaseOrderStatus.Confirmed, cancellationToken);
+        if (!hasConfirmedSource)
+            throw new InvalidOperationException("Chỉ được tạo phiếu trả hàng mua từ đơn mua hàng đã xác nhận.");
+
         var entity = new PurchaseReturn();
         entity.CreatedById = request.CreatedById;
 

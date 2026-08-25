@@ -74,6 +74,14 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                 if (requestedStatus is StockCountStatus.Cancelled or StockCountStatus.Archived)
                     throw new InvalidOperationException("Phiếu kiểm kê Nháp phải được xóa hoặc xác nhận.");
             }
+            else if (entity.Status == StockCountStatus.Archived)
+            {
+                var headerChanged = entity.CountDate != request.CountDate
+                    || entity.WarehouseId != request.WarehouseId
+                    || entity.Description != request.Description;
+                if (requestedStatus != StockCountStatus.Confirmed || headerChanged)
+                    throw new InvalidOperationException("Phiếu kiểm kê đã lưu trữ chỉ có thể được khôi phục về Đã xác nhận mà không thay đổi nội dung.");
+            }
             else
             {
                 var headerChanged = entity.CountDate != request.CountDate

@@ -915,7 +915,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
     }
 
     expectHttpError('/StockCount/UpdateStockCount', 409);
-    const materialOpeningCostResult = await page.evaluate(async ({ productId, warehouseId, customerId, referenceCode, testKey }) => {
+    const materialOpeningCostResult = await page.evaluate(async ({ productId, secondaryProductId, warehouseId, customerId, referenceCode, testKey }) => {
         const userId = StorageManager.getUserId();
         const dataOf = response => response?.data?.content?.data || [];
         const products = dataOf(await AxiosManager.get('/Product/GetProductList', {}));
@@ -966,9 +966,19 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
             createdById: userId
         });
         const materialExportLineId = createLineResponse?.data?.content?.data?.id;
+        const secondaryLineResponse = await AxiosManager.post('/InventoryTransaction/MaterialExportCreateInvenTrans', {
+            moduleId: materialExportId,
+            productId: secondaryProductId,
+            movement: 1,
+            productSerialIds: [],
+            createdById: userId
+        });
+        const secondaryMaterialExportLineId = secondaryLineResponse?.data?.content?.data?.id;
         const exportHeader = dataOf(await AxiosManager.get('/MaterialExport/GetMaterialExportList', {}))
             .find(item => item.id === materialExportId);
-        if (!exportHeader || !materialExportLineId) throw new Error('Material Export setup failed.');
+        if (!exportHeader || !materialExportLineId || !secondaryMaterialExportLineId) {
+            throw new Error('Material Export setup failed.');
+        }
 
         await AxiosManager.post('/MaterialExport/UpdateMaterialExport', {
             id: exportHeader.id,
@@ -982,6 +992,10 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
 
         const costTransactions = dataOf(await AxiosManager.get('/CashTransaction/GetCashTransactionList', {}))
             .filter(item => item.sourceModule === 'MaterialExport' && item.sourceModuleId === materialExportId);
+        const sourceItems = costTransactions.length === 1
+            ? (await AxiosManager.get(`/CashTransaction/GetCashTransactionSourceItems?cashTransactionId=${encodeURIComponent(costTransactions[0].id)}`, {}))
+                ?.data?.content?.data ?? []
+            : [];
         const stockAfterExport = dataOf(await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))
             .find(item => item.productId === productId && item.warehouseId === warehouseId)?.stock ?? 0;
         const selectedAfter = dataOf(await AxiosManager.get(
@@ -1022,6 +1036,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         return {
             materialExportId,
             materialExportLineId,
+            secondaryMaterialExportLineId,
             selectedBefore: selectedSerial,
             selectedAfter,
             costTransactions: costTransactions.map(item => ({
@@ -1030,6 +1045,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
                 sourceModule: item.sourceModule,
                 sourceModuleId: item.sourceModuleId
             })),
+            sourceItems,
             stockAfterExport,
             openingAfterExport: productAfter?.openingStockQuantity,
             currentCostPrice: productAfter?.costPrice,
@@ -1039,6 +1055,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         };
     }, {
         productId: openingResult.autoId,
+        secondaryProductId: openingResult.noneId,
         warehouseId: openingWarehouse.id,
         customerId: costCustomerId,
         referenceCode: openingResult.auto.referenceCode,
@@ -1046,9 +1063,14 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
     });
     if (!materialOpeningCostResult.materialExportId
         || !materialOpeningCostResult.materialExportLineId
+        || !materialOpeningCostResult.secondaryMaterialExportLineId
         || materialOpeningCostResult.costTransactions.length !== 1
-        || materialOpeningCostResult.costTransactions[0].amount !== 100
-        || !/tồn đầu kỳ/i.test(materialOpeningCostResult.costTransactions[0].description || '')
+        || materialOpeningCostResult.costTransactions[0].amount !== 250
+        || materialOpeningCostResult.sourceItems.length !== 2
+        || new Set(materialOpeningCostResult.sourceItems.map(item => item.sourceItemId)).size !== 2
+        || materialOpeningCostResult.sourceItems.some(item => !item.sourceItemId || !item.customerName)
+        || materialOpeningCostResult.sourceItems.reduce((sum, item) => sum + Number(item.total || 0), 0) !== 250
+        || JSON.stringify(materialOpeningCostResult.sourceItems.map(item => item.unitPrice).sort((a, b) => a - b)) !== JSON.stringify([100, 150])
         || materialOpeningCostResult.currentCostPrice !== 777
         || materialOpeningCostResult.stockAfterExport !== 2
         || materialOpeningCostResult.openingAfterExport !== 3
@@ -1114,6 +1136,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         openingStockCountLifecycle: true,
         openingStockProfitCost: true,
         internalAutoOpeningMaterialCost: true,
+        materialExportSingleCashTransaction: true,
         unicodeCustomerLookup: true,
         exportRows: exportRows.length,
         pdfCount

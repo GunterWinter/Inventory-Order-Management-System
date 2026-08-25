@@ -209,6 +209,7 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     await paidAmount.press('Control+A');
     await paidAmount.pressSequentially('200.000,22');
     await paidAmount.press('Tab');
+    await page.waitForFunction(() => document.querySelector('#PaidAmountInput')?.value === '200.000,22');
     const partialPaymentInput = await page.evaluate(() => {
         const element = document.querySelector('#PaidAmountInput');
         return { display: element?.value, value: element?.ej2_instances?.[0]?.value };

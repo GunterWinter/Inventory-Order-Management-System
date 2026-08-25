@@ -948,6 +948,23 @@ const App = {
 
         const mainGrid = {
             obj: null,
+            onPaymentActionMouseDown: (event) => {
+                if (event.target?.closest?.('.payment-status-action')) {
+                    event.stopPropagation();
+                }
+            },
+            onPaymentActionClick: async (event) => {
+                const paymentAction = event.target?.closest?.('.payment-status-action');
+                if (!paymentAction || !mainGrid.obj?.element?.contains(paymentAction)) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                const row = paymentAction.closest('tr');
+                if (!row) return;
+                const rowData = mainGrid.obj.getRowInfo(row).rowData;
+                if (!rowData) return;
+                await showPaymentPopup(rowData);
+            },
             create: async (dataSource) => {
                 mainGrid.obj = new ej.grids.Grid({
                     height: '240px',
@@ -1009,20 +1026,6 @@ const App = {
                         window.requestAnimationFrame(() => {
                             if (!mainGrid.obj?.element?.isConnected) return;
                             mainGrid.obj.toolbarModule?.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-
-                            const paymentActions = mainGrid.obj.element.querySelectorAll('.payment-status-action');
-                            paymentActions.forEach(paymentAction => {
-                                paymentAction.addEventListener('mousedown', e => e.stopPropagation());
-                                paymentAction.addEventListener('click', async (e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const row = paymentAction.closest('tr');
-                                    if (!row) return;
-                                    const rowData = mainGrid.obj.getRowInfo(row).rowData;
-                                    if (!rowData) return;
-                                    await showPaymentPopup(rowData);
-                                });
-                            });
                         });
                     },
                     excelExportComplete: () => { },
@@ -1159,6 +1162,8 @@ const App = {
                     }
                 });
 
+                mainGridRef.value.addEventListener('mousedown', mainGrid.onPaymentActionMouseDown);
+                mainGridRef.value.addEventListener('click', mainGrid.onPaymentActionClick);
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
@@ -1169,6 +1174,7 @@ const App = {
         let productObj;
         let warehouseObj;
         let priceObj;
+        let priceEditorValue = null;
         let quantityObj;
         let totalObj;
         let taxObj;
@@ -1486,14 +1492,14 @@ const App = {
                         {
                             field: 'unitPrice',
                             headerText: 'Unit Price',
-                            width: 200, validationRules: { required: true }, type: 'number', format: 'N0', textAlign: 'Right',
+                            width: 200, validationRules: { required: true }, type: 'number', numericKind: 'money', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let priceElem = document.createElement('input');
                                     return priceElem;
                                 },
                                 read: () => {
-                                    return Number(priceObj?.value ?? 0);
+                                    return Number(priceEditorValue ?? priceObj?.value ?? 0);
                                 },
                                 destroy: () => {
                                     if (priceObj) {
@@ -1506,14 +1512,17 @@ const App = {
                                         normalizeLookupId(item.id) === normalizeLookupId(args.rowData.productId));
                                     const initialPrice = args.rowData.unitPrice ?? SalesOrderItemEditor.resolveUnitPrice(product, state.salesType);
                                     args.rowData.unitPrice = Number(initialPrice ?? 0);
+                                    priceEditorValue = args.rowData.unitPrice;
                                     priceObj = new ej.inputs.NumericTextBox({
-                                        format: 'n0',
-                                        decimals: 0,
-                                        step: 1000,
+                                        numericKind: 'money',
+                                        format: 'n6',
+                                        decimals: 6,
+                                        step: 0.01,
                                         validateDecimalOnType: false,
                                         value: args.rowData.unitPrice,
                                         change: (e) => {
-                                            args.rowData.unitPrice = Number(e.value ?? 0);
+                                            priceEditorValue = Number(e.value ?? priceEditorValue ?? 0);
+                                            args.rowData.unitPrice = priceEditorValue;
                                             args.rowData.total = args.rowData.unitPrice * Number(args.rowData.quantity ?? quantityObj?.value ?? 0);
                                             updateEditorRowCell(args.element, 'total', args.rowData.total);
                                             if (totalObj) {
@@ -1524,6 +1533,14 @@ const App = {
                                         }
                                     });
                                     priceObj.appendTo(args.element);
+                                    priceObj.element.addEventListener('input', () => {
+                                        const typedValue = NumberFormatManager.parseLocaleNumber(priceObj.element.value);
+                                        if (typedValue == null) return;
+                                        priceEditorValue = Number(typedValue);
+                                        args.rowData.unitPrice = priceEditorValue;
+                                        args.rowData.total = priceEditorValue * Number(args.rowData.quantity ?? quantityObj?.value ?? 0);
+                                        updateEditorRowCell(args.element, 'total', args.rowData.total);
+                                    });
                                 }
                             }
                         },
@@ -1544,7 +1561,7 @@ const App = {
                             // Validate the completed row in actionBegin. Cell-level validation
                             // fires too early while the user is still choosing product/warehouse.
                             validationRules: { required: false },
-                            type: 'number', format: 'N6', textAlign: 'Right',
+                            type: 'number', numericKind: 'decimal', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     let quantityElem = document.createElement('input');
@@ -1563,6 +1580,7 @@ const App = {
                                     quantityObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.quantity ?? 0,
                                         readonly: isSerialTrackedProduct(args.rowData.productId),
+                                        numericKind: isSerialTrackedProduct(args.rowData.productId) ? 'integer' : 'decimal',
                                         format: 'n6',
                                         decimals: 6,
                                         validateDecimalOnType: false,
@@ -1904,7 +1922,9 @@ const App = {
                         }
 
                         if (!['quantity', 'unitPrice', 'taxId'].includes(field)) return;
-                        const value = field === 'taxId' ? normalizeLookupId(args.value) : Number(args.value ?? 0);
+                        const value = field === 'taxId'
+                            ? normalizeLookupId(args.value)
+                            : Number(field === 'unitPrice' ? priceEditorValue ?? args.value ?? 0 : args.value ?? 0);
                         const amounts = applySalesOrderItemAmounts(args.rowData, { [field]: value });
                         requestAnimationFrame(() => writeSalesOrderBatchFields(args.rowData, amounts));
                     },
@@ -2421,6 +2441,8 @@ const App = {
 
         Vue.onUnmounted(() => {
             mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
+            mainGridRef.value?.removeEventListener('mousedown', mainGrid.onPaymentActionMouseDown);
+            mainGridRef.value?.removeEventListener('click', mainGrid.onPaymentActionClick);
         });
 
         return {

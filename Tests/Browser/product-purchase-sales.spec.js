@@ -11,13 +11,46 @@ const path = require('node:path');
 
 const dataOf = response => response?.data?.content?.data;
 
-async function selectTaxAndSaveItem(page, taxName) {
+async function openActiveGridDropdown(page, editorSelector) {
+    const editor = page.locator(editorSelector);
+    const editorId = await editor.getAttribute('id');
+    const popup = editorId ? page.locator(`#${editorId}_popup`) : page.locator('.e-ddl.e-popup').last();
+    await expect.poll(() => editor.evaluate(element => element.ej2_instances?.[0]?.dataSource?.length ?? 0))
+        .toBeGreaterThan(0);
+    if (await popup.isVisible().catch(() => false)) return popup;
+
+    const actions = [
+        () => editor.locator('xpath=..').locator('.e-ddl-icon').click(),
+        async () => { await editor.focus(); await page.keyboard.press('Alt+ArrowDown'); },
+        async () => { await editor.focus(); await page.keyboard.press('F4'); },
+        () => editor.evaluate(element => element.ej2_instances?.[0]?.showPopup?.())
+    ];
+    for (const action of actions) {
+        await action();
+        const opened = await popup.waitFor({ state: 'visible', timeout: 1000 })
+            .then(() => true, () => false);
+        if (opened) return popup;
+    }
+    await popup.waitFor({ state: 'visible' });
+    return popup;
+}
+
+async function selectTaxAndSaveItem(page, taxName, taxId) {
     await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'taxId'));
     await page.waitForFunction(() => Boolean(
         document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0]
     ));
-    await page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist').locator('xpath=..').click();
-    await selectOpenDropdownOption(page, taxName);
+    const selectedTax = await page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')
+        .evaluate((element, expected) => {
+            const dropdown = element.ej2_instances?.[0];
+            const item = dropdown?.dataSource?.find(candidate => String(candidate.id) === String(expected.id));
+            if (!dropdown || !item) return null;
+            dropdown.value = item.id;
+            dropdown.dataBind();
+            dropdown.change?.({ value: item.id, itemData: item });
+            return { id: String(item.id), name: item.name };
+        }, { id: taxId, name: taxName });
+    expect(selectedTax).toEqual({ id: String(taxId), name: taxName });
 
     const quantityAfterTax = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -61,44 +94,61 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
     expect(editorSettings.allowFiltering).toBe(true);
     expect(editorSettings.filterBarPlaceholder).toBe(expectedSearchPlaceholder);
 
-    await page.locator(editorSelector).locator('xpath=..').click();
-    const popup = page.locator('.e-ddl.e-popup:visible').last();
-    await popup.waitFor({ state: 'visible' });
-    const options = page.locator('.e-ddl.e-popup:visible .e-list-item:visible');
-    await expect.poll(() => options.count()).toBeGreaterThan(0);
-    const filterInput = page.locator('input.e-input-filter:visible').last();
-    await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            const popup = await openActiveGridDropdown(page, editorSelector);
+            const filterInput = popup.locator('input.e-input-filter');
+            await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
+            await filterInput.click();
+            await filterInput.press('Control+A');
+            await filterInput.pressSequentially(searchText, { delay: 20 });
+            const options = popup.locator('.e-list-item:visible');
+            await expect(options).toHaveCount(1);
+            await expect(options.first()).toContainText(expectedProductName);
+            await options.first().click();
+            return;
+        } catch (error) {
+            lastError = error;
+            await page.waitForTimeout(250);
+        }
+    }
+    throw lastError;
+}
 
-    await expect(filterInput).toBeFocused();
-    await page.keyboard.press('Control+A');
-    await page.keyboard.type(searchText, { delay: 20 });
-    await expect(options).toHaveCount(1);
-    await expect(options.first()).toContainText(expectedProductName);
-    await options.first().click();
+async function selectProductEditorValue(page, productId) {
+    const editor = page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist');
+    const selected = await editor.evaluate((element, expectedId) => {
+        const dropdown = element.ej2_instances?.[0];
+        const item = dropdown?.dataSource?.find(candidate => String(candidate.id) === String(expectedId));
+        if (!dropdown || !item) return null;
+        dropdown.value = item.id;
+        dropdown.dataBind();
+        dropdown.change?.({ value: item.id, itemData: item });
+        return String(item.id);
+    }, productId);
+    expect(selected).toBe(String(productId));
+    await expect.poll(() => page.evaluate(() => (
+        document.querySelector('#SecondaryGrid').ej2_instances[0].getRowsObject()[0]?.data?.productId
+    ))).toBe(productId);
 }
 
 async function beginProductItemEdit(page) {
     const editor = page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist');
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-        await page.locator('#SecondaryGrid_add').click();
-        try {
-            await editor.waitFor({ state: 'attached', timeout: 4_000 });
-            return;
-        } catch {
-            const rowCount = await page.evaluate(() => (
-                document.querySelector('#SecondaryGrid')?.ej2_instances?.[0]?.getRowsObject?.().length ?? 0
-            ));
-            if (rowCount > 0) {
-                await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'productId'));
-                await editor.waitFor({ state: 'attached', timeout: 4_000 });
-                return;
-            }
-        }
-    }
-    throw new Error('Product item editor did not open after using the Add toolbar action.');
+    await page.waitForFunction(() => {
+        const modal = document.querySelector('#MainModal.show');
+        const dialog = modal?.querySelector('.modal-dialog');
+        return dialog && getComputedStyle(dialog).transform === 'none';
+    });
+
+    const addButton = page.locator('#SecondaryGrid_add');
+    await expect(addButton).toBeEnabled();
+    await addButton.click();
+    await editor.waitFor({ state: 'visible', timeout: 8_000 });
 }
 
 test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ngay khi chọn hàng', async ({ monitoredPage: page }) => {
+    test.slow();
     let salesOrderId = null;
     let purchaseOrderId = null;
     const key = `E2E-PRICE-${Date.now()}`;
@@ -108,6 +158,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const expectedCostPrice = 234000.25;
     const expectedOpeningStock = 2.5;
     const expectedSalesQuantity = 1.25;
+    const editedSalesPrice = 456789.125;
+    const editedPurchasePrice = 321987.625;
+    const editedPurchaseQuantity = 2.5;
 
     await login(page);
     await page.goto('/Products/ProductList', { waitUntil: 'domcontentloaded' });
@@ -136,6 +189,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     expect(lookup.vendor?.id).toBeTruthy();
     expect(lookup.tax?.id).toBeTruthy();
 
+    await page.waitForFunction(() => Boolean(
+        bootstrap.Modal.getInstance(document.querySelector('#MainModal'))
+    ));
     await page.locator('#AddCustom').click();
     await page.waitForSelector('#MainModal.show');
     await page.locator('input[placeholder="Enter Name"]').fill(productName);
@@ -205,8 +261,73 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     });
     expect(transactionView.groupColumns).toEqual(['productName']);
     expect(transactionView.dataCount).toBeGreaterThan(0);
-    await expect(page.locator('#MainGrid tr', { hasText: key }).first()).toContainText('2.50');
+    await expect(page.locator('#MainGrid tr', { hasText: key }).first()).toContainText('2,5');
+    const transactionRecord = await page.evaluate(id => {
+        const grid = document.querySelector('#MainGrid').ej2_instances[0];
+        const record = grid.dataSource.find(item => item.productId === id);
+        return {
+            productName: record?.productName,
+            movement: record?.movement,
+            stock: record?.stock,
+            height: Number(grid.height)
+        };
+    }, productId);
+    expect(transactionRecord.productName).toBe(productName);
+    expect(transactionRecord.movement).toBe(expectedOpeningStock);
+    expect(transactionRecord.stock).toBe(expectedOpeningStock);
+    expect(transactionRecord.height).toBeGreaterThanOrEqual(420);
     expect(await page.locator('#MainGrid .e-row').count()).toBeGreaterThan(0);
+
+    await test.step('Material Export previews decimal warehouse stock as soon as a product is selected', async () => {
+        await page.goto('/MaterialExports/MaterialExportList', { waitUntil: 'domcontentloaded' });
+        await waitForVuePage(page);
+        await page.locator('#AddCustom').click();
+        await page.waitForSelector('#MainModal.show');
+
+        const exportDateInput = page.locator('#MainModal .e-datepicker').first();
+        const locale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
+        await exportDateInput.fill(locale === 'vi' ? '25/08/2026' : '08/25/2026');
+        await exportDateInput.press('Tab');
+        const stockLookupResponsePromise = page.waitForResponse(response => (
+            response.url().includes('/MaterialExport/GetWarehouseProductStock') && response.status() === 200
+        ));
+        await page.locator('#MainModal input[placeholder="Chọn Kho"]').locator('xpath=..').click();
+        await selectOpenDropdownOption(page, lookup.warehouse.name);
+        await stockLookupResponsePromise;
+        await page.locator('#MainModal input[placeholder="Chọn Khách hàng"]').locator('xpath=..').click();
+        await selectOpenDropdownOption(page, lookup.customer.name);
+
+        const materialExportResponsePromise = page.waitForResponse(response => (
+            response.url().includes('/MaterialExport/CreateMaterialExport') && response.status() === 200
+        ));
+        await page.locator('#MainModal .modal-footer .btn-primary').click();
+        const materialExportResponse = await materialExportResponsePromise;
+        const materialExport = (await materialExportResponse.json())?.content?.data;
+        expect(materialExport?.id).toBeTruthy();
+        await expect(page.locator('#MainModal #ComplexDiv')).toBeVisible();
+        await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
+
+        await beginProductItemEdit(page);
+        await searchAndSelectProduct(page, productSearchText, productName);
+        await expect.poll(async () => page.evaluate(() => {
+            const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+            const cell = grid.getCellFromIndex(0, grid.getColumnIndexByField('remainingDisplay'));
+            const editor = document.querySelector('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist')?.ej2_instances?.[0];
+            const selected = editor?.dataSource?.find?.(item => item.id === editor.value);
+            return {
+                rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? ''),
+                selectedStock: Number(selected?.stockQuantity ?? 0)
+            };
+        })).toEqual({ rendered: expectedOpeningStock, selectedStock: expectedOpeningStock });
+
+        await page.locator('#MainModal .btn-close').click();
+        await page.waitForSelector('#MainModal', { state: 'hidden' });
+        const materialExportRow = page.locator('#MainGrid .e-row', { hasText: materialExport.number }).first();
+        await materialExportRow.click();
+        await page.locator('#DeleteCustom').click();
+        await page.locator('.swal2-confirm').click();
+        await expect(materialExportRow).toHaveCount(0);
+    });
 
     const documents = await page.evaluate(async ({ customerId, vendorId, key }) => {
         const unwrap = response => response?.data?.content?.data;
@@ -259,6 +380,22 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     expect(salesRow.row.unitPrice).toBe(expectedSalesPrice);
     expect(salesRow.parsedPrice).toBe(expectedSalesPrice);
 
+    await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'unitPrice'));
+    const orderSalesPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await orderSalesPriceInput.click();
+    await orderSalesPriceInput.press('Control+A');
+    await orderSalesPriceInput.pressSequentially('456789,125');
+    await expect(orderSalesPriceInput).toHaveValue('456.789,125');
+    await page.locator('#MainModal .modal-title').click();
+    await expect.poll(() => page.evaluate(() => {
+        const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+        const cell = grid.getCellFromIndex(0, grid.getColumnIndexByField('unitPrice'));
+        return {
+            row: Number(grid.getRowsObject()[0]?.data?.unitPrice),
+            rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
+        };
+    })).toEqual({ row: editedSalesPrice, rendered: editedSalesPrice });
+
     await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'quantity'));
     const salesQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await salesQuantityInput.fill('');
@@ -266,7 +403,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await expect(salesQuantityInput).toHaveValue('1,25');
     expect(await salesQuantityInput.evaluate(element => element.ej2_instances?.[0]?.value)).toBe(expectedSalesQuantity);
 
-    const salesQuantityAfterTax = await selectTaxAndSaveItem(page, lookup.tax.name);
+    const salesQuantityAfterTax = await selectTaxAndSaveItem(page, lookup.tax.name, lookup.tax.id);
     expect(salesQuantityAfterTax).toEqual({ row: expectedSalesQuantity, rendered: expectedSalesQuantity });
     const renderedSalesRow = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -296,13 +433,13 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     ), salesOrderId);
     expect(persistedSalesItems).toHaveLength(1);
     expect(persistedSalesItems[0].productId).toBe(productId);
-    expect(persistedSalesItems[0].unitPrice).toBe(expectedSalesPrice);
+    expect(persistedSalesItems[0].unitPrice).toBe(editedSalesPrice);
     expect(persistedSalesItems[0].quantity).toBe(expectedSalesQuantity);
     expect(persistedSalesItems[0].taxId).toBe(lookup.tax.id);
 
     const reloadedSalesItem = await reloadAndReadItem(page, '/SalesOrders/SalesOrderList', salesOrderId);
     expect(reloadedSalesItem.productId).toBe(productId);
-    expect(reloadedSalesItem.unitPrice).toBe(expectedSalesPrice);
+    expect(reloadedSalesItem.unitPrice).toBe(editedSalesPrice);
     expect(reloadedSalesItem.quantity).toBe(expectedSalesQuantity);
 
     await page.goto('/PurchaseOrders/PurchaseOrderList', { waitUntil: 'domcontentloaded' });
@@ -312,7 +449,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
     await beginProductItemEdit(page);
-    await searchAndSelectProduct(page, productSearchText, productName);
+    await selectProductEditorValue(page, productId);
 
     const purchaseRow = await page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -329,14 +466,37 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     expect(purchaseRow.row.unitPrice).toBe(expectedCostPrice);
     expect(purchaseRow.parsedPrice).toBe(expectedCostPrice);
 
-    await selectTaxAndSaveItem(page, lookup.tax.name);
+    await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'unitPrice'));
+    const purchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await purchasePriceInput.click();
+    await purchasePriceInput.press('Control+A');
+    await purchasePriceInput.pressSequentially('321987,625');
+    await expect(purchasePriceInput).toHaveValue('321.987,625');
+    await page.locator('#MainModal .modal-title').click();
+    await expect.poll(() => page.evaluate(() => {
+        const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+        const cell = grid.getCellFromIndex(0, grid.getColumnIndexByField('unitPrice'));
+        return {
+            row: Number(grid.getRowsObject()[0]?.data?.unitPrice),
+            rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
+        };
+    })).toEqual({ row: editedPurchasePrice, rendered: editedPurchasePrice });
+
+    await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editCell(0, 'quantity'));
+    const purchaseQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await purchaseQuantityInput.fill('');
+    await purchaseQuantityInput.pressSequentially('2,5');
+    await expect(purchaseQuantityInput).toHaveValue('2,5');
+
+    await selectTaxAndSaveItem(page, lookup.tax.name, lookup.tax.id);
     const persistedPurchaseItems = await page.evaluate(async id => (
         (await AxiosManager.get(`/PurchaseOrderItem/GetPurchaseOrderItemByPurchaseOrderIdList?purchaseOrderId=${encodeURIComponent(id)}`, {}))
             ?.data?.content?.data ?? []
     ), purchaseOrderId);
     expect(persistedPurchaseItems).toHaveLength(1);
     expect(persistedPurchaseItems[0].productId).toBe(productId);
-    expect(persistedPurchaseItems[0].unitPrice).toBe(expectedCostPrice);
+    expect(persistedPurchaseItems[0].unitPrice).toBe(editedPurchasePrice);
+    expect(persistedPurchaseItems[0].quantity).toBe(editedPurchaseQuantity);
     expect(persistedPurchaseItems[0].taxId).toBe(lookup.tax.id);
 
     const reloadedPurchaseItem = await reloadAndReadItem(
@@ -345,7 +505,33 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         purchaseOrderId
     );
     expect(reloadedPurchaseItem.productId).toBe(productId);
-    expect(reloadedPurchaseItem.unitPrice).toBe(expectedCostPrice);
+    expect(reloadedPurchaseItem.unitPrice).toBe(editedPurchasePrice);
+    expect(reloadedPurchaseItem.quantity).toBe(editedPurchaseQuantity);
+
+    for (const [route, draftOrderId] of [
+        ['/SalesReturns/SalesReturnList', salesOrderId],
+        ['/PurchaseReturns/PurchaseReturnList', purchaseOrderId]
+    ]) {
+        await page.goto(route, { waitUntil: 'domcontentloaded' });
+        await waitForVuePage(page);
+        await page.locator('#AddCustom').click();
+        await page.waitForSelector('#MainModal.show');
+        const sourceIds = await page.locator('#MainModal .e-dropdownlist').first().evaluate(element => (
+            element.ej2_instances?.[0]?.dataSource?.map?.(item => item.id) ?? []
+        ));
+        expect(sourceIds).not.toContain(draftOrderId);
+        await page.locator('#MainModal .btn-close').click();
+        await page.waitForSelector('#MainModal', { state: 'hidden' });
+    }
+
+    await page.goto('/StockCounts/StockCountList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.locator('#AddCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    await expect.poll(() => page.locator('#MainModal .e-dropdownlist').last()
+        .evaluate(element => element.ej2_instances?.[0]?.value ?? null)).toBe('0');
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
 
     await page.evaluate(async ({ salesOrderId, purchaseOrderId }) => {
         const userId = StorageManager.getUserId();
@@ -405,6 +591,10 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
     }, { key, unitPrice });
     expect(fixture.product?.id).toBeTruthy();
     expect(fixture.salesOrder?.id).toBeTruthy();
+    await expect.poll(() => page.evaluate(async productId => (
+        ((await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))?.data?.content?.data ?? [])
+            .some(item => item.productId === productId && Number(item.stock) === 3)
+    ), fixture.product.id)).toBe(true);
 
     await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
@@ -412,11 +602,9 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
         ?.dataSource?.some?.(item => item.id === id), fixture.salesOrder.id);
     await openSelectedDocument(page, '#MainGrid', fixture.salesOrder.id);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
+    await page.waitForTimeout(500);
     await beginProductItemEdit(page);
-    await page.evaluate(() => document.querySelector(
-        '#SecondaryGrid td.e-editedbatchcell .e-dropdownlist'
-    ).ej2_instances[0].showPopup());
-    await selectOpenDropdownOption(page, key);
+    await searchAndSelectProduct(page, key, key);
     await page.waitForFunction(() => {
         const button = document.querySelector('#SecondaryGrid .so-serial-picker');
         return button && !button.disabled;
@@ -452,7 +640,7 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
         renderedQuantity: 2
     });
 
-    const quantityAfterTax = await selectTaxAndSaveItem(page, fixture.tax.name);
+    const quantityAfterTax = await selectTaxAndSaveItem(page, fixture.tax.name, fixture.tax.id);
     expect(quantityAfterTax).toEqual({ row: 2, rendered: 2 });
     const persisted = await page.evaluate(async id => (
         (await AxiosManager.get(`/SalesOrderItem/GetSalesOrderItemBySalesOrderIdList?salesOrderId=${encodeURIComponent(id)}`, {}))
@@ -461,4 +649,227 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
     expect(persisted).toHaveLength(1);
     expect(persisted[0].quantity).toBe(2);
     expect(persisted[0].productSerialIds).toHaveLength(2);
+});
+
+test('Material Export keeps selected serials in added and changed batch records when Update is clicked immediately', async ({ monitoredPage: page }) => {
+    const key = `E2E-MATERIAL-EXPORT-SERIAL-${Date.now()}`;
+
+    await login(page);
+    const fixture = await page.evaluate(async key => {
+        const unwrap = response => response?.data?.content?.data ?? [];
+        const userId = StorageManager.getUserId();
+        const [groups, warehouses, customers] = await Promise.all([
+            AxiosManager.get('/ProductGroup/GetProductGroupList', {}),
+            AxiosManager.get('/Warehouse/GetWarehouseList', {}),
+            AxiosManager.get('/Customer/GetCustomerList', {})
+        ]);
+        const group = unwrap(groups)[0];
+        const warehouse = unwrap(warehouses).find(item => item.systemWarehouse === false);
+        const customer = unwrap(customers)[0];
+        const productResponse = await AxiosManager.post('/Product/CreateProduct', {
+            name: key,
+            referenceCode: `${key}-REF`,
+            unitPrice: 125000,
+            costPrice: 100000,
+            physical: true,
+            serialTrackingMode: 1,
+            internalSerialFixedCode: 'E2E',
+            defaultWarehouseId: warehouse.id,
+            defaultWarrantyMonths: 0,
+            unitMeasureName: 'PCS',
+            productGroupId: group.id,
+            openingStockQuantity: 3,
+            createdById: userId
+        });
+        return {
+            product: productResponse?.data?.content?.data,
+            warehouse,
+            customer
+        };
+    }, key);
+    expect(fixture.product?.id).toBeTruthy();
+    expect(fixture.warehouse?.id).toBeTruthy();
+    expect(fixture.customer?.id).toBeTruthy();
+
+    await expect.poll(() => page.evaluate(async productId => (
+        ((await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))?.data?.content?.data ?? [])
+            .some(item => item.productId === productId && Number(item.stock) === 3)
+    ), fixture.product.id)).toBe(true);
+
+    await page.goto('/MaterialExports/MaterialExportList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.locator('#AddCustom').click();
+    await page.waitForSelector('#MainModal.show');
+
+    const exportDateInput = page.locator('#MainModal .e-datepicker').first();
+    const locale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
+    await exportDateInput.fill(locale === 'vi' ? '25/08/2026' : '08/25/2026');
+    await exportDateInput.press('Tab');
+
+    const headerDropdowns = page.locator('#MainModal .e-dropdownlist');
+    const stockLookupResponsePromise = page.waitForResponse(response => (
+        response.url().includes('/MaterialExport/GetWarehouseProductStock') && response.status() === 200
+    ));
+    await headerDropdowns.nth(0).locator('xpath=..').click();
+    await selectOpenDropdownOption(page, fixture.warehouse.name);
+    await stockLookupResponsePromise;
+    await headerDropdowns.nth(1).locator('xpath=..').click();
+    await selectOpenDropdownOption(page, fixture.customer.name);
+
+    const createHeaderResponsePromise = page.waitForResponse(response => (
+        response.url().includes('/MaterialExport/CreateMaterialExport') && response.status() === 200
+    ));
+    await page.locator('#MainModal .modal-footer .btn-primary').click();
+    const materialExport = (await (await createHeaderResponsePromise).json())?.content?.data;
+    expect(materialExport?.id).toBeTruthy();
+    await expect(page.locator('#MainModal #ComplexDiv')).toBeVisible();
+
+    await beginProductItemEdit(page);
+    await searchAndSelectProduct(page, key, key);
+
+    // Exercise the real failure path where Quantity was edited first. Moving to
+    // the serial column destroys that NumericTextBox before the picker callback.
+    const quantityCellBeforeSerial = page.locator('#SecondaryGrid').getByRole('gridcell', {
+        name: /column header Quantity/
+    }).first();
+    await quantityCellBeforeSerial.dblclick();
+    const quantityInputBeforeSerial = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await expect(quantityInputBeforeSerial).toBeVisible();
+    await quantityInputBeforeSerial.fill('1');
+
+    let serialCell = page.locator('#SecondaryGrid').getByRole('gridcell', {
+        name: /column header Serial Numbers/
+    }).first();
+    await serialCell.dblclick();
+    const serialPickerButton = page.locator('#SecondaryGrid td.e-editedbatchcell button');
+    await expect(serialPickerButton).toBeEnabled();
+    await serialPickerButton.click();
+    await page.waitForSelector('#ProductSerialPickerModal.show');
+
+    const pickerRows = page.locator('#ProductSerialPickerBody tr');
+    await expect(pickerRows).toHaveCount(3);
+    const selectedSerials = await pickerRows.evaluateAll(rows => rows.slice(0, 2).map(row => ({
+        id: row.querySelector('.product-serial-picker-check')?.value,
+        number: row.cells[1]?.textContent?.trim()
+    })));
+    await pickerRows.nth(0).locator('.product-serial-picker-check').check();
+    await pickerRows.nth(1).locator('.product-serial-picker-check').check();
+    await page.locator('#ProductSerialPickerApply').click();
+    await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
+
+    const selectedState = await page.evaluate(() => {
+        const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+        const row = grid.getRowsObject()[0]?.data;
+        const added = grid.getBatchChanges().addedRecords[0];
+        const serialCell = grid.getCellFromIndex(0, grid.getColumnIndexByField('productSerialNumbers'));
+        const quantityCell = grid.getCellFromIndex(0, grid.getColumnIndexByField('movement'));
+        return {
+            rowIds: [...(row?.productSerialIds ?? [])],
+            rowText: row?.productSerialNumbers ?? '',
+            rowQuantity: Number(row?.movement),
+            addedIds: [...(added?.productSerialIds ?? [])],
+            addedText: added?.productSerialNumbers ?? '',
+            addedQuantity: Number(added?.movement),
+            renderedSerials: serialCell?.innerText ?? '',
+            renderedQuantity: NumberFormatManager.parseLocaleNumber(quantityCell?.innerText ?? '')
+        };
+    });
+    const selectedIds = selectedSerials.map(item => item.id);
+    expect(selectedState.rowIds).toEqual(selectedIds);
+    expect(selectedState.addedIds).toEqual(selectedIds);
+    expect(selectedState.rowText).toBe(selectedSerials.map(item => item.number).join(', '));
+    expect(selectedState.addedText).toBe(selectedState.rowText);
+    expect(selectedState.rowQuantity).toBe(2);
+    expect(selectedState.addedQuantity).toBe(2);
+    expect(selectedState.renderedSerials).toContain(selectedSerials[0].number);
+    expect(selectedState.renderedSerials).toContain(selectedSerials[1].number);
+    expect(selectedState.renderedQuantity).toBe(2);
+
+    const createLineResponsePromise = page.waitForResponse(response => (
+        response.url().includes('/InventoryTransaction/MaterialExportCreateInvenTrans')
+            && response.request().method() === 'POST'
+    ));
+    await page.locator('#MainModal .modal-footer .btn-primary').click();
+    const createLineResponse = await createLineResponsePromise;
+    expect(createLineResponse.status()).toBe(200);
+    const createPayload = createLineResponse.request().postDataJSON();
+    expect(createPayload.productSerialIds).toEqual(selectedIds);
+    expect(Number(createPayload.movement)).toBe(2);
+    await expect(page.locator('.swal2-popup', { hasText: 'Vui lòng chọn serial thiết bị trước khi lưu' })).toHaveCount(0);
+
+    await expect.poll(() => page.evaluate(async id => (
+        (await AxiosManager.get(`/InventoryTransaction/MaterialExportGetInvenTransList?moduleId=${encodeURIComponent(id)}`, {}))
+            ?.data?.content?.data ?? []
+    ), materialExport.id)).toHaveLength(1);
+    let persisted = await page.evaluate(async id => (
+        (await AxiosManager.get(`/InventoryTransaction/MaterialExportGetInvenTransList?moduleId=${encodeURIComponent(id)}`, {}))
+            ?.data?.content?.data ?? []
+    ), materialExport.id);
+    expect([...persisted[0].productSerialIds].sort()).toEqual([...selectedIds].sort());
+    expect(persisted[0].movement).toBe(2);
+
+    await expect.poll(() => page.evaluate(() => (
+        document.querySelector('#SecondaryGrid').ej2_instances[0].dataSource?.length ?? 0
+    ))).toBe(1);
+    serialCell = page.locator('#SecondaryGrid').getByRole('gridcell', {
+        name: /column header Serial Numbers/
+    }).first();
+    await serialCell.dblclick();
+    await expect(serialPickerButton).toBeEnabled();
+    await serialPickerButton.click();
+    await page.waitForSelector('#ProductSerialPickerModal.show');
+    const checkedSerials = page.locator('#ProductSerialPickerBody .product-serial-picker-check:checked');
+    await expect(checkedSerials).toHaveCount(2);
+    const removedSerialId = await checkedSerials.first().getAttribute('value');
+    await checkedSerials.first().uncheck();
+    await page.locator('#ProductSerialPickerApply').click();
+    await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
+    const remainingId = selectedIds.find(id => id !== removedSerialId);
+
+    const changedState = await page.evaluate(() => {
+        const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
+        const row = grid.getRowsObject()[0]?.data;
+        const changed = grid.getBatchChanges().changedRecords[0];
+        return {
+            rowIds: [...(row?.productSerialIds ?? [])],
+            rowQuantity: Number(row?.movement),
+            changedIds: [...(changed?.productSerialIds ?? [])],
+            changedQuantity: Number(changed?.movement)
+        };
+    });
+    expect(changedState).toEqual({
+        rowIds: [remainingId],
+        rowQuantity: 1,
+        changedIds: [remainingId],
+        changedQuantity: 1
+    });
+
+    const updateLineResponsePromise = page.waitForResponse(response => (
+        response.url().includes('/InventoryTransaction/MaterialExportUpdateInvenTrans')
+            && response.request().method() === 'POST'
+    ));
+    await page.locator('#SecondaryGrid_update').click();
+    const updateLineResponse = await updateLineResponsePromise;
+    expect(updateLineResponse.status()).toBe(200);
+    const updatePayload = updateLineResponse.request().postDataJSON();
+    expect(updatePayload.productSerialIds).toEqual([remainingId]);
+    expect(Number(updatePayload.movement)).toBe(1);
+
+    await expect.poll(() => page.evaluate(async ({ id, serialId }) => {
+        const rows = (await AxiosManager.get(
+            `/InventoryTransaction/MaterialExportGetInvenTransList?moduleId=${encodeURIComponent(id)}`, {}))
+            ?.data?.content?.data ?? [];
+        return rows.length === 1
+            && Number(rows[0].movement) === 1
+            && rows[0].productSerialIds?.length === 1
+            && rows[0].productSerialIds[0] === serialId;
+    }, { id: materialExport.id, serialId: remainingId })).toBe(true);
+
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+    const materialExportRow = page.locator('#MainGrid .e-row', { hasText: materialExport.number }).first();
+    await materialExportRow.click();
+    await page.locator('#DeleteCustom').click();
+    await page.locator('.swal2-confirm').click();
+    await expect(materialExportRow).toHaveCount(0);
 });

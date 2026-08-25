@@ -4,6 +4,7 @@ using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Domain.Enums;
 
 namespace Application.Features.InventoryTransactionManager.Queries;
 
@@ -19,9 +20,11 @@ public record GetInventoryTransactionListDto
     public string? StatusName { get; init; }
     public string? Number { get; init; }
     public string? WarehouseName { get; init; }
+    public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? ProductReferenceCode { get; init; }
     public decimal? Movement { get; init; }
+    public InventoryTransType? TransType { get; init; }
     public string? TransTypeName { get; init; }
     public decimal? Stock { get; init; }
     public string? WarehouseFromName { get; init; }
@@ -35,6 +38,14 @@ public class GetInventoryTransactionListProfile : Profile
     public GetInventoryTransactionListProfile()
     {
         CreateMap<InventoryTransaction, GetInventoryTransactionListDto>()
+            .ForMember(
+                dest => dest.Movement,
+                opt => opt.MapFrom(src => Math.Abs(src.Movement ?? 0))
+            )
+            .ForMember(
+                dest => dest.Stock,
+                opt => opt.MapFrom(src => Math.Abs(src.Movement ?? 0) * (int)(src.TransType ?? 0))
+            )
             .ForMember(
                 dest => dest.StatusName,
                 opt => opt.MapFrom(src => src.Status.HasValue ? src.Status.Value.ToFriendlyName() : string.Empty)
@@ -57,7 +68,7 @@ public class GetInventoryTransactionListProfile : Profile
             )
             .ForMember(
                 dest => dest.ProductName,
-                opt => opt.MapFrom(src => src.Product != null ? src.Product.Number + ' ' + src.Product.Name : string.Empty)
+                opt => opt.MapFrom(src => src.Product != null ? src.Product.Name : string.Empty)
             )
             .ForMember(
                 dest => dest.ProductReferenceCode,
@@ -100,7 +111,9 @@ public class GetInventoryTransactionListHandler : IRequestHandler<GetInventoryTr
             .Include(x => x.WarehouseTo)
             .Where(x =>
                 x.Product!.Physical == true &&
-                x.Warehouse!.SystemWarehouse == false
+                x.Warehouse!.SystemWarehouse == false &&
+                (x.Status == InventoryTransactionStatus.Confirmed
+                    || x.Status == InventoryTransactionStatus.Archived)
             )
             .OrderByDescending(x => x.CreatedAtUtc)
             .AsQueryable();

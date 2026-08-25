@@ -5,6 +5,22 @@ const App = {
         });
 
         const mainGridRef = Vue.ref(null);
+        const getGridHeight = () => Math.max(
+            420,
+            Math.floor(window.innerHeight - (mainGridRef.value?.getBoundingClientRect?.().top ?? 260) - 32)
+        );
+        const resizeGrid = () => {
+            if (!mainGrid.obj) return;
+            mainGrid.obj.height = getGridHeight();
+            mainGrid.obj.dataBind();
+        };
+        const finalizeGroupedGrid = () => requestAnimationFrame(() => {
+            mainGrid.obj?.element?.querySelectorAll?.('.transaction-stock-sum').forEach(element => {
+                const rawValue = Number(element.textContent);
+                element.textContent = NumberFormatManager.formatToLocale(Number.isFinite(rawValue) ? rawValue : 0);
+            });
+            GridInteractionManager.collapseGroups(mainGrid.obj);
+        });
 
         const services = {
             getMainData: async () => {
@@ -37,6 +53,7 @@ const App = {
 
                 await methods.populateMainData();
                 await mainGrid.create(state.mainData);
+                window.addEventListener('resize', resizeGrid);
 
             } catch (e) {
                 console.error('page init error:', e);
@@ -45,11 +62,13 @@ const App = {
             }
         });
 
+        Vue.onUnmounted(() => window.removeEventListener('resize', resizeGrid));
+
         const mainGrid = {
             obj: null,
             create: async (dataSource) => {
                 mainGrid.obj = new ej.grids.Grid({
-                    height: '240px',
+                    height: getGridHeight(),
                     dataSource: dataSource,
                     allowFiltering: true,
                     allowSorting: true,
@@ -79,9 +98,9 @@ const App = {
                         { field: 'productName', headerText: 'Product', width: 100 },
                         { field: 'movementDate', headerText: 'Movement Date', width: 100, format: 'yyyy-MM-dd' },
                         { field: 'number', headerText: 'Number', width: 100 },
-                        { field: 'movement', headerText: 'Movement', width: 100, type: 'number', format: 'N0', textAlign: 'Right' },
+                        { field: 'movement', headerText: 'Movement', width: 100, type: 'number', numericKind: 'decimal', textAlign: 'Right' },
                         { field: 'transTypeName', headerText: 'Trans Type', width: 100 },
-                        { field: 'stock', headerText: 'Stock', width: 150, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
+                        { field: 'stock', headerText: 'Stock', width: 150, type: 'number', numericKind: 'decimal', textAlign: 'Right' },
                         { field: 'statusName', headerText: 'Status', width: 100 },
                         { field: 'moduleName', headerText: 'Module', width: 100 },
                         { field: 'moduleCode', headerText: 'Module Code', width: 100 },
@@ -96,8 +115,8 @@ const App = {
                                 {
                                     type: 'Sum',
                                     field: 'stock',
-                                    groupCaptionTemplate: 'Stock: ${Sum}',
-                                    format: 'N2'
+                                    groupCaptionTemplate: 'Stock: <span class="transaction-stock-sum">${Sum}</span>',
+                                    footerTemplate: 'Stock: <span class="transaction-stock-sum">${Sum}</span>'
                                 }
                             ]
                         }
@@ -107,6 +126,7 @@ const App = {
                         { type: 'Separator' },
                     ],
                     beforeDataBound: () => { },
+                    dataBound: finalizeGroupedGrid,
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (mainGrid.obj.getSelectedRecords().length == 1) {

@@ -74,11 +74,11 @@ const App = {
                     state.totalCount = content.totalCount ?? 0;
                     state.mainData = (content.data ?? []).map(item => ({
                     ...item,
-                    salesOrderDate: item.salesOrderDate ? DateFormatManager.parseServerDate(item.salesOrderDate) : null,
+                    salesOrderDate: item.salesOrderDate ? DateFormatManager.parseBusinessDate(item.salesOrderDate) : null,
                     salesOrderDateText: methods.formatDate(item.salesOrderDate),
-                    customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseServerDate(item.customerWarrantyEndDate) : null,
+                    customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseBusinessDate(item.customerWarrantyEndDate) : null,
                     customerWarrantyEndDateText: methods.formatDate(item.customerWarrantyEndDate),
-                    supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseServerDate(item.supplierWarrantyEndDate) : null,
+                    supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseBusinessDate(item.supplierWarrantyEndDate) : null,
                     supplierWarrantyEndDateText: methods.formatDate(item.supplierWarrantyEndDate),
                     warrantyStatus: item.customerWarrantyEndDate
                         ? (window.UiLocalization?.translateText ? window.UiLocalization.translateText(item.isCustomerWarrantyValid ? 'Valid' : 'Expired') : (item.isCustomerWarrantyValid ? 'Valid' : 'Expired'))
@@ -103,8 +103,8 @@ const App = {
                 state.selectedSerialNumber = rowData.internalSerialNumber;
                 state.movementData = (rowData.movements ?? []).map(m => ({
                     ...m,
-                    movementDate: m.movementDate ? DateFormatManager.parseServerDate(m.movementDate) : null,
-                    movementDateText: methods.formatDateTime(m.movementDate),
+                    movementDate: m.movementDate ? DateFormatManager.parseBusinessDate(m.movementDate) : null,
+                    movementDateText: methods.formatDate(m.movementDate),
                     moduleName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.moduleName) : m.moduleName,
                     fromWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.fromWarehouseName) : m.fromWarehouseName,
                     toWarehouseName: window.UiLocalization?.translateText ? window.UiLocalization.translateText(m.toWarehouseName) : m.toWarehouseName,
@@ -114,10 +114,9 @@ const App = {
             },
             formatDate: (dateString) => {
                 if (!dateString) return '';
-                const date = dateString instanceof Date ? dateString : DateFormatManager.parseServerDate(dateString);
+                const date = DateFormatManager.parseBusinessDate(dateString);
                 if (!date) return '';
                 return new Intl.DateTimeFormat(getDisplayLocale(), {
-                    timeZone: 'Asia/Ho_Chi_Minh',
                     day: '2-digit', month: '2-digit', year: 'numeric'
                 }).format(date);
             },
@@ -133,7 +132,7 @@ const App = {
             },
             formatNumber: (value) => {
                 if (!value && value !== 0) return '';
-                return Number(value).toLocaleString(getDisplayLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                return NumberFormatManager.formatToLocale(value);
             },
             formatStatus: (statusValue) => {
                 if (statusValue === null || statusValue === undefined || statusValue === '') return '';
@@ -282,7 +281,7 @@ const App = {
             }));
             state.movementData = state.movementData.map(item => ({
                 ...item,
-                movementDateText: methods.formatDateTime(item.movementDate)
+                movementDateText: methods.formatDate(item.movementDate)
             }));
             mainGrid.refresh();
             movementGrid.refresh();

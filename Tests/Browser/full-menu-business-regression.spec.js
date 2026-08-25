@@ -48,3 +48,22 @@ test('every authorized sidebar page renders through real browser navigation with
         await page.screenshot({ path: path.join(evidenceDirectory, fileName), fullPage: true });
     }
 });
+
+test('cash allocation renders exactly one searchable customer control per row', async ({ monitoredPage: page }) => {
+    await login(page, 'vi');
+    await page.goto('/CashTransactions/CashTransactionList', { waitUntil: 'domcontentloaded' });
+    await waitForPage(page);
+    await page.locator('#AddCustom').click();
+    await page.waitForSelector('#MainModal.show');
+
+    const detailsButton = page.locator('#MainModal button').filter({ hasText: /Chi tiết phân bổ/i }).first();
+    if (await detailsButton.isVisible()) await detailsButton.click();
+    const addRowButton = page.locator('#MainModal .allocation-panel__header button');
+    await addRowButton.click();
+    await expect(page.locator('#MainModal .allocation-row')).toHaveCount(1);
+    await expect.poll(() => page.locator('#MainModal .allocation-row .app-searchable-native-dropdown:visible').count()).toBe(1);
+    await expect(page.locator('#MainModal .allocation-row select[data-searchable-dropdown]:visible')).toHaveCount(0);
+
+    await page.locator('#MainModal .allocation-remove-button').click();
+    await expect(page.locator('#MainModal .allocation-row')).toHaveCount(0);
+});

@@ -38,7 +38,14 @@
         return value;
     }
 
-    function syncBatchRowValues(grid, { rowData, editorElement, values, formatters = {} } = {}) {
+    function syncBatchRowValues(grid, {
+        rowData,
+        editorElement,
+        rowIndex: stableRowIndex,
+        rowUid,
+        values,
+        formatters = {}
+    } = {}) {
         if (!grid || !rowData || !values) return -1;
 
         const normalizedId = value => value === null || value === undefined || value === ''
@@ -48,6 +55,14 @@
         const renderedRows = grid.getRows?.() ?? [];
         const editorRow = editorElement?.closest?.('tr') ?? null;
         let rowIndex = editorRow ? renderedRows.indexOf(editorRow) : -1;
+
+        if (rowIndex < 0 && rowUid) {
+            rowIndex = renderedRows.findIndex(row => row?.getAttribute?.('data-uid') === rowUid);
+        }
+        if (rowIndex < 0 && Number.isInteger(stableRowIndex)
+            && stableRowIndex >= 0 && stableRowIndex < renderedRows.length) {
+            rowIndex = stableRowIndex;
+        }
 
         if (rowIndex < 0 && targetId && typeof grid.getRowIndexByPrimaryKey === 'function') {
             rowIndex = grid.getRowIndexByPrimaryKey(rowData.id);
@@ -60,16 +75,66 @@
         }
         if (rowIndex == null || rowIndex < 0) return -1;
 
-        Object.assign(rowData, values);
         const actualRow = rowObjects[rowIndex]?.data;
-        if (actualRow && actualRow !== rowData) Object.assign(actualRow, values);
-
-        const changes = grid.getBatchChanges?.() ?? {};
-        [...(changes.addedRecords ?? []), ...(changes.changedRecords ?? [])]
+        let changes = grid.getBatchChanges?.() ?? {};
+        let addedRecords = changes.addedRecords ?? [];
+        let changedRecords = changes.changedRecords ?? [];
+        let matchedBatchRecords = [...addedRecords, ...changedRecords]
             .filter(item => item === rowData
                 || item === actualRow
-                || (targetId && normalizedId(item?.id) === targetId))
-            .forEach(item => Object.assign(item, values));
+                || (targetId && normalizedId(item?.id) === targetId));
+
+        // Applying a custom modal editor does not always make Syncfusion create a
+        // changed record until the cell later blurs. Register an existing row now
+        // so an immediate Update/Main Save persists the values just applied.
+        if (matchedBatchRecords.length === 0 && targetId && typeof grid.updateCell === 'function') {
+            const valueChanged = (current, next) => {
+                if (Array.isArray(current) || Array.isArray(next)) {
+                    return JSON.stringify(current ?? []) !== JSON.stringify(next ?? []);
+                }
+                return current !== next;
+            };
+            const marker = Object.entries(values).find(([field, value]) => {
+                const column = grid.getColumnByField?.(field);
+                return column && column.allowEditing !== false
+                    && !column.isPrimaryKey
+                    && valueChanged(actualRow?.[field], value);
+            });
+            if (marker) {
+                try {
+                    grid.updateCell(rowIndex, marker[0], marker[1]);
+                } catch (error) {
+                    // The explicit row/added-record synchronization below remains
+                    // authoritative if Syncfusion rejects a rendered cell refresh.
+                }
+                changes = grid.getBatchChanges?.() ?? changes;
+                addedRecords = changes.addedRecords ?? addedRecords;
+                changedRecords = changes.changedRecords ?? changedRecords;
+                matchedBatchRecords = [...addedRecords, ...changedRecords]
+                    .filter(item => item === rowData
+                        || item === actualRow
+                        || (targetId && normalizedId(item?.id) === targetId));
+            }
+        }
+
+        Object.assign(rowData, values);
+        if (actualRow && actualRow !== rowData) Object.assign(actualRow, values);
+
+        // A newly inserted Syncfusion batch row may expose three distinct objects
+        // (editor rowData, rowsObject data and addedRecords data) before it has a key.
+        // In that case, use the ordinal of the keyless rendered row to locate the
+        // corresponding added record instead of relying on object identity.
+        if (matchedBatchRecords.length === 0 && !targetId) {
+            const keylessRowOrdinal = rowObjects
+                .slice(0, rowIndex + 1)
+                .filter(item => !normalizedId(item?.data?.id))
+                .length - 1;
+            const keylessAddedRecords = addedRecords.filter(item => !normalizedId(item?.id));
+            const addedRecord = keylessAddedRecords[keylessRowOrdinal];
+            if (addedRecord) matchedBatchRecords.push(addedRecord);
+        }
+
+        matchedBatchRecords.forEach(item => Object.assign(item, values));
 
         Object.entries(values).forEach(([field, value]) => {
             const column = grid.getColumnByField?.(field);

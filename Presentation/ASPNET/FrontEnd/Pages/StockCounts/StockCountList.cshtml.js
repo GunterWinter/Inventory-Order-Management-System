@@ -59,6 +59,8 @@
                 allowedStatuses = [stockCountStatus.draft, stockCountStatus.confirmed];
             } else if (currentStatus === stockCountStatus.confirmed) {
                 allowedStatuses = [stockCountStatus.confirmed, stockCountStatus.cancelled, stockCountStatus.archived];
+            } else if (currentStatus === stockCountStatus.archived) {
+                allowedStatuses = [stockCountStatus.archived, stockCountStatus.confirmed];
             } else {
                 allowedStatuses = [currentStatus];
             }
@@ -72,12 +74,13 @@
             const isExisting = Boolean(state.id);
             const isDraft = !isExisting || originalStatus === stockCountStatus.draft;
             const isConfirmed = isExisting && originalStatus === stockCountStatus.confirmed;
+            const isArchived = isExisting && originalStatus === stockCountStatus.archived;
             const isInteractive = !state.isViewMode && !state.deleteMode;
 
             state.isHeaderReadOnly = !isInteractive || (isExisting && !isDraft);
-            state.canEditStatus = isInteractive && (isDraft || isConfirmed);
+            state.canEditStatus = isInteractive && (isDraft || isConfirmed || isArchived);
             state.canEditLines = isInteractive && isExisting && isDraft;
-            state.canSubmit = isInteractive && (isDraft || isConfirmed);
+            state.canSubmit = isInteractive && (isDraft || isConfirmed || isArchived);
 
             if (countDatePicker.obj) {
                 countDatePicker.obj.enabled = !state.isHeaderReadOnly;
@@ -232,6 +235,7 @@
                         enabled: state.canEditStatus,
                         value: normalizeStatus(state.status)
                     });
+                    statusListLookup.obj.dataBind();
                 }
             }
         };
@@ -372,7 +376,11 @@
             },
             populateStockCountStatusListLookupData: async () => {
                 const response = await services.getStockCountStatusListLookupData();
-                state.stockCountStatusListLookupData = response?.data?.content?.data;
+                state.stockCountStatusListLookupData = (response?.data?.content?.data ?? []).map(item => ({
+                    ...item,
+                    id: normalizeStatus(item.id),
+                    name: window.UiLocalization?.translateText?.(item.name) ?? item.name
+                }));
             },
             populateSecondaryData: async (stockCountId) => {
                 try {
@@ -406,7 +414,7 @@
                 const hasSingleSelection = selectedRecords.length === 1;
                 const selectedStatus = hasSingleSelection ? normalizeStatus(selectedRecords[0].status) : '';
                 const canEditSelection = hasSingleSelection
-                    && [stockCountStatus.draft, stockCountStatus.confirmed].includes(selectedStatus);
+                    && [stockCountStatus.draft, stockCountStatus.confirmed, stockCountStatus.archived].includes(selectedStatus);
                 const canDeleteSelection = selectedRecords.length > 0
                     && selectedRecords.every(record => normalizeStatus(record.status) === stockCountStatus.draft);
 
@@ -431,7 +439,7 @@
 
                 if (viewMode) {
                     state.mainTitle = 'View Stock Count';
-                } else if (state.originalStatus === stockCountStatus.confirmed) {
+                } else if ([stockCountStatus.confirmed, stockCountStatus.archived].includes(state.originalStatus)) {
                     state.mainTitle = 'Update Stock Count Status';
                 } else {
                     state.mainTitle = 'Edit Stock Count';
@@ -517,10 +525,10 @@
                             state.number = savedRecord.number ?? '';
                             state.status = normalizeStatus(savedRecord.status ?? state.status);
                             state.originalStatus = state.status;
-                            if ([stockCountStatus.cancelled, stockCountStatus.archived].includes(state.originalStatus)) {
+                            if (state.originalStatus === stockCountStatus.cancelled) {
                                 state.isViewMode = true;
                                 state.mainTitle = 'View Stock Count';
-                            } else if (state.originalStatus === stockCountStatus.confirmed) {
+                            } else if ([stockCountStatus.confirmed, stockCountStatus.archived].includes(state.originalStatus)) {
                                 state.mainTitle = 'Update Stock Count Status';
                             } else {
                                 state.mainTitle = 'Edit Stock Count';
@@ -580,6 +588,7 @@
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
+                mainModalRef.value?.addEventListener('shown.bs.modal', statusListLookup.refresh);
 
                 await methods.populateWarehouseListLookupData();
                 warehouseListLookup.create();
@@ -610,6 +619,7 @@
 
         Vue.onUnmounted(() => {
             mainModalRef.value?.removeEventListener('hidden.bs.modal', methods.onMainModalHidden);
+            mainModalRef.value?.removeEventListener('shown.bs.modal', statusListLookup.refresh);
         });
 
         const mainGrid = {
@@ -687,12 +697,13 @@
                             state.showComplexDiv = false;
                             refreshEditorPermissions();
                             mainModal.obj.show();
+                            requestAnimationFrame(() => statusListLookup.refresh());
                         }
 
                         if (args.item.id === 'EditCustom') {
                             const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                             const selectedStatus = normalizeStatus(selectedRecord?.status);
-                            if (![stockCountStatus.draft, stockCountStatus.confirmed].includes(selectedStatus)) return;
+                            if (![stockCountStatus.draft, stockCountStatus.confirmed, stockCountStatus.archived].includes(selectedStatus)) return;
                             await methods.openRecord(selectedRecord, false);
                         }
 

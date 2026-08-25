@@ -87,7 +87,9 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 .Set<SalesOrderItem>()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
-                .Where(x => x.SalesOrderId == request.ModuleId)
+                .Where(x => x.SalesOrderId == request.ModuleId
+                    && x.SalesOrder != null
+                    && x.SalesOrder.OrderStatus == SalesOrderStatus.Confirmed)
                 .Select(x => x.Id!)
                 .ToListAsync(cancellationToken);
 
@@ -100,7 +102,9 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 .Set<PurchaseOrderItem>()
                 .AsNoTracking()
                 .ApplyIsDeletedFilter(false)
-                .Where(x => x.PurchaseOrderId == request.ModuleId)
+                .Where(x => x.PurchaseOrderId == request.ModuleId
+                    && x.PurchaseOrder != null
+                    && x.PurchaseOrder.OrderStatus == PurchaseOrderStatus.Confirmed)
                 .Select(x => x.Id!)
                 .ToListAsync(cancellationToken);
 

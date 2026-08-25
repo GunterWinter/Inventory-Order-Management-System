@@ -129,7 +129,10 @@ window.ProductSerialPicker = (() => {
         .filter(Boolean)
         .join(', ');
 
-    const createGridColumn = (options) => ({
+    const createGridColumn = (options) => {
+        let activeRowData = null;
+
+        return ({
         field: 'productSerialNumbers',
         headerText: options.headerText ?? 'Device Serials',
         width: options.width ?? 220,
@@ -142,13 +145,25 @@ window.ProductSerialPicker = (() => {
                 wrapper.innerHTML = '<button type="button" class="btn btn-outline-primary btn-sm">Choose serials</button><span class="text-muted serial-count"></span>';
                 return wrapper;
             },
-            read: () => '',
+            read: () => activeRowData?.productSerialNumbers ?? '',
             write: (args) => {
+                activeRowData = args.rowData;
                 const button = args.element.querySelector('button');
                 const label = args.element.querySelector('.serial-count');
                 const productList = options.productListGetter?.() ?? [];
                 const quantityField = options.quantityField ?? 'movement';
                 const serialEnabled = isSerialTrackedProduct(productList, args.rowData.productId);
+                const grid = options.gridGetter?.();
+                let stableRowIndex = -1;
+                let rowUid = null;
+                const captureRowContext = () => {
+                    const editorRow = args.element?.closest?.('tr');
+                    const renderedRows = grid?.getRows?.() ?? [];
+                    const currentIndex = editorRow ? renderedRows.indexOf(editorRow) : -1;
+                    if (currentIndex >= 0) stableRowIndex = currentIndex;
+                    rowUid = editorRow?.getAttribute?.('data-uid') ?? rowUid;
+                };
+                captureRowContext();
                 if (!serialEnabled) {
                     button.disabled = true;
                     button.classList.add('disabled');
@@ -161,6 +176,7 @@ window.ProductSerialPicker = (() => {
 
                 refreshLabel();
                 button.addEventListener('click', async () => {
+                    captureRowContext();
                     if (!serialEnabled) {
                         Swal.fire({
                             icon: 'info',
@@ -196,7 +212,16 @@ window.ProductSerialPicker = (() => {
                     }
 
                     applySelectionToRow(args.rowData, selectedSerials, quantityField);
-                    if (quantityObj) {
+                    options.onSelectionApplied?.({
+                        rowData: args.rowData,
+                        editorElement: args.element,
+                        rowIndex: stableRowIndex,
+                        rowUid,
+                        serialIds: [...args.rowData.productSerialIds],
+                        serialNumbers: args.rowData.productSerialNumbers,
+                        quantity: args.rowData[quantityField]
+                    });
+                    if (quantityObj && quantityObj.isDestroyed !== true) {
                         quantityObj.value = args.rowData[quantityField] ?? 0;
                         quantityObj.readonly = selectedSerials.length > 0;
                         quantityObj.dataBind();
@@ -205,7 +230,8 @@ window.ProductSerialPicker = (() => {
                 });
             }
         }
-    });
+        });
+    };
 
     const validateGridSave = (args, options) => {
         if (String(args.requestType ?? '').toLowerCase() !== 'save' || args.managedBatch !== true) {
