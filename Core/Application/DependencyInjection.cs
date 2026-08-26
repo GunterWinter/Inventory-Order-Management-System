@@ -27,13 +27,13 @@ public static class DependencyInjection
         //>>> Register services in Application.Features 
         var assembly = Assembly.GetExecutingAssembly();
         var featureTypes = assembly.GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract)
+            .Where(type => type.IsClass && !type.IsAbstract && !type.IsNested)
             .Where(type => type.Namespace != null && type.Namespace.StartsWith("Application.Features"));
 
         foreach (var type in featureTypes)
         {
             var interfaces = type.GetInterfaces();
-            foreach (var serviceInterface in interfaces)
+            foreach (var serviceInterface in interfaces.Where(serviceInterface => serviceInterface.Assembly == assembly))
             {
                 services.AddScoped(serviceInterface, type);
             }

@@ -170,6 +170,7 @@ public class PurchaseOrderService
             transaction.WarehouseId = item.WarehouseId;
             transaction.ProductId = item.ProductId;
             transaction.Movement = item.Quantity;
+            transaction.UnitCost = item.UnitPrice;
             _inventoryService.CalculateInvenTrans(transaction);
         }
         await _unitOfWork.SaveAsync(ct);

@@ -32,6 +32,7 @@ public record GetSalesOrderItemListDto
     public decimal? ProfitAmount { get; init; }
     public List<string>? ProductSerialIds { get; set; }
     public string? ProductSerialNumbers { get; set; }
+    public List<MaterialExportItem> CostAllocations { get; set; } = [];
     public DateTime? CreatedAtUtc { get; init; }
 }
 
@@ -125,6 +126,44 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
             .GroupBy(x => x.SalesOrderItemId!)
             .ToDictionary(x => x.Key, x => x.ToList());
 
+        var costRows = await (from inventory in _context.Set<InventoryTransaction>().AsNoTracking()
+            join allocation in _context.Set<MaterialExportItem>().AsNoTracking()
+                on inventory.Id equals allocation.InventoryTransactionId
+            join source in _context.Set<InventoryTransaction>().AsNoTracking()
+                on allocation.SourceInventoryTransactionId equals source.Id
+            join serial in _context.Set<ProductSerial>().AsNoTracking()
+                on allocation.ProductSerialId equals serial.Id into serialsByAllocation
+            from serial in serialsByAllocation.DefaultIfEmpty()
+            where !inventory.IsDeleted && !allocation.IsDeleted
+                && inventory.ModuleName == nameof(SalesOrder)
+                && inventory.ModuleItemId != null && itemIds.Contains(inventory.ModuleItemId)
+            orderby source.MovementDate, source.CreatedAtUtc, source.Id, allocation.Id
+            select new
+            {
+                inventory.ModuleItemId,
+                Allocation = new MaterialExportItem
+                {
+                    Id = allocation.Id,
+                    InventoryTransactionId = allocation.InventoryTransactionId,
+                    SourceInventoryTransactionId = allocation.SourceInventoryTransactionId,
+                    SourceCostAllocationId = allocation.SourceCostAllocationId,
+                    PurchaseOrderItemId = allocation.PurchaseOrderItemId,
+                    ProductSerialId = allocation.ProductSerialId,
+                    Quantity = allocation.Quantity,
+                    UnitPrice = allocation.UnitPrice,
+                    Total = allocation.Total,
+                    CostSource = allocation.CostSource,
+                    SourceModule = source.ModuleName,
+                    SourceNumber = source.ModuleNumber ?? source.Number,
+                    SourceDate = source.MovementDate,
+                    ProductSerialNumber = serial != null
+                        ? serial.ManufacturerSerialNumber ?? serial.InternalSerialNumber
+                        : null
+                }
+            }).ToListAsync(cancellationToken);
+        var costLookup = costRows.GroupBy(x => x.ModuleItemId!)
+            .ToDictionary(x => x.Key, x => x.Select(y => y.Allocation).ToList());
+
         foreach (var dto in dtos)
         {
             if (!string.IsNullOrWhiteSpace(dto.Id)
@@ -133,6 +172,8 @@ public class GetSalesOrderItemListHandler : IRequestHandler<GetSalesOrderItemLis
                 dto.ProductSerialIds = itemSerials.Select(x => x.Id).ToList();
                 dto.ProductSerialNumbers = string.Join(", ", itemSerials.Select(x => x.InternalSerialNumber));
             }
+            if (!string.IsNullOrWhiteSpace(dto.Id) && costLookup.TryGetValue(dto.Id, out var itemCosts))
+                dto.CostAllocations = itemCosts;
         }
 
         return new GetSalesOrderItemListResult

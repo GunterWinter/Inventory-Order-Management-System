@@ -18,6 +18,7 @@ public partial class InventoryTransactionService
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly ICommandRepository<StockCount> _stockCountRepository;
+    private readonly ICommandRepository<MaterialExportItem> _costAllocationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProductSerialService _productSerialService;
     private readonly InventoryCostResolver _inventoryCostResolver;
@@ -30,6 +31,7 @@ public partial class InventoryTransactionService
         IQueryContext queryContext,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         ICommandRepository<StockCount> stockCountRepository,
+        ICommandRepository<MaterialExportItem> costAllocationRepository,
         IUnitOfWork unitOfWork,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
         ProductSerialService productSerialService,
@@ -41,6 +43,7 @@ public partial class InventoryTransactionService
         _queryContext = queryContext;
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _stockCountRepository = stockCountRepository;
+        _costAllocationRepository = costAllocationRepository;
         _unitOfWork = unitOfWork;
         _salesOrderItemRepository = salesOrderItemRepository;
         _productSerialService = productSerialService;
@@ -131,6 +134,7 @@ public partial class InventoryTransactionService
                     || alreadyConfirmedIds.Contains(childId))
                 {
                     await _productSerialService.ReleaseInventoryTransactionSerialsAsync(childId, updatedId, cancellationToken);
+                    await DeleteCostAllocationsAsync(childId, updatedId, cancellationToken);
                 }
                 continue;
             }

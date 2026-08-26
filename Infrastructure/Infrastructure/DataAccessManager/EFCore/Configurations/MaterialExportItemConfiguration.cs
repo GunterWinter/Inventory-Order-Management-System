@@ -25,5 +25,31 @@ public class MaterialExportItemConfiguration : BaseEntityConfiguration<MaterialE
             .WithMany()
             .HasForeignKey(x => x.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<InventoryTransaction>()
+            .WithMany()
+            .HasForeignKey(x => x.InventoryTransactionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<InventoryTransaction>()
+            .WithMany()
+            .HasForeignKey(x => x.SourceInventoryTransactionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.ProductSerial)
+            .WithMany()
+            .HasForeignKey(x => x.ProductSerialId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Property(x => x.CostSource).HasMaxLength(200);
+        builder.HasIndex(x => x.SourceCostAllocationId);
+        builder.HasIndex(x => new { x.InventoryTransactionId, x.SourceInventoryTransactionId, x.SourceCostAllocationId })
+            .IsUnique()
+            .HasDatabaseName("UX_MaterialExportItem_ActiveFifoSource")
+            .HasFilter("[IsDeleted] = 0 AND [InventoryTransactionId] IS NOT NULL AND [SourceInventoryTransactionId] IS NOT NULL AND [ProductSerialId] IS NULL");
+        builder.HasIndex(x => new { x.InventoryTransactionId, x.ProductSerialId })
+            .IsUnique()
+            .HasDatabaseName("UX_MaterialExportItem_ActiveSerial")
+            .HasFilter("[IsDeleted] = 0 AND [InventoryTransactionId] IS NOT NULL AND [ProductSerialId] IS NOT NULL");
     }
 }

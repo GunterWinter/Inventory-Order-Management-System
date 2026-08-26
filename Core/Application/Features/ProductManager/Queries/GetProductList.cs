@@ -31,6 +31,7 @@ public record GetProductListDto
     public decimal OpeningStockQuantity { get; set; }
     public string? OpeningStockWarehouseId { get; set; }
     public string? OpeningStockWarehouseName { get; set; }
+    public DateTime? OpeningStockDate { get; set; }
     public bool HasOpeningStockHistory { get; set; }
     public DateTime? CreatedAtUtc { get; init; }
 }
@@ -51,6 +52,7 @@ public class GetProductListProfile : Profile
             .ForMember(dest => dest.OpeningStockQuantity, opt => opt.Ignore())
             .ForMember(dest => dest.OpeningStockWarehouseId, opt => opt.Ignore())
             .ForMember(dest => dest.OpeningStockWarehouseName, opt => opt.Ignore())
+            .ForMember(dest => dest.OpeningStockDate, opt => opt.Ignore())
             .ForMember(dest => dest.HasOpeningStockHistory, opt => opt.Ignore());
 
     }
@@ -107,6 +109,7 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
                 x.Status,
                 x.WarehouseId,
                 WarehouseName = x.Warehouse != null ? x.Warehouse.Name : null,
+                x.MovementDate,
                 x.CreatedAtUtc,
                 x.Id
             })
@@ -133,6 +136,7 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
                 .Sum(x => x.Stock ?? 0m);
             dto.OpeningStockWarehouseId = first.WarehouseId;
             dto.OpeningStockWarehouseName = first.WarehouseName;
+            dto.OpeningStockDate = first.MovementDate;
         }
 
         return new GetProductListResult

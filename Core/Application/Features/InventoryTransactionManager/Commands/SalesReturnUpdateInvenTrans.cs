@@ -18,6 +18,7 @@ public class SalesReturnUpdateInvenTransRequest : IRequest<SalesReturnUpdateInve
     public decimal? Movement { get; init; }
     public string? UpdatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
+    public List<ReturnCostLayerSelectionDto>? CostLayers { get; init; }
 
 }
 
@@ -50,7 +51,7 @@ public class SalesReturnUpdateInvenTransHandler : IRequestHandler<SalesReturnUpd
         InventoryTransaction? entity = null;
         await _unitOfWork.ExecuteInTransactionAsync(async ct => entity = await _inventoryTransactionService.SalesReturnUpdateInvenTrans(
             request.Id, request.WarehouseId, request.ProductId, request.Movement,
-            request.UpdatedById, ct, request.ProductSerialIds), cancellationToken);
+            request.UpdatedById, ct, request.ProductSerialIds, request.CostLayers), cancellationToken);
 
         return new SalesReturnUpdateInvenTransResult
         {

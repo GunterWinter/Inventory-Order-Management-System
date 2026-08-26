@@ -15,6 +15,7 @@ public record ProductSerialPickerDto
     public string? ProductName { get; init; }
     public string? WarehouseId { get; init; }
     public string? WarehouseName { get; init; }
+    public decimal? UnitCost { get; init; }
     public ProductSerialStatus? Status { get; init; }
     public string? StatusName { get; init; }
     public DateTime? SupplierWarrantyEndDate { get; init; }
@@ -129,6 +130,7 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 ProductName = x.Product != null ? x.Product.Name : string.Empty,
                 WarehouseId = x.CurrentWarehouseId,
                 WarehouseName = x.CurrentWarehouse != null ? x.CurrentWarehouse.Name : string.Empty,
+                UnitCost = x.UnitCost,
                 Status = x.Status,
                 StatusName = x.Status.ToString(),
                 SupplierWarrantyEndDate = x.SupplierWarrantyEndDate,

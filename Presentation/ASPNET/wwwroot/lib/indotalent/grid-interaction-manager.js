@@ -180,6 +180,14 @@
             }
         }
 
+        const editBatchChanges = grid.editModule?.batchChanges;
+        if (matchedBatchRecords.length === 0 && targetId
+            && Array.isArray(editBatchChanges?.changedRecords)) {
+            const changedRecord = { ...(actualRow ?? rowData), ...immediateValues };
+            editBatchChanges.changedRecords.push(changedRecord);
+            matchedBatchRecords.push(changedRecord);
+        }
+
         Object.assign(rowData, immediateValues);
         if (actualRow && actualRow !== rowData) Object.assign(actualRow, immediateValues);
 

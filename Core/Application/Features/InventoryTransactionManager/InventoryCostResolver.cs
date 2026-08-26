@@ -1,6 +1,7 @@
 using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.ProductManager;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,25 @@ public readonly record struct InventorySerialCostResolution(
     string SourceKey,
     string CostSource);
 
+public readonly record struct InventoryCostSlice(
+    string SourceInventoryTransactionId,
+    string? SourceCostAllocationId,
+    string? PurchaseOrderItemId,
+    string? SourceModule,
+    string? SourceNumber,
+    DateTime? SourceDate,
+    decimal Quantity,
+    decimal UnitCost,
+    string CostSource);
+
+public sealed record InventoryFifoCostResolution(
+    decimal UnitCost,
+    decimal TotalCost,
+    string CostSource,
+    bool IncludesOpeningStock,
+    bool IncludesPurchase,
+    IReadOnlyList<InventoryCostSlice> Slices);
+
 public sealed class InventoryCostResolver
 {
     private const decimal QuantityTolerance = 0.000001m;
@@ -29,6 +49,7 @@ public sealed class InventoryCostResolver
     private readonly ICommandRepository<PurchaseOrderCostAllocation> _purchaseOrderCostAllocationRepository;
     private readonly ICommandRepository<PurchaseReturn> _purchaseReturnRepository;
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
+    private readonly ICommandRepository<MaterialExportItem> _costAllocationRepository;
     private readonly ICommandRepository<Product> _productRepository;
     private readonly Dictionary<(string ProductId, string WarehouseId), InventoryUnitCostResolution> _weightedCache = [];
 
@@ -39,6 +60,7 @@ public sealed class InventoryCostResolver
         ICommandRepository<PurchaseOrderCostAllocation> purchaseOrderCostAllocationRepository,
         ICommandRepository<PurchaseReturn> purchaseReturnRepository,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
+        ICommandRepository<MaterialExportItem> costAllocationRepository,
         ICommandRepository<Product> productRepository)
     {
         _productSerialRepository = productSerialRepository;
@@ -47,6 +69,7 @@ public sealed class InventoryCostResolver
         _purchaseOrderCostAllocationRepository = purchaseOrderCostAllocationRepository;
         _purchaseReturnRepository = purchaseReturnRepository;
         _salesOrderItemRepository = salesOrderItemRepository;
+        _costAllocationRepository = costAllocationRepository;
         _productRepository = productRepository;
     }
 
@@ -336,24 +359,250 @@ public sealed class InventoryCostResolver
             includesPurchaseReceipt);
     }
 
+    public async Task<InventoryFifoCostResolution> ResolveFifoAsync(
+        string? productId,
+        string? warehouseId,
+        decimal quantity,
+        DateTime? businessDate,
+        string? excludedInventoryTransactionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(productId) || string.IsNullOrWhiteSpace(warehouseId))
+            throw new InvalidOperationException("Phải xác định hàng hóa và kho để tính giá vốn FIFO.");
+        if (quantity <= QuantityTolerance)
+            throw new InvalidOperationException("Số lượng xuất FIFO phải lớn hơn 0.");
+
+        var nextBusinessDate = (businessDate ?? AppDateTime.VietnamNow()).Date.AddDays(1);
+        var rows = await _inventoryTransactionRepository.GetQuery()
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && (x.Status == InventoryTransactionStatus.Confirmed || x.Status == InventoryTransactionStatus.Archived)
+                && x.ProductId == productId
+                && x.WarehouseId == warehouseId
+                && x.Id != excludedInventoryTransactionId
+                && (x.MovementDate ?? x.CreatedAtUtc) < nextBusinessDate
+                && (x.Stock ?? 0m) != 0m)
+            .OrderBy(x => x.MovementDate ?? x.CreatedAtUtc)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.ModuleName,
+                x.ModuleCode,
+                x.ModuleId,
+                x.ModuleItemId,
+                x.ModuleNumber,
+                x.MovementDate,
+                x.CreatedAtUtc,
+                Stock = x.Stock ?? 0m,
+                x.UnitCost
+            })
+            .ToListAsync(cancellationToken);
+
+        var purchaseItemIds = rows
+            .Where(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleItemId != null)
+            .Select(x => x.ModuleItemId!)
+            .Distinct()
+            .ToList();
+        var purchaseCosts = await _purchaseOrderItemRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => purchaseItemIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.UnitPrice })
+            .ToDictionaryAsync(x => x.Id, x => x.UnitPrice, cancellationToken);
+
+        var purchaseAllocationIds = rows
+            .Where(x => x.ModuleName == "CostAllocation" && x.ModuleId != null)
+            .Select(x => x.ModuleId!)
+            .Distinct()
+            .ToList();
+        var purchaseAllocationSources = await _purchaseOrderCostAllocationRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => purchaseAllocationIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.PurchaseOrderItemId })
+            .ToDictionaryAsync(x => x.Id, x => x.PurchaseOrderItemId, cancellationToken);
+
+        var salesReturnItemIds = rows
+            .Where(x => x.ModuleName == nameof(SalesReturn) && x.ModuleItemId != null)
+            .Select(x => x.ModuleItemId!)
+            .Distinct()
+            .ToList();
+        var legacyReturnCosts = await _salesOrderItemRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => salesReturnItemIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.Quantity, x.CogsAmount })
+            .ToDictionaryAsync(
+                x => x.Id,
+                x => (x.Quantity ?? 0m) > QuantityTolerance && x.CogsAmount.HasValue
+                    ? x.CogsAmount.Value / x.Quantity!.Value
+                    : (decimal?)null,
+                cancellationToken);
+
+        var rowIds = rows.Select(x => x.Id).ToList();
+        var allocations = await _costAllocationRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.InventoryTransactionId != null && rowIds.Contains(x.InventoryTransactionId))
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.InventoryTransactionId,
+                x.SourceInventoryTransactionId,
+                x.SourceCostAllocationId,
+                Quantity = x.Quantity ?? 0m,
+                x.UnitPrice,
+                x.CostSource
+            })
+            .ToListAsync(cancellationToken);
+
+        var layers = new List<DocumentFifoLayer>();
+        foreach (var row in rows)
+        {
+            if (row.Stock > QuantityTolerance)
+            {
+                var returnedAllocations = row.ModuleName == nameof(SalesReturn)
+                    ? allocations.Where(x => x.InventoryTransactionId == row.Id).ToList()
+                    : [];
+                if (returnedAllocations.Count > 0)
+                {
+                    foreach (var returned in returnedAllocations)
+                    {
+                        if (returned.Quantity <= QuantityTolerance || !IsValidCost(returned.UnitPrice))
+                            throw new InvalidOperationException($"Phiếu trả hàng {row.ModuleNumber ?? row.Id} thiếu lớp giá vốn hợp lệ.");
+                        layers.Add(new DocumentFifoLayer(
+                            returned.Quantity,
+                            returned.UnitPrice!.Value,
+                            row.Id,
+                            returned.Id,
+                            null,
+                            row.ModuleName,
+                            row.ModuleNumber,
+                            row.MovementDate ?? row.CreatedAtUtc,
+                            returned.CostSource ?? "Giá vốn trả hàng theo lớp đã bán",
+                            false,
+                            false));
+                    }
+                    continue;
+                }
+
+                decimal? unitCost = row.UnitCost;
+                string? purchaseOrderItemId = null;
+                var isOpening = row.ModuleName == nameof(StockCount)
+                    && row.ModuleCode == ProductOpeningStockService.OpeningStockModuleCode;
+                var isPurchase = row.ModuleName == nameof(PurchaseOrder);
+                if (isPurchase && row.ModuleItemId != null)
+                {
+                    purchaseOrderItemId = row.ModuleItemId;
+                    if (purchaseCosts.TryGetValue(row.ModuleItemId, out var purchaseCost)) unitCost = purchaseCost;
+                }
+                else if (row.ModuleName == nameof(SalesReturn) && row.ModuleItemId != null
+                    && legacyReturnCosts.TryGetValue(row.ModuleItemId, out var returnCost))
+                {
+                    unitCost = returnCost;
+                }
+                if (!IsValidCost(unitCost))
+                    throw new InvalidOperationException($"Chứng từ nguồn {row.ModuleNumber ?? row.Id} chưa có giá vốn hợp lệ.");
+
+                layers.Add(new DocumentFifoLayer(
+                    row.Stock,
+                    unitCost!.Value,
+                    row.Id,
+                    null,
+                    purchaseOrderItemId,
+                    row.ModuleName,
+                    row.ModuleNumber,
+                    row.MovementDate ?? row.CreatedAtUtc,
+                    isOpening ? "Tồn đầu kỳ" : isPurchase ? "Đơn mua hàng" : row.ModuleName ?? "Nhập kho",
+                    isOpening,
+                    isPurchase));
+                continue;
+            }
+
+            var outbound = -row.Stock;
+            var frozen = allocations
+                .Where(x => x.InventoryTransactionId == row.Id && x.SourceInventoryTransactionId != null)
+                .ToList();
+            foreach (var allocation in frozen)
+            {
+                var remainder = ConsumeDocumentFifoQuantity(
+                    layers,
+                    allocation.Quantity,
+                    x => x.SourceInventoryTransactionId == allocation.SourceInventoryTransactionId
+                        && x.SourceCostAllocationId == allocation.SourceCostAllocationId);
+                if (remainder > QuantityTolerance)
+                    throw new InvalidOperationException($"Lớp giá vốn đã chốt của {row.ModuleNumber ?? row.Id} không còn khớp lịch sử kho.");
+                outbound -= allocation.Quantity;
+            }
+            if (outbound <= QuantityTolerance) continue;
+
+            string? targetedPurchaseItemId = null;
+            if (row.ModuleName == nameof(PurchaseReturn)) targetedPurchaseItemId = row.ModuleItemId;
+            else if (row.ModuleName == "CostAllocation" && row.ModuleId != null)
+                purchaseAllocationSources.TryGetValue(row.ModuleId, out targetedPurchaseItemId);
+
+            if (targetedPurchaseItemId != null)
+                outbound = ConsumeDocumentFifoQuantity(layers, outbound, x => x.PurchaseOrderItemId == targetedPurchaseItemId);
+            outbound = ConsumeDocumentFifoQuantity(layers, outbound, _ => true);
+            if (outbound > QuantityTolerance)
+                throw new InvalidOperationException($"Tồn kho bị âm theo ngày chứng từ tại {row.ModuleNumber ?? row.Id}. Hãy nhập đủ chứng từ nhận hàng trước khi xác nhận.");
+        }
+
+        var remaining = quantity;
+        var slices = new List<InventoryCostSlice>();
+        foreach (var layer in layers)
+        {
+            if (remaining <= QuantityTolerance) break;
+            if (layer.Quantity <= QuantityTolerance) continue;
+            var consumed = Math.Min(layer.Quantity, remaining);
+            slices.Add(new InventoryCostSlice(
+                layer.SourceInventoryTransactionId,
+                layer.SourceCostAllocationId,
+                layer.PurchaseOrderItemId,
+                layer.SourceModule,
+                layer.SourceNumber,
+                layer.SourceDate,
+                consumed,
+                layer.UnitCost,
+                layer.CostSource));
+            remaining -= consumed;
+        }
+        if (remaining > QuantityTolerance)
+            throw new InvalidOperationException($"Không đủ lớp tồn FIFO. Cần {quantity}, còn {quantity - remaining} theo ngày chứng từ.");
+
+        var totalCost = AccountingMath.RoundVnd(slices.Sum(x => x.Quantity * x.UnitCost));
+        var includesOpening = slices.Any(x => x.SourceModule == nameof(StockCount));
+        var includesPurchase = slices.Any(x => x.SourceModule == nameof(PurchaseOrder));
+        var source = includesOpening && includesPurchase
+            ? "FIFO tồn đầu kỳ và đơn mua"
+            : includesOpening ? "FIFO tồn đầu kỳ" : includesPurchase ? "FIFO đơn mua" : "FIFO nhập kho";
+        return new InventoryFifoCostResolution(
+            AccountingMath.RoundVnd(totalCost / quantity),
+            totalCost,
+            source,
+            includesOpening,
+            includesPurchase,
+            slices);
+    }
+
     public InventorySerialCostResolution ResolveSerial(ProductSerial serial)
     {
         var serialUnitCost = IsValidCost(serial.UnitCost) ? serial.UnitCost : null;
         var purchaseUnitCost = IsValidCost(serial.PurchaseOrderItem?.UnitPrice)
             ? serial.PurchaseOrderItem!.UnitPrice
             : null;
-        var productUnitCost = IsValidCost(serial.Product?.CostPrice)
-            ? serial.Product!.CostPrice
-            : null;
-        var hasSerialOrPurchaseCost = serialUnitCost.HasValue || purchaseUnitCost.HasValue;
-        var unitCost = serialUnitCost ?? purchaseUnitCost ?? productUnitCost;
+        var unitCost = serialUnitCost ?? purchaseUnitCost;
         if (!unitCost.HasValue)
         {
             throw new InvalidOperationException(
                 $"Serial {serial.InternalSerialNumber ?? serial.Id} không có giá vốn hợp lệ.");
         }
 
-        if (!hasSerialOrPurchaseCost)
+        if (serialUnitCost is null && purchaseUnitCost is null)
         {
             return new InventorySerialCostResolution(
                 unitCost.Value,
@@ -601,7 +850,50 @@ public sealed class InventoryCostResolver
         return remaining;
     }
 
+    private static decimal ConsumeDocumentFifoQuantity(
+        List<DocumentFifoLayer> layers,
+        decimal quantity,
+        Func<DocumentFifoLayer, bool> predicate)
+    {
+        var remaining = quantity;
+        foreach (var layer in layers)
+        {
+            if (remaining <= QuantityTolerance) break;
+            if (layer.Quantity <= QuantityTolerance || !predicate(layer)) continue;
+            var consumed = Math.Min(layer.Quantity, remaining);
+            layer.Quantity -= consumed;
+            remaining -= consumed;
+        }
+        return remaining;
+    }
+
     private readonly record struct CostRow(decimal Quantity, decimal UnitCost);
+
+    private sealed class DocumentFifoLayer(
+        decimal quantity,
+        decimal unitCost,
+        string sourceInventoryTransactionId,
+        string? sourceCostAllocationId,
+        string? purchaseOrderItemId,
+        string? sourceModule,
+        string? sourceNumber,
+        DateTime? sourceDate,
+        string costSource,
+        bool includesOpeningStock,
+        bool includesPurchase)
+    {
+        public decimal Quantity { get; set; } = quantity;
+        public decimal UnitCost { get; } = unitCost;
+        public string SourceInventoryTransactionId { get; } = sourceInventoryTransactionId;
+        public string? SourceCostAllocationId { get; } = sourceCostAllocationId;
+        public string? PurchaseOrderItemId { get; } = purchaseOrderItemId;
+        public string? SourceModule { get; } = sourceModule;
+        public string? SourceNumber { get; } = sourceNumber;
+        public DateTime? SourceDate { get; } = sourceDate;
+        public string CostSource { get; } = costSource;
+        public bool IncludesOpeningStock { get; } = includesOpeningStock;
+        public bool IncludesPurchase { get; } = includesPurchase;
+    }
 
     private sealed class InventoryFifoLayer(
         decimal quantity,

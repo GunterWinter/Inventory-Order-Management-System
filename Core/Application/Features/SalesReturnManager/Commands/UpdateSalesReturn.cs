@@ -85,6 +85,9 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
                     throw new InvalidOperationException("Phiếu trả hàng bán phải có ít nhất một dòng có số lượng trả lớn hơn 0.");
                 if (lines.Any(x => x.CurrentReturnQuantity > x.AvailableReturnQuantity + 0.000001m))
                     throw new InvalidOperationException("Số lượng trả đã vượt quá số còn có thể trả. Vui lòng tải lại phiếu.");
+                if (lines.Any(x => x.CurrentReturnQuantity > 0m
+                    && Math.Abs(x.CostLayers.Sum(layer => layer.CurrentReturnQuantity) - x.CurrentReturnQuantity) > 0.000001m))
+                    throw new InvalidOperationException("Chi tiết lớp giá vốn phải phân bổ đủ số lượng trả hàng trước khi xác nhận.");
             }
             ValidateTransition(entity, requestedStatus, request);
 

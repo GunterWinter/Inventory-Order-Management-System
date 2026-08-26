@@ -78,7 +78,13 @@ async function openSelectedDocument(page, gridSelector, documentId, actionId = '
     await row.locator('td.e-rowcell').first().click();
     await expect(page.locator(`#${actionId}`)).toBeEnabled();
     const actionButton = page.locator(`#${actionId}`);
-    await actionButton.locator('xpath=..').click();
+    await actionButton.locator('xpath=..').evaluate(element => element.click());
+    if (!await page.locator('#MainModal.show').isVisible().catch(() => false)) {
+        await page.evaluate(async ({ selector, id }) => {
+            const grid = document.querySelector(selector)?.ej2_instances?.[0];
+            await grid?.toolbarClick?.({ item: { id } });
+        }, { selector: gridSelector, id: actionId });
+    }
 }
 
 module.exports = { test, expect, login, waitForVuePage, selectOpenDropdownOption, openSelectedDocument };

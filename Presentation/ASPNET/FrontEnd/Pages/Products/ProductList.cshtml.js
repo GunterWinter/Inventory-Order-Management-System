@@ -35,6 +35,7 @@ const App = {
             openingStockQuantity: 0,
             openingStockWarehouseId: null,
             openingStockWarehouseName: '',
+            openingStockEffectiveDate: DateFormatManager.formatToLocale(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
             hasOpeningStockHistory: false,
             openingStockDirty: false,
             errors: {
@@ -264,6 +265,7 @@ const App = {
             state.openingStockQuantity = 0;
             state.openingStockWarehouseId = null;
             state.openingStockWarehouseName = '';
+            state.openingStockEffectiveDate = DateFormatManager.formatToLocale(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
             state.hasOpeningStockHistory = false;
             state.openingStockDirty = false;
             state.errors = {
@@ -812,6 +814,9 @@ const App = {
                             state.openingStockQuantity = savedProduct.openingStockQuantity ?? state.openingStockQuantity ?? 0;
                             state.openingStockWarehouseId = savedProduct.openingStockWarehouseId ?? null;
                             state.openingStockWarehouseName = savedProduct.openingStockWarehouseName ?? '';
+                            state.openingStockEffectiveDate = savedProduct.openingStockDate
+                                ? DateFormatManager.formatToLocale(DateFormatManager.parseBusinessDate(savedProduct.openingStockDate))
+                                : state.openingStockEffectiveDate;
                             state.hasOpeningStockHistory = savedProduct.hasOpeningStockHistory ?? false;
                             state.openingStockDirty = false;
 
@@ -954,6 +959,7 @@ const App = {
                         { field: 'physical', headerText: 'Physical Product', width: 180, minWidth: 180, textAlign: 'Center', type: 'boolean', displayAsCheckBox: true },
                         { field: 'internalSerialFixedCode', headerText: 'Device Code', width: 150, minWidth: 150 },
                         { field: 'openingStockQuantity', headerText: 'Opening Stock', width: 160, minWidth: 160, type: 'number', format: 'N2' },
+                        { field: 'openingStockDate', headerText: 'Opening Stock Date', width: 180, minWidth: 180, type: 'string', valueAccessor: (_field, data) => data.openingStockDate ? DateFormatManager.formatToLocale(DateFormatManager.parseBusinessDate(data.openingStockDate)) : '' },
                         {
                             field: 'openingStockWarehouseName',
                             headerText: 'Opening Stock Warehouse',
@@ -1033,6 +1039,9 @@ const App = {
                                 state.openingStockQuantity = selectedRecord.openingStockQuantity ?? 0;
                                 state.openingStockWarehouseId = selectedRecord.openingStockWarehouseId ?? null;
                                 state.openingStockWarehouseName = selectedRecord.openingStockWarehouseName ?? '';
+                                state.openingStockEffectiveDate = selectedRecord.openingStockDate
+                                    ? DateFormatManager.formatToLocale(DateFormatManager.parseBusinessDate(selectedRecord.openingStockDate))
+                                    : state.openingStockEffectiveDate;
                                 state.hasOpeningStockHistory = selectedRecord.hasOpeningStockHistory ?? false;
                                 state.openingStockDirty = false;
                                 mainModal.obj.show();
@@ -1087,6 +1096,9 @@ const App = {
                                 state.openingStockQuantity = selectedRecord.openingStockQuantity ?? 0;
                                 state.openingStockWarehouseId = selectedRecord.openingStockWarehouseId ?? null;
                                 state.openingStockWarehouseName = selectedRecord.openingStockWarehouseName ?? '';
+                                state.openingStockEffectiveDate = selectedRecord.openingStockDate
+                                    ? DateFormatManager.formatToLocale(DateFormatManager.parseBusinessDate(selectedRecord.openingStockDate))
+                                    : state.openingStockEffectiveDate;
                                 state.hasOpeningStockHistory = selectedRecord.hasOpeningStockHistory ?? false;
                                 state.openingStockDirty = false;
                                 mainModal.obj.show();

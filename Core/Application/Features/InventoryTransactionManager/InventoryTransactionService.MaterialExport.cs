@@ -180,7 +180,8 @@ public partial class InventoryTransactionService
             .Where(x => x.ModuleId == moduleId && x.ModuleName == moduleName)
             .ToListAsync(cancellationToken);
 
-        return await EnrichProductSerialsAsync(childs, cancellationToken);
+        await EnrichProductSerialsAsync(childs, cancellationToken);
+        return await EnrichCostAllocationsAsync(childs, cancellationToken);
     }
 
     private InventoryTransaction MaterialExportProcessing(InventoryTransaction transaction)

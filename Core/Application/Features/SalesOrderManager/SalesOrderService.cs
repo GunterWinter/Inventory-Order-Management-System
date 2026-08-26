@@ -94,6 +94,7 @@ public class SalesOrderService
                 transaction.UpdatedById = userId;
                 _inventoryRepository.Update(transaction);
                 await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+                await _inventoryService.DeleteCostAllocationsAsync(transaction.Id, userId, ct);
             }
             await DeleteUnpaidReceivableAsync(order.Id, userId, ct);
             await _unitOfWork.SaveAsync(ct);
@@ -107,6 +108,7 @@ public class SalesOrderService
             foreach (var transaction in transactions.Where(x => x.Status == InventoryTransactionStatus.Confirmed))
             {
                 await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+                await _inventoryService.DeleteCostAllocationsAsync(transaction.Id, userId, ct);
             }
             await DeleteUnpaidReceivableAsync(order.Id, userId, ct);
         }

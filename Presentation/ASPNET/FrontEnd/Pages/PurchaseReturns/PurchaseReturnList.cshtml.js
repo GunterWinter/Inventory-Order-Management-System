@@ -860,7 +860,7 @@
                                         format: serialTracked ? 'n0' : 'n6',
                                         decimals: serialTracked ? 0 : 6,
                                         readonly: serialTracked,
-                                        validateDecimalOnType: true,
+                                        validateDecimalOnType: true
                                     });
                                     movementObj.appendTo(args.element);
                                 }

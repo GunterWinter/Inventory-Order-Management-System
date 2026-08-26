@@ -259,12 +259,16 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
             id: so.id, orderDate: so.orderDate, orderStatus: '2', description: so.description,
             customerId: so.customerId, salesType: so.salesType, updatedById: userId
         });
+        const saleSource = (await AxiosManager.get(
+            `/SalesReturn/GetSourceLineList?salesOrderId=${encodeURIComponent(so.id)}&salesReturnId=`
+        ))?.data?.content?.[0];
         const previousSalesReturn = one(await AxiosManager.post('/SalesReturn/CreateSalesReturn', {
             returnDate: now, status: '0', description: `${key}-SR-PREV`, salesOrderId: so.id, createdById: userId
         }));
         await AxiosManager.post('/InventoryTransaction/SalesReturnCreateInvenTrans', {
             moduleId: previousSalesReturn.id, sourceItemId: soItem.id, movement: 4,
-            createdById: userId, productSerialIds: []
+            createdById: userId, productSerialIds: [],
+            costLayers: [{ sourceCostAllocationId: saleSource.costLayers[0].sourceCostAllocationId, quantity: 4 }]
         });
         const salesReturn = one(await AxiosManager.post('/SalesReturn/CreateSalesReturn', {
             returnDate: now, status: '0', description: `${key}-SR-CURRENT`, salesOrderId: so.id, createdById: userId
@@ -302,14 +306,25 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
             .locator('xpath=..').locator('input.e-input').first();
         await expect(sourceInput).toBeDisabled();
 
-        const movementCell = await gridCellByHeader(grid, /Số lượng trả lần này/i);
-        await movementCell.dblclick();
-        const movementInput = grid.locator('td.e-editedbatchcell input.e-numerictextbox');
-        await movementInput.fill('');
-        await movementInput.pressSequentially('2,5');
-        await expect(movementInput).toHaveValue('2,5');
         const createLine = page.waitForResponse(response => response.url().includes(scenario.createUrl)
             && response.request().method() === 'POST');
+        if (scenario.route.includes('SalesReturns')) {
+            await grid.locator('.sales-return-cost-layer-picker').first().click();
+            const layerInput = page.locator('.inventory-cost-layer-quantity').first();
+            await layerInput.fill('');
+            await layerInput.pressSequentially('2,5');
+            await page.locator('.swal2-confirm').click();
+            await expect(page.locator('.swal2-popup')).toBeHidden();
+        } else {
+            const movementCell = await gridCellByHeader(grid, /Số lượng trả lần này/i);
+            await movementCell.dblclick();
+            const movementInput = grid.locator('td.e-editedbatchcell input.e-numerictextbox');
+            await movementInput.fill('');
+            await movementInput.pressSequentially('2,5');
+            await expect(movementInput).toHaveValue('2,5');
+            await page.locator('#MainModal .modal-title').click();
+            await expect(page.locator('#SecondaryGrid_update')).toBeEnabled();
+        }
         await page.locator('#SecondaryGrid_update').click();
         const createLineResponse = await createLine;
         expect(createLineResponse.status()).toBe(200);
@@ -321,6 +336,17 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
         await openDocumentFromGrid(page, scenario.number);
         await expect(await gridCellByHeader(page.locator('#SecondaryGrid'), /Số lượng trả lần này/i)).toHaveText(/2,5/);
     }
+
+    await page.goto('/MovementReports/MovementReportList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    const profitRow = page.locator('#MainGrid .e-row', { hasText: fixture.salesProduct.name }).first();
+    await expect(profitRow).toBeVisible();
+    const frozenProfit = await page.evaluate(productId => {
+        const rows = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource ?? [];
+        const row = rows.find(item => item.productId === productId);
+        return row && { totalCost: row.totalCost, totalSales: row.totalSales, totalProfit: row.totalProfit };
+    }, fixture.salesProduct.id);
+    expect(frozenProfit).toEqual({ totalCost: 800000, totalSales: 1000000, totalProfit: 200000 });
 });
 
 test('Stock Count thao tác grid thật, giữ snapshot và không áp tồn lần hai khi Archive/restore', async ({ monitoredPage: page }) => {

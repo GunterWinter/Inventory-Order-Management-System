@@ -1,6 +1,5 @@
 using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
-using Application.Features.InventoryTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -39,15 +38,8 @@ public sealed class GetInventoryProfitReportHandler
     : IRequestHandler<GetInventoryProfitReportRequest, GetInventoryProfitReportResult>
 {
     private readonly IQueryContext _context;
-    private readonly InventoryCostResolver _costResolver;
 
-    public GetInventoryProfitReportHandler(
-        IQueryContext context,
-        InventoryCostResolver costResolver)
-    {
-        _context = context;
-        _costResolver = costResolver;
-    }
+    public GetInventoryProfitReportHandler(IQueryContext context) => _context = context;
 
     public async Task<GetInventoryProfitReportResult> Handle(
         GetInventoryProfitReportRequest request,
@@ -67,6 +59,7 @@ public sealed class GetInventoryProfitReportHandler
                 ProductNumber = x.Product != null ? x.Product.Number : null,
                 ProductReferenceCode = x.Product != null ? x.Product.ReferenceCode : null,
                 ProductName = x.Product != null ? x.Product.Name : null,
+                Physical = x.Product != null && x.Product.Physical == true,
                 SerialTrackingMode = x.Product != null && x.Product.Physical == true
                     ? x.Product.SerialTrackingMode ?? SerialTrackingMode.None
                     : SerialTrackingMode.None,
@@ -74,7 +67,9 @@ public sealed class GetInventoryProfitReportHandler
                 SalesOrderNumber = x.SalesOrder!.Number,
                 SoldDate = x.SalesOrder.OrderDate ?? x.CreatedAtUtc,
                 Quantity = x.Quantity ?? 0m,
-                SalesUnitPrice = x.UnitPrice ?? 0m
+                SalesUnitPrice = x.UnitPrice ?? 0m,
+                x.CogsAmount,
+                x.ProfitAmount
             })
             .ToListAsync(cancellationToken);
 
@@ -86,6 +81,20 @@ public sealed class GetInventoryProfitReportHandler
             .GroupBy(x => x.SalesOrderItemId!)
             .Select(group => new { SalesOrderItemId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(x => x.SalesOrderItemId, x => x.Count, cancellationToken);
+
+        var costSources = await (from inventory in _context.Set<InventoryTransaction>().AsNoTracking()
+            join allocation in _context.Set<MaterialExportItem>().AsNoTracking()
+                on inventory.Id equals allocation.InventoryTransactionId
+            where !inventory.IsDeleted && !allocation.IsDeleted
+                && inventory.ModuleName == nameof(SalesOrder)
+                && inventory.ModuleItemId != null && salesItemIds.Contains(inventory.ModuleItemId)
+            select new { inventory.ModuleItemId, allocation.CostSource })
+            .ToListAsync(cancellationToken);
+        var costSourceLookup = costSources
+            .GroupBy(x => x.ModuleItemId!)
+            .ToDictionary(
+                group => group.Key,
+                group => string.Join(", ", group.Select(x => x.CostSource).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct()));
 
         var data = new List<InventoryProfitReportItemDto>(salesItems.Count);
         foreach (var item in salesItems)
@@ -102,13 +111,11 @@ public sealed class GetInventoryProfitReportHandler
                 }
             }
 
-            var resolution = await _costResolver.ResolveAsync(
-                item.ProductId,
-                item.WarehouseId,
-                item.Id,
-                cancellationToken);
-            var totalCost = Math.Round(resolution.UnitCost * item.Quantity, 0, MidpointRounding.AwayFromZero);
-            var totalSales = Math.Round(item.SalesUnitPrice * item.Quantity, 0, MidpointRounding.AwayFromZero);
+            if (item.Physical && (!item.CogsAmount.HasValue || !item.ProfitAmount.HasValue))
+                throw new InvalidOperationException($"Dòng bán {item.SalesOrderNumber} của {item.ProductName} chưa có giá vốn đã chốt. Hãy backfill trước khi xem báo cáo.");
+            var totalCost = item.CogsAmount ?? 0m;
+            var profit = item.ProfitAmount ?? 0m;
+            var totalSales = totalCost + profit;
             data.Add(new InventoryProfitReportItemDto
             {
                 SalesOrderItemId = item.Id,
@@ -119,13 +126,13 @@ public sealed class GetInventoryProfitReportHandler
                 ProductName = item.ProductName,
                 WarehouseName = item.WarehouseName,
                 Quantity = item.Quantity,
-                UnitCost = resolution.UnitCost,
+                UnitCost = item.Quantity > 0m ? totalCost / item.Quantity : 0m,
                 SalesUnitPrice = item.SalesUnitPrice,
                 TotalCost = totalCost,
                 TotalSales = totalSales,
-                Profit = totalSales - totalCost,
-                CostSource = resolution.CostSource,
-                IsFallbackCost = resolution.IsFallbackCost,
+                Profit = profit,
+                CostSource = costSourceLookup.GetValueOrDefault(item.Id, "FrozenSalesOrderItem"),
+                IsFallbackCost = false,
                 SoldDate = item.SoldDate
             });
         }

@@ -35,5 +35,7 @@ public class InventoryTransaction : BaseEntity
     public List<string>? ProductSerialIds { get; set; }
     [NotMapped]
     public string? ProductSerialNumbers { get; set; }
+    [NotMapped]
+    public List<MaterialExportItem> CostAllocations { get; set; } = [];
 
 }

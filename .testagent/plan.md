@@ -1,6 +1,9 @@
-# Test plan
+# Test plan: FIFO inventory costing
 
-1. [complete] Add focused unit regressions for passive-vs-interactive SweetAlert Enter behavior, native searchable-select hiding/restoration, locale decimal parsing, and Dashboard date column configuration.
-2. [complete] Apply the smallest shared/root fixes in `grid-interaction-manager.js`, `dropdown-search-manager.js`, Cash Transactions, and Dashboard.
-3. [complete] Replace Antigravity naming and API-driven coverage with a project browser-regression skill, isolated `WHMS_UiRegression_*` runner, and Playwright UI audit/lifecycle checks with screenshots.
-4. [complete] Run focused tests, all JavaScript tests, full isolated Playwright regression, build/publish asset verification, skill validation, test-gap analysis, assertion-quality audit, and `git diff --check`.
+1. [complete] Guard production data and repair nested-type DI registration.
+2. [complete] Persist FIFO/source allocations and implement document-date costing with deterministic decimal behavior.
+3. [in progress] Implement opening-date, serial-cost, Material Export, Sales Order, and Sales Return UI workflows.
+4. [pending] Make inventory-profit reports consume frozen COGS/return allocations.
+5. [pending] Add focused JavaScript and isolated Playwright regressions for affected direct callers and lifecycle paths.
+6. [pending] Run JavaScript, build, isolated browser, publish asset/IIS checks, test-gap and assertion audits.
+7. [pending] Run production read-only backfill dry-run and stop before apply.

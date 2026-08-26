@@ -303,3 +303,10 @@ test('native select enhancement keeps value, disabled state, focus and refreshed
     assert.equal(attributes.has('aria-hidden'), false);
     assert.equal(attributes.has('tabindex'), false);
 });
+
+test('Material Export product editor uses native filtering', () => {
+    const source = fs.readFileSync(path.resolve(__dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/MaterialExports/MaterialExportList.cshtml.js'), 'utf8');
+
+    assert.match(source, /dataSource:\s*state\.productListLookupData[\s\S]*?allowFiltering:\s*true/);
+});

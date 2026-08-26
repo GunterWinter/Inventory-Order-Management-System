@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using System.Text.RegularExpressions;
 
 namespace Infrastructure.DataAccessManager.EFCore;
 
@@ -17,6 +18,10 @@ namespace Infrastructure.DataAccessManager.EFCore;
 
 public static class DI
 {
+    private static readonly Regex DisposableDatabaseName = new(
+        "^WHMS_UiRegression_[A-Za-z0-9_]+$",
+        RegexOptions.CultureInvariant);
+
     public static IServiceCollection RegisterDataAccess(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -88,6 +93,13 @@ public static class DI
         // never delete an existing database.
         if (resetDatabase)
         {
+            var databaseName = dataContext.Database.GetDbConnection().Database;
+            if (!DisposableDatabaseName.IsMatch(databaseName))
+            {
+                throw new InvalidOperationException(
+                    $"Refusing to reset database '{databaseName}'. Demo reset is allowed only for WHMS_UiRegression_* databases.");
+            }
+
             dataContext.Database.EnsureDeleted();
         }
         dataContext.Database.EnsureCreated();
@@ -152,6 +164,18 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_ManufacturerSerialNumber' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[ProductSerial] WHERE [IsDeleted] = 0 AND [ManufacturerSerialNumber] IS NOT NULL GROUP BY [ManufacturerSerialNumber] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_ProductSerial_ManufacturerSerialNumber] ON [dbo].[ProductSerial] ([ManufacturerSerialNumber]) WHERE [ManufacturerSerialNumber] IS NOT NULL AND [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[PurchaseOrderItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_PurchaseOrderItem_PurchaseOrderId_ProductId' AND [object_id] = OBJECT_ID(N'[dbo].[PurchaseOrderItem]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[PurchaseOrderItem] WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL GROUP BY [PurchaseOrderId], [ProductId] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [IX_PurchaseOrderItem_PurchaseOrderId_ProductId] ON [dbo].[PurchaseOrderItem] ([PurchaseOrderId], [ProductId]) WHERE [IsDeleted] = 0 AND [PurchaseOrderId] IS NOT NULL AND [ProductId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[MaterialExport]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExport', N'WarehouseId') IS NULL ALTER TABLE [dbo].[MaterialExport] ADD [WarehouseId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'InventoryTransactionId') IS NULL AND EXISTS (SELECT 1 FROM [dbo].[MaterialExportItem]) THROW 51000, 'MaterialExportItem contains legacy rows; inventory cost ledger migration requires manual review.', 1;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'InventoryTransactionId') IS NULL ALTER TABLE [dbo].[MaterialExportItem] ADD [InventoryTransactionId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'SourceInventoryTransactionId') IS NULL ALTER TABLE [dbo].[MaterialExportItem] ADD [SourceInventoryTransactionId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'SourceCostAllocationId') IS NULL ALTER TABLE [dbo].[MaterialExportItem] ADD [SourceCostAllocationId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'ProductSerialId') IS NULL ALTER TABLE [dbo].[MaterialExportItem] ADD [ProductSerialId] nvarchar(50) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.MaterialExportItem', N'CostSource') IS NULL ALTER TABLE [dbo].[MaterialExportItem] ADD [CostSource] nvarchar(200) NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE [name] = N'FK_MaterialExportItem_InventoryTransaction_InventoryTransactionId') ALTER TABLE [dbo].[MaterialExportItem] ADD CONSTRAINT [FK_MaterialExportItem_InventoryTransaction_InventoryTransactionId] FOREIGN KEY ([InventoryTransactionId]) REFERENCES [dbo].[InventoryTransaction] ([Id]);",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE [name] = N'FK_MaterialExportItem_InventoryTransaction_SourceInventoryTransactionId') ALTER TABLE [dbo].[MaterialExportItem] ADD CONSTRAINT [FK_MaterialExportItem_InventoryTransaction_SourceInventoryTransactionId] FOREIGN KEY ([SourceInventoryTransactionId]) REFERENCES [dbo].[InventoryTransaction] ([Id]);",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE [name] = N'FK_MaterialExportItem_ProductSerial_ProductSerialId') ALTER TABLE [dbo].[MaterialExportItem] ADD CONSTRAINT [FK_MaterialExportItem_ProductSerial_ProductSerialId] FOREIGN KEY ([ProductSerialId]) REFERENCES [dbo].[ProductSerial] ([Id]);",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_MaterialExportItem_SourceCostAllocationId' AND [object_id] = OBJECT_ID(N'[dbo].[MaterialExportItem]')) CREATE INDEX [IX_MaterialExportItem_SourceCostAllocationId] ON [dbo].[MaterialExportItem] ([SourceCostAllocationId]);",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_MaterialExportItem_ActiveFifoSource' AND [object_id] = OBJECT_ID(N'[dbo].[MaterialExportItem]')) CREATE UNIQUE INDEX [UX_MaterialExportItem_ActiveFifoSource] ON [dbo].[MaterialExportItem] ([InventoryTransactionId], [SourceInventoryTransactionId], [SourceCostAllocationId]) WHERE [IsDeleted] = 0 AND [InventoryTransactionId] IS NOT NULL AND [SourceInventoryTransactionId] IS NOT NULL AND [ProductSerialId] IS NULL;",
+            "IF OBJECT_ID(N'[dbo].[MaterialExportItem]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_MaterialExportItem_ActiveSerial' AND [object_id] = OBJECT_ID(N'[dbo].[MaterialExportItem]')) CREATE UNIQUE INDEX [UX_MaterialExportItem_ActiveSerial] ON [dbo].[MaterialExportItem] ([InventoryTransactionId], [ProductSerialId]) WHERE [IsDeleted] = 0 AND [InventoryTransactionId] IS NOT NULL AND [ProductSerialId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NULL BEGIN CREATE TABLE [dbo].[CashTransactionPayment] ([Id] nvarchar(50) NOT NULL, [IsDeleted] bit NOT NULL CONSTRAINT [DF_CashTransactionPayment_IsDeleted] DEFAULT 0, [CreatedAtUtc] datetime2 NULL, [CreatedById] nvarchar(450) NULL, [UpdatedAtUtc] datetime2 NULL, [UpdatedById] nvarchar(450) NULL, [CashTransactionId] nvarchar(50) NOT NULL, [CashAccountId] nvarchar(50) NULL, [PaymentDate] datetime2 NOT NULL, [Amount] decimal(19,6) NOT NULL, [Description] nvarchar(4000) NULL, CONSTRAINT [PK_CashTransactionPayment] PRIMARY KEY ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashTransaction_CashTransactionId] FOREIGN KEY ([CashTransactionId]) REFERENCES [dbo].[CashTransaction] ([Id]), CONSTRAINT [FK_CashTransactionPayment_CashAccount_CashAccountId] FOREIGN KEY ([CashAccountId]) REFERENCES [dbo].[CashAccount] ([Id])); CREATE INDEX [IX_CashTransactionPayment_CashTransactionId] ON [dbo].[CashTransactionPayment] ([CashTransactionId]); CREATE INDEX [IX_CashTransactionPayment_CashAccountId] ON [dbo].[CashTransactionPayment] ([CashAccountId]); CREATE INDEX [IX_CashTransactionPayment_PaymentDate] ON [dbo].[CashTransactionPayment] ([PaymentDate]); END;",
             "IF OBJECT_ID(N'[dbo].[CashTransactionPayment]', N'U') IS NOT NULL ALTER TABLE [dbo].[CashTransactionPayment] ALTER COLUMN [CashAccountId] nvarchar(50) NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransaction_ActiveBalance' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) CREATE INDEX [IX_CashTransaction_ActiveBalance] ON [dbo].[CashTransaction] ([CashAccountId], [TransactionType]) INCLUDE ([PaidAmount]) WHERE [IsDeleted] = 0;",

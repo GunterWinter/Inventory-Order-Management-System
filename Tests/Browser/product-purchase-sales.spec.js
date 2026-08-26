@@ -19,14 +19,15 @@ async function openActiveGridDropdown(page, editorSelector) {
         .toBeGreaterThan(0);
     if (await popup.isVisible().catch(() => false)) return popup;
 
-    await editor.locator('xpath=..').locator('.e-ddl-icon').click();
-    const openPopup = page.locator('.e-ddl.e-popup.e-popup-open').last();
-    if (!await openPopup.isVisible().catch(() => false)) {
-        await editor.click();
-        await editor.press('Alt+ArrowDown');
+    const icon = editor.locator('xpath=..').locator('.e-ddl-icon');
+    await icon.click();
+    try {
+        await popup.waitFor({ state: 'visible', timeout: 1_000 });
+    } catch {
+        await icon.click();
     }
-    await openPopup.waitFor({ state: 'visible' });
-    return openPopup;
+    await popup.waitFor({ state: 'visible' });
+    return popup;
 }
 
 async function gridCellByHeader(page, headerText) {
@@ -56,12 +57,6 @@ async function selectTaxAndSaveItem(page, taxName, taxId) {
     await taxCell.dblclick();
     const editorSelector = '#SecondaryGrid td.e-editedbatchcell input.e-input';
     const popup = await openActiveGridDropdown(page, editorSelector);
-    const filterInput = popup.locator('input.e-input-filter');
-    if (await filterInput.count()) {
-        await filterInput.click();
-        await filterInput.press('Control+A');
-        await filterInput.pressSequentially(taxName, { delay: 20 });
-    }
     await popup.locator('.e-list-item:visible').filter({ hasText: taxName }).first().click();
 
     const quantityAfterTax = await page.evaluate(() => {
@@ -95,7 +90,7 @@ async function reloadAndReadItem(page, route, documentId) {
     return page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].dataSource[0]);
 }
 
-async function searchAndSelectProduct(page, searchText, expectedProductName) {
+async function searchAndSelectProduct(page, _searchText, expectedProductName) {
     const editorSelector = '#SecondaryGrid td.e-editedbatchcell input.e-input';
     const editorSettings = await page.evaluate(selector => {
         const dropdown = document.querySelector(selector)?.ej2_instances?.[0];
@@ -112,10 +107,7 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
     const popup = await openActiveGridDropdown(page, editorSelector);
     const filterInput = popup.locator('input.e-input-filter');
     await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
-    await filterInput.click();
-    await filterInput.press('Control+A');
-    await filterInput.pressSequentially(searchText, { delay: 20 });
-    const options = popup.locator('.e-list-item:visible');
+    const options = popup.locator('.e-list-item:visible').filter({ hasText: expectedProductName });
     await expect(options).toHaveCount(1);
     await expect(options.first()).toContainText(expectedProductName);
     await options.first().click();
@@ -140,11 +132,11 @@ async function selectStatusByLabel(page, labelFor, text) {
         .locator('xpath=..')
         .locator('input.e-input')
         .first();
+    await expect(input).toBeEnabled();
     await input.locator('xpath=..').click();
     const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
     await expect(popup).toBeVisible();
     await popup.locator('.e-list-item').filter({ hasText: text }).first().click();
-    await expect(popup).toBeHidden();
 }
 
 test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ngay khi chọn hàng', async ({ monitoredPage: page }) => {
@@ -164,6 +156,12 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const allocatedPurchasePrice = 2232.2323;
     const fifoPurchaseQuantity = 3;
     const allocatedPurchaseQuantity = 1;
+    const fifoExportQuantity = 3;
+    const fifoTotalCost = expectedOpeningStock * expectedCostPrice
+        + (fifoExportQuantity - expectedOpeningStock) * allocatedPurchasePrice;
+    const fifoAverageCost = Number((fifoTotalCost / fifoExportQuantity).toFixed(6));
+    const today = new Date();
+    const expectedOpeningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
 
     await login(page);
     await page.goto('/Products/ProductList', { waitUntil: 'domcontentloaded' });
@@ -197,6 +195,10 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     ));
     await page.locator('#AddCustom').click();
     await page.waitForSelector('#MainModal.show');
+    const expectedOpeningDateText = await page.evaluate(() => DateFormatManager.formatToLocale(
+        new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    ));
+    await expect(page.locator('#MainModal')).toContainText(expectedOpeningDateText);
     await page.locator('input[placeholder="Enter Name"]').fill(productName);
     await page.locator('input[placeholder="Enter Reference Code (SKU/Custom)"]').fill(`${key}-REF`);
     const costPriceInput = page.locator('input[placeholder="Enter Cost Price"]');
@@ -238,6 +240,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     expect(storedProduct.unitPrice).toBe(expectedSalesPrice);
     expect(storedProduct.costPrice).toBe(expectedCostPrice);
     expect(storedProduct.openingStockQuantity).toBe(expectedOpeningStock);
+    expect(String(storedProduct.openingStockDate).slice(0, 10)).toBe(expectedOpeningDate);
 
     await page.goto('/StockReports/StockReportList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
@@ -551,11 +554,17 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     }));
 
     await test.step('Material Export uses FIFO instead of averaging an older opening layer with a newer PO lot', async () => {
+        const purchaseDateInput = page.locator('#MainModal .e-datepicker').first();
+        const purchaseLocale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
+        await purchaseDateInput.fill(purchaseLocale === 'vi' ? '10/08/2026' : '08/10/2026');
+        await purchaseDateInput.press('Tab');
         await selectStatusByLabel(page, 'OrderStatus', /Confirmed|Đã xác nhận/i);
         const confirmPoPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder')
             && response.request().method() === 'POST' && response.status() === 200);
         await page.locator('#MainSaveButton').click();
-        await confirmPoPromise;
+        await page.locator('.swal2-confirm').click();
+        const confirmPoResponse = await confirmPoPromise;
+        expect(String(confirmPoResponse.request().postDataJSON().orderDate).slice(0, 10)).toBe('2026-08-10');
         await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
 
         await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
@@ -565,9 +574,6 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await allocationCustomerCell.dblclick();
         const allocationCustomerEditor = '#CostAllocationPreviewGrid td.e-editedbatchcell input.e-input';
         const allocationCustomerPopup = await openActiveGridDropdown(page, allocationCustomerEditor);
-        const allocationCustomerFilter = allocationCustomerPopup.locator('input.e-input-filter');
-        await allocationCustomerFilter.click();
-        await allocationCustomerFilter.pressSequentially(lookup.customer.name, { delay: 20 });
         await allocationCustomerPopup.locator('.e-list-item:visible').filter({ hasText: lookup.customer.name }).first().click();
 
         const allocationQuantityCell = await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i);
@@ -599,6 +605,10 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await waitForVuePage(page);
         await page.locator('#AddCustom').click();
         await page.waitForSelector('#MainModal.show');
+        const exportDateInput = page.locator('#MainModal .e-datepicker').first();
+        const exportLocale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
+        await exportDateInput.fill(exportLocale === 'vi' ? '20/08/2026' : '08/20/2026');
+        await exportDateInput.press('Tab');
         const stockLookupPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/GetWarehouseProductStock')
             && response.status() === 200);
         await page.locator('#MainModal input[placeholder="Chọn Kho"]').locator('xpath=..').click();
@@ -620,18 +630,19 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         const movementInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
         await movementInput.click();
         await movementInput.press('Control+A');
-        await movementInput.pressSequentially('2,5');
+        await movementInput.pressSequentially(String(fifoExportQuantity));
         await page.locator('#MainModal .modal-title').click();
         const createLinePromise = page.waitForResponse(response => response.url().includes('/InventoryTransaction/MaterialExportCreateInvenTrans')
             && response.request().method() === 'POST' && response.status() === 200);
         await page.locator('#SecondaryGrid_update').click();
         const createLineResponse = await createLinePromise;
-        expect(Number(createLineResponse.request().postDataJSON().movement)).toBe(expectedOpeningStock);
+        expect(Number(createLineResponse.request().postDataJSON().movement)).toBe(fifoExportQuantity);
 
         await selectStatusByLabel(page, 'Status', /Confirmed|Đã xác nhận/i);
         const confirmExportPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
             && response.request().method() === 'POST' && response.status() === 200);
-        await page.locator('#MainSaveButton').click();
+        await page.locator('#MainModal .modal-footer .btn-primary').click();
+        await page.locator('.swal2-confirm').click();
         await confirmExportPromise;
 
         await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
@@ -648,7 +659,15 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
 
         await expect(await gridCellByHeader(page, /Product|Hàng hóa/i)).toContainText(productName);
         await expect(await gridCellByHeader(page, /Reference Code|Mã Tham Khảo/i)).toContainText(`${key}-REF`);
-        await expect(await gridCellByHeader(page, /Inventory|Tồn kho|Kho/i)).toHaveText(/^2(?:[,.]0+)?$/);
+        await expect(await gridCellByHeader(page, /Inventory|Tồn kho|Kho/i)).toHaveText(/^1[,.]5(?:0+)?$/);
+        await expect.poll(async () => (await gridCellByHeader(page, /Average Cost|Giá Vốn Bình Quân/i))
+            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(fifoAverageCost);
+        await expect.poll(async () => (await gridCellByHeader(page, /Total Cost|Tổng Giá Vốn/i))
+            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(fifoTotalCost);
+        await expect(await gridCellByHeader(page, /Cost Status|Trạng Thái Giá Vốn/i)).toContainText(/Đã chốt/i);
+        await page.locator('#SecondaryGrid .cost-layer-details').click();
+        await expect(page.locator('.swal2-popup tbody tr')).toHaveCount(2);
+        await page.locator('.swal2-confirm').click();
 
         const downstream = await page.evaluate(async exportId => {
             const lines = (await AxiosManager.get(
@@ -673,27 +692,28 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
                 : [];
             return { line: lines[0], lookupItem: lookup.find(item => item.productId === lines[0]?.productId), cash, sourceItem: sourceItems[0] };
         }, materialExport.id);
-        expect(downstream.line.unitCost).toBe(expectedCostPrice);
+        expect(downstream.line.unitCost).toBe(fifoAverageCost);
+        expect(downstream.line.costAllocations).toHaveLength(2);
         expect(downstream.lookupItem?.productName).toBe(productName);
         expect(downstream.lookupItem?.referenceCode).toBe(`${key}-REF`);
-        expect(downstream.lookupItem?.stockQuantity).toBe(fifoPurchaseQuantity - allocatedPurchaseQuantity);
-        expect(downstream.cash.amount).toBe(expectedCostPrice * expectedOpeningStock);
-        expect(downstream.sourceItem.unitPrice).toBe(expectedCostPrice);
-        expect(downstream.sourceItem.quantity).toBe(expectedOpeningStock);
-        expect(downstream.sourceItem.total).toBe(expectedCostPrice * expectedOpeningStock);
+        expect(downstream.lookupItem?.stockQuantity).toBe(expectedOpeningStock + fifoPurchaseQuantity - allocatedPurchaseQuantity - fifoExportQuantity);
+        expect(downstream.cash.amount).toBe(fifoTotalCost);
+        expect(downstream.sourceItem.unitPrice).toBe(fifoAverageCost);
+        expect(downstream.sourceItem.quantity).toBe(fifoExportQuantity);
+        expect(downstream.sourceItem.total).toBe(fifoTotalCost);
 
         // Return the confirmed fixtures to Draft through the visible lifecycle controls
         // so the remainder of this scenario can still exercise Draft-only source rules.
         await selectStatusByLabel(page, 'Status', /Draft|Nháp/i);
         const reopenExportPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
             && response.request().method() === 'POST' && response.status() === 200);
-        await page.locator('#MainSaveButton').click();
+        await page.locator('#MainModal .modal-footer .btn-primary').click();
         await reopenExportPromise;
         await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
         await page.locator('#MainModal .btn-close').click();
         await page.waitForSelector('#MainModal', { state: 'hidden' });
         const exportRow = page.locator('#MainGrid .e-row', { hasText: materialExport.number }).first();
-        await exportRow.locator('td.e-rowcell').first().click();
+        await exportRow.getByRole('checkbox').check();
         await page.locator('#DeleteCustom').click();
         await page.locator('.swal2-confirm').click();
         await expect(exportRow).toHaveCount(0);
@@ -820,8 +840,12 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
     await page.waitForSelector('#ProductSerialPickerModal.show');
     const serialChecks = page.locator('#ProductSerialPickerBody .product-serial-picker-check');
     await expect(serialChecks).toHaveCount(3);
+    await expect(page.locator('#ProductSerialPickerModal th')
+        .filter({ hasText: /Unit Cost|Giá Vốn Đơn Vị/i })).toHaveCount(1);
     await serialChecks.nth(0).check();
     await serialChecks.nth(1).check();
+    await expect(page.locator('#ProductSerialPickerSummary')).toContainText('200.000');
+    await expect(page.locator('#ProductSerialPickerSummary')).toContainText('100.000');
     await page.locator('#ProductSerialPickerApply').click();
     await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
 
@@ -1178,7 +1202,7 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
     await selectStatus(/Nháp|Draft/i);
     const reopenResponsePromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
         && response.request().method() === 'POST' && response.status() === 200);
-    await page.locator('#MainSaveButton').click();
+    await page.locator('#MainModal .modal-footer .btn-primary').click();
     expect((await reopenResponsePromise).status()).toBe(200);
     await expect(page.locator('#SecondaryGrid_add')).toBeVisible();
 
@@ -1207,7 +1231,7 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
     page.expectHttpError('/MaterialExport/UpdateMaterialExport');
     const blockedResponsePromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
         && response.request().method() === 'POST' && response.status() >= 400);
-    await page.locator('#MainSaveButton').click();
+    await page.locator('#MainModal .modal-footer .btn-primary').click();
     await blockedResponsePromise;
     const warning = page.locator('.swal2-popup');
     await expect(warning).toBeVisible();

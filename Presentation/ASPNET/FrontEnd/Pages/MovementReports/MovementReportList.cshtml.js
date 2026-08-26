@@ -15,7 +15,7 @@ const App = {
                 const totalSales = Number(item.totalSales ?? 0);
                 const unitCost = Number(item.unitCost ?? 0);
                 const salesUnitPrice = Number(item.salesUnitPrice ?? 0);
-                const soldDate = item.soldDate ? DateFormatManager.parseServerDate(item.soldDate) : null;
+                const soldDate = item.soldDate ? DateFormatManager.parseBusinessDate(item.soldDate) : null;
                 const key = [
                     item.productId ?? '',
                     String(Math.round(unitCost * 1000000)),
@@ -114,12 +114,12 @@ const App = {
                         { field: 'productNumber', headerText: 'Product Number', width: 160 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product', width: 220 },
-                        { field: 'soldQty', headerText: 'Sold Qty', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'unitCost', headerText: 'Unit Cost', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'salesUnitPrice', headerText: 'Sales Price', width: 130, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'totalCost', headerText: 'Total Cost', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'totalSales', headerText: 'Total Sales', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
-                        { field: 'totalProfit', headerText: 'Profit', width: 150, type: 'number', format: 'N0', textAlign: 'Right' },
+                        { field: 'soldQty', headerText: 'Sold Qty', width: 130, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'unitCost', headerText: 'Unit Cost', width: 130, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'salesUnitPrice', headerText: 'Sales Price', width: 130, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'totalCost', headerText: 'Total Cost', width: 150, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'totalSales', headerText: 'Total Sales', width: 150, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'totalProfit', headerText: 'Profit', width: 150, type: 'number', format: 'N6', textAlign: 'Right' },
                         { field: 'costSource', headerText: 'Cost Source', width: 210 },
                         { field: 'lastSoldDate', headerText: 'Last Sold', width: 150, format: 'yyyy-MM-dd' }
                     ],

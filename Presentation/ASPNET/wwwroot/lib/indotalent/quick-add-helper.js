@@ -894,6 +894,7 @@ const QuickAddHelper = (() => {
                         <label class="qa-label" for="qa-p-opening-stock">Opening Stock</label>
                         <input id="qa-p-opening-stock" class="qa-input" type="text" inputmode="decimal" value="0" placeholder="0">
                         <small id="qa-p-opening-stock-help" class="qa-help-text">Opening stock uses the default warehouse when first entered.</small>
+                        <small class="qa-help-text">Effective date: first day of the current month.</small>
                     </div>
                     <div class="qa-field">
                         <label class="qa-label">Description</label>

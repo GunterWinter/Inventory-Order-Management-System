@@ -1,24 +1,32 @@
 # Implementation and verification status
 
-Date: 2026-08-25
+Date: 2026-08-26
 
-Status: complete.
+Status: in progress.
 
-- Purchase Order: passive validation SweetAlert consumes Enter, closes itself, keeps the document modal/editor open, and sends no invalid item request. Interactive Quick Add retains Enter.
-- Cash Transaction allocations: one visible searchable control per row, stable row identity, locale-formatted decimal input, exact six-decimal payload/persistence, and correct partial/full payment math.
-- Dashboard: sales, purchase, and recent inventory date columns render localized strings without Syncfusion reparsing; the stock chart grows with warehouse-series count to avoid negative SVG dimensions.
-- Test infrastructure: Antigravity guide/runner removed; `inventory-browser-regression` skill and isolated `WHMS_UiRegression_*` UI-first runner added. Successful evidence contains 41 screenshots.
+## Checkpoints
 
-## Verification
+- [complete] 1. Production reset guard and DI startup fix.
+- [complete] 2. Cost-allocation model and document-date FIFO.
+- [complete] 3. Product/serial/Material Export UI and decimals.
+- [complete] 4. Sales Order/Sales Return costing and UI.
+- [complete] 5. Frozen-profit reporting.
+- [in progress] 6. Narrow UI regression.
+- [pending] 7. Full build/browser/publish verification.
+- [pending] 8. Read-only `WHMS-LT` dry-run; production apply remains forbidden without separate confirmation.
 
-- `npm.cmd run test:js`: 61/61 passed after mutation restoration.
-- `npm.cmd run test:browser:isolated`: passed all Dashboard, document modal, PO/SO, Cash Transaction/group report, responsive, file workflow, and 41-route full-menu screenshot checks.
-- `dotnet build Indotalent.sln --no-restore`: passed, 0 warnings, 0 errors.
-- Release publish: passed; SHA-256 matched source for grid interaction, searchable dropdown, Cash Transaction, and Dashboard scripts (4/4). IIS Express is not installed locally.
-- Skill validation: `inventory-browser-regression` passed `quick_validate.py`.
-- `git diff --check`: passed (line-ending notices only).
-- LocalDB cleanup: no `WHMS_UiRegression_*` databases remain.
-- Pseudo-mutation audit: 3/3 injected mutations were killed by the named Enter-warning, native-select visibility, and Dashboard string-column tests; all mutations were restored and the suite returned green.
-- Assertion audit: new regressions use equality/format, negative side-effect, state transition, structural payload, and browser-visible assertions; no new assertion-free or trivial-only test was found.
-- Static source/test pairing was attempted once but unavailable because `tree-sitter-language-pack` is not installed; no dependency was added because executable unit/browser evidence covers the changed paths.
-- No migration or database schema change was introduced by this implementation.
+## Evidence so far
+
+- Baseline before implementation: `npm.cmd run test:js` passed 91/91; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Static pairing analyzer was invoked once and was unavailable because `tree-sitter-language-pack` is not installed; no dependency was added.
+- Safety changes now restrict demo reset to database names matching `WHMS_UiRegression_*` and set the checked-in `WHMS-LT` configuration to non-demo.
+- DI scanning now excludes nested feature implementation details such as `InventoryCostResolver.InventoryFifoLayer`.
+- Checkpoint 1 verification: `npm.cmd run test:js` passed 93/93; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Checkpoint 2: FIFO is ordered by document date, exact source slices are frozen in the existing empty `MaterialExportItem` table, physical Sales Orders share FIFO, serial costs are specific, Sales Returns carry source-layer selections, and new opening stock is effective on day 1 of its month.
+- Checkpoint 2 verification: `npm.cmd run test:js` passed 95/95; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Checkpoint 3: Product and Quick Add show the opening-stock effective date rule; the shared serial picker shows exact per-serial cost plus selected total/average; PO manufacturer-serial entry explains the per-serial PO cost; Material Export shows frozen average/total/status and exact source-layer details.
+- Checkpoint 3 verification: `npm.cmd run test:js` passed 96/96; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors; `git diff --check` passed (line-ending notices only).
+- Checkpoint 4: Sales Order shows frozen average/total COGS, profit, status, and source layers; Sales Return selects exact non-serial source layers and sends them in the API payload, while serial returns retain exact serial costs.
+- Checkpoint 4 verification: `npm.cmd run test:js` passed 97/97; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Checkpoint 5: Inventory Profit Report no longer resolves current inventory cost; it reads frozen `CogsAmount`/`ProfitAmount`, reports allocation sources, and preserves six-decimal display.
+- Checkpoint 5 verification: `npm.cmd run test:js` passed 98/98; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.

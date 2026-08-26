@@ -41,15 +41,15 @@ test('purchase and sales editors explicitly preserve Vietnamese decimal values',
     }
 });
 
-test('material export persists one six-decimal unit cost for both detail and cash totals', () => {
+test('material export persists six-decimal FIFO summary and exact slice total', () => {
     const source = fs.readFileSync(path.resolve(
         __dirname,
         '../../Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs'), 'utf8');
 
-    assert.match(source, /ResolveMaterialExportFifoAsync\(\s*line\.ProductId,\s*entity\.WarehouseId,\s*movement,\s*ct\)/s);
-    assert.match(source, /resolvedUnitCost\s*=\s*AccountingMath\.RoundVnd\(costResolution\.UnitCost\)/);
-    assert.match(source, /line\.UnitCost\s*=\s*resolvedUnitCost/);
-    assert.match(source, /totalProjectCost\s*\+=\s*AccountingMath\.RoundVnd\(resolvedUnitCost\s*\*\s*movement\)/);
+    assert.match(source, /ResolveFifoAsync\(\s*line\.ProductId,\s*entity\.WarehouseId,\s*movement,\s*entity\.ExportDate,\s*line\.Id,\s*ct\)/s);
+    assert.match(source, /line\.UnitCost\s*=\s*costResolution\.UnitCost/);
+    assert.match(source, /totalProjectCost\s*\+=\s*costResolution\.TotalCost/);
+    assert.match(source, /ReplaceFifoCostAllocationsAsync\([\s\S]{0,180}costResolution\.Slices/);
 });
 
 test('purchase return carries the source product serial policy instead of forcing serial tracking', () => {

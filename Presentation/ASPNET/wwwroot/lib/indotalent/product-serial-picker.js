@@ -35,6 +35,7 @@ window.ProductSerialPicker = (() => {
                                         <th>Sản phẩm</th>
                                         <th>Kho</th>
                                         <th>Trạng thái</th>
+                                        <th class="text-end">Unit Cost</th>
                                         <th>Hạn BH</th>
                                     </tr>
                                 </thead>
@@ -61,6 +62,15 @@ window.ProductSerialPicker = (() => {
     };
 
     const formatDate = (value) => value ? DateFormatManager.formatToLocale(new Date(value)) : '';
+    const formatCost = (value) => NumberFormatManager.formatToLocale(value ?? 0, 0, 6);
+
+    const updateSummary = (items, selectedIds) => {
+        const selected = items.filter(item => selectedIds.has(item.id));
+        const total = selected.reduce((sum, item) => sum + Number(item.unitCost ?? 0), 0);
+        const average = selected.length ? total / selected.length : 0;
+        document.getElementById('ProductSerialPickerSummary').textContent =
+            `Đã chọn ${selected.length} / ${items.length} | Tổng giá vốn: ${formatCost(total)} | Bình quân: ${formatCost(average)}`;
+    };
 
     const buildUrl = (options) => {
         const params = new URLSearchParams();
@@ -74,7 +84,6 @@ window.ProductSerialPicker = (() => {
 
     const renderRows = (items, selectedIds, searchText) => {
         const body = document.getElementById('ProductSerialPickerBody');
-        const summary = document.getElementById('ProductSerialPickerSummary');
         const search = (searchText ?? '').toLowerCase();
         const filtered = items.filter(item => (item.internalSerialNumber ?? '').toLowerCase().includes(search));
 
@@ -89,11 +98,12 @@ window.ProductSerialPicker = (() => {
                     <td>${item.productName ?? ''}</td>
                     <td>${item.warehouseName ?? ''}</td>
                     <td>${item.statusName ?? ''}</td>
+                    <td class="text-end">${formatCost(item.unitCost)}</td>
                     <td>${formatDate(item.customerWarrantyEndDate ?? item.supplierWarrantyEndDate)}</td>
                 </tr>`;
         }).join('');
 
-        summary.textContent = `Đã chọn ${selectedIds.size} / ${items.length}`;
+        updateSummary(items, selectedIds);
 
         body.querySelectorAll('.product-serial-picker-check').forEach(check => {
             check.addEventListener('change', () => {
@@ -102,7 +112,7 @@ window.ProductSerialPicker = (() => {
                 } else {
                     selectedIds.delete(check.value);
                 }
-                summary.textContent = `Đã chọn ${selectedIds.size} / ${items.length}`;
+                updateSummary(items, selectedIds);
             });
         });
     };
@@ -120,6 +130,8 @@ window.ProductSerialPicker = (() => {
         rowData.productSerialIds = selectedSerials.map(item => item.id);
         rowData.productSerialNumbers = selectedSerials.map(item => item.internalSerialNumber).join(', ');
         rowData[quantityField] = selectedSerials.length;
+        rowData.totalCost = selectedSerials.reduce((sum, item) => sum + Number(item.unitCost ?? 0), 0);
+        rowData.unitCost = selectedSerials.length ? rowData.totalCost / selectedSerials.length : null;
     };
 
     const serialText = value => (Array.isArray(value) ? value : [value])
@@ -222,6 +234,8 @@ window.ProductSerialPicker = (() => {
                             values: {
                                 productSerialIds: [...args.rowData.productSerialIds],
                                 productSerialNumbers: args.rowData.productSerialNumbers,
+                                unitCost: args.rowData.unitCost,
+                                totalCost: args.rowData.totalCost,
                                 [quantityField]: args.rowData[quantityField]
                             },
                             formatters: {
@@ -237,7 +251,9 @@ window.ProductSerialPicker = (() => {
                         rowUid,
                         serialIds: [...args.rowData.productSerialIds],
                         serialNumbers: args.rowData.productSerialNumbers,
-                        quantity: args.rowData[quantityField]
+                        quantity: args.rowData[quantityField],
+                        unitCost: args.rowData.unitCost,
+                        totalCost: args.rowData.totalCost
                     });
                     if (quantityObj && quantityObj.isDestroyed !== true) {
                         quantityObj.value = args.rowData[quantityField] ?? 0;

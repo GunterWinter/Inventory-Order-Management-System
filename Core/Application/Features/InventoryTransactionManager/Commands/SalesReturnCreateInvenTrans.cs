@@ -19,6 +19,7 @@ public class SalesReturnCreateInvenTransRequest : IRequest<SalesReturnCreateInve
     public decimal? Movement { get; init; }
     public string? CreatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
+    public List<ReturnCostLayerSelectionDto>? CostLayers { get; init; }
 }
 
 public class SalesReturnCreateInvenTransValidator : AbstractValidator<SalesReturnCreateInvenTransRequest>
@@ -51,7 +52,7 @@ public class SalesReturnCreateInvenTransHandler : IRequestHandler<SalesReturnCre
         InventoryTransaction? entity = null;
         await _unitOfWork.ExecuteInTransactionAsync(async ct => entity = await _inventoryTransactionService.SalesReturnCreateInvenTrans(
             request.ModuleId, request.WarehouseId, request.ProductId, request.Movement,
-            request.CreatedById, ct, request.ProductSerialIds, request.SourceItemId), cancellationToken);
+            request.CreatedById, ct, request.ProductSerialIds, request.SourceItemId, request.CostLayers), cancellationToken);
 
         return new SalesReturnCreateInvenTransResult
         {

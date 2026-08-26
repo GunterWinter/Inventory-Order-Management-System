@@ -1389,9 +1389,10 @@ const App = {
         const editManufacturerSerials = async (rowData, refreshQuantity, editorElement = null) => {
             if (!isManufacturerSerialProduct(rowData.productId)) return;
             const serials = [...(rowData.manufacturerSerialNumbers ?? [])];
+            const unitCostText = NumberFormatManager.formatToLocale(rowData.unitPrice ?? 0, 0, 6);
             const result = await Swal.fire({
                 title: 'Mã serial nhà sản xuất',
-                html: '<div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Thêm serial</button>',
+                html: `<div class="alert alert-light border text-start py-2">Giá vốn mỗi serial: <strong>${unitCostText}</strong> (đơn giá dòng mua hàng)</div><div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Thêm serial</button>`,
                 showCancelButton: true, confirmButtonText: 'Áp dụng', cancelButtonText: 'Hủy',
                 didOpen: () => {
                     const list = document.getElementById('manufacturer-serial-list');

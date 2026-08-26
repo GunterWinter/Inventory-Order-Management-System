@@ -183,6 +183,17 @@ public sealed class GetCashTransactionSourceItemsHandler
         };
 
         var lineIds = lines.Select(x => x.Id).ToList();
+        var allocationTotals = await _context.Set<MaterialExportItem>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.InventoryTransactionId != null && lineIds.Contains(x.InventoryTransactionId))
+            .GroupBy(x => x.InventoryTransactionId!)
+            .Select(group => new
+            {
+                InventoryTransactionId = group.Key,
+                Total = group.Sum(x => x.Total ?? (x.Quantity ?? 0m) * (x.UnitPrice ?? 0m))
+            })
+            .ToDictionaryAsync(x => x.InventoryTransactionId, x => x.Total, cancellationToken);
         var movementSerials = await (
             from movement in _context.Set<ProductSerialMovement>().AsNoTracking()
             join serial in _context.Set<ProductSerial>().AsNoTracking()
@@ -259,7 +270,9 @@ public sealed class GetCashTransactionSourceItemsHandler
                 WarehouseName = line.Warehouse?.Name,
                 Quantity = quantity,
                 UnitPrice = unitPrice,
-                Total = quantity * unitPrice,
+                Total = allocationTotals.TryGetValue(line.Id, out var allocationTotal)
+                    ? allocationTotal
+                    : quantity * unitPrice,
                 ProductSerialNumbers = string.Join(", ", serials.Select(x => x.InternalSerialNumber)
                     .Where(x => !string.IsNullOrWhiteSpace(x)))
             });

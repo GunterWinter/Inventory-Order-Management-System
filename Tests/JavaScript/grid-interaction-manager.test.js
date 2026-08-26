@@ -405,6 +405,27 @@ test('custom modal changes register an existing row before its editor blurs', ()
     assert.equal(changedRecords[0].productSerialNumbers, 'SER-2');
 });
 
+test('custom modal changes fall back to the grid batch ledger when updateCell is ignored', () => {
+    const manager = loadManager();
+    const changedRecords = [];
+    const data = { id: 'line-1', movement: 0 };
+    const grid = {
+        element: { id: 'SecondaryGrid' },
+        editModule: { batchChanges: { addedRecords: [], changedRecords, deletedRecords: [] } },
+        getRows: () => [{}],
+        getRowsObject: () => [{ data }],
+        getBatchChanges() { return this.editModule.batchChanges; },
+        getColumnByField: field => ({ field }),
+        getColumnIndexByField: () => -1,
+        updateCell() { }
+    };
+
+    manager.syncBatchRowValues(grid, { rowData: data, rowIndex: 0, values: { movement: 2.5 } });
+
+    assert.equal(changedRecords.length, 1);
+    assert.equal(changedRecords[0].movement, 2.5);
+});
+
 test('main grid delegates plain and additive row clicks to native multiple selection', () => {
     const manager = loadManager();
     let clears = 0;

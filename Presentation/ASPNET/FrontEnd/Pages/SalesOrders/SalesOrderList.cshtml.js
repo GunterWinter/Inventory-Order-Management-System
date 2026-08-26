@@ -218,19 +218,25 @@ const App = {
                 ...amounts
             };
         };
-        const enrichSalesOrderItem = (item) => ({
-            ...item,
-            productId: normalizeLookupId(item.productId),
-            warehouseId: normalizeLookupId(item.warehouseId),
-            taxId: normalizeLookupId(item.taxId),
-            availableStock: getAvailableStock(item.productId, item.warehouseId),
-            productSerialIds: Array.isArray(item.productSerialIds)
-                ? item.productSerialIds.map(normalizeLookupId).filter(Boolean)
-                : [],
-            productSerialNumbers: typeof item.productSerialNumbers === 'string'
-                ? item.productSerialNumbers
-                : ''
-        });
+        const enrichSalesOrderItem = (item) => {
+            const costAllocations = item.costAllocations ?? [];
+            const totalCost = item.cogsAmount ?? costAllocations.reduce((sum, allocation) => sum + Number(allocation.total ?? 0), 0);
+            return {
+                ...item,
+                productId: normalizeLookupId(item.productId),
+                warehouseId: normalizeLookupId(item.warehouseId),
+                taxId: normalizeLookupId(item.taxId),
+                availableStock: getAvailableStock(item.productId, item.warehouseId),
+                averageCost: Number(item.quantity ?? 0) > 0 ? Number(totalCost ?? 0) / Number(item.quantity) : null,
+                costStatus: costAllocations.length ? 'Đã chốt' : 'Chưa chốt',
+                productSerialIds: Array.isArray(item.productSerialIds)
+                    ? item.productSerialIds.map(normalizeLookupId).filter(Boolean)
+                    : [],
+                productSerialNumbers: typeof item.productSerialNumbers === 'string'
+                    ? item.productSerialNumbers
+                    : ''
+            };
+        };
         const syncSecondaryAvailability = () => {
             state.secondaryData = state.secondaryData.map(enrichSalesOrderItem);
             if (secondaryGrid.obj) {
@@ -1865,6 +1871,21 @@ const App = {
                                 }
                             }
                         },
+                        {
+                            field: 'averageCost',
+                            headerText: 'Giá vốn bình quân',
+                            allowEditing: false,
+                            width: 170,
+                            textAlign: 'Right',
+                            valueAccessor: (_field, data) => data.averageCost == null ? '' : NumberFormatManager.formatToLocale(data.averageCost, 0, 6)
+                        },
+                        { field: 'costStatus', headerText: 'Trạng thái giá vốn', width: 130, allowEditing: false },
+                        {
+                            headerText: 'Chi tiết giá vốn',
+                            width: 140,
+                            allowEditing: false,
+                            template: '<button type="button" class="btn btn-outline-info btn-sm cost-layer-details">Chi tiết</button>'
+                        },
                     ],
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
@@ -1873,6 +1894,10 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: () => secondaryGrid.syncSerialPickerRows(),
+                    recordClick: args => {
+                        if (!args.target?.closest?.('.cost-layer-details')) return;
+                        InventoryCostLayerViewer.show(args.rowData?.costAllocations ?? [], 'Chi tiết giá vốn đơn bán hàng');
+                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {

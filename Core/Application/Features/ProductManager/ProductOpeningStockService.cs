@@ -184,12 +184,14 @@ public sealed class ProductOpeningStockService
             ?? throw new InvalidOperationException("Không tìm thấy kho hệ thống StockCount.");
 
         var now = AppDateTime.VietnamNow();
+        var effectiveDate = firstHistory?.MovementDate?.Date
+            ?? new DateTime(now.Year, now.Month, 1);
         var stockCount = new StockCount
         {
             CreatedById = userId,
             UpdatedById = userId,
             Number = _numberSequenceService.GenerateNumber(nameof(StockCount), string.Empty, "SC"),
-            CountDate = now,
+            CountDate = effectiveDate,
             Status = StockCountStatus.Confirmed,
             Description = $"Tồn đầu kỳ từ danh mục hàng hóa: {product.Name}",
             WarehouseId = warehouseId
@@ -205,7 +207,7 @@ public sealed class ProductOpeningStockService
             ModuleName = nameof(StockCount),
             ModuleCode = OpeningStockModuleCode,
             ModuleNumber = stockCount.Number,
-            MovementDate = now,
+            MovementDate = effectiveDate,
             Status = InventoryTransactionStatus.Confirmed,
             WarehouseId = warehouseId,
             ProductId = product.Id,

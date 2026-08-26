@@ -18,4 +18,28 @@ public sealed class ReturnSourceLineDto
     public decimal AvailableReturnQuantity { get; init; }
     public List<string> ProductSerialIds { get; init; } = [];
     public string ProductSerialNumbers { get; init; } = string.Empty;
+    public List<ReturnCostLayerDto> CostLayers { get; init; } = [];
+}
+
+public sealed class ReturnCostLayerDto
+{
+    public string? SourceCostAllocationId { get; init; }
+    public string? SourceInventoryTransactionId { get; init; }
+    public string? SourceModule { get; init; }
+    public string? SourceNumber { get; init; }
+    public DateTime? SourceDate { get; init; }
+    public string? ProductSerialId { get; init; }
+    public string? ProductSerialNumber { get; init; }
+    public decimal SoldQuantity { get; init; }
+    public decimal PreviouslyReturnedQuantity { get; init; }
+    public decimal CurrentReturnQuantity { get; init; }
+    public decimal AvailableReturnQuantity { get; init; }
+    public decimal UnitCost { get; init; }
+    public decimal TotalCost { get; init; }
+}
+
+public sealed class ReturnCostLayerSelectionDto
+{
+    public string? SourceCostAllocationId { get; init; }
+    public decimal Quantity { get; init; }
 }

@@ -270,20 +270,20 @@
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds) => {
+            createSecondaryData: async (moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds, costLayers) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/SalesReturnCreateInvenTrans', {
-                        moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds
+                        moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds, costLayers
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, warehouseId, productId, movement, updatedById, productSerialIds) => {
+            updateSecondaryData: async (id, warehouseId, productId, movement, updatedById, productSerialIds, costLayers) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/SalesReturnUpdateInvenTrans', {
-                        id, warehouseId, productId, movement, updatedById, productSerialIds
+                        id, warehouseId, productId, movement, updatedById, productSerialIds, costLayers
                     });
                     return response;
                 } catch (error) {
@@ -375,12 +375,23 @@
                         physical: item.physical === true,
                         serialTrackingMode: Number(item.serialTrackingMode ?? 0)
                     }])).values());
-                    state.secondaryData = sourceLines.map(item => ({
-                        ...item,
-                        id: item.returnLineId ?? item.sourceItemId,
-                        movement: item.currentReturnQuantity ?? 0,
-                        isVirtual: !item.returnLineId
-                    }));
+                    state.secondaryData = sourceLines.map(item => {
+                        const costLayerSelections = (item.costLayers ?? [])
+                            .filter(layer => Number(layer.currentReturnQuantity ?? 0) > 0)
+                            .map(layer => ({ sourceCostAllocationId: layer.sourceCostAllocationId, quantity: Number(layer.currentReturnQuantity) }));
+                        const totalCost = (item.costLayers ?? []).reduce((sum, layer) => sum + Number(layer.totalCost ?? 0), 0);
+                        const movement = Number(item.currentReturnQuantity ?? 0);
+                        return {
+                            ...item,
+                            id: item.returnLineId ?? item.sourceItemId,
+                            movement,
+                            costLayerSelections,
+                            unitCost: movement > 0 ? totalCost / movement : null,
+                            totalCost: movement > 0 ? totalCost : null,
+                            costLayerSummary: costLayerSelections.length ? `${costLayerSelections.length} lớp` : 'Chưa chọn',
+                            isVirtual: !item.returnLineId
+                        };
+                    });
                     methods.refreshSummary();
                 } catch (error) {
                     state.secondaryData = [];
@@ -815,6 +826,16 @@
                             requireWarehouse: true
                         }),
                         {
+                            field: 'costLayerSummary',
+                            headerText: 'Chi tiết giá vốn',
+                            width: 180,
+                            allowEditing: false,
+                            valueAccessor: (_field, data) => Number(data.serialTrackingMode ?? 0) > 0
+                                ? 'Theo serial'
+                                : (data.costLayerSummary ?? 'Chưa chọn'),
+                            template: '<button type="button" class="btn btn-outline-info btn-sm sales-return-cost-layer-picker">Chọn lớp giá vốn</button>'
+                        },
+                        {
                             field: 'movement',
                             headerText: 'Số lượng trả lần này',
                             width: 200,
@@ -844,12 +865,28 @@
                                         numericKind: serialTracked ? 'integer' : 'decimal',
                                         format: serialTracked ? 'n0' : 'n6',
                                         decimals: serialTracked ? 0 : 6,
-                                        readonly: serialTracked,
+                                        readonly: true,
                                         validateDecimalOnType: true,
                                     });
                                     movementObj.appendTo(args.element);
                                 }
                             }
+                        },
+                        {
+                            field: 'unitCost',
+                            headerText: 'Giá vốn bình quân',
+                            width: 160,
+                            allowEditing: false,
+                            textAlign: 'Right',
+                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatToLocale(data.unitCost, 0, 6)
+                        },
+                        {
+                            field: 'totalCost',
+                            headerText: 'Tổng giá vốn',
+                            width: 160,
+                            allowEditing: false,
+                            textAlign: 'Right',
+                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatToLocale(data.totalCost, 0, 6)
                         },
                     ],
                     toolbar: !state.isViewMode && String(state.status ?? '0') === '0' ? [
@@ -859,6 +896,31 @@
                     ] : ['ExcelExport'],
                     beforeDataBound: () => { },
                     dataBound: function () { },
+                    recordClick: async args => {
+                        if (!args.target?.closest?.('.sales-return-cost-layer-picker')) return;
+                        if (state.isViewMode || String(state.status ?? '0') !== '0' || Number(args.rowData.serialTrackingMode ?? 0) > 0) return;
+                        const selected = await InventoryCostLayerViewer.select(args.rowData.costLayers ?? []);
+                        if (!selected) return;
+                        const values = {
+                            costLayerSelections: selected.selections,
+                            costLayerSummary: selected.selections.length ? `${selected.selections.length} lớp` : 'Chưa chọn',
+                            movement: selected.totalQuantity,
+                            unitCost: selected.totalQuantity ? selected.unitCost : null,
+                            totalCost: selected.totalQuantity ? selected.totalCost : null
+                        };
+                        const row = args.target.closest('tr');
+                        GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
+                            rowData: args.rowData,
+                            editorElement: args.target,
+                            rowIndex: secondaryGrid.obj.getRows().indexOf(row),
+                            rowUid: row?.getAttribute('data-uid'),
+                            values,
+                            formatters: {
+                                movement: value => NumberFormatManager.formatToLocale(value ?? 0),
+                                costLayerSummary: value => value
+                            }
+                        });
+                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
@@ -892,6 +954,15 @@
                             allowEmptySelection: false,
                             allowZeroQuantity: true
                         });
+                        if (args.cancel || String(args.requestType ?? '').toLowerCase() !== 'save' || args.managedBatch !== true) return;
+                        if (Number(args.data.serialTrackingMode ?? 0) === 0) {
+                            const selectedQuantity = (args.data.costLayerSelections ?? [])
+                                .reduce((sum, layer) => sum + Number(layer.quantity ?? 0), 0);
+                            if (Math.abs(selectedQuantity - Number(args.data.movement ?? 0)) > 0.000001) {
+                                args.cancel = true;
+                                Swal.fire({ icon: 'warning', title: 'Thiếu chi tiết giá vốn', text: 'Hãy chọn lớp giá vốn có tổng số lượng bằng số lượng trả.', confirmButtonText: 'Đồng ý' });
+                            }
+                        }
                     },
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'edit') {
@@ -900,9 +971,9 @@
                                 if (Number(args.data.movement ?? 0) === 0) {
                                     if (args.data.returnLineId) response = await services.deleteSecondaryData(args.data.returnLineId, StorageManager.getUserId());
                                 } else if (args.data.returnLineId) {
-                                    response = await services.updateSecondaryData(args.data.returnLineId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                    response = await services.updateSecondaryData(args.data.returnLineId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? [], args.data.costLayerSelections ?? []);
                                 } else {
-                                    response = await services.createSecondaryData(state.id, args.data.sourceItemId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                    response = await services.createSecondaryData(state.id, args.data.sourceItemId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? [], args.data.costLayerSelections ?? []);
                                 }
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();

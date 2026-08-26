@@ -380,6 +380,10 @@ const App = {
                     const response = await services.getSecondaryData(MaterialExportId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
+                        totalCost: (item.costAllocations ?? []).length
+                            ? item.costAllocations.reduce((sum, allocation) => sum + Number(allocation.total ?? 0), 0)
+                            : null,
+                        costStatus: (item.costAllocations ?? []).length ? 'Đã chốt' : 'Chưa chốt',
                         createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                     }));
                     methods.refreshSummary();
@@ -923,6 +927,7 @@ const App = {
                                         dataSource: state.productListLookupData,
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
+                                        allowFiltering: true,
                                         select: function (e) {
                                             applyProductSelection(e.itemData?.id ?? e.itemData?.value ?? e.value);
                                         },
@@ -1007,6 +1012,35 @@ const App = {
                                 return Number.isFinite(previewQuantity) ? previewQuantity : '';
                             }
                         },
+                        {
+                            field: 'unitCost',
+                            headerText: 'Giá vốn bình quân',
+                            width: 160,
+                            allowEditing: false,
+                            textAlign: 'Right',
+                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatToLocale(data.unitCost, 0, 6)
+                        },
+                        {
+                            field: 'totalCost',
+                            headerText: 'Tổng giá vốn',
+                            width: 160,
+                            allowEditing: false,
+                            textAlign: 'Right',
+                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatToLocale(data.totalCost, 0, 6)
+                        },
+                        {
+                            field: 'costStatus',
+                            headerText: 'Trạng thái giá vốn',
+                            width: 130,
+                            allowEditing: false,
+                            valueAccessor: (_field, data) => (data.costAllocations ?? []).length ? 'Đã chốt' : 'Chưa chốt'
+                        },
+                        {
+                            headerText: 'Chi tiết giá vốn',
+                            width: 140,
+                            allowEditing: false,
+                            template: '<button type="button" class="btn btn-outline-info btn-sm cost-layer-details">Chi tiết</button>'
+                        },
                     ],
                     toolbar: allowEdit ? [
                         'ExcelExport',
@@ -1015,6 +1049,10 @@ const App = {
                     ] : ['ExcelExport'],
                     beforeDataBound: () => { },
                     dataBound: function () { },
+                    recordClick: args => {
+                        if (!args.target?.closest?.('.cost-layer-details')) return;
+                        InventoryCostLayerViewer.show(args.rowData?.costAllocations ?? []);
+                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {

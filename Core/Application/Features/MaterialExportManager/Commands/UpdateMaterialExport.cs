@@ -147,6 +147,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 foreach (var line in confirmedLines)
                 {
                     await _productSerialService.ReleaseInventoryTransactionSerialsAsync(line.Id, request.UpdatedById, ct);
+                    await _inventoryTransactionService.DeleteCostAllocationsAsync(line.Id, request.UpdatedById, ct);
                     line.Status = requestedStatus == MaterialExportStatus.Draft
                         ? InventoryTransactionStatus.Draft
                         : InventoryTransactionStatus.Cancelled;
@@ -251,15 +252,15 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     if (movement > availableStock + 0.000001m)
                         throw new InvalidOperationException($"Not enough stock for {line.Product.Name}. Available: {availableStock}.");
 
-                    var costResolution = await _inventoryCostResolver.ResolveMaterialExportFifoAsync(
+                    var costResolution = await _inventoryCostResolver.ResolveFifoAsync(
                         line.ProductId,
                         entity.WarehouseId,
                         movement,
+                        entity.ExportDate,
+                        line.Id,
                         ct);
-                    var resolvedUnitCost = AccountingMath.RoundVnd(costResolution.UnitCost);
-                    line.UnitCost = resolvedUnitCost;
-                    totalProjectCost += AccountingMath.RoundVnd(resolvedUnitCost * movement);
-                    hasFallbackCost |= costResolution.IsFallbackCost;
+                    line.UnitCost = costResolution.UnitCost;
+                    totalProjectCost += costResolution.TotalCost;
                     hasOpeningCost |= costResolution.IncludesOpeningStock;
                     hasPurchaseCost |= costResolution.IncludesPurchase;
 
@@ -270,6 +271,12 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     _inventoryTransactionService.CalculateInvenTrans(line);
                     _inventoryTransactionRepository.Update(line);
                     await _unitOfWork.SaveAsync(ct);
+                    await _inventoryTransactionService.ReplaceFifoCostAllocationsAsync(
+                        line,
+                        costResolution.Slices,
+                        request.UpdatedById,
+                        entity.Id,
+                        ct);
                     continue;
                 }
 
@@ -338,10 +345,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     }
                     var serialCost = _inventoryCostResolver.ResolveSerial(serial);
                     lineTotalCost += serialCost.UnitCost;
-                    hasFallbackCost |= serialCost.SourceKey.StartsWith("FALLBACK:", StringComparison.Ordinal);
                     hasOpeningCost |= serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
-                    hasPurchaseCost |= !serialCost.SourceKey.StartsWith("FALLBACK:", StringComparison.Ordinal)
-                        && !serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
+                    hasPurchaseCost |= !serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
                 }
 
                 line.UnitCost = AccountingMath.RoundVnd(lineTotalCost / required);
@@ -353,6 +358,13 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 _inventoryTransactionService.CalculateInvenTrans(line);
                 _inventoryTransactionRepository.Update(line);
                 await _unitOfWork.SaveAsync(ct);
+
+                await _inventoryTransactionService.ReplaceSerialCostAllocationsAsync(
+                    line,
+                    selectedSerials,
+                    request.UpdatedById,
+                    entity.Id,
+                    ct);
 
                 await _productSerialService.ApplyInventoryTransactionSerialsAsync(
                     line,
