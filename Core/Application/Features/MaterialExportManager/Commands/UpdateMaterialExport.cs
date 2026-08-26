@@ -251,10 +251,11 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     if (movement > availableStock + 0.000001m)
                         throw new InvalidOperationException($"Not enough stock for {line.Product.Name}. Available: {availableStock}.");
 
-                    var costResolution = await _inventoryCostResolver.ResolveAsync(
+                    var costResolution = await _inventoryCostResolver.ResolveMaterialExportFifoAsync(
                         line.ProductId,
                         entity.WarehouseId,
-                        cancellationToken: ct);
+                        movement,
+                        ct);
                     var resolvedUnitCost = AccountingMath.RoundVnd(costResolution.UnitCost);
                     line.UnitCost = resolvedUnitCost;
                     totalProjectCost += AccountingMath.RoundVnd(resolvedUnitCost * movement);

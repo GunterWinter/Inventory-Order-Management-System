@@ -46,6 +46,7 @@ test('material export persists one six-decimal unit cost for both detail and cas
         __dirname,
         '../../Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs'), 'utf8');
 
+    assert.match(source, /ResolveMaterialExportFifoAsync\(\s*line\.ProductId,\s*entity\.WarehouseId,\s*movement,\s*ct\)/s);
     assert.match(source, /resolvedUnitCost\s*=\s*AccountingMath\.RoundVnd\(costResolution\.UnitCost\)/);
     assert.match(source, /line\.UnitCost\s*=\s*resolvedUnitCost/);
     assert.match(source, /totalProjectCost\s*\+=\s*AccountingMath\.RoundVnd\(resolvedUnitCost\s*\*\s*movement\)/);

@@ -1,105 +1,111 @@
 ---
 name: inventory-browser-regression
-description: Test this inventory system from the user's UI through persistence and downstream business effects. Use after application changes or when auditing Vietnamese numbers, Syncfusion grids, document lifecycles, serials, stock, cash, reports, localization, or data-protection regressions.
+description: Test only the UI routes and downstream effects actually impacted by changed code in this inventory system. Trace shared helper callers before selecting narrow browser scenarios; do not expand into unrelated modules.
 ---
 
-# Inventory browser regression
+# Inventory Browser Regression
 
-Read `.agents/AGENTS.md` completely. Treat every business rule there as an assertion, not background information.
+Read `.agents/AGENTS.md` completely before acting. This skill narrows regression scope; it does not waive any repository-mandated verification gate.
 
-Before testing, inspect the changed production files and their callers, the changed tests, `package.json`, and Playwright discovery. Read [references/ui-risk-matrix.md](references/ui-risk-matrix.md): read the cross-cutting section plus every affected area; read the whole matrix when a shared number, date, dropdown, grid, serial, document, stock, or cash helper changed.
+## Build an impact map first
 
-## Safety
+Before changing, adding, or running tests:
 
-- Use `npm.cmd run test:browser:isolated` for destructive setup and cleanup. It may create or drop only the database generated for that run with prefix `WHMS_UiRegression_`.
-- Never target a development or production database. Never enable `IsDemoVersion=true` outside the disposable runner.
-- Preserve failure trace, video, screenshot, browser errors, request failures, and HTTP errors. Promote success evidence only after every required gate passes.
+1. Inspect the diff and identify the exact behavior, branch, contract, or symbol that changed.
+2. Search for every direct caller of each changed shared symbol with `rg`.
+3. Map each executable caller to its real page, route, user action, endpoint, and existing test.
+4. Select the smallest UI scenarios that exercise the changed behavior through those callers.
 
-## UI-first contract
+The changed file alone does not define the test scope. The executable caller chain does.
 
-Perform the behavior under test exactly as a user does with Playwright locators and keyboard actions: navigate from the menu, click, fill, type, select, add a row, edit a cell, apply a picker, save, reopen, resize, upload, or download.
+For a shared JavaScript or `lib` helper, do not test the whole application merely because the file is widely available. Search for the exact changed function, class method, event, option, or exported contract and test only callers that can execute the changed path.
 
-Do not use `page.evaluate` or application internals to perform the behavior. In particular, do not:
+Example: after changing `GridInteractionManager.syncBatchRowValues` in `grid-interaction-manager.js`, start with:
 
-- call Axios instead of submitting the form;
-- invoke Vue methods, `editCell`, `toolbarClick`, `batchSave`, or Syncfusion `change` handlers;
-- assign widget `.value`, call `.dataBind()`, replace `getSelectedRecords`, or mutate row/batch data;
-- force a click through a real overlay or use a fallback that commits data for the application.
+```powershell
+rg -n "GridInteractionManager\.syncBatchRowValues|syncBatchRowValues" Presentation Tests
+```
 
-`page.evaluate` may read state after a real UI action. API/SQL may create only prerequisite data for which no UI exists, and may read back persisted/downstream state. Document lifecycle fixtures must be created through the UI. A separate forged-request test may verify a backend trust boundary, but it never counts as UI coverage.
+If the results include `PurchaseOrderList.cshtml.js`, test the relevant Purchase Order UI interaction. Repeat for every other actual caller returned by the search. Verify the changed batch-row behavior from the visible editor through the rendered row and, where that caller persists data, through its request/persistence/reload boundary.
 
-Prefer observable waits (`expect`, `waitForResponse`, `waitForURL`, `expect.poll`) over sleeps. Do not make a flaky test pass by increasing delays.
+Do not automatically add cash, report, serial, stock, document-lifecycle, or other module scenarios. Include a downstream effect only when the changed caller path actually produces that effect.
 
-## Proof chain for every business scenario
+## Keep the scope bounded
 
-One green final response is insufficient. Assert the same expected value at every applicable boundary:
+- For page-specific code, test that page's affected action and its direct result.
+- For a shared helper, test every direct caller that executes the changed branch, not pages that merely load the shared file.
+- For backend code, identify its direct endpoint/service callers and test the affected UI path. Follow downstream data only when the changed mutation affects it.
+- For formatting, localization, grid, date, number, or dropdown changes, test only the affected pages and the relevant input/display boundary.
+- For test-only changes, verify the changed test contract; do not use them as permission to change unrelated production behavior.
 
-1. visible editor text while the cell is still active;
-2. visible grid/modal state after the real blur, Tab, picker Apply, or immediate Update/Save action;
-3. outgoing request payload and HTTP response;
-4. persisted readback;
-5. close/reopen or full-page reload rendered value;
-6. exact downstream stock, serial, warranty, debt, cash transaction, and report effect.
+If an unrelated pre-existing defect appears:
 
-For a rejected action, assert that nothing changed at boundaries 3-6 and that the Vietnamese message identifies the blocking object. Screenshots are evidence, not business assertions.
+1. Preserve the error, trace, screenshot, video, and route needed to reproduce it.
+2. Report it separately as outside the impact map.
+3. Do not edit unrelated production code, test assertions, seed data, or fallback behavior to make the current task green.
+4. Ask the user before expanding the implementation or regression scope when that defect blocks proof of the requested change.
 
-## Mandatory adversarial dimensions
+## Select only relevant risk guidance
 
-Choose cases from every relevant dimension; one happy integer row is never enough:
+Read the cross-cutting assertions and only the affected sections of `references/ui-risk-matrix.md` identified by the impact map. A shared helper change does not by itself justify reading or testing the entire matrix.
 
-- Number policy: Vietnamese `321.987,625`, `2,5`, six decimals, grouping-only `1.234`, zero, invalid negative, and an integer-only serial quantity. Distinguish money, decimal quantity, and integer fields.
-- Product policy: non-physical, physical without serials, internal serial, and manufacturer serial.
-- Grid identity: new keyless row, saved row, changed row, duplicate-looking rows, product switch, deleted/re-added row, and a picker callback after its original editor was destroyed.
-- Timing: cold first load with delayed lookups, save while the last editor is active, Update immediately after Apply, modal close/reopen, repeated bind, rapid repeat action, refresh, and window resize.
-- Lifecycle: Draft, Confirmed, Archived, restored Confirmed, Cancelled, repeated confirm/cancel, and blocked dependency.
-- Cardinality/history: empty, one, multiple lines, multiple cost sources, same customer, legacy duplicates, unpaid and paid linked transactions.
-- Locale/date: Vietnamese first, then language rebind where relevant; exact business dates near a UTC day boundary.
+Apply only adversarial dimensions tied to the changed contract, for example:
 
-Use unique values for fixture identity, but deliberately create duplicate display values when testing Vue keys, dropdown wrappers, grouping, or row reuse.
+- Vietnamese parsing and formatting only when the changed path handles numbers or dates.
+- Batch add/edit/delete/save only when the changed grid behavior participates in those actions.
+- Dropdown identity and reload only when the changed path reads or writes dropdown values.
+- Serial uniqueness only when the affected caller handles serial-controlled products.
+- Confirm/cancel/reconfirm only when the changed code participates in document transitions.
+- Stock, cash, reports, or ledger effects only when they are direct consequences of the affected operation.
 
-## Lifecycle and data invariants
+Do not create a broad feature checklist unrelated to the diff.
 
-For every affected document form, drive this matrix through visible controls:
+## Protect real data
 
-- Draft: create, save, reopen, edit, delete; no stock/accounting effect.
-- Confirmed: confirm once; verify exact stock/serial/debt/report effects; direct header/item editing and deletion are blocked.
-- Archived: archive and restore through the UI; header/items remain locked and effects remain identical to Confirmed.
-- Cancelled: cancel once; all effects reverse; repeat is idempotent or explicitly rejected.
-- Dependencies: invalid delete/cancel/source selection is blocked in UI and backend without partial mutation.
+- Use only the isolated browser runner and its disposable database for mutating scenarios.
+- Never run mutating browser tests against production, shared development, or an environment selected only by a convenient URL.
+- Read-only production investigation requires explicit user authorization and must remain read-only.
+- Keep failure artifacts; do not delete evidence before reporting.
 
-After each transition, compare header, every line, aggregate totals, stock by product/warehouse, serial status/location/history, cash/debt, and reports. Confirm/cancel must be atomic.
+## Exercise the real UI contract
 
-## Regression effectiveness
+Drive the affected behavior through visible user actions: navigate, click, type, choose, add, edit, delete, confirm, cancel, reload, and reopen as applicable.
 
-For an escaped or high-risk bug, first make the new test fail on the unfixed behavior. If the old revision cannot be run safely, inject one minimal equivalent mutation, run the narrow test, revert immediately, and restore a green tree. A regression test is accepted only if it kills the defect it names.
+- Use `page.evaluate` only for observation or diagnostics, never to perform the business action under test.
+- Use direct API or database setup only when no UI setup path exists; explain why and keep it outside the assertion path.
+- Wait for observable state such as a response, dialog, spinner transition, grid update, or persisted reload. Do not use fixed sleeps as proof.
+- Assert the localized UI value and the canonical value at each boundary relevant to the changed path.
 
-Before claiming the gate covers a scenario:
+For a persisted edit, the useful proof chain is:
 
-- run `npx.cmd playwright test --list` and confirm the file/test is discovered;
-- inspect `package.json` and the isolated runner to confirm the test is executed;
-- ensure the test name matches the route and behavior it actually visits;
-- treat full-menu navigation and screenshots as smoke coverage only;
-- fail on every unexpected functional defect, not only one severity label.
+```text
+visible editor -> rendered row -> batch record/request -> server binding -> stored value -> reload/reopen
+```
 
-Never weaken an assertion, replace UI interaction with setup code, or add a fallback merely to turn the gate green.
+Use only the boundaries that exist in the impacted caller. Do not manufacture downstream checks for unrelated subsystems.
 
-## Execution order
+## Run narrow verification
 
-1. Run the narrowest affected Playwright scenario.
-2. Run `npm.cmd run test:js`.
-3. Run `dotnet build Indotalent.sln --no-restore`.
-4. Run `npm.cmd run test:browser:isolated`.
+Run verification in this order:
 
-The full gate does not erase a known scenario gap. If a required case is absent, add the regression or report it as untested.
+1. List the changed symbols, direct callers, mapped routes, and selected scenarios.
+2. Run the smallest isolated Playwright file or `-PlaywrightGrep` selection covering every impacted UI caller.
+3. Run targeted JavaScript or unit tests that exercise the changed helper or contract when available.
+4. Run broader build or test commands only when `.agents/AGENTS.md` explicitly requires them for this change type, the user requests a wider gate, or the impact map is genuinely unbounded.
+5. Run the full isolated browser suite only for an explicit full-regression/release request or when no defensible narrower caller set exists.
 
-## Completion report
+A mandatory broad gate is a verification result, not authorization to investigate or fix unrelated failures. Record unrelated failures and leave them untouched.
 
-Never say “tested everything” or “no bugs.” Report:
+## Report completion
 
-- exact commands and results;
-- routes, lifecycle states, data variants, and downstream assertions exercised;
-- the escaped defect or mutation each new regression kills;
-- artifacts for failures;
-- anything skipped, untestable, or still covered only by smoke/static assertions.
+Report:
 
-The strongest valid conclusion is: “No failure was found in the following tested matrix.”
+- The changed behavior or symbols used to define scope.
+- Every direct caller found and its mapped UI route.
+- Which callers and user actions were tested.
+- Any caller not tested and the concrete reason.
+- Commands run and results.
+- Relevant persistence or downstream evidence.
+- Unrelated failures observed but deliberately not modified.
+
+Do not claim coverage for a page, caller, or downstream subsystem that was not exercised.

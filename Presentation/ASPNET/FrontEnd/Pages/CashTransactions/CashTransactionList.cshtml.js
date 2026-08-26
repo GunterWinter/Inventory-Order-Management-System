@@ -587,7 +587,7 @@ const App = {
 
         const refreshMainFormControls = () => {
             if (transactionDatePicker.obj) {
-                transactionDatePicker.obj.enabled = methods.canEditPrimaryFields();
+                transactionDatePicker.obj.enabled = methods.canEditRestrictedFields();
                 transactionDatePicker.obj.dataBind();
             }
             transactionTypeDropDown.refresh();

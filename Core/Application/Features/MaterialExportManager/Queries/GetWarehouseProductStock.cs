@@ -47,6 +47,31 @@ public class GetWarehouseProductStockHandler : IRequestHandler<GetWarehouseProdu
 
     public async Task<GetWarehouseProductStockResult> Handle(GetWarehouseProductStockRequest request, CancellationToken cancellationToken)
     {
+        var documentProducts = string.IsNullOrWhiteSpace(request.MaterialExportId)
+            ? new List<GetWarehouseProductStockDto>()
+            : await _context.Set<InventoryTransaction>()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.ModuleName == nameof(MaterialExport)
+                    && x.ModuleId == request.MaterialExportId
+                    && x.Product != null)
+                .GroupBy(x => new
+                {
+                    x.ProductId,
+                    x.Product!.Name,
+                    x.Product.ReferenceCode,
+                    x.Product.SerialTrackingMode
+                })
+                .Select(g => new GetWarehouseProductStockDto
+                {
+                    ProductId = g.Key.ProductId,
+                    ProductName = g.Key.Name,
+                    ReferenceCode = g.Key.ReferenceCode,
+                    StockQuantity = 0m,
+                    SerialTrackingMode = (int)(g.Key.SerialTrackingMode ?? SerialTrackingMode.None)
+                })
+                .ToListAsync(cancellationToken);
+
         var ownReservedSerialIds = string.IsNullOrWhiteSpace(request.MaterialExportId)
             ? new List<string>()
             : await _context.Set<ProductSerialMovement>()
@@ -101,9 +126,19 @@ public class GetWarehouseProductStockHandler : IRequestHandler<GetWarehouseProdu
             })
             .ToListAsync(cancellationToken);
 
-        var dtos = nonSerialStock
+        var stockByProduct = nonSerialStock
             .Concat(serialStock)
-            .Where(x => x.StockQuantity > 0)
+            .ToDictionary(x => x.ProductId ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        foreach (var documentProduct in documentProducts)
+        {
+            var productId = documentProduct.ProductId ?? string.Empty;
+            if (!stockByProduct.ContainsKey(productId))
+            {
+                stockByProduct[productId] = documentProduct;
+            }
+        }
+
+        var dtos = stockByProduct.Values
             .OrderBy(x => x.ProductName)
             .ToList();
 

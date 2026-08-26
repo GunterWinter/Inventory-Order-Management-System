@@ -20,8 +20,13 @@ async function openActiveGridDropdown(page, editorSelector) {
     if (await popup.isVisible().catch(() => false)) return popup;
 
     await editor.locator('xpath=..').locator('.e-ddl-icon').click();
-    await popup.waitFor({ state: 'visible' });
-    return popup;
+    const openPopup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+    if (!await openPopup.isVisible().catch(() => false)) {
+        await editor.click();
+        await editor.press('Alt+ArrowDown');
+    }
+    await openPopup.waitFor({ state: 'visible' });
+    return openPopup;
 }
 
 async function gridCellByHeader(page, headerText) {
@@ -33,6 +38,17 @@ async function gridCellByHeader(page, headerText) {
         }
     }
     throw new Error(`Không tìm thấy cột ${headerText}.`);
+}
+
+async function gridCellByHeaderIn(page, gridSelector, headerText) {
+    const grid = page.locator(gridSelector);
+    const headers = grid.locator('.e-headercell:visible');
+    for (let index = 0; index < await headers.count(); index += 1) {
+        if (headerText.test((await headers.nth(index).innerText()).trim())) {
+            return grid.locator('.e-row').first().locator('td.e-rowcell:visible').nth(index);
+        }
+    }
+    throw new Error(`Không tìm thấy cột ${headerText} trong ${gridSelector}.`);
 }
 
 async function selectTaxAndSaveItem(page, taxName, taxId) {
@@ -145,6 +161,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const editedSalesPrice = 456789.125;
     const editedPurchasePrice = 321987.625;
     const editedPurchaseQuantity = 2.5;
+    const allocatedPurchasePrice = 2232.2323;
+    const fifoPurchaseQuantity = 3;
+    const allocatedPurchaseQuantity = 1;
 
     await login(page);
     await page.goto('/Products/ProductList', { waitUntil: 'domcontentloaded' });
@@ -506,12 +525,72 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     expect(reloadedPurchaseItem.unitPrice).toBe(expectedCostPrice);
     expect(reloadedPurchaseItem.quantity).toBe(editedPurchaseQuantity);
 
-    await test.step('PO and Material Export keep 1.232,2323 through cash source details', async () => {
+    // Keep the decimal persistence coverage above, then make this receipt a
+    // distinct integer-priced lot so part of that newer lot remains in stock.
+    // The later material export must consume the older opening layer first.
+    await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
+    const allocatedPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await allocatedPriceInput.click();
+    await allocatedPriceInput.press('Control+A');
+    await allocatedPriceInput.pressSequentially('2232,2323');
+    await page.locator('#MainModal .modal-title').click();
+    await (await gridCellByHeader(page, /Quantity|Số lượng/i)).dblclick();
+    const allocatedQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
+    await allocatedQuantityInput.click();
+    await allocatedQuantityInput.press('Control+A');
+    await allocatedQuantityInput.pressSequentially(String(fifoPurchaseQuantity));
+    await page.locator('#MainModal .modal-title').click();
+    const updatePurchaseItemPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrderItem/UpdatePurchaseOrderItem')
+        && response.request().method() === 'POST');
+    await page.locator('#SecondaryGrid_update').click();
+    const updatePurchaseItemResponse = await updatePurchaseItemPromise;
+    expect(updatePurchaseItemResponse.status()).toBe(200);
+    expect(updatePurchaseItemResponse.request().postDataJSON()).toEqual(expect.objectContaining({
+        unitPrice: allocatedPurchasePrice,
+        quantity: fifoPurchaseQuantity
+    }));
+
+    await test.step('Material Export uses FIFO instead of averaging an older opening layer with a newer PO lot', async () => {
         await selectStatusByLabel(page, 'OrderStatus', /Confirmed|Đã xác nhận/i);
         const confirmPoPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder')
             && response.request().method() === 'POST' && response.status() === 200);
         await page.locator('#MainSaveButton').click();
         await confirmPoPromise;
+        await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
+
+        await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
+        await page.locator('#CostAllocateCustom').click();
+        await page.waitForSelector('#CostAllocationModal.show');
+        const allocationCustomerCell = await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Customer|Khách hàng/i);
+        await allocationCustomerCell.dblclick();
+        const allocationCustomerEditor = '#CostAllocationPreviewGrid td.e-editedbatchcell input.e-input';
+        const allocationCustomerPopup = await openActiveGridDropdown(page, allocationCustomerEditor);
+        const allocationCustomerFilter = allocationCustomerPopup.locator('input.e-input-filter');
+        await allocationCustomerFilter.click();
+        await allocationCustomerFilter.pressSequentially(lookup.customer.name, { delay: 20 });
+        await allocationCustomerPopup.locator('.e-list-item:visible').filter({ hasText: lookup.customer.name }).first().click();
+
+        const allocationQuantityCell = await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i);
+        await allocationQuantityCell.dblclick();
+        const allocationQuantityInput = page.locator('#CostAllocationPreviewGrid td.e-editedbatchcell input.e-numerictextbox');
+        await allocationQuantityInput.click();
+        await allocationQuantityInput.press('Control+A');
+        await allocationQuantityInput.pressSequentially(String(allocatedPurchaseQuantity));
+        await page.locator('#CostAllocationModal .modal-title').click();
+
+        const allocationPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/AllocatePurchaseOrderCosts')
+            && response.request().method() === 'POST');
+        await page.locator('#CostAllocationSaveButton').click();
+        const allocationResponse = await allocationPromise;
+        expect(allocationResponse.status()).toBe(200);
+        expect(allocationResponse.request().postDataJSON().items).toEqual([
+            expect.objectContaining({
+                customerId: lookup.customer.id,
+                quantity: allocatedPurchaseQuantity
+            })
+        ]);
+        await page.waitForSelector('#CostAllocationModal', { state: 'hidden' });
+        await page.locator('.swal2-cancel').click();
         await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
         await page.locator('#MainModal .btn-close').click();
         await page.waitForSelector('#MainModal', { state: 'hidden' });
@@ -541,12 +620,13 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         const movementInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
         await movementInput.click();
         await movementInput.press('Control+A');
-        await movementInput.pressSequentially('1');
+        await movementInput.pressSequentially('2,5');
         await page.locator('#MainModal .modal-title').click();
         const createLinePromise = page.waitForResponse(response => response.url().includes('/InventoryTransaction/MaterialExportCreateInvenTrans')
             && response.request().method() === 'POST' && response.status() === 200);
         await page.locator('#SecondaryGrid_update').click();
-        await createLinePromise;
+        const createLineResponse = await createLinePromise;
+        expect(Number(createLineResponse.request().postDataJSON().movement)).toBe(expectedOpeningStock);
 
         await selectStatusByLabel(page, 'Status', /Confirmed|Đã xác nhận/i);
         const confirmExportPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
@@ -554,10 +634,34 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await page.locator('#MainSaveButton').click();
         await confirmExportPromise;
 
+        await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
+        await page.locator('#MainModal .btn-close').click();
+        await page.waitForSelector('#MainModal', { state: 'hidden' });
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await waitForVuePage(page);
+        await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+            ?.dataSource?.some?.(item => item.id === id), materialExport.id);
+        await openSelectedDocument(page, '#MainGrid', materialExport.id);
+        await page.waitForFunction(() => (
+            document.querySelector('#MainModal.show #SecondaryGrid')?.ej2_instances?.[0]?.dataSource?.length === 1
+        ));
+
+        await expect(await gridCellByHeader(page, /Product|Hàng hóa/i)).toContainText(productName);
+        await expect(await gridCellByHeader(page, /Reference Code|Mã Tham Khảo/i)).toContainText(`${key}-REF`);
+        await expect(await gridCellByHeader(page, /Inventory|Tồn kho|Kho/i)).toHaveText(/^2(?:[,.]0+)?$/);
+
         const downstream = await page.evaluate(async exportId => {
             const lines = (await AxiosManager.get(
                 `/InventoryTransaction/MaterialExportGetInvenTransList?moduleId=${encodeURIComponent(exportId)}`, {}))
                 ?.data?.content?.data ?? [];
+            const header = (await AxiosManager.get('/MaterialExport/GetMaterialExportList', {}))
+                ?.data?.content?.data?.find(item => item.id === exportId);
+            const lookup = header
+                ? (await AxiosManager.get(
+                    `/MaterialExport/GetWarehouseProductStock?warehouseId=${encodeURIComponent(header.warehouseId)}`
+                    + `&materialExportId=${encodeURIComponent(exportId)}`, {}))
+                    ?.data?.content?.data ?? []
+                : [];
             const transactions = (await AxiosManager.get('/CashTransaction/GetCashTransactionList', {}))
                 ?.data?.content?.data ?? [];
             const cash = transactions.find(item => item.sourceModule === 'MaterialExport'
@@ -567,12 +671,16 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
                     `/CashTransaction/GetCashTransactionSourceItems?cashTransactionId=${encodeURIComponent(cash.id)}`, {}))
                     ?.data?.content?.data ?? []
                 : [];
-            return { line: lines[0], cash, sourceItem: sourceItems[0] };
+            return { line: lines[0], lookupItem: lookup.find(item => item.productId === lines[0]?.productId), cash, sourceItem: sourceItems[0] };
         }, materialExport.id);
         expect(downstream.line.unitCost).toBe(expectedCostPrice);
-        expect(downstream.cash.amount).toBe(expectedCostPrice);
+        expect(downstream.lookupItem?.productName).toBe(productName);
+        expect(downstream.lookupItem?.referenceCode).toBe(`${key}-REF`);
+        expect(downstream.lookupItem?.stockQuantity).toBe(fifoPurchaseQuantity - allocatedPurchaseQuantity);
+        expect(downstream.cash.amount).toBe(expectedCostPrice * expectedOpeningStock);
         expect(downstream.sourceItem.unitPrice).toBe(expectedCostPrice);
-        expect(downstream.sourceItem.total).toBe(expectedCostPrice);
+        expect(downstream.sourceItem.quantity).toBe(expectedOpeningStock);
+        expect(downstream.sourceItem.total).toBe(expectedCostPrice * expectedOpeningStock);
 
         // Return the confirmed fixtures to Draft through the visible lifecycle controls
         // so the remainder of this scenario can still exercise Draft-only source rules.

@@ -94,10 +94,10 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
 
             previousAccountId = entity.CashAccountId;
             entity.UpdatedById = request.UpdatedById;
+            entity.TransactionDate = request.TransactionDate;
 
             if (string.IsNullOrWhiteSpace(entity.SourceModule))
             {
-                entity.TransactionDate = request.TransactionDate;
                 entity.TransactionType = (CashTransactionType?)request.TransactionType;
                 entity.Amount = request.Amount;
                 entity.Description = request.Description;
