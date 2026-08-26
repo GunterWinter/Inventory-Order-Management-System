@@ -88,7 +88,12 @@ public partial class InventoryTransactionService
 
         child.UpdatedById = updatedById;
 
-        if (child.ProductId != productId) child.QtySCSys = null;
+        if (!string.Equals(child.ProductId, productId, StringComparison.OrdinalIgnoreCase))
+        {
+            await _productSerialService.ReleaseInventoryTransactionSerialsAsync(
+                child.Id, updatedById, cancellationToken);
+            child.QtySCSys = null;
+        }
         child.ProductId = productId;
         child.QtySCCount = qtySCCount;
 

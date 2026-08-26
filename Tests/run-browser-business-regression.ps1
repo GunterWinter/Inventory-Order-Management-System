@@ -1,6 +1,7 @@
 param(
     [int]$Port = 5127,
-    [string]$DatabaseName = ("WHMS_UiRegression_{0}" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    [string]$DatabaseName = ("WHMS_UiRegression_{0}" -f (Get-Date -Format 'yyyyMMdd_HHmmss')),
+    [string]$PlaywrightGrep = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,7 +73,11 @@ try {
     }
     if (-not $ready) { throw 'The test application was not ready after 120 seconds.' }
 
-    & npm.cmd run test:browser:all
+    if ([string]::IsNullOrWhiteSpace($PlaywrightGrep)) {
+        & npm.cmd run test:browser:all
+    } else {
+        & npx.cmd playwright test --grep $PlaywrightGrep
+    }
     $testExitCode = $LASTEXITCODE
     if ($testExitCode -ne 0) { throw "Browser regression failed with exit code $testExitCode." }
 } finally {

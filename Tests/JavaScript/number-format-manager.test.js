@@ -23,6 +23,59 @@ function loadManager() {
     return window.NumberFormatManager;
 }
 
+function loadInteractiveManager() {
+    const listeners = {};
+    class FakeInput {
+        constructor() {
+            this.dataset = {};
+            this.value = '';
+            this.selectionStart = 0;
+            this.selectionEnd = 0;
+        }
+
+        addEventListener() { }
+        setSelectionRange(start, end) {
+            this.selectionStart = start;
+            this.selectionEnd = end;
+        }
+    }
+
+    class NumericTextBox {
+        constructor(options = {}) {
+            Object.assign(this, options);
+            this.element = new FakeInput();
+            this.element.value = options.value == null ? '' : String(options.value);
+        }
+
+        appendTo() { }
+        setProperties(properties) { Object.assign(this, properties); }
+        inputHandler() { }
+        keyPressHandler() { }
+        changeHandler() { }
+        focusHandler() { }
+        focusOutHandler() { this.value = 12; }
+    }
+
+    const document = {
+        activeElement: null,
+        addEventListener(name, handler) {
+            if (!listeners[name]) listeners[name] = [];
+            listeners[name].push(handler);
+        }
+    };
+    const window = { ej: { inputs: { NumericTextBox } } };
+    vm.runInNewContext(fs.readFileSync(managerPath, 'utf8'), {
+        window,
+        document,
+        Intl,
+        HTMLInputElement: FakeInput,
+        setTimeout,
+        queueMicrotask,
+        requestAnimationFrame: callback => callback()
+    });
+    return { manager: window.NumberFormatManager, NumericTextBox, listeners, document };
+}
+
 test('parses Vietnamese grouping and decimal quantities without changing their scale', () => {
     const manager = loadManager();
 
@@ -80,4 +133,37 @@ test('explicit numeric policies distinguish money decimals and integers', () => 
     assert.equal(integer.decimals, 0);
     assert.equal(integer.validateDecimalOnType, true);
     assert.equal(manager.createGridValueAccessor(manager.numericKind.money)('amount', { amount: 1234.5 }), '1.234,5');
+});
+
+test('grid reads the latest Vietnamese decimal after blur even when Syncfusion overwrites its value', () => {
+    const { manager, NumericTextBox, listeners, document } = loadInteractiveManager();
+    const numeric = new NumericTextBox({ numericKind: 'decimal', value: 1 });
+    numeric.appendTo();
+    document.activeElement = numeric.element;
+    numeric.element.value = '1,2';
+    numeric.element.selectionStart = numeric.element.value.length;
+    numeric.element.selectionEnd = numeric.element.value.length;
+
+    listeners.input.forEach(handler => handler({ target: numeric.element }));
+    listeners.blur.forEach(handler => handler({ target: numeric.element }));
+    numeric.focusOutHandler({ target: numeric.element });
+
+    assert.equal(manager.readNumericTextBoxValue(numeric), 1.2);
+});
+
+test('grid reads the stored locale value after Syncfusion consumes blur state', () => {
+    const { manager, NumericTextBox, listeners, document } = loadInteractiveManager();
+    const numeric = new NumericTextBox({ numericKind: 'decimal', value: 0, decimals: 6 });
+    numeric.appendTo();
+    document.activeElement = numeric.element;
+    numeric.element.value = '2,123456';
+    numeric.element.selectionStart = numeric.element.value.length;
+    numeric.element.selectionEnd = numeric.element.value.length;
+
+    listeners.input.forEach(handler => handler({ target: numeric.element }));
+    listeners.blur.forEach(handler => handler({ target: numeric.element }));
+    numeric.focusOutHandler({ target: numeric.element });
+    numeric.value = 2123456;
+
+    assert.equal(manager.readNumericTextBoxValue(numeric), 2.123456);
 });

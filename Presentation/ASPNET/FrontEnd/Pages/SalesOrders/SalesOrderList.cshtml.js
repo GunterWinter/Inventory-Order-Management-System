@@ -1243,7 +1243,9 @@ const App = {
                 secondaryGrid.syncSerialPickerRows();
             },
             create: async (dataSource) => {
-                const allowEdit = !state.isViewMode && state.inventoryAvailabilityReady;
+                const allowEdit = !state.isViewMode
+                    && String(state.orderStatus ?? '0') === '0'
+                    && state.inventoryAvailabilityReady;
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
@@ -1468,7 +1470,7 @@ const App = {
                                     return warrantyElem;
                                 },
                                 read: () => {
-                                    return warrantyObj?.value ?? null;
+                                    return NumberFormatManager.readNumericTextBoxValue(warrantyObj);
                                 },
                                 destroy: () => {
                                     if (warrantyObj) {
@@ -1499,7 +1501,8 @@ const App = {
                                     return priceElem;
                                 },
                                 read: () => {
-                                    return Number(priceEditorValue ?? priceObj?.value ?? 0);
+                                    return NumberFormatManager.readNumericTextBoxValue(priceObj)
+                                        ?? Number(priceEditorValue ?? 0);
                                 },
                                 destroy: () => {
                                     if (priceObj) {
@@ -1568,7 +1571,7 @@ const App = {
                                     return quantityElem;
                                 },
                                 read: () => {
-                                    return Number(quantityObj?.value ?? 0);
+                                    return NumberFormatManager.readNumericTextBoxValue(quantityObj) ?? 0;
                                 },
                                 destroy: () => {
                                     if (quantityObj) {
@@ -1581,9 +1584,9 @@ const App = {
                                         value: args.rowData.quantity ?? 0,
                                         readonly: isSerialTrackedProduct(args.rowData.productId),
                                         numericKind: isSerialTrackedProduct(args.rowData.productId) ? 'integer' : 'decimal',
-                                        format: 'n6',
-                                        decimals: 6,
-                                        validateDecimalOnType: false,
+                                        format: isSerialTrackedProduct(args.rowData.productId) ? 'n0' : 'n6',
+                                        decimals: isSerialTrackedProduct(args.rowData.productId) ? 0 : 6,
+                                        validateDecimalOnType: isSerialTrackedProduct(args.rowData.productId),
                                         change: (e) => {
                                             args.rowData.quantity = Number(e.value ?? 0);
                                             args.rowData.total = args.rowData.quantity * Number(args.rowData.unitPrice ?? priceObj?.value ?? 0);
@@ -2234,7 +2237,9 @@ const App = {
             },
             refresh: () => {
                 if (!secondaryGrid.obj) return;
-                const allowEdit = !state.isViewMode && state.inventoryAvailabilityReady;
+                const allowEdit = !state.isViewMode
+                    && String(state.orderStatus ?? '') === '0'
+                    && state.inventoryAvailabilityReady;
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },

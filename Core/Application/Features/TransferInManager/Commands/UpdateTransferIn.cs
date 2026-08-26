@@ -77,9 +77,9 @@ public class UpdateTransferInHandler : IRequestHandler<UpdateTransferInRequest, 
                     || entity.TransferOutId != request.TransferOutId
                     || entity.Description != request.Description;
                 if (entity.Status != TransferStatus.Confirmed
-                    || requestedStatus is not (TransferStatus.Cancelled or TransferStatus.Archived)
+                    || requestedStatus is not (TransferStatus.Draft or TransferStatus.Cancelled or TransferStatus.Archived)
                     || headerChanged)
-                    throw new InvalidOperationException("Phiếu nhận chuyển kho đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+                    throw new InvalidOperationException("Phiếu nhận chuyển kho đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
             }
 
             var transferOut = await _transferOutRepository.GetAsync(request.TransferOutId ?? string.Empty, ct)

@@ -431,17 +431,13 @@ const App = {
                     return { isValid: false, response: null };
                 }
 
-                try {
-                    const response = state.id === ''
-                        ? await services.createMainData(state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId())
-                        : state.deleteMode
-                            ? await services.deleteMainData(state.id, StorageManager.getUserId())
-                            : await services.updateMainData(state.id, state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId());
+                const response = state.id === ''
+                    ? await services.createMainData(state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId())
+                    : state.deleteMode
+                        ? await services.deleteMainData(state.id, StorageManager.getUserId())
+                        : await services.updateMainData(state.id, state.MaterialExportDate, state.description, state.status, state.warehouseId, state.customerId, StorageManager.getUserId());
 
-                    return { isValid, response };
-                } catch (error) {
-                    return { isValid, response: null };
-                }
+                return { isValid, response };
             },
         };
 
@@ -674,6 +670,7 @@ const App = {
 
                         if (args.item.id === 'EditCustom') {
                             state.deleteMode = false;
+                            state.isViewMode = false;
                             if (mainGrid.obj.getSelectedRecords().length) {
                                 const selectedRecord = mainGrid.obj.getSelectedRecords()[0];
                                 state.mainTitle = 'Sửa phiếu Xuất vật tư';
@@ -832,10 +829,11 @@ const App = {
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
+                const allowEdit = !state.isViewMode && String(state.status ?? '0') === '0';
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: true },
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -975,18 +973,22 @@ const App = {
                                     return movementElem;
                                 },
                                 read: () => {
-                                    return movementObj.value;
+                                    return NumberFormatManager.readNumericTextBoxValue(movementObj);
                                 },
                                 destroy: function () {
                                     movementObj?.destroy();
                                     movementObj = null;
                                 },
                                 write: function (args) {
+                                    const product = state.productListLookupData.find(x => x.id === args.rowData.productId);
+                                    const serialTracked = product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
-                                        format: 'n2',
-                                        decimals: 2,
-                                        validateDecimalOnType: true,
+                                        numericKind: serialTracked ? 'integer' : 'decimal',
+                                        format: serialTracked ? 'n0' : 'n6',
+                                        decimals: serialTracked ? 0 : 6,
+                                        readonly: serialTracked,
+                                        validateDecimalOnType: serialTracked,
                                     });
                                     movementObj.appendTo(movementElem);
                                 }
@@ -1006,11 +1008,11 @@ const App = {
                             }
                         },
                     ],
-                    toolbar: [
+                    toolbar: allowEdit ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
-                    ],
+                    ] : ['ExcelExport'],
                     beforeDataBound: () => { },
                     dataBound: function () { },
                     excelExportComplete: () => { },
@@ -1209,7 +1211,12 @@ const App = {
                 }
             },
             refresh: () => {
-                secondaryGrid.obj.setProperties({ dataSource: state.secondaryData });
+                const allowEdit = !state.isViewMode && String(state.status ?? '') === '0';
+                secondaryGrid.obj.setProperties({
+                    dataSource: state.secondaryData,
+                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
+                    toolbar: allowEdit ? ['ExcelExport', { type: 'Separator' }, 'Add', 'Edit', 'Delete', 'Update', 'Cancel'] : ['ExcelExport']
+                });
             }
         };
 

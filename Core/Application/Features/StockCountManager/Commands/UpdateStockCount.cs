@@ -93,10 +93,10 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                     || entity.WarehouseId != request.WarehouseId
                     || entity.Description != request.Description;
                 if (entity.Status != StockCountStatus.Confirmed
-                    || requestedStatus is not (StockCountStatus.Cancelled or StockCountStatus.Archived)
+                    || requestedStatus is not (StockCountStatus.Draft or StockCountStatus.Cancelled or StockCountStatus.Archived)
                     || headerChanged)
-                    throw new InvalidOperationException("Phiếu kiểm kê đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
-                if (requestedStatus == StockCountStatus.Cancelled)
+                    throw new InvalidOperationException("Phiếu kiểm kê đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
+                if (requestedStatus is StockCountStatus.Draft or StockCountStatus.Cancelled)
                 {
                     var lines = await _queryContext.Set<InventoryTransaction>().AsNoTracking()
                         .Where(x => !x.IsDeleted && x.ModuleName == nameof(StockCount) && x.ModuleId == entity.Id)
@@ -115,7 +115,7 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
                             .Select(x => x.ModuleNumber ?? x.Number)
                             .FirstOrDefaultAsync(ct);
                         if (newerDocument != null)
-                            throw new InvalidOperationException($"Không thể hủy phiếu kiểm kê {entity.Number}: hàng hóa đã có giao dịch phát sinh sau tại {newerDocument}. Hãy hoàn tác giao dịch mới hơn trước.");
+                            throw new InvalidOperationException($"Không thể chuyển phiếu kiểm kê {entity.Number} về Nháp hoặc Hủy: hàng hóa đã có giao dịch phát sinh sau tại {newerDocument}. Hãy hoàn tác giao dịch mới hơn trước.");
                     }
                 }
             }

@@ -59,7 +59,7 @@
             } else if (currentStatus === stockCountStatus.draft) {
                 allowedStatuses = [stockCountStatus.draft, stockCountStatus.confirmed];
             } else if (currentStatus === stockCountStatus.confirmed) {
-                allowedStatuses = [stockCountStatus.confirmed, stockCountStatus.cancelled, stockCountStatus.archived];
+                allowedStatuses = [stockCountStatus.draft, stockCountStatus.confirmed, stockCountStatus.cancelled, stockCountStatus.archived];
             } else if (currentStatus === stockCountStatus.archived) {
                 allowedStatuses = [stockCountStatus.archived, stockCountStatus.confirmed];
             } else {
@@ -470,11 +470,11 @@
                     return { isValid: false, response: null };
                 }
                 if (state.id && originalStatus === stockCountStatus.confirmed
-                    && ![stockCountStatus.cancelled, stockCountStatus.archived].includes(requestedStatus)) {
+                    && ![stockCountStatus.draft, stockCountStatus.cancelled, stockCountStatus.archived].includes(requestedStatus)) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'Trạng thái không hợp lệ',
-                        text: 'Phiếu kiểm kê đã xác nhận chỉ có thể hủy hoặc lưu trữ.'
+                        text: 'Phiếu kiểm kê đã xác nhận phải chuyển về Nháp trước khi sửa dòng; cũng có thể hủy hoặc lưu trữ.'
                     });
                     return { isValid: false, response: null };
                 }
@@ -872,6 +872,8 @@
                                             if (qtySCCountObj) {
                                                 qtySCCountObj.value = 0;
                                                 const serialTracked = p?.physical === true && Number(p?.serialTrackingMode ?? 0) > 0;
+                                                qtySCCountObj.numericKind = serialTracked ? 'integer' : 'decimal';
+                                                if (qtySCCountObj.element?.dataset) qtySCCountObj.element.dataset.numericKind = qtySCCountObj.numericKind;
                                                 qtySCCountObj.decimals = serialTracked ? 0 : 6;
                                                 qtySCCountObj.format = serialTracked ? 'n0' : 'n6';
                                                 qtySCCountObj.readonly = serialTracked;
@@ -913,7 +915,7 @@
                                     return qtySCCountElem;
                                 },
                                 read: () => {
-                                    return qtySCCountObj.value;
+                                    return NumberFormatManager.readNumericTextBoxValue(qtySCCountObj);
                                 },
                                 destroy: function () {
                                     qtySCCountObj.destroy();
@@ -923,6 +925,7 @@
                                     const serialTracked = product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
                                     qtySCCountObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.qtySCCount ?? 0,
+                                        numericKind: serialTracked ? 'integer' : 'decimal',
                                         format: serialTracked ? 'n0' : 'n6',
                                         decimals: serialTracked ? 0 : 6,
                                         readonly: serialTracked,

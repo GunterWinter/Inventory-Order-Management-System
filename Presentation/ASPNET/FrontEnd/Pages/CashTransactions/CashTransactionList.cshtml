@@ -95,12 +95,12 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div v-if="state.sourceModule && methods.isEditableSource() && !state.viewMode && !state.deleteMode"
+                    @* <div v-if="state.sourceModule && methods.isEditableSource() && !state.viewMode && !state.deleteMode"
                          class="alert alert-info py-2">
                         {{ state.sourceModule === 'MaterialExport'
                             ? 'Only Description and Cash Category can be edited for a material export transaction.'
                             : 'Only Paid Amount, Description and Cash Category can be edited for a source-generated transaction.' }}
-                    </div>
+                    </div> *@
                     <input type="hidden" v-model="state.id" id="Id" name="Id" />
                     <form id="MainForm">
                         <div class="row">

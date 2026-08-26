@@ -124,13 +124,18 @@ public partial class InventoryTransactionService
 
         foreach (var childId in childIds)
         {
-            if (isDeleted == true || status == InventoryTransactionStatus.Cancelled)
+            if (isDeleted == true || status is InventoryTransactionStatus.Cancelled or InventoryTransactionStatus.Draft)
             {
-                await _productSerialService.ReleaseInventoryTransactionSerialsAsync(childId, updatedId, cancellationToken);
+                if (isDeleted == true
+                    || status == InventoryTransactionStatus.Cancelled
+                    || alreadyConfirmedIds.Contains(childId))
+                {
+                    await _productSerialService.ReleaseInventoryTransactionSerialsAsync(childId, updatedId, cancellationToken);
+                }
                 continue;
             }
 
-            if (status == InventoryTransactionStatus.Archived || status == InventoryTransactionStatus.Draft)
+            if (status == InventoryTransactionStatus.Archived)
             {
                 continue;
             }
@@ -306,6 +311,7 @@ public partial class InventoryTransactionService
             .ApplyIsDeletedFilter(false)
             .Include(x => x.ProductSerial)
             .Where(x => transactionIds.Contains(x.InventoryTransactionId!)
+                && x.ReversedAtUtc == null
                 && (x.ModuleName != nameof(StockCount) || x.Status != ProductSerialStatus.Missing))
             .Select(x => new
             {

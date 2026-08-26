@@ -100,6 +100,17 @@ public class SalesOrderService
             return;
         }
 
+        if (order.OrderStatus == SalesOrderStatus.Draft
+            && transactions.Any(x => x.Status == InventoryTransactionStatus.Confirmed))
+        {
+            await ValidateCancellationAsync(order, transactions, ct);
+            foreach (var transaction in transactions.Where(x => x.Status == InventoryTransactionStatus.Confirmed))
+            {
+                await _serialService.ReleaseInventoryTransactionSerialsAsync(transaction.Id, userId, ct);
+            }
+            await DeleteUnpaidReceivableAsync(order.Id, userId, ct);
+        }
+
         var validItemIds = physicalItems.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var obsolete in transactions.Where(x => !validItemIds.Contains(x.ModuleItemId ?? string.Empty)))
         {

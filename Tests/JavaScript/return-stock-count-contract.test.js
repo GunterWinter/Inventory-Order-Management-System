@@ -21,6 +21,20 @@ test('Return availability stays attached to the exact confirmed source line', ()
     assert.doesNotMatch(createSales, /CreateAsync\(transaction/);
 });
 
+test('Stock Count releases old serial movements before changing the product', () => {
+    const stockCount = read('Core/Application/Features/InventoryTransactionManager/InventoryTransactionService.StockCount.cs');
+    const stockCountPage = read('Presentation/ASPNET/FrontEnd/Pages/StockCounts/StockCountList.cshtml.js');
+    const releaseIndex = stockCount.indexOf('ReleaseInventoryTransactionSerialsAsync(');
+    const productAssignmentIndex = stockCount.indexOf('child.ProductId = productId;', releaseIndex);
+
+    assert.notEqual(releaseIndex, -1);
+    assert.notEqual(productAssignmentIndex, -1);
+    assert.ok(releaseIndex < productAssignmentIndex);
+    assert.match(read('Core/Application/Features/InventoryTransactionManager/InventoryTransactionService.cs'),
+        /transactionIds\.Contains\(x\.InventoryTransactionId!\)[\s\S]*?x\.ReversedAtUtc == null/);
+    assert.match(stockCountPage, /productSerialIds:\s*\[\],\s*productSerialNumbers:\s*''/s);
+});
+
 test('Stock Count preserves its snapshot and records missing serials reversibly', () => {
     const inventory = read('Core/Application/Features/InventoryTransactionManager/InventoryTransactionService.cs');
     const serials = read('Core/Application/Features/ProductSerialManager/ProductSerialService.cs');

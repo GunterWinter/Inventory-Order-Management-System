@@ -71,13 +71,13 @@ public class UpdateSalesOrderHandler : IRequestHandler<UpdateSalesOrderRequest, 
             if (entity.OrderStatus != SalesOrderStatus.Draft)
             {
                 var allowedStatusChange = entity.OrderStatus == SalesOrderStatus.Confirmed
-                    && requestedStatus is SalesOrderStatus.Cancelled or SalesOrderStatus.Archived;
+                    && requestedStatus is SalesOrderStatus.Draft or SalesOrderStatus.Cancelled or SalesOrderStatus.Archived;
                 var headerChanged = entity.OrderDate != request.OrderDate
                     || entity.CustomerId != request.CustomerId
                     || entity.Description != request.Description
                     || entity.SalesType != (request.SalesType ?? SalesType.Retail);
                 if (!allowedStatusChange || headerChanged)
-                    throw new InvalidOperationException("Đơn bán hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
+                    throw new InvalidOperationException("Đơn bán hàng đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
             }
 
             entity.UpdatedById = request.UpdatedById;

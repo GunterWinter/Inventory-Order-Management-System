@@ -44,6 +44,39 @@ test('every authorized sidebar page renders through real browser navigation with
         await page.waitForURL(url => url.pathname === route);
         await waitForPage(page);
 
+        const mainGrid = page.locator('#MainGrid.e-grid:visible');
+        if (await mainGrid.count()) {
+            await expect.poll(() => mainGrid.evaluate(element => {
+                const grid = element.ej2_instances?.[0];
+                const content = element.querySelector('.e-gridcontent');
+                const footer = document.querySelector('.main-footer, footer');
+                const footerHeight = footer?.getBoundingClientRect?.().height ?? 0;
+                return {
+                    contentHeight: content?.getBoundingClientRect?.().height ?? 0,
+                    bottomGap: window.innerHeight - footerHeight - element.getBoundingClientRect().bottom,
+                    configuredHeight: Number(grid?.height ?? 0)
+                };
+            })).toMatchObject({
+                contentHeight: expect.any(Number),
+                bottomGap: expect.any(Number),
+                configuredHeight: expect.any(Number)
+            });
+            const gridMetrics = await mainGrid.evaluate(element => {
+                const grid = element.ej2_instances?.[0];
+                const content = element.querySelector('.e-gridcontent');
+                const footer = document.querySelector('.main-footer, footer');
+                const footerHeight = footer?.getBoundingClientRect?.().height ?? 0;
+                return {
+                    contentHeight: content?.getBoundingClientRect?.().height ?? 0,
+                    bottomGap: window.innerHeight - footerHeight - element.getBoundingClientRect().bottom,
+                    configuredHeight: Number(grid?.height ?? 0)
+                };
+            });
+            expect(gridMetrics.contentHeight, `${route} grid content must use the remaining viewport.`).toBeGreaterThanOrEqual(250);
+            expect(gridMetrics.configuredHeight, `${route} grid must receive a viewport height.`).toBeGreaterThanOrEqual(250);
+            expect(Math.abs(gridMetrics.bottomGap), `${route} grid must end near the viewport footer.`).toBeLessThanOrEqual(80);
+        }
+
         const fileName = `${String(index + 1).padStart(2, '0')}-${route.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}.png`;
         await page.screenshot({ path: path.join(evidenceDirectory, fileName), fullPage: true });
     }

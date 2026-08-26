@@ -111,7 +111,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 throw new InvalidOperationException($"Material export was not found: {request.Id}");
             }
             if (entity.Status == MaterialExportStatus.Confirmed
-                && requestedStatus is MaterialExportStatus.Cancelled or MaterialExportStatus.Archived)
+                && requestedStatus is MaterialExportStatus.Draft or MaterialExportStatus.Cancelled or MaterialExportStatus.Archived)
             {
                 var headerChanged = entity.ExportDate != request.MaterialExportDate
                     || entity.WarehouseId != request.WarehouseId
@@ -138,7 +138,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     || await _queryContext.Set<CashTransactionPayment>().AsNoTracking()
                         .AnyAsync(x => !x.IsDeleted && sourceTransactionIds.Contains(x.CashTransactionId) && x.Amount != 0m, ct);
                 if (hasPayment)
-                    throw new InvalidOperationException($"Không thể hủy phiếu xuất vật tư {entity.Number} vì chi phí nguồn đã có thanh toán. Hãy hoàn tác thanh toán trước.");
+                    throw new InvalidOperationException($"Không thể chuyển phiếu xuất vật tư {entity.Number} về Nháp hoặc Hủy vì giao dịch chi phí đã có thanh toán. Hãy hoàn tác thanh toán trước.");
 
                 var confirmedLines = await _inventoryTransactionRepository.GetQuery()
                     .ApplyIsDeletedFilter(false)
@@ -147,7 +147,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                 foreach (var line in confirmedLines)
                 {
                     await _productSerialService.ReleaseInventoryTransactionSerialsAsync(line.Id, request.UpdatedById, ct);
-                    line.Status = InventoryTransactionStatus.Cancelled;
+                    line.Status = requestedStatus == MaterialExportStatus.Draft
+                        ? InventoryTransactionStatus.Draft
+                        : InventoryTransactionStatus.Cancelled;
                     line.UpdatedById = request.UpdatedById;
                     _inventoryTransactionRepository.Update(line);
                 }
@@ -156,7 +158,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     sourceTransaction.UpdatedById = request.UpdatedById;
                     _cashTransactionRepository.Delete(sourceTransaction);
                 }
-                entity.Status = MaterialExportStatus.Cancelled;
+                entity.Status = requestedStatus;
                 entity.UpdatedById = request.UpdatedById;
                 _materialExportRepository.Update(entity);
                 await _unitOfWork.SaveAsync(ct);
@@ -165,7 +167,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
 
             if (entity.Status != MaterialExportStatus.Draft)
             {
-                throw new InvalidOperationException("Phiếu xuất vật tư đã Hủy/Lưu trữ không thể thay đổi trạng thái hoặc nội dung.");
+                throw new InvalidOperationException("Phiếu xuất vật tư đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; phiếu đã Hủy/Lưu trữ không thể sửa.");
             }
             if (requestedStatus is MaterialExportStatus.Cancelled or MaterialExportStatus.Archived)
             {
@@ -253,8 +255,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         line.ProductId,
                         entity.WarehouseId,
                         cancellationToken: ct);
-                    line.UnitCost = costResolution.UnitCost;
-                    totalProjectCost += costResolution.UnitCost * movement;
+                    var resolvedUnitCost = AccountingMath.RoundVnd(costResolution.UnitCost);
+                    line.UnitCost = resolvedUnitCost;
+                    totalProjectCost += AccountingMath.RoundVnd(resolvedUnitCost * movement);
                     hasFallbackCost |= costResolution.IsFallbackCost;
                     hasOpeningCost |= costResolution.IncludesOpeningStock;
                     hasPurchaseCost |= costResolution.IncludesPurchase;
@@ -340,8 +343,8 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         && !serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
                 }
 
-                line.UnitCost = lineTotalCost / required;
-                totalProjectCost += lineTotalCost;
+                line.UnitCost = AccountingMath.RoundVnd(lineTotalCost / required);
+                totalProjectCost += AccountingMath.RoundVnd(line.UnitCost.Value * required);
                 line.Status = InventoryTransactionStatus.Confirmed;
                 line.WarehouseId = entity.WarehouseId;
                 line.MovementDate = entity.ExportDate;

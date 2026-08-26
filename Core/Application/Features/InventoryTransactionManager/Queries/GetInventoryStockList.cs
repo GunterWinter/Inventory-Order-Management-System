@@ -17,6 +17,8 @@ public record GetInventoryStockListDto
     public string? ProductName { get; init; }
     public string? ProductNumber { get; init; }
     public string? ProductReferenceCode { get; init; }
+    public string? ProductGroupId { get; init; }
+    public string? ProductGroupName { get; init; }
 
     public decimal? Stock { get; init; }
     public int? SupplierWarrantyMonths { get; set; }
@@ -66,7 +68,9 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.ProductId,
                 ProductName = x.Product!.Name,
                 ProductNumber = x.Product.Number,
-                ProductReferenceCode = x.Product.ReferenceCode
+                ProductReferenceCode = x.Product.ReferenceCode,
+                ProductGroupId = x.Product.ProductGroupId,
+                ProductGroupName = x.Product.ProductGroup != null ? x.Product.ProductGroup.Name : string.Empty
             })
             .Select(group => new GetInventoryStockListDto
             {
@@ -76,6 +80,8 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 ProductName = group.Key.ProductName,
                 ProductNumber = group.Key.ProductNumber,
                 ProductReferenceCode = group.Key.ProductReferenceCode,
+                ProductGroupId = group.Key.ProductGroupId,
+                ProductGroupName = group.Key.ProductGroupName,
                 Stock = group.Sum(x => x.Stock),
                 StatusName = nameof(InventoryTransactionStatus.Confirmed),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
@@ -101,7 +107,9 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.ProductId,
                 ProductName = x.Product!.Name,
                 ProductNumber = x.Product.Number,
-                ProductReferenceCode = x.Product.ReferenceCode
+                ProductReferenceCode = x.Product.ReferenceCode,
+                ProductGroupId = x.Product.ProductGroupId,
+                ProductGroupName = x.Product.ProductGroup != null ? x.Product.ProductGroup.Name : string.Empty
             })
             .Select(group => new GetInventoryStockListDto
             {
@@ -111,6 +119,8 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 ProductName = group.Key.ProductName,
                 ProductNumber = group.Key.ProductNumber,
                 ProductReferenceCode = group.Key.ProductReferenceCode,
+                ProductGroupId = group.Key.ProductGroupId,
+                ProductGroupName = group.Key.ProductGroupName,
                 Stock = group.Count(),
                 StatusName = nameof(InventoryTransactionStatus.Confirmed),
                 CreatedAtUtc = group.Max(x => x.CreatedAtUtc)
@@ -131,6 +141,8 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                     ProductName = first.ProductName,
                     ProductNumber = first.ProductNumber,
                     ProductReferenceCode = first.ProductReferenceCode,
+                    ProductGroupId = first.ProductGroupId,
+                    ProductGroupName = first.ProductGroupName,
                     Stock = group.Sum(x => x.Stock ?? 0m),
                     StatusName = nameof(InventoryTransactionStatus.Confirmed),
                     CreatedAtUtc = group.Max(x => x.CreatedAtUtc)

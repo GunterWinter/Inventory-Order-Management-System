@@ -309,6 +309,7 @@
         let inputRevision = 0;
         let componentValuePrepared = false;
         let preparedBlurValue = null;
+        let latestParsedValue;
 
         const prepareInputForComponent = () => {
             if (isComposing || numericTextBox.readonly || numericTextBox.enabled === false) {
@@ -321,6 +322,8 @@
             const afterDecimalSeparator = editableValue.slice(0, selectionStart).endsWith(DECIMAL_SEPARATOR);
             const normalizedValue = normalizeNumberString(editableValue);
             const parsedValue = parseLocaleNumber(editableValue);
+            latestParsedValue = parsedValue;
+            element.dataset.localeNumericValue = parsedValue == null ? '' : `${parsedValue}`;
             const revision = ++inputRevision;
 
             // Syncfusion must parse an ungrouped value. Reapply the grouped
@@ -344,8 +347,16 @@
         };
 
         const prepareBlurForComponent = () => {
-            const parsedValue = parseLocaleNumber(element.value);
+            const storedLocaleValue = element.dataset.localeNumericValue;
+            const storedNumber = storedLocaleValue === undefined || storedLocaleValue === ''
+                ? null
+                : Number(storedLocaleValue);
+            const parsedValue = Number.isFinite(storedNumber)
+                ? storedNumber
+                : parseLocaleNumber(element.value);
             preparedBlurValue = parsedValue;
+            latestParsedValue = parsedValue;
+            element.dataset.localeNumericValue = parsedValue == null ? '' : `${parsedValue}`;
             element.value = parsedValue == null ? '' : `${parsedValue}`;
             componentValuePrepared = true;
             setTimeout(() => syncNumericDisplay(numericTextBox), 0);
@@ -364,6 +375,8 @@
             prepareInputForComponent,
             prepareBlurForComponent,
             getPreparedBlurValue: () => preparedBlurValue,
+            getLatestParsedValue: () => latestParsedValue,
+            hasLatestParsedValue: () => latestParsedValue !== undefined,
             consumePreparedBlurValue: () => {
                 const prepared = preparedBlurValue;
                 preparedBlurValue = null;
@@ -380,6 +393,33 @@
         if (numericTextBox.value != null && numericTextBox.value !== '') {
             syncNumericDisplay(numericTextBox);
         }
+    }
+
+    function readNumericTextBoxValue(numericTextBox) {
+        if (!numericTextBox) return null;
+        const storedLocaleValue = numericTextBox.element?.dataset?.localeNumericValue;
+        if (storedLocaleValue !== undefined && storedLocaleValue !== '') {
+            const storedNumber = Number(storedLocaleValue);
+            if (Number.isFinite(storedNumber)) return storedNumber;
+        }
+        const handlers = numericInputHandlers.get(numericTextBox.element);
+        if (handlers?.getPreparedBlurValue?.() !== null) {
+            const preparedValue = handlers.getPreparedBlurValue();
+            return preparedValue == null ? null : Number(preparedValue);
+        }
+        if (handlers?.hasLatestParsedValue?.()) {
+            const latestValue = handlers.getLatestParsedValue();
+            return latestValue == null ? null : Number(latestValue);
+        }
+
+        const visibleValue = numericTextBox.element?.value;
+        if (typeof visibleValue === 'string' && visibleValue.includes(DECIMAL_SEPARATOR)) {
+            const parsedValue = parseLocaleNumber(visibleValue);
+            if (parsedValue != null) return parsedValue;
+        }
+
+        const componentValue = Number(numericTextBox.value);
+        return Number.isFinite(componentValue) ? componentValue : null;
     }
 
     function patchNumericTextBox() {
@@ -556,6 +596,27 @@
         }
     }, true);
 
+    // Syncfusion re-parses the visible text when its Batch Update toolbar is
+    // clicked. In an English-configured component, the Vietnamese comma is then
+    // treated as a grouping separator (2,123456 -> 2123456). Blur has already
+    // completed before the click event, so restore the canonical decimal text
+    // immediately before Syncfusion's toolbar handler reads the editor.
+    const prepareGridNumericUpdate = event => {
+        const updateButton = event.target?.closest?.('[id$="_update"]');
+        const grid = updateButton?.closest?.('.e-grid');
+        const input = grid?.querySelector?.('td.e-editedbatchcell input.e-numerictextbox');
+        const storedLocaleValue = input?.dataset?.localeNumericValue;
+        if (!input || storedLocaleValue === undefined || storedLocaleValue === '') return;
+        const canonicalValue = Number(storedLocaleValue);
+        if (!Number.isFinite(canonicalValue)) return;
+
+        input.value = `${canonicalValue}`;
+        const component = input.ej2_instances?.[0];
+        component?.setProperties?.({ value: canonicalValue }, true);
+    };
+    document.addEventListener('mousedown', prepareGridNumericUpdate, true);
+    document.addEventListener('click', prepareGridNumericUpdate, true);
+
     function patchGrid() {
         const grid = window.ej?.grids?.Grid;
         if (!grid || grid.prototype.__vietnamMoneyFormatPatched) {
@@ -593,6 +654,7 @@
         formatEditableValue,
         normalizeNumberString,
         parseLocaleNumber,
+        readNumericTextBoxValue,
         configureNumericTextBox,
         createGridValueAccessor,
         bindNumericInput,

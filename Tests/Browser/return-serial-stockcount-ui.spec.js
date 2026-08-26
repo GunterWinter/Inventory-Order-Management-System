@@ -4,7 +4,7 @@ async function openDocumentFromGrid(page, number) {
     const row = page.locator('#MainGrid .e-row', { hasText: number }).first();
     await expect(row).toBeVisible();
     await row.click();
-    await page.locator('#EditCustom').click();
+    await page.locator('#EditCustom').locator('xpath=..').click();
     await page.waitForSelector('#MainModal.show');
 }
 
@@ -18,24 +18,27 @@ async function gridCellByHeader(grid, headerText) {
 }
 
 async function selectEditedDropdown(page, text) {
-    const editor = page.locator('#SecondaryGrid td.e-editedbatchcell .e-dropdownlist');
+    const editor = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-input').first();
     await expect(editor).toBeVisible();
     const editorId = await editor.getAttribute('id');
     await editor.locator('xpath=..').click();
     const popup = page.locator(`#${editorId}_popup`);
     await expect(popup).toBeVisible();
     const filter = popup.locator('input.e-input-filter');
-    if (await filter.count()) await filter.fill(text);
+    if (await filter.count()) {
+        await filter.click();
+        await filter.press('Control+A');
+        await filter.pressSequentially(text, { delay: 20 });
+    }
     await popup.locator('.e-list-item', { hasText: text }).first().click();
 }
 
 async function selectHeaderDropdown(page, labelFor, text) {
     const input = page.locator(`#MainModal label[for="${labelFor}"]`)
-        .locator('xpath=..').locator('input.e-dropdownlist');
+        .locator('xpath=..').locator('input.e-input').first();
     await expect(input).toBeEnabled();
-    const inputId = await input.getAttribute('id');
     await input.locator('xpath=..').click();
-    const popup = page.locator(`#${inputId}_popup`);
+    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
     await expect(popup).toBeVisible();
     await popup.locator('.e-list-item').filter({ hasText: text }).first().click();
 }
@@ -44,7 +47,9 @@ async function submitDocumentStatus(page, endpoint) {
     const response = page.waitForResponse(item => item.url().includes(endpoint) && item.request().method() === 'POST');
     await page.locator('#MainSaveButton').click();
     const confirmation = page.locator('.swal2-confirm');
-    if (await confirmation.isVisible().catch(() => false)) await confirmation.click();
+    const confirmationOpened = await confirmation.waitFor({ state: 'visible', timeout: 2_000 })
+        .then(() => true, () => false);
+    if (confirmationOpened) await confirmation.click();
     expect((await response).status()).toBe(200);
     await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
 }
@@ -121,9 +126,12 @@ test('PO nhập ba serial nhà sản xuất bằng UI, lưu/reload và Confirm t
     const taxCell = await gridCellByHeader(grid, /Thuế|Tax/i);
     await taxCell.dblclick();
     await selectEditedDropdown(page, fixture.tax.name);
-    const createLine = page.waitForRequest(request => request.url().includes('/PurchaseOrderItem/CreatePurchaseOrderItem'));
+    const createLine = page.waitForResponse(response => response.url().includes('/PurchaseOrderItem/CreatePurchaseOrderItem')
+        && response.request().method() === 'POST');
     await page.locator('#SecondaryGrid_update').click();
-    const payload = (await createLine).postDataJSON();
+    const createLineResponse = await createLine;
+    expect(createLineResponse.status()).toBe(200);
+    const payload = createLineResponse.request().postDataJSON();
     expect(Number(payload.quantity)).toBe(3);
     expect(payload.manufacturerSerialNumbers).toEqual(serials);
     await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
@@ -135,11 +143,14 @@ test('PO nhập ba serial nhà sản xuất bằng UI, lưu/reload và Confirm t
     await expect(await gridCellByHeader(page.locator('#SecondaryGrid'), /Số lượng|Quantity/i)).toHaveText(/3/);
 
     await selectHeaderDropdown(page, 'OrderStatus', /Đã xác nhận|Confirmed/i);
-    const confirmResponse = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder'));
+    const confirmResponse = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder')
+        && response.request().method() === 'POST' && response.status() === 200);
     await page.locator('#MainSaveButton').click();
     const confirmation = page.locator('.swal2-confirm');
-    if (await confirmation.isVisible().catch(() => false)) await confirmation.click();
-    expect((await confirmResponse).status()).toBe(200);
+    await expect(confirmation).toBeVisible();
+    await confirmation.click();
+    const confirmed = await confirmResponse;
+    expect((await confirmed.json())?.code).toBe(200);
 
     const storedSerials = await page.evaluate(async serials => {
         const rows = [];
@@ -150,6 +161,28 @@ test('PO nhập ba serial nhà sản xuất bằng UI, lưu/reload và Confirm t
         return rows.map(item => item.manufacturerSerialNumber);
     }, serials);
     expect(new Set(storedSerials)).toEqual(new Set(serials));
+
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+    const deleteRequests = [];
+    const collectDeleteRequest = request => {
+        if (request.url().includes('/PurchaseOrder/DeletePurchaseOrder')) deleteRequests.push(request);
+    };
+    page.on('request', collectDeleteRequest);
+    const confirmedRow = page.locator('#MainGrid .e-row', { hasText: fixture.order.number }).first();
+    await confirmedRow.getByRole('checkbox').check();
+    await page.locator('#DeleteCustom').click();
+    const deleteWarning = page.locator('.swal2-popup');
+    await expect(deleteWarning).toBeVisible();
+    await expect(deleteWarning.locator('.swal2-title')).toHaveText('Không thể xóa đơn mua hàng');
+    await expect(deleteWarning.locator('.swal2-html-container')).toHaveText(
+        'Chỉ đơn mua hàng Nháp mới được xóa. Đơn đã xác nhận phải dùng chức năng Hủy.'
+    );
+    await deleteWarning.locator('.swal2-confirm').click();
+    await page.waitForTimeout(250);
+    page.off('request', collectDeleteRequest);
+    expect(deleteRequests).toHaveLength(0);
+    await expect(confirmedRow).toBeVisible();
 });
 
 test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ phần Draft đã giữ chỗ', async ({ monitoredPage: page }) => {
@@ -266,7 +299,7 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
         await expect(await gridCellByHeader(grid, /Số lượng trả lần này/i)).toHaveText(/0/);
 
         const sourceInput = page.locator('#MainModal label').filter({ hasText: scenario.sourceLabel })
-            .locator('xpath=..').locator('input.e-dropdownlist');
+            .locator('xpath=..').locator('input.e-input').first();
         await expect(sourceInput).toBeDisabled();
 
         const movementCell = await gridCellByHeader(grid, /Số lượng trả lần này/i);
@@ -275,9 +308,12 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
         await movementInput.fill('');
         await movementInput.pressSequentially('2,5');
         await expect(movementInput).toHaveValue('2,5');
-        const createLine = page.waitForRequest(request => request.url().includes(scenario.createUrl));
+        const createLine = page.waitForResponse(response => response.url().includes(scenario.createUrl)
+            && response.request().method() === 'POST');
         await page.locator('#SecondaryGrid_update').click();
-        expect(Number((await createLine).postDataJSON().movement)).toBe(2.5);
+        const createLineResponse = await createLine;
+        expect(createLineResponse.status()).toBe(200);
+        expect(Number(createLineResponse.request().postDataJSON().movement)).toBe(2.5);
         await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
 
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -351,9 +387,12 @@ test('Stock Count thao tác grid thật, giữ snapshot và không áp tồn l�
     await countedInput.fill('');
     await countedInput.pressSequentially('2,123456');
     await expect(countedInput).toHaveValue('2,123456');
-    const createLine = page.waitForRequest(request => request.url().includes('/InventoryTransaction/StockCountCreateInvenTrans'));
+    const createLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountCreateInvenTrans')
+        && response.request().method() === 'POST');
     await page.locator('#SecondaryGrid_update').click();
-    expect(Number((await createLine).postDataJSON().qtySCCount)).toBe(2.123456);
+    const createLineResponse = await createLine;
+    expect(createLineResponse.status()).toBe(200);
+    expect(Number(createLineResponse.request().postDataJSON().qtySCCount)).toBe(2.123456);
     await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -379,4 +418,150 @@ test('Stock Count thao tác grid thật, giữ snapshot và không áp tồn l�
     await submitDocumentStatus(page, '/StockCount/UpdateStockCount');
     expect(await readStock()).toBe(5.5);
     await expect(page.locator('#MainSaveButton')).toHaveCount(0);
+});
+
+test('Stock Count đổi hàng serial sang hàng thường sẽ release serial cũ và xóa serial khỏi payload', async ({ monitoredPage: page }) => {
+    test.slow();
+    await login(page, 'vi');
+    const key = `UI-STOCK-SERIAL-SWITCH-${Date.now()}`;
+    const fixture = await page.evaluate(async key => {
+        const one = response => response?.data?.content?.data;
+        const list = response => response?.data?.content?.data ?? [];
+        const userId = StorageManager.getUserId();
+        const [groups, warehouses] = await Promise.all([
+            AxiosManager.get('/ProductGroup/GetProductGroupList', {}),
+            AxiosManager.get('/Warehouse/GetWarehouseList', {})
+        ]);
+        const group = list(groups)[0];
+        const warehouse = list(warehouses).find(item => item.systemWarehouse === false);
+        const createProduct = (name, serialTrackingMode, openingStockQuantity) => AxiosManager.post('/Product/CreateProduct', {
+            name,
+            referenceCode: `${name}-REF`,
+            unitPrice: 100000,
+            costPrice: 80000,
+            physical: true,
+            serialTrackingMode,
+            internalSerialFixedCode: serialTrackingMode ? 'SCS' : '',
+            defaultWarehouseId: warehouse.id,
+            defaultWarrantyMonths: 0,
+            unitMeasureName: 'Cái',
+            productGroupId: group.id,
+            openingStockQuantity,
+            createdById: userId
+        });
+        const serialProduct = one(await createProduct(`${key}-SERIAL`, 1, 1));
+        const plainProduct = one(await createProduct(`${key}-PLAIN`, 0, 4));
+        const serials = list(await AxiosManager.get(
+            `/ProductSerial/GetProductSerialPickerList?productId=${encodeURIComponent(serialProduct.id)}`
+            + `&warehouseId=${encodeURIComponent(warehouse.id)}`, {}
+        ));
+        return { serialProduct, plainProduct, warehouse, serial: serials[0] };
+    }, key);
+    expect(fixture.serial?.id).toBeTruthy();
+
+    await page.goto('/StockCounts/StockCountList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.locator('#AddCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    const countDate = page.locator('#MainModal label[for="CountDate"]')
+        .locator('xpath=..').locator('input.e-datepicker');
+    await countDate.fill('26/08/2026');
+    await countDate.press('Tab');
+    await selectHeaderDropdown(page, 'WarehouseId', fixture.warehouse.name);
+    const createHeader = page.waitForResponse(response => response.url().includes('/StockCount/CreateStockCount')
+        && response.request().method() === 'POST');
+    await page.locator('#MainSaveButton').click();
+    const createHeaderResponse = await createHeader;
+    expect(createHeaderResponse.status()).toBe(200);
+    const stockCount = (await createHeaderResponse.json())?.content?.data;
+    expect(stockCount?.id).toBeTruthy();
+
+    const grid = page.locator('#SecondaryGrid');
+    await page.locator('#SecondaryGrid_add').click();
+    const newProductCell = await gridCellByHeader(grid, /Hàng hóa|Product/i);
+    if (await grid.locator('td.e-editedbatchcell input.e-input').count() === 0) {
+        await page.evaluate(() => document.querySelector('#SecondaryGrid').ej2_instances[0].editModule?.editModule?.saveCell?.());
+        await newProductCell.dblclick();
+    }
+    await selectEditedDropdown(page, fixture.serialProduct.name);
+    const serialCell = await gridCellByHeader(grid, /Serial/i);
+    await serialCell.dblclick();
+    await grid.locator('td.e-editedbatchcell button').click();
+    await page.waitForSelector('#ProductSerialPickerModal.show');
+    const serialCheck = page.locator(`#ProductSerialPickerBody .product-serial-picker-check[value="${fixture.serial.id}"]`);
+    await expect(serialCheck).toBeVisible();
+    await serialCheck.check();
+    await page.locator('#ProductSerialPickerApply').click();
+    await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
+
+    const createLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountCreateInvenTrans')
+        && response.request().method() === 'POST');
+    await page.locator('#SecondaryGrid_update').click();
+    const createLineResponse = await createLine;
+    expect(createLineResponse.status()).toBe(200);
+    expect(createLineResponse.request().postDataJSON().productSerialIds).toEqual([fixture.serial.id]);
+    const line = (await createLineResponse.json())?.content?.data;
+    expect(line?.id).toBeTruthy();
+    await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
+
+    const reserved = await page.evaluate(async serialNumber => {
+        const response = await AxiosManager.get(
+            `/ProductSerial/GetWarrantyLookup?search=${encodeURIComponent(serialNumber)}&page=1&pageSize=20`, {}
+        );
+        return (response?.data?.content?.data ?? [])[0]?.statusName;
+    }, fixture.serial.internalSerialNumber);
+    expect(reserved).toBe('Reserved');
+
+    const productCell = await gridCellByHeader(grid, /Hàng hóa|Product/i);
+    await productCell.dblclick();
+    await selectEditedDropdown(page, fixture.plainProduct.name);
+    const clearedRow = await page.evaluate(() => {
+        const row = document.querySelector('#SecondaryGrid').ej2_instances[0].getRowsObject()[0]?.data;
+        const changed = document.querySelector('#SecondaryGrid').ej2_instances[0].getBatchChanges().changedRecords[0];
+        return {
+            rowIds: row?.productSerialIds ?? [],
+            rowText: row?.productSerialNumbers ?? '',
+            changedIds: changed?.productSerialIds ?? [],
+            changedText: changed?.productSerialNumbers ?? ''
+        };
+    });
+    expect(clearedRow).toEqual({ rowIds: [], rowText: '', changedIds: [], changedText: '' });
+    const updateLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountUpdateInvenTrans')
+        && response.request().method() === 'POST');
+    await page.locator('#SecondaryGrid_update').click();
+    const updateLineResponse = await updateLine;
+    expect(updateLineResponse.status()).toBe(200);
+    const updatePayload = updateLineResponse.request().postDataJSON();
+    expect(updatePayload.id).toBe(line.id);
+    expect(updatePayload.productId).toBe(fixture.plainProduct.id);
+    expect(updatePayload.productSerialIds).toEqual([]);
+
+    await expect.poll(() => page.evaluate(async ({ stockCountId, lineId, serialProductId, warehouseId, serialId }) => {
+        const [linesResponse, pickerResponse] = await Promise.all([
+            AxiosManager.get(`/InventoryTransaction/StockCountGetInvenTransList?moduleId=${encodeURIComponent(stockCountId)}`, {}),
+            AxiosManager.get(`/ProductSerial/GetProductSerialPickerList?productId=${encodeURIComponent(serialProductId)}`
+                + `&warehouseId=${encodeURIComponent(warehouseId)}`, {})
+        ]);
+        const lines = linesResponse?.data?.content?.data ?? [];
+        const persistedLine = lines.find(item => item.id === lineId);
+        const picker = pickerResponse?.data?.content?.data ?? [];
+        const releasedSerial = picker.find(item => item.id === serialId);
+        return {
+            productId: persistedLine?.productId,
+            productSerialIds: persistedLine?.productSerialIds ?? [],
+            serialStatus: releasedSerial?.statusName,
+            serialWarehouseId: releasedSerial?.warehouseId
+        };
+    }, {
+        stockCountId: stockCount.id,
+        lineId: line.id,
+        serialProductId: fixture.serialProduct.id,
+        warehouseId: fixture.warehouse.id,
+        serialId: fixture.serial.id
+    })).toEqual({
+        productId: fixture.plainProduct.id,
+        productSerialIds: [],
+        serialStatus: 'InStock',
+        serialWarehouseId: fixture.warehouse.id
+    });
 });

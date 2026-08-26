@@ -193,9 +193,78 @@ test('Syncfusion Update toolbar persists changes captured by beforeBatchSave', a
     stageQuantityChange();
 
     grid.editModule.batchSave();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const deadline = Date.now() + 1000;
+    while (calls.length === 0 && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
 
     assert.deepEqual(calls, ['edit:product-1']);
+});
+
+test('batch persistence discards transient deleted rows without calling the page delete API', async () => {
+    const manager = loadManager();
+    let changes = {
+        addedRecords: [],
+        changedRecords: [],
+        deletedRecords: [{ id: 'new-1', productId: 'product-1' }, { productId: 'product-2' }]
+    };
+    const calls = [];
+    const grid = {
+        isEdit: false,
+        editSettings: { mode: 'Batch' },
+        getCurrentViewRecords: () => [],
+        getBatchChanges: () => changes,
+        endEdit() { },
+        editModule: {
+            batchSave() {
+                const batchChanges = changes;
+                const beforeArgs = { batchChanges, cancel: false };
+                grid.beforeBatchSave?.(beforeArgs);
+                changes = { addedRecords: [], changedRecords: [], deletedRecords: [] };
+                setTimeout(() => grid.actionComplete({ requestType: 'batchsave', batchChanges }), 0);
+            }
+        },
+        async actionComplete(args) {
+            if (args.requestType === 'delete') calls.push(args.data[0]?.id ?? 'keyless');
+        }
+    };
+    manager.track(grid);
+
+    grid.editModule.batchSave();
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    assert.deepEqual(calls, []);
+});
+
+test('batch persistence still calls the page delete API for saved rows', async () => {
+    const manager = loadManager();
+    let changes = { addedRecords: [], changedRecords: [], deletedRecords: [{ id: 'saved-1' }] };
+    const calls = [];
+    const grid = {
+        isEdit: false,
+        editSettings: { mode: 'Batch' },
+        getCurrentViewRecords: () => [],
+        getBatchChanges: () => changes,
+        endEdit() { },
+        editModule: {
+            batchSave() {
+                const batchChanges = changes;
+                const beforeArgs = { batchChanges, cancel: false };
+                grid.beforeBatchSave?.(beforeArgs);
+                changes = { addedRecords: [], changedRecords: [], deletedRecords: [] };
+                setTimeout(() => grid.actionComplete({ requestType: 'batchsave', batchChanges }), 0);
+            }
+        },
+        async actionComplete(args) {
+            if (args.requestType === 'delete') calls.push(args.data[0].id);
+        }
+    };
+    manager.track(grid);
+
+    grid.editModule.batchSave();
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    assert.deepEqual(calls, ['saved-1']);
 });
 
 test('product selection renders the lookup name instead of its UUID', () => {
@@ -380,21 +449,53 @@ test('main grid clears deleted records from persisted selection after reload', (
     assert.equal(cleared, 1);
 });
 
+test('main list grids expand their content height to the remaining viewport', () => {
+    const footer = { getBoundingClientRect: () => ({ height: 40 }) };
+    const manager = loadManager(undefined, { innerHeight: 900 }, {
+        querySelector: selector => selector === '.main-footer, footer' ? footer : null,
+        documentElement: { clientHeight: 900 }
+    });
+    const applied = [];
+    const grid = {
+        element: {
+            id: 'MainGrid',
+            dataset: {},
+            getBoundingClientRect: () => ({ top: 20, height: 430 }),
+            querySelector: selector => selector === '.e-gridcontent'
+                ? { getBoundingClientRect: () => ({ height: 240 }) }
+                : null
+        },
+        setProperties: value => applied.push(value.height),
+        dataBind() { }
+    };
+
+    manager.fitMainGridToViewport(grid);
+
+    assert.deepEqual(applied, [626]);
+    assert.equal(grid.height, 626);
+});
+
 test('batch configuration defers required rules until final save and preserves read-only mode', () => {
     const manager = loadManager();
+    const enabled = [];
     const grid = {
         columns: [{ field: 'productId', validationRules: { required: true } }],
         editSettings: { mode: 'Batch', allowEditing: false, allowAdding: false, allowDeleting: false },
         selectionSettings: {},
-        toolbar: ['Add']
+        toolbar: ['Add'],
+        element: { id: 'SecondaryGrid' },
+        getSelectedRecords: () => [{ id: 'new-1' }],
+        toolbarModule: { enableItems: (items, value) => enabled.push([items[0], value]) }
     };
 
     manager.configureBatch(grid);
+    grid.rowSelected({});
 
     assert.equal(Object.keys(grid.columns[0].validationRules).length, 0);
     assert.equal(grid.editSettings.allowEditing, false);
     assert.equal(grid.editSettings.allowAdding, false);
     assert.equal(grid.editSettings.allowDeleting, false);
+    assert.deepEqual(enabled, [['SecondaryGrid_delete', true]]);
 });
 
 test('Enter inside interactive Quick Add stays with SweetAlert and does not save the parent batch', () => {

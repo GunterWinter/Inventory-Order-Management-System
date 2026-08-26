@@ -1254,8 +1254,28 @@ const App = {
                         }
 
                         if (args.item.id === 'DeleteCustom') {
-                            const selected = mainGrid.obj.getSelectedRecords();
-                            if (!selected.length) return;
+                            const selectedIds = mainGrid.obj.getSelectedRecords().map(record => record.id);
+                            if (!selectedIds.length) return;
+
+                            // Re-read the live status before deleting. A row selected immediately
+                            // after confirming can still be the old Draft object held by Syncfusion.
+                            // The backend remains authoritative, but the UI must show the business
+                            // error instead of opening a misleading generic confirmation first.
+                            await methods.populateMainData();
+                            const selected = selectedIds
+                                .map(id => state.mainData.find(record => record.id === id))
+                                .filter(Boolean);
+                            if (selected.length !== selectedIds.length
+                                || selected.some(record => String(record.orderStatus ?? '') !== '0')) {
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'Không thể xóa đơn mua hàng',
+                                    text: 'Chỉ đơn mua hàng Nháp mới được xóa. Đơn đã xác nhận phải dùng chức năng Hủy.',
+                                    confirmButtonText: 'Đồng ý',
+                                    heightAuto: false
+                                });
+                                return;
+                            }
                             const confirmation = await Swal.fire({
                                 icon: 'warning',
                                 title: 'Bạn có chắc chắn muốn xóa?',
@@ -1266,12 +1286,30 @@ const App = {
                                 heightAuto: false
                             });
                             if (!confirmation.isConfirmed) return;
-                            for (const record of selected) {
-                                await services.deleteMainData(record.id, StorageManager.getUserId());
+                            try {
+                                for (const record of selected) {
+                                    await services.deleteMainData(record.id, StorageManager.getUserId());
+                                }
+                                mainGrid.obj.clearSelection();
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                await Swal.fire({
+                                    icon: 'success',
+                                    title: 'Xóa thành công',
+                                    text: `Đã xóa ${selected.length} đơn mua hàng.`,
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                    heightAuto: false
+                                });
+                            } catch (error) {
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'Không thể xóa đơn mua hàng',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý',
+                                    heightAuto: false
+                                });
                             }
-                            mainGrid.obj.clearSelection();
-                            await methods.populateMainData();
-                            mainGrid.refresh();
                         }
 
 
@@ -1391,7 +1429,7 @@ const App = {
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
-                const allowEdit = !state.isViewMode;
+                const allowEdit = !state.isViewMode && String(state.orderStatus ?? '0') === '0';
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
@@ -1533,7 +1571,7 @@ const App = {
                                     return supplierWarrantyElem;
                                 },
                                 read: () => {
-                                    return supplierWarrantyObj?.value ?? 6;
+                                    return NumberFormatManager.readNumericTextBoxValue(supplierWarrantyObj) ?? 6;
                                 },
                                 destroy: () => {
                                     if (supplierWarrantyObj) {
@@ -1569,7 +1607,8 @@ const App = {
                                     return priceElem;
                                 },
                                 read: () => {
-                                    return Number(priceEditorValue ?? priceObj?.value ?? 0);
+                                    return NumberFormatManager.readNumericTextBoxValue(priceObj)
+                                        ?? Number(priceEditorValue ?? 0);
                                 },
                                 destroy: () => {
                                     priceObj.destroy();
@@ -1634,7 +1673,7 @@ const App = {
                                     return quantityElem;
                                 },
                                 read: () => {
-                                    return quantityObj.value;
+                                    return NumberFormatManager.readNumericTextBoxValue(quantityObj);
                                 },
                                 destroy: () => {
                                     quantityObj.destroy();
@@ -2194,11 +2233,11 @@ const App = {
             },
             refresh: () => {
                 if (!secondaryGrid.obj) return;
-                const allowEdit = !state.isViewMode;
+                const allowEdit = !state.isViewMode && String(state.orderStatus ?? '') === '0';
                 secondaryGrid.obj.setProperties({
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showConfirmDialog: false, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: allowEdit ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Delete', 'Update', 'Cancel',
@@ -2207,7 +2246,9 @@ const App = {
                         { type: 'Separator' },
                         { text: 'Add Warehouse', tooltipText: 'Quick Add Warehouse', prefixIcon: 'e-plus', id: 'QuickAddWarehouseBtn' },
                         { text: 'Add Product', tooltipText: 'Quick Add Product', prefixIcon: 'e-plus', id: 'QuickAddProductBtn' }
-                    ]
+                    ] : (!state.isViewMode && String(state.orderStatus ?? '') === '2'
+                        ? ['ExcelExport', { type: 'Separator' }, { text: 'Cost Allocation', tooltipText: 'Allocate selected product costs to customers', prefixIcon: 'e-export', id: 'CostAllocateCustom' }]
+                        : ['ExcelExport'])
                 });
             }
         };

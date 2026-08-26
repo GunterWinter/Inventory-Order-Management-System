@@ -103,9 +103,9 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
                     || entity.PurchaseOrderId != request.PurchaseOrderId
                     || entity.Description != request.Description;
                 if (entity.Status != PurchaseReturnStatus.Confirmed
-                    || requestedStatus is not (PurchaseReturnStatus.Cancelled or PurchaseReturnStatus.Archived)
+                    || requestedStatus is not (PurchaseReturnStatus.Draft or PurchaseReturnStatus.Cancelled or PurchaseReturnStatus.Archived)
                     || headerChanged)
-                    throw new InvalidOperationException("Phiếu trả hàng mua đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+                    throw new InvalidOperationException("Phiếu trả hàng mua đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
             }
             entity.UpdatedById = request.UpdatedById;
             entity.ReturnDate = request.ReturnDate;

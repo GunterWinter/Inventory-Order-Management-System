@@ -13,6 +13,58 @@
     const batchChangeCount = changes => (changes?.addedRecords?.length || 0)
         + (changes?.changedRecords?.length || 0)
         + (changes?.deletedRecords?.length || 0);
+    const isTransientRecord = record => {
+        const id = record?.id;
+        return id === null || id === undefined || id === '' || String(id).startsWith('new-');
+    };
+    const normalizeBatchChanges = changes => {
+        const deletedRecords = [...(changes?.deletedRecords || [])];
+        const transientDeletedIds = new Set(deletedRecords
+            .filter(isTransientRecord)
+            .map(record => record?.id)
+            .filter(id => id !== null && id !== undefined && id !== '')
+            .map(String));
+        const deletedObjects = new Set(deletedRecords.filter(isTransientRecord));
+        const wasDiscarded = record => deletedObjects.has(record)
+            || (record?.id !== null && record?.id !== undefined && record?.id !== ''
+                && transientDeletedIds.has(String(record.id)));
+
+        return {
+            addedRecords: [...(changes?.addedRecords || [])].filter(record => !wasDiscarded(record)),
+            changedRecords: [...(changes?.changedRecords || [])].filter(record => !wasDiscarded(record)),
+            deletedRecords: deletedRecords.filter(record => !isTransientRecord(record))
+        };
+    };
+    const discardTransientRecords = (grid, records) => {
+        const changes = grid.getBatchChanges?.() ?? {};
+        const addedRecords = changes.addedRecords ?? [];
+        const rowObjects = grid.getRowsObject?.() ?? [];
+        const innerEdit = grid.editModule?.editModule;
+        const targets = records.map(record => {
+            const recordId = record?.id == null ? null : String(record.id);
+            const rowIndex = rowObjects.findIndex(row => row?.data === record
+                || (recordId !== null && String(row?.data?.id) === recordId));
+            return { record, recordId, rowElement: rowIndex >= 0 ? grid.getRowByIndex?.(rowIndex) : null };
+        });
+
+        targets.forEach(({ record, recordId, rowElement }) => {
+            const addedIndex = addedRecords.findIndex(item => item === record
+                || (recordId !== null && String(item?.id) === recordId));
+            if (addedIndex >= 0) addedRecords.splice(addedIndex, 1);
+
+            const dataSource = Array.isArray(grid.dataSource) ? grid.dataSource : null;
+            const dataIndex = dataSource?.findIndex?.(item => item === record
+                || (recordId !== null && String(item?.id) === recordId)) ?? -1;
+            if (dataIndex >= 0 && isTransientRecord(dataSource[dataIndex])) dataSource.splice(dataIndex, 1);
+
+            const uid = rowElement?.getAttribute?.('data-uid');
+            if (uid) innerEdit?.removeRowObjectFromUID?.(uid);
+            rowElement?.remove?.();
+        });
+
+        innerEdit?.refreshRowIdx?.();
+        grid.refreshHeader?.();
+    };
     const pendingChanges = grid => {
         try {
             const changes = grid?.getBatchChanges?.() || {};
@@ -87,7 +139,18 @@
         // Applying a custom modal editor does not always make Syncfusion create a
         // changed record until the cell later blurs. Register an existing row now
         // so an immediate Update/Main Save persists the values just applied.
-        if (matchedBatchRecords.length === 0 && targetId && typeof grid.updateCell === 'function') {
+        const editorIsMounted = Boolean(editorElement?.closest?.('.e-editedbatchcell'));
+        const editorId = String(editorElement?.id ?? '');
+        const gridId = String(grid.element?.id ?? '');
+        const activeEditorField = editorId.startsWith(gridId) ? editorId.slice(gridId.length) : null;
+        const deferDropdownValue = editorIsMounted
+            && Boolean(activeEditorField)
+            && Object.prototype.hasOwnProperty.call(values, activeEditorField)
+            && Boolean(editorElement?.closest?.('.e-dropdownlist'));
+        const immediateValues = deferDropdownValue
+            ? Object.fromEntries(Object.entries(values).filter(([field]) => field !== activeEditorField))
+            : values;
+        if (matchedBatchRecords.length === 0 && targetId && !editorIsMounted && typeof grid.updateCell === 'function') {
             const valueChanged = (current, next) => {
                 if (Array.isArray(current) || Array.isArray(next)) {
                     return JSON.stringify(current ?? []) !== JSON.stringify(next ?? []);
@@ -117,8 +180,8 @@
             }
         }
 
-        Object.assign(rowData, values);
-        if (actualRow && actualRow !== rowData) Object.assign(actualRow, values);
+        Object.assign(rowData, immediateValues);
+        if (actualRow && actualRow !== rowData) Object.assign(actualRow, immediateValues);
 
         // A newly inserted Syncfusion batch row may expose three distinct objects
         // (editor rowData, rowsObject data and addedRecords data) before it has a key.
@@ -134,7 +197,7 @@
             if (addedRecord) matchedBatchRecords.push(addedRecord);
         }
 
-        matchedBatchRecords.forEach(item => Object.assign(item, values));
+        matchedBatchRecords.forEach(item => Object.assign(item, immediateValues));
 
         Object.entries(values).forEach(([field, value]) => {
             const column = grid.getColumnByField?.(field);
@@ -154,6 +217,36 @@
                 : displayValue(column, field, value, actualRow ?? rowData);
             cell.textContent = renderedValue ?? '';
         });
+
+        const updateId = `${grid.element?.id || 'SecondaryGrid'}_update`;
+        grid.toolbarModule?.enableItems?.([updateId], true);
+        const updateButton = document.getElementById?.(updateId);
+        const updateToolbarItem = updateButton?.closest?.('.e-toolbar-item');
+        updateToolbarItem?.classList?.remove?.('e-overlay');
+        updateToolbarItem?.setAttribute?.('aria-disabled', 'false');
+        if (updateButton) {
+            updateButton.disabled = false;
+            updateButton.setAttribute('aria-disabled', 'false');
+        }
+
+        // Let the editor's change callback finish before committing the active cell.
+        // This registers the row in changedRecords without updateCell() tearing down
+        // the dropdown/button DOM underneath Syncfusion's own saveCell bookkeeping.
+        if (editorIsMounted) {
+            window.setTimeout(() => {
+                if (grid.isEdit && editorElement?.isConnected) {
+                    grid.editModule?.editModule?.saveCell?.();
+                }
+                Object.assign(rowData, values);
+                if (actualRow && actualRow !== rowData) Object.assign(actualRow, values);
+                const committedChanges = grid.getBatchChanges?.() ?? {};
+                [...(committedChanges.addedRecords ?? []), ...(committedChanges.changedRecords ?? [])]
+                    .filter(item => item === rowData
+                        || item === actualRow
+                        || (targetId && normalizedId(item?.id) === targetId))
+                    .forEach(item => Object.assign(item, values));
+            }, 0);
+        }
 
         return rowIndex;
     }
@@ -230,11 +323,7 @@
             if (state.batchPrepared) return true;
             state.validationFailed = false;
             state.validationFailure = null;
-            state.batchChanges = {
-                addedRecords: [...(changes?.addedRecords || [])],
-                changedRecords: [...(changes?.changedRecords || [])],
-                deletedRecords: [...(changes?.deletedRecords || [])]
-            };
+            state.batchChanges = normalizeBatchChanges(changes);
 
             const saves = [
                 ...state.batchChanges.addedRecords.map(data => ({ action: 'add', data })),
@@ -432,6 +521,7 @@
         if (!deferredBatchValidation.has(grid)) {
             (grid.columns || []).forEach(column => {
                 if (column?.validationRules) column.validationRules = {};
+                if (String(column?.type ?? '').toLowerCase() === 'checkbox') column.allowEditing = false;
             });
             deferredBatchValidation.add(grid);
         }
@@ -452,6 +542,46 @@
             actions.forEach(item => { if (!custom.includes(item)) custom.push(item); });
             grid.toolbar = custom;
         }
+        const updateDeleteToolbar = () => {
+            const count = grid.getSelectedRecords?.().length ?? 0;
+            const deleteId = `${grid.element?.id || 'SecondaryGrid'}_delete`;
+            const enabled = count > 0;
+            grid.toolbarModule?.enableItems?.([deleteId], enabled);
+
+            // Syncfusion keeps the toolbar wrapper overlaid for newly-added Batch rows,
+            // even though getSelectedRecords() already contains the row. Keep the DOM
+            // state in sync so a transient row can be removed with the real Delete button.
+            const button = document.getElementById?.(deleteId);
+            const toolbarItem = button?.closest?.('.e-toolbar-item');
+            toolbarItem?.classList?.toggle('e-overlay', !enabled);
+            toolbarItem?.setAttribute?.('aria-disabled', String(!enabled));
+            if (button) {
+                button.disabled = !enabled;
+                button.setAttribute('aria-disabled', String(!enabled));
+            }
+        };
+        const originalSelected = grid.rowSelected;
+        const originalDeselected = grid.rowDeselected;
+        const originalToolbarClick = grid.toolbarClick;
+        grid.rowSelected = args => { originalSelected?.(args); updateDeleteToolbar(); };
+        grid.rowDeselected = args => { originalDeselected?.(args); updateDeleteToolbar(); };
+        grid.toolbarClick = args => {
+            const deleteId = `${grid.element?.id || 'SecondaryGrid'}_delete`;
+            const selected = grid.getSelectedRecords?.() ?? [];
+            if (args?.item?.id === deleteId && selected.length > 0 && selected.every(isTransientRecord)) {
+                args.cancel = true;
+                if (grid.isEdit) grid.editModule?.editModule?.saveCell?.();
+                discardTransientRecords(grid, selected);
+                grid.clearSelection?.();
+                window.setTimeout(updateDeleteToolbar, 0);
+                return;
+            }
+            originalToolbarClick?.(args);
+        };
+        grid.addEventListener?.('rowSelected', updateDeleteToolbar);
+        grid.addEventListener?.('rowDeselected', updateDeleteToolbar);
+        grid.element?.addEventListener?.('click', () => window.setTimeout(updateDeleteToolbar, 0));
+        grid.element?.addEventListener?.('change', () => window.setTimeout(updateDeleteToolbar, 0));
         track(grid, options);
         return grid;
     }
@@ -476,8 +606,19 @@
 
         const updateToolbar = () => {
             const count = grid.getSelectedRecords?.().length ?? 0;
-            grid.toolbarModule?.enableItems?.(['EditCustom'], count === 1);
-            grid.toolbarModule?.enableItems?.(['DeleteCustom'], count > 0);
+            const setEnabled = (id, enabled) => {
+                grid.toolbarModule?.enableItems?.([id], enabled);
+                const button = document.getElementById?.(id);
+                const toolbarItem = button?.closest?.('.e-toolbar-item');
+                toolbarItem?.classList?.toggle('e-overlay', !enabled);
+                toolbarItem?.setAttribute?.('aria-disabled', String(!enabled));
+                if (button) {
+                    button.disabled = !enabled;
+                    button.setAttribute('aria-disabled', String(!enabled));
+                }
+            };
+            setEnabled('EditCustom', count === 1);
+            setEnabled('DeleteCustom', count > 0);
         };
         const originalSelected = grid.rowSelected;
         const originalDeselected = grid.rowDeselected;
@@ -497,7 +638,34 @@
             updateToolbar();
         };
         grid.addEventListener?.('dataBound', clearStaleSelection);
+        grid.element?.addEventListener?.('click', () => window.setTimeout(updateToolbar, 0));
+        grid.element?.addEventListener?.('change', () => window.setTimeout(updateToolbar, 0));
         return grid;
+    }
+
+    function fitMainGridToViewport(grid) {
+        const element = grid?.element;
+        if (!element || !/^maingrid$/i.test(element.id || '') || element.dataset?.fixedGridHeight === 'true') return;
+        const rect = element.getBoundingClientRect?.();
+        if (!rect || rect.height <= 0 || rect.top < 0) return;
+
+        const footer = document.querySelector?.('.main-footer, footer');
+        const footerRect = footer?.getBoundingClientRect?.();
+        const footerHeight = footerRect?.height > 0 ? footerRect.height : 0;
+        const content = element.querySelector?.('.e-gridcontent');
+        const contentRect = content?.getBoundingClientRect?.();
+        const chromeHeight = contentRect?.height > 0
+            ? Math.max(0, rect.height - contentRect.height)
+            : 150;
+        const availableTotal = Math.max(320, (window.innerHeight || document.documentElement?.clientHeight || 900)
+            - rect.top - footerHeight - 24);
+        const contentHeight = Math.max(260, Math.floor(availableTotal - chromeHeight));
+        if (Math.abs(Number(grid.__viewportContentHeight ?? 0) - contentHeight) < 2) return;
+
+        grid.__viewportContentHeight = contentHeight;
+        grid.setProperties?.({ height: contentHeight }, true);
+        grid.height = contentHeight;
+        grid.dataBind?.();
     }
 
     function autoConfigure() {
@@ -521,7 +689,10 @@
                 element.dataset.batchManaged = 'true';
                 configureBatch(grid);
             }
-            if (!/^secondarygrid/i.test(element.id || '')) configureRowSelection(grid);
+            if (!/^secondarygrid/i.test(element.id || '')) {
+                configureRowSelection(grid);
+                fitMainGridToViewport(grid);
+            }
         });
         document.querySelectorAll('form').forEach(form => {
             if (form.dataset.gridPendingWired) return;
@@ -653,9 +824,22 @@
         else grid.groupModule.expandAll?.();
     }
 
-    window.GridInteractionManager = { configureBatch, configureRowSelection, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, autoConfigure, patchModalPopups, refreshModalGrids };
+    window.GridInteractionManager = { configureBatch, configureRowSelection, fitMainGridToViewport, track, save, saveBeforeSubmit, syncBatchRowValues, wireKeyboard, collapseGroups, autoConfigure, patchModalPopups, refreshModalGrids };
     patchModalPopups();
-    const init = () => { patchModalPopups(); wireKeyboard(); autoConfigure(); new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true }); };
+    const init = () => {
+        patchModalPopups();
+        wireKeyboard();
+        autoConfigure();
+        new MutationObserver(autoConfigure).observe(document.body, { childList: true, subtree: true });
+        let resizeFrame = null;
+        window.addEventListener?.('resize', () => {
+            if (resizeFrame) window.cancelAnimationFrame?.(resizeFrame);
+            resizeFrame = window.requestAnimationFrame?.(() => {
+                resizeFrame = null;
+                autoConfigure();
+            }) ?? null;
+        });
+    };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
 })(window, document);

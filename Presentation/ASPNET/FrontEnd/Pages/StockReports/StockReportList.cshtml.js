@@ -52,7 +52,7 @@ const App = {
                     allowSelection: true,
                     allowGrouping: true,
                     groupSettings: {
-                        columns: ['warehouseName', 'productName']
+                        columns: ['warehouseName', 'productGroupName', 'productName']
                     },
                     allowTextWrap: true,
                     allowResizing: true,
@@ -67,6 +67,7 @@ const App = {
                     columns: [
                         { type: 'checkbox', width: 60 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 180 },
+                        { field: 'productGroupName', headerText: 'Product Group', width: 180 },
                         { field: 'productNumber', headerText: 'Product Number', width: 160 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 150 },
                         { field: 'productName', headerText: 'Product Name', width: 220 },

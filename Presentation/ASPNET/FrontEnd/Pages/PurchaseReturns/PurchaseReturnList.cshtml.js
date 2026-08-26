@@ -688,7 +688,7 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: !state.isViewMode, allowAdding: false, allowDeleting: false, showDeleteConfirmDialog: false, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
+                    editSettings: { allowEditing: !state.isViewMode && String(state.status ?? '0') === '0', allowAdding: false, allowDeleting: false, showDeleteConfirmDialog: false, mode: 'Batch', allowEditOnDblClick: !state.isViewMode && String(state.status ?? '0') === '0' },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -844,7 +844,7 @@
                                     return movementElem;
                                 },
                                 read: () => {
-                                    return movementObj.value;
+                                    return NumberFormatManager.readNumericTextBoxValue(movementObj);
                                 },
                                 destroy: function () {
                                     movementObj.destroy();
@@ -856,6 +856,7 @@
                                         value: args.rowData.movement ?? 0,
                                         min: 0,
                                         max: args.rowData.availableReturnQuantity ?? 0,
+                                        numericKind: serialTracked ? 'integer' : 'decimal',
                                         format: serialTracked ? 'n0' : 'n6',
                                         decimals: serialTracked ? 0 : 6,
                                         readonly: serialTracked,
@@ -866,11 +867,11 @@
                             }
                         },
                     ],
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: !state.isViewMode && String(state.status ?? '0') === '0' ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Edit', 'Update', 'Cancel',
-                    ],
+                    ] : ['ExcelExport'],
                     beforeDataBound: () => { },
                     dataBound: function () { },
                     excelExportComplete: () => { },
@@ -951,15 +952,15 @@
 
             },
             refresh: () => {
-                const allowEdit = !state.isViewMode;
+                const allowEdit = !state.isViewMode && String(state.status ?? '') === '0';
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: false, allowDeleting: false, showDeleteConfirmDialog: false, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: allowEdit ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Edit', 'Update', 'Cancel',
-                    ]
+                    ] : ['ExcelExport']
                 });
             }
         };

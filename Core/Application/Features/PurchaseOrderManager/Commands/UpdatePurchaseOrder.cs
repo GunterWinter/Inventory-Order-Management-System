@@ -71,12 +71,12 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderReq
             if (entity.OrderStatus != PurchaseOrderStatus.Draft)
             {
                 var allowedStatusChange = entity.OrderStatus == PurchaseOrderStatus.Confirmed
-                    && requestedStatus is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Archived;
+                    && requestedStatus is PurchaseOrderStatus.Draft or PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Archived;
                 var headerChanged = entity.OrderDate != request.OrderDate
                     || entity.VendorId != request.VendorId
                     || entity.Description != request.Description;
                 if (!allowedStatusChange || headerChanged)
-                    throw new InvalidOperationException("Đơn mua hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
+                    throw new InvalidOperationException("Đơn mua hàng đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ theo đúng điều kiện phụ thuộc.");
             }
 
             entity.UpdatedById = request.UpdatedById;

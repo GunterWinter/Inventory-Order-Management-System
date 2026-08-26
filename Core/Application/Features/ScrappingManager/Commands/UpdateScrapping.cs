@@ -74,9 +74,9 @@ public class UpdateScrappingHandler : IRequestHandler<UpdateScrappingRequest, Up
                     || entity.WarehouseId != request.WarehouseId
                     || entity.Description != request.Description;
                 if (entity.Status != ScrappingStatus.Confirmed
-                    || requestedStatus is not (ScrappingStatus.Cancelled or ScrappingStatus.Archived)
+                    || requestedStatus is not (ScrappingStatus.Draft or ScrappingStatus.Cancelled or ScrappingStatus.Archived)
                     || headerChanged)
-                    throw new InvalidOperationException("Phiếu hủy hàng đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+                    throw new InvalidOperationException("Phiếu hủy hàng đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
             }
             entity.UpdatedById = request.UpdatedById;
             entity.ScrappingDate = request.ScrappingDate;

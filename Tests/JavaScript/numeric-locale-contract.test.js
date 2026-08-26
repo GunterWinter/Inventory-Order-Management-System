@@ -36,8 +36,19 @@ test('purchase and sales editors explicitly preserve Vietnamese decimal values',
         assert.match(source, /format:\s*'n6'/);
         assert.match(source, /decimals:\s*6/);
         assert.match(source, /NumberFormatManager\.parseLocaleNumber\(/);
+        assert.match(source, /NumberFormatManager\.readNumericTextBoxValue\(priceObj\)/);
         assert.doesNotMatch(source, /priceEditorValue\s*=\s*Number\(priceEditorValue\s*\?\?/);
     }
+});
+
+test('material export persists one six-decimal unit cost for both detail and cash totals', () => {
+    const source = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs'), 'utf8');
+
+    assert.match(source, /resolvedUnitCost\s*=\s*AccountingMath\.RoundVnd\(costResolution\.UnitCost\)/);
+    assert.match(source, /line\.UnitCost\s*=\s*resolvedUnitCost/);
+    assert.match(source, /totalProjectCost\s*\+=\s*AccountingMath\.RoundVnd\(resolvedUnitCost\s*\*\s*movement\)/);
 });
 
 test('purchase return carries the source product serial policy instead of forcing serial tracking', () => {
@@ -46,4 +57,37 @@ test('purchase return carries the source product serial policy instead of forcin
     assert.match(source, /physical:\s*item\.physical\s*===\s*true/);
     assert.match(source, /serialTrackingMode:\s*Number\(item\.serialTrackingMode\s*\?\?\s*0\)/);
     assert.doesNotMatch(source, /physical:\s*true,\s*\r?\n\s*serialTrackingMode:\s*1/);
+});
+
+test('document quantity editors read the latest locale value through the shared manager', () => {
+    const files = [
+        'PurchaseOrders/PurchaseOrderList.cshtml.js',
+        'SalesOrders/SalesOrderList.cshtml.js',
+        'PurchaseReturns/PurchaseReturnList.cshtml.js',
+        'SalesReturns/SalesReturnList.cshtml.js',
+        'MaterialExports/MaterialExportList.cshtml.js',
+        'Scrappings/ScrappingList.cshtml.js',
+        'StockCounts/StockCountList.cshtml.js',
+        'TransferIns/TransferInList.cshtml.js',
+        'TransferOuts/TransferOutList.cshtml.js'
+    ];
+
+    for (const file of files) {
+        const source = fs.readFileSync(path.join(pagesRoot, file), 'utf8');
+        assert.match(source, /NumberFormatManager\.readNumericTextBoxValue\(/, file);
+    }
+});
+
+test('inventory movement editors distinguish serial integers from non-serial decimals', () => {
+    for (const file of [
+        'MaterialExports/MaterialExportList.cshtml.js',
+        'Scrappings/ScrappingList.cshtml.js',
+        'StockCounts/StockCountList.cshtml.js',
+        'TransferIns/TransferInList.cshtml.js',
+        'TransferOuts/TransferOutList.cshtml.js'
+    ]) {
+        const source = fs.readFileSync(path.join(pagesRoot, file), 'utf8');
+        assert.match(source, /numericKind:\s*serialTracked\s*\?\s*'integer'\s*:\s*'decimal'/, file);
+        assert.match(source, /decimals:\s*serialTracked\s*\?\s*0\s*:\s*6/, file);
+    }
 });

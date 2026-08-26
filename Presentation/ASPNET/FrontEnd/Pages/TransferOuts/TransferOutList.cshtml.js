@@ -707,7 +707,7 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
+                    editSettings: { allowEditing: !state.isViewMode && String(state.status ?? '0') === '0', allowAdding: !state.isViewMode && String(state.status ?? '0') === '0', allowDeleting: !state.isViewMode && String(state.status ?? '0') === '0', showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: !state.isViewMode && String(state.status ?? '0') === '0' },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -813,28 +813,32 @@
                                     return movementElem;
                                 },
                                 read: () => {
-                                    return movementObj.value;
+                                    return NumberFormatManager.readNumericTextBoxValue(movementObj);
                                 },
                                 destroy: function () {
                                     movementObj.destroy();
                                 },
                                 write: function (args) {
+                                    const product = state.productListLookupData.find(x => x.id === args.rowData.productId);
+                                    const serialTracked = product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
-                                        format: 'n0',
-                                        decimals: 0,
-                                        validateDecimalOnType: true,
+                                        numericKind: serialTracked ? 'integer' : 'decimal',
+                                        format: serialTracked ? 'n0' : 'n6',
+                                        decimals: serialTracked ? 0 : 6,
+                                        readonly: serialTracked,
+                                        validateDecimalOnType: serialTracked,
                                     });
                                     movementObj.appendTo(args.element);
                                 }
                             }
                         },
                     ],
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: !state.isViewMode && String(state.status ?? '0') === '0' ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
-                    ],
+                    ] : ['ExcelExport'],
                     beforeDataBound: () => { },
                     dataBound: function () { },
                     excelExportComplete: () => { },
@@ -964,15 +968,15 @@
 
             },
             refresh: () => {
-                const allowEdit = !state.isViewMode;
+                const allowEdit = !state.isViewMode && String(state.status ?? '') === '0';
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
                     editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
-                    toolbar: state.isViewMode ? ['ExcelExport'] : [
+                    toolbar: allowEdit ? [
                         'ExcelExport',
                         { type: 'Separator' },
                         'Add', 'Edit', 'Delete', 'Update', 'Cancel',
-                    ]
+                    ] : ['ExcelExport']
                 });
             }
         };

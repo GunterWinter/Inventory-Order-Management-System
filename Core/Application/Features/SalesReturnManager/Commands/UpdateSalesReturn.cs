@@ -127,9 +127,9 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
             || entity.SalesOrderId != request.SalesOrderId
             || entity.Description != request.Description;
         if (entity.Status != SalesReturnStatus.Confirmed
-            || requested is not (SalesReturnStatus.Cancelled or SalesReturnStatus.Archived)
+            || requested is not (SalesReturnStatus.Draft or SalesReturnStatus.Cancelled or SalesReturnStatus.Archived)
             || headerChanged)
-            throw new InvalidOperationException("Phiếu trả hàng bán đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
+            throw new InvalidOperationException("Phiếu trả hàng bán đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
     }
 }
 

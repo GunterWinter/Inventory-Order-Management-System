@@ -82,17 +82,17 @@ public class UpdateTransferOutHandler : IRequestHandler<UpdateTransferOutRequest
                     || entity.WarehouseToId != request.WarehouseToId
                     || entity.Description != request.Description;
                 if (entity.Status != TransferStatus.Confirmed
-                    || requestedStatus is not (TransferStatus.Cancelled or TransferStatus.Archived)
+                    || requestedStatus is not (TransferStatus.Draft or TransferStatus.Cancelled or TransferStatus.Archived)
                     || headerChanged)
-                    throw new InvalidOperationException("Phiếu chuyển kho đã xác nhận không được sửa nội dung; chỉ có thể Hủy hoặc Lưu trữ.");
-                if (requestedStatus == TransferStatus.Cancelled)
+                    throw new InvalidOperationException("Phiếu chuyển kho đã xác nhận phải chuyển về Nháp trước khi sửa nội dung; cũng có thể Hủy hoặc Lưu trữ.");
+                if (requestedStatus is TransferStatus.Draft or TransferStatus.Cancelled)
                 {
                     var transferInNumber = await _queryContext.Set<TransferIn>().AsNoTracking()
                         .Where(x => !x.IsDeleted && x.TransferOutId == entity.Id && x.Status != TransferStatus.Cancelled)
                         .Select(x => x.Number)
                         .FirstOrDefaultAsync(ct);
                     if (transferInNumber != null)
-                        throw new InvalidOperationException($"Không thể hủy phiếu chuyển kho {entity.Number} vì phiếu nhận kho {transferInNumber} còn hiệu lực. Hãy hủy phiếu nhận kho trước.");
+                        throw new InvalidOperationException($"Không thể chuyển phiếu chuyển kho {entity.Number} về Nháp hoặc Hủy vì phiếu nhận kho {transferInNumber} còn hiệu lực. Hãy hủy phiếu nhận kho trước.");
                 }
             }
             entity.UpdatedById = request.UpdatedById;
