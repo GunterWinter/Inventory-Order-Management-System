@@ -728,6 +728,7 @@
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
+                            gridGetter: () => secondaryGrid.obj,
                             warehouseIdGetter: (rowData) => state.warehouseId,
                             moduleName: 'Scrapping',
                             quantityField: 'movement',

@@ -155,12 +155,13 @@
                 purchaseOrderListLookup.refresh();
                 state.errors.purchaseOrderId = '';
                 if (newVal !== oldVal) {
-                    state.secondaryData.forEach(row => {
-                        row.productSerialIds = [];
-                        row.productSerialNumbers = '';
-                    });
+                    state.secondaryData = [];
                 }
                 await methods.populateProductListLookupData();
+                if (newVal) {
+                    await methods.populateSecondaryData(state.id || null);
+                    secondaryGrid.obj?.setProperties({ dataSource: state.secondaryData });
+                }
             }
         );
 
@@ -259,18 +260,19 @@
                     throw error;
                 }
             },
-            getSecondaryData: async (moduleId) => {
+            getSecondaryData: async (purchaseReturnId) => {
                 try {
-                    const response = await AxiosManager.get('/InventoryTransaction/PurchaseReturnGetInvenTransList?moduleId=' + moduleId, {});
+                    const response = await AxiosManager.get('/PurchaseReturn/GetSourceLineList?purchaseOrderId=' + encodeURIComponent(state.purchaseOrderId ?? '')
+                        + '&purchaseReturnId=' + encodeURIComponent(purchaseReturnId ?? ''), {});
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            createSecondaryData: async (moduleId, warehouseId, productId, movement, createdById, productSerialIds) => {
+            createSecondaryData: async (moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/PurchaseReturnCreateInvenTrans', {
-                        moduleId, warehouseId, productId, movement, createdById, productSerialIds
+                        moduleId, sourceItemId, warehouseId, productId, movement, createdById, productSerialIds
                     });
                     return response;
                 } catch (error) {
@@ -364,9 +366,19 @@
             populateSecondaryData: async (purchaseReturnId) => {
                 try {
                     const response = await services.getSecondaryData(purchaseReturnId);
-                    state.secondaryData = response?.data?.content?.data.map(item => ({
+                    const sourceLines = response?.data?.content ?? [];
+                    state.productListLookupData = Array.from(new Map(sourceLines.map(item => [item.productId, {
+                        id: item.productId,
+                        name: item.productName,
+                        referenceCode: item.productReferenceCode,
+                        physical: item.physical === true,
+                        serialTrackingMode: Number(item.serialTrackingMode ?? 0)
+                    }])).values());
+                    state.secondaryData = sourceLines.map(item => ({
                         ...item,
-                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
+                        id: item.returnLineId ?? item.sourceItemId,
+                        movement: item.currentReturnQuantity ?? 0,
+                        isVirtual: !item.returnLineId
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -409,7 +421,7 @@
                         mainGrid.refresh();
 
                         if (!state.deleteMode) {
-                            state.mainTitle = 'Edit Purchase Return';
+                            state.mainTitle = 'Sửa phiếu trả hàng mua';
                             state.id = response?.data?.content?.data.id ?? '';
                             state.number = response?.data?.content?.data.number ?? '';
                             purchaseOrderListLookup.refresh();
@@ -676,7 +688,7 @@
                 secondaryGrid.obj = new ej.grids.Grid({
                     height: 400,
                     dataSource: dataSource,
-                    editSettings: { allowEditing: !state.isViewMode, allowAdding: !state.isViewMode, allowDeleting: !state.isViewMode, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
+                    editSettings: { allowEditing: !state.isViewMode, allowAdding: false, allowDeleting: false, showDeleteConfirmDialog: false, mode: 'Batch', allowEditOnDblClick: !state.isViewMode },
                     allowFiltering: false,
                     allowSorting: true,
                     allowSelection: true,
@@ -700,8 +712,9 @@
                         },
                         {
                             field: 'warehouseId',
-                            headerText: 'Warehouse',
+                            headerText: 'Kho',
                             width: 250,
+                            allowEditing: false,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
@@ -744,7 +757,7 @@
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Ref Code',
+                            headerText: 'Mã tham khảo',
                             width: 140,
                             allowEditing: false,
                             disableHtmlEncode: false,
@@ -755,8 +768,9 @@
                         },
                         {
                             field: 'productId',
-                            headerText: 'Product',
+                            headerText: 'Hàng hóa',
                             width: 250,
+                            allowEditing: false,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
                             valueAccessor: (field, data, column) => {
@@ -800,26 +814,30 @@
                                 }
                             }
                         },
+                        { field: 'sourceQuantity', headerText: 'Số lượng đơn nguồn', width: 140, allowEditing: false, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'warehouseStock', headerText: 'Tồn kho hiện tại', width: 140, allowEditing: false, type: 'number', format: 'N6', textAlign: 'Right' },
+                        { field: 'availableReturnQuantity', headerText: 'Có thể trả', width: 120, allowEditing: false, type: 'number', format: 'N6', textAlign: 'Right' },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
+                            gridGetter: () => secondaryGrid.obj,
                             warehouseIdGetter: (rowData) => rowData.warehouseId,
                             moduleName: 'PurchaseReturn',
                             moduleIdGetter: () => state.purchaseOrderId,
+                            moduleItemIdGetter: rowData => rowData.returnLineId,
+                            sourceItemIdGetter: rowData => rowData.sourceItemId,
                             quantityField: 'movement',
                             quantityObjGetter: () => movementObj,
                             requireWarehouse: true
                         }),
                         {
                             field: 'movement',
-                            headerText: 'Movement',
+                            headerText: 'Số lượng trả lần này',
                             width: 200,
                             validationRules: {
                                 required: true,
-                                custom: [(args) => {
-                                    return args['value'] > 0;
-                                }, 'Must be a positive number and not zero']
+                                custom: [(args) => args['value'] >= 0, 'Số lượng trả không được âm.']
                             },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', format: 'N6', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     const movementElem = document.createElement('input');
@@ -832,10 +850,15 @@
                                     movementObj.destroy();
                                 },
                                 write: function (args) {
+                                    const product = state.productListLookupData.find(x => x.id === args.rowData.productId);
+                                    const serialTracked = product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
                                     movementObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.movement ?? 0,
-                                        format: 'n0',
-                                        decimals: 0,
+                                        min: 0,
+                                        max: args.rowData.availableReturnQuantity ?? 0,
+                                        format: serialTracked ? 'n0' : 'n6',
+                                        decimals: serialTracked ? 0 : 6,
+                                        readonly: serialTracked,
                                         validateDecimalOnType: true,
                                     });
                                     movementObj.appendTo(args.element);
@@ -846,7 +869,7 @@
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        'Edit', 'Update', 'Cancel',
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () { },
@@ -880,42 +903,21 @@
                             productListGetter: () => state.productListLookupData,
                             quantityField: 'movement',
                             warehouseField: 'warehouseId',
-                            allowEmptySelection: false
+                            allowEmptySelection: false,
+                            allowZeroQuantity: true
                         });
                     },
                     actionComplete: async (args) => {
-                        if (args.requestType === 'save' && args.action === 'add') {
-                            try {
-                                const response = await services.createSecondaryData(state.id, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
-                                await methods.populateSecondaryData(state.id);
-                                secondaryGrid.refresh();
-                                if (response.data.code === 200) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: t('Save Successful'),
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: t('Save Failed'),
-                                        text: t(response.data.message ?? 'Please check your data.'),
-                                        confirmButtonText: t('Try Again')
-                                    });
-                                }
-                            } catch (error) {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: t('An Error Occurred'),
-                                    text: t(error.response?.data?.message ?? 'Please try again.'),
-                                    confirmButtonText: t('OK')
-                                });
-                            }
-                        }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                let response = { data: { code: 200 } };
+                                if (Number(args.data.movement ?? 0) === 0) {
+                                    if (args.data.returnLineId) response = await services.deleteSecondaryData(args.data.returnLineId, StorageManager.getUserId());
+                                } else if (args.data.returnLineId) {
+                                    response = await services.updateSecondaryData(args.data.returnLineId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                } else {
+                                    response = await services.createSecondaryData(state.id, args.data.sourceItemId, args.data.warehouseId, args.data.productId, args.data.movement, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                }
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -942,35 +944,6 @@
                                 });
                             }
                         }
-                        if (args.requestType === 'delete') {
-                            try {
-                                const response = await services.deleteSecondaryData(args.data[0].id, StorageManager.getUserId());
-                                await methods.populateSecondaryData(state.id);
-                                secondaryGrid.refresh();
-                                if (response.data.code === 200) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: t('Delete Successful'),
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: t('Delete Failed'),
-                                        text: t(response.data.message ?? 'Please check your data.'),
-                                        confirmButtonText: t('Try Again')
-                                    });
-                                }
-                            } catch (error) {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: t('An Error Occurred'),
-                                    text: t(error.response?.data?.message ?? 'Please try again.'),
-                                    confirmButtonText: t('OK')
-                                });
-                            }
-                        }
                         methods.refreshSummary();
                     }
                 });
@@ -981,11 +954,11 @@
                 const allowEdit = !state.isViewMode;
                 secondaryGrid.obj.setProperties({ 
                     dataSource: state.secondaryData,
-                    editSettings: { allowEditing: allowEdit, allowAdding: allowEdit, allowDeleting: allowEdit, showDeleteConfirmDialog: true, mode: 'Batch', allowEditOnDblClick: allowEdit },
+                    editSettings: { allowEditing: allowEdit, allowAdding: false, allowDeleting: false, showDeleteConfirmDialog: false, mode: 'Batch', allowEditOnDblClick: allowEdit },
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
                         { type: 'Separator' },
-                        'Add', 'Edit', 'Delete', 'Update', 'Cancel',
+                        'Edit', 'Update', 'Cancel',
                     ]
                 });
             }

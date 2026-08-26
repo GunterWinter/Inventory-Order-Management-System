@@ -1,6 +1,7 @@
 ﻿using Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Application.Common.Repositories;
 
 namespace Application.Features.InventoryTransactionManager.Commands;
 
@@ -28,20 +29,24 @@ public class SalesReturnDeleteInvenTransValidator : AbstractValidator<SalesRetur
 public class SalesReturnDeleteInvenTransHandler : IRequestHandler<SalesReturnDeleteInvenTransRequest, SalesReturnDeleteInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IUnitOfWork _unitOfWork;
 
     public SalesReturnDeleteInvenTransHandler(
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IUnitOfWork unitOfWork
         )
     {
         _inventoryTransactionService = inventoryTransactionService;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<SalesReturnDeleteInvenTransResult> Handle(SalesReturnDeleteInvenTransRequest request, CancellationToken cancellationToken = default)
     {
-        var entity = await _inventoryTransactionService.SalesReturnDeleteInvenTrans(
+        InventoryTransaction? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct => entity = await _inventoryTransactionService.SalesReturnDeleteInvenTrans(
             request.Id,
             request.DeletedById,
-            cancellationToken);
+            ct), cancellationToken);
 
         return new SalesReturnDeleteInvenTransResult
         {

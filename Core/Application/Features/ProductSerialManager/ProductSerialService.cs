@@ -145,7 +145,7 @@ public class ProductSerialService
         }
         if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial && manufacturerNumbers.Count != quantity)
         {
-            throw new Exception("Manufacturer serial number count must match quantity.");
+            throw new Exception("Số mã serial nhà sản xuất phải bằng số lượng hàng.");
         }
         if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
         {
@@ -156,7 +156,7 @@ public class ProductSerialService
                     && x.ManufacturerSerialNumber != null
                     && manufacturerNumbers.Contains(x.ManufacturerSerialNumber), cancellationToken);
             if (duplicateExists)
-                throw new InvalidOperationException("Manufacturer serial numbers must be unique across all products.");
+                throw new InvalidOperationException("Mã serial nhà sản xuất phải là duy nhất trong toàn hệ thống.");
         }
 
         if (existing.Count > quantity)
@@ -169,7 +169,7 @@ public class ProductSerialService
 
             if (removable.Count != existing.Count - quantity)
             {
-                throw new Exception("Cannot reduce quantity because one or more generated serial numbers have already been used.");
+                throw new Exception("Không thể giảm số lượng vì một hoặc nhiều serial đã được sử dụng.");
             }
 
             foreach (var serial in removable)
@@ -263,7 +263,7 @@ public class ProductSerialService
 
         if (productSerialIds == null || productSerialIds.Count == 0)
         {
-            throw new Exception("Serial-tracked products require selected serial numbers.");
+            throw new Exception("Hàng hóa theo dõi serial yêu cầu chọn đúng mã serial thiết bị.");
         }
 
         var serials = await GetSerialsByIdsAsync(productSerialIds, cancellationToken);
@@ -275,7 +275,7 @@ public class ProductSerialService
                 serial.CurrentWarehouseId != item.WarehouseId ||
                 ((serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.ReturnedByCustomer) && serial.SalesOrderItemId != item.Id))
             {
-                throw new Exception("Selected serial numbers are not valid for the selected product and warehouse.");
+                throw new Exception("Serial đã chọn không hợp lệ với hàng hóa và kho hiện tại.");
             }
         }
 
@@ -371,7 +371,7 @@ public class ProductSerialService
                 return;
             }
 
-            throw new Exception("Serial-tracked products require selected serial numbers.");
+            throw new Exception("Hàng hóa theo dõi serial yêu cầu chọn đúng mã serial thiết bị.");
         }
 
         var serials = await GetSerialsByIdsAsync(serialIds, cancellationToken);
@@ -379,7 +379,7 @@ public class ProductSerialService
 
         if (quantity != serials.Count)
         {
-            throw new Exception("Transaction quantity must match selected serial count.");
+            throw new Exception("Số lượng giao dịch phải bằng số serial đã chọn.");
         }
 
         await ReplaceMovementsAsync(transaction, serials, userId, cancellationToken);
@@ -558,7 +558,8 @@ public class ProductSerialService
             .Set<ProductSerialMovement>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.InventoryTransactionId == transaction.Id && x.ReversedAtUtc == null)
+            .Where(x => x.InventoryTransactionId == transaction.Id && x.ReversedAtUtc == null
+                && (x.ModuleName != nameof(StockCount) || x.Status != ProductSerialStatus.Missing))
             .Select(x => x.ProductSerialId!)
             .ToListAsync(cancellationToken);
     }
@@ -576,7 +577,7 @@ public class ProductSerialService
     {
         if (requestedIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != serials.Count)
         {
-            throw new Exception("One or more selected serial numbers are invalid.");
+            throw new Exception("Có ít nhất một serial đã chọn không hợp lệ.");
         }
     }
 
@@ -704,6 +705,24 @@ public class ProductSerialService
 
         foreach (var serial in missingSerials)
         {
+            await _productSerialMovementRepository.CreateAsync(new ProductSerialMovement
+            {
+                CreatedById = userId,
+                ProductSerialId = serial.Id,
+                InventoryTransactionId = transaction.Id,
+                ModuleName = transaction.ModuleName,
+                ModuleId = transaction.ModuleId,
+                ModuleItemId = transaction.ModuleItemId,
+                FromWarehouseId = transaction.WarehouseId,
+                ToWarehouseId = transaction.WarehouseToId,
+                MovementDate = transaction.MovementDate,
+                Status = ProductSerialStatus.Missing,
+                PreviousStatus = serial.Status,
+                PreviousWarehouseId = serial.CurrentWarehouseId,
+                PreviousSalesOrderItemId = serial.SalesOrderItemId,
+                PreviousCustomerWarrantyEndDate = serial.CustomerWarrantyEndDate,
+                PreviousCostAllocationId = serial.CostAllocationId
+            }, cancellationToken);
             serial.Status = ProductSerialStatus.Missing;
             serial.CurrentWarehouseId = null;
             serial.UpdatedById = userId;
@@ -715,7 +734,7 @@ public class ProductSerialService
     {
         if (serial.ProductId != transaction.ProductId)
         {
-            throw new Exception("Selected serial number does not match transaction product.");
+            throw new Exception("Serial đã chọn không thuộc hàng hóa của giao dịch.");
         }
 
         if (transaction.ModuleName == nameof(PurchaseOrder))
@@ -729,7 +748,7 @@ public class ProductSerialService
         {
             if (serial.Status != ProductSerialStatus.InTransfer && serial.Status != ProductSerialStatus.Reserved && serial.Status != targetStatus)
             {
-                throw new Exception("Transfer In requires serial numbers currently in transfer.");
+                throw new Exception("Phiếu nhập chuyển kho chỉ nhận serial đang chuyển kho.");
             }
             return;
         }
@@ -738,19 +757,19 @@ public class ProductSerialService
         {
             if (serial.Status != ProductSerialStatus.Sold && serial.Status != ProductSerialStatus.Reserved && serial.Status != targetStatus)
             {
-                throw new Exception("Sales Return requires sold serial numbers.");
+                throw new Exception("Phiếu trả hàng bán chỉ nhận serial đã bán từ đơn nguồn.");
             }
             return;
         }
 
         if (serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.Reserved && serial.Status != ProductSerialStatus.ReturnedByCustomer && serial.Status != targetStatus)
         {
-            throw new Exception("Selected serial number is not available in stock.");
+            throw new Exception("Serial đã chọn hiện không còn sẵn trong kho.");
         }
 
         if (!string.IsNullOrWhiteSpace(transaction.WarehouseId) && serial.CurrentWarehouseId != transaction.WarehouseId && serial.Status != targetStatus)
         {
-            throw new Exception("Selected serial number is not in the selected warehouse.");
+            throw new Exception("Serial đã chọn không nằm trong kho hiện tại.");
         }
     }
 
@@ -810,10 +829,10 @@ public class ProductSerialService
     {
         if (transaction.ModuleName == nameof(StockCount))
         {
-            return RequireWholeQuantity(transaction.QtySCCount, "Stock count quantity", allowZero: true);
+            return RequireWholeQuantity(transaction.QtySCCount, "Số lượng kiểm kê", allowZero: true);
         }
 
-        return RequireWholeQuantity(transaction.Movement, "Movement");
+        return RequireWholeQuantity(transaction.Movement, "Số lượng giao dịch");
     }
 
     private static int RequireWholeQuantity(decimal? quantity, string fieldName, bool allowZero = false)
@@ -823,8 +842,8 @@ public class ProductSerialService
             (!allowZero && quantity <= 0) ||
             Math.Abs(quantity.Value % 1) > 0.000001m)
         {
-            var requirement = allowZero ? "a non-negative whole number" : "a positive whole number";
-            throw new Exception($"{fieldName} for serial-tracked products must be {requirement}.");
+            var requirement = allowZero ? "số nguyên không âm" : "số nguyên dương";
+            throw new Exception($"{fieldName} của hàng hóa theo dõi serial phải là {requirement}.");
         }
 
         return Convert.ToInt32(quantity.Value);

@@ -94,3 +94,32 @@ test('serial picker exposes the editor context and Material Export syncs IDs, te
     assert.doesNotMatch(materialExportSource, /close:\s*function\s*\(\)\s*\{\s*requestAnimationFrame/);
     assert.doesNotMatch(materialExportSource, /requestAnimationFrame\(\(\)\s*=>\s*\{\s*const rowIndex[^}]+updateCell\(rowIndex,\s*'productSerialNumbers'/s);
 });
+
+test('shared serial picker writes selection to the batch row and scopes Return serials to the exact source line', () => {
+    const pickerSource = fs.readFileSync(pickerPath, 'utf8');
+    const purchaseReturnSource = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/PurchaseReturns/PurchaseReturnList.cshtml.js'
+    ), 'utf8');
+    const salesReturnSource = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/SalesReturns/SalesReturnList.cshtml.js'
+    ), 'utf8');
+
+    assert.match(pickerSource, /GridInteractionManager\.syncBatchRowValues\(grid/);
+    assert.match(pickerSource, /sourceItemId:\s*options\.sourceItemIdGetter\?\.\(args\.rowData\)/);
+    assert.match(purchaseReturnSource, /sourceItemIdGetter:\s*rowData\s*=>\s*rowData\.sourceItemId/);
+    assert.match(salesReturnSource, /sourceItemIdGetter:\s*rowData\s*=>\s*rowData\.sourceItemId/);
+});
+
+test('Purchase Order manufacturer serial Apply updates quantity and batch fields with Vietnamese validation', () => {
+    const source = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/PurchaseOrders/PurchaseOrderList.cshtml.js'
+    ), 'utf8');
+
+    assert.match(source, /quantity:\s*result\.value\.length/);
+    assert.match(source, /writePurchaseOrderBatchFields\(rowData,\s*values,\s*editorElement\)/);
+    assert.match(source, /Serial nhà sản xuất không hợp lệ/);
+    assert.doesNotMatch(source, /Invalid serial numbers/);
+});

@@ -39,26 +39,20 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
 {
     private readonly ICommandRepository<SalesReturn> _SalesOrderRepository;
     private readonly ICommandRepository<SalesOrder> _sourceSalesOrderRepository;
-    private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreateSalesReturnHandler(
         ICommandRepository<SalesReturn> SalesOrderRepository,
         ICommandRepository<SalesOrder> sourceSalesOrderRepository,
-        ICommandRepository<InventoryTransaction> itemRepository,
         IUnitOfWork unitOfWork,
-        NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        NumberSequenceService numberSequenceService
         )
     {
         _SalesOrderRepository = SalesOrderRepository;
         _sourceSalesOrderRepository = sourceSalesOrderRepository;
-        _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
     }
 
     public async Task<CreateSalesReturnResult> Handle(CreateSalesReturnRequest request, CancellationToken cancellationToken = default)
@@ -75,37 +69,15 @@ public class CreateSalesReturnHandler : IRequestHandler<CreateSalesReturnRequest
 
         entity.Number = _numberSequenceService.GenerateNumber(nameof(SalesReturn), "", "SRN");
         entity.ReturnDate = request.ReturnDate;
-        entity.Status = (SalesReturnStatus)int.Parse(request.Status!);
+        entity.Status = SalesReturnStatus.Draft;
         entity.Description = request.Description;
         entity.SalesOrderId = request.SalesOrderId;
 
-        await _SalesOrderRepository.CreateAsync(entity, cancellationToken);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        var items = request.SkipDefaultItems
-            ? []
-            : await _itemRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.SalesOrderId && x.ModuleName == nameof(SalesOrder))
-            .Include(x => x.Product)
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in items)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            if (item?.Product?.Physical ?? false)
-            {
-                await _inventoryTransactionService.SalesReturnCreateInvenTrans(
-                    entity.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    item.Movement,
-                    entity.CreatedById,
-                    cancellationToken
-                    );
-
-            }
-        }
+            await _SalesOrderRepository.CreateAsync(entity, ct);
+            await _unitOfWork.SaveAsync(ct);
+        }, cancellationToken);
 
         return new CreateSalesReturnResult
         {

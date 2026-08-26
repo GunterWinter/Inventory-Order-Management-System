@@ -83,14 +83,19 @@ public partial class InventoryTransactionService
             await ValidateOutboundStockAsync(moduleId, moduleName, warehouseId, cancellationToken);
         }
 
-        var childIds = await _queryContext
+        var children = await _queryContext
             .Set<InventoryTransaction>()
             .AsNoTracking()
             // Never resurrect a transaction that was explicitly removed by a
             // line update. Parent synchronization only owns active children.
             .Where(x => !x.IsDeleted && x.ModuleId == moduleId && x.ModuleName == moduleName)
-            .Select(x => x.Id)
+            .Select(x => new { x.Id, x.Status })
             .ToListAsync(cancellationToken);
+        var childIds = children.Select(x => x.Id).ToList();
+        var alreadyConfirmedIds = children
+            .Where(x => x.Status == InventoryTransactionStatus.Confirmed)
+            .Select(x => x.Id)
+            .ToHashSet();
 
         foreach (var childId in childIds)
         {
@@ -126,6 +131,11 @@ public partial class InventoryTransactionService
             }
 
             if (status == InventoryTransactionStatus.Archived || status == InventoryTransactionStatus.Draft)
+            {
+                continue;
+            }
+
+            if (status == InventoryTransactionStatus.Confirmed && alreadyConfirmedIds.Contains(childId))
             {
                 continue;
             }
@@ -237,13 +247,13 @@ public partial class InventoryTransactionService
 
         if (moduleName != nameof(StockCount) && transaction.Movement <= 0m)
         {
-            throw new Exception("Quantity must not zero and should be positive.");
+            throw new Exception("Số lượng phải lớn hơn 0.");
         }
 
         if (moduleName == nameof(StockCount)
             && (transaction.QtySCCount == null || transaction.QtySCCount < 0m))
         {
-            throw new Exception("Stock count quantity must be zero or a positive number.");
+            throw new Exception("Số lượng kiểm kê không được âm.");
         }
 
         switch (moduleName)
@@ -295,7 +305,8 @@ public partial class InventoryTransactionService
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Include(x => x.ProductSerial)
-            .Where(x => transactionIds.Contains(x.InventoryTransactionId!))
+            .Where(x => transactionIds.Contains(x.InventoryTransactionId!)
+                && (x.ModuleName != nameof(StockCount) || x.Status != ProductSerialStatus.Missing))
             .Select(x => new
             {
                 x.InventoryTransactionId,
@@ -432,11 +443,11 @@ public partial class InventoryTransactionService
             throw new Exception("Inventory transaction is null");
         }
 
-        transaction.QtySCSys = GetStock(transaction.WarehouseId, transaction.ProductId, transaction.Id);
-        transaction.QtySCDelta = transaction.QtySCSys - transaction.QtySCCount;
+        transaction.QtySCSys ??= GetStock(transaction.WarehouseId, transaction.ProductId, transaction.Id);
+        transaction.QtySCDelta = transaction.QtySCCount - transaction.QtySCSys;
         transaction.Movement = Math.Abs(transaction.QtySCDelta ?? 0m);
 
-        if (transaction.QtySCDelta < 0m)
+        if (transaction.QtySCDelta > 0m)
         {
 
             transaction.TransType = InventoryTransType.In;

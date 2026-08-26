@@ -15,6 +15,7 @@
             stockCountStatusListLookupData: [],
             secondaryData: [],
             productListLookupData: [],
+            inventoryStockLookupData: [],
             mainTitle: null,
             id: '',
             number: '',
@@ -106,15 +107,15 @@
             let isValid = true;
 
             if (!state.countDate) {
-                state.errors.countDate = 'Count date is required.';
+                state.errors.countDate = 'Ngày kiểm kê là bắt buộc.';
                 isValid = false;
             }
             if (!state.warehouseId) {
-                state.errors.warehouseId = 'Warehouse is required.';
+                state.errors.warehouseId = 'Kho là bắt buộc.';
                 isValid = false;
             }
             if (!state.status) {
-                state.errors.status = 'Status is required.';
+                state.errors.status = 'Trạng thái là bắt buộc.';
                 isValid = false;
             }
 
@@ -145,7 +146,7 @@
             obj: null,
             create: () => {
                 countDatePicker.obj = new ej.calendars.DatePicker({
-                    placeholder: 'Select Date',
+                    placeholder: 'Chọn ngày kiểm kê',
                     format: 'yyyy-MM-dd',
                     locale: DateFormatManager.syncfusionDateLocale,
                     enabled: !state.isHeaderReadOnly,
@@ -159,6 +160,8 @@
             refresh: () => {
                 if (countDatePicker.obj) {
                     countDatePicker.obj.value = state.countDate ? DateFormatManager.parseBusinessDate(state.countDate) : null;
+                    countDatePicker.obj.enabled = !state.isHeaderReadOnly;
+                    countDatePicker.obj.dataBind();
                 }
             }
         };
@@ -178,7 +181,7 @@
                     warehouseListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: state.warehouseListLookupData,
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Select Warehouse',
+                        placeholder: 'Chọn kho',
                         allowFiltering: true,
                         enabled: !state.isHeaderReadOnly,
                         filtering: (e) => {
@@ -199,6 +202,9 @@
             refresh: () => {
                 if (warehouseListLookup.obj) {
                     warehouseListLookup.obj.value = state.warehouseId;
+                    warehouseListLookup.obj.dataSource = state.warehouseListLookupData;
+                    warehouseListLookup.obj.enabled = !state.isHeaderReadOnly;
+                    warehouseListLookup.obj.dataBind();
                 }
             }
         };
@@ -218,7 +224,7 @@
                     statusListLookup.obj = new ej.dropdowns.DropDownList({
                         dataSource: getAllowedStatusData(),
                         fields: { value: 'id', text: 'name' },
-                        placeholder: 'Select Status',
+                        placeholder: 'Chọn trạng thái',
                         allowFiltering: false,
                         enabled: state.canEditStatus,
                         change: (e) => {
@@ -359,6 +365,7 @@
                     throw error;
                 }
             },
+            getInventoryStockLookupData: async () => AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}),
         };
 
         const methods = {
@@ -387,7 +394,8 @@
                     const response = await services.getSecondaryData(stockCountId);
                     state.secondaryData = response?.data?.content?.data.map(item => ({
                         ...item,
-                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
+                        createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
+                        qtySCDelta: Number(item.qtySCCount ?? 0) - Number(item.qtySCSys ?? 0)
                     }));
                     methods.refreshSummary();
                 } catch (error) {
@@ -402,6 +410,10 @@
                         ...product,
                         numberName: `${product.number} - ${product.name}`
                     })) || [];
+            },
+            populateInventoryStockLookupData: async () => {
+                const response = await services.getInventoryStockLookupData();
+                state.inventoryStockLookupData = response?.data?.content?.data ?? [];
             },
             refreshSummary: () => {
                 const totalMovement = state.secondaryData.reduce((sum, record) => sum + (record.qtySCDelta ?? 0), 0);
@@ -438,11 +450,11 @@
                 state.originalStatus = state.status;
 
                 if (viewMode) {
-                    state.mainTitle = 'View Stock Count';
+                    state.mainTitle = 'Xem phiếu kiểm kê';
                 } else if ([stockCountStatus.confirmed, stockCountStatus.archived].includes(state.originalStatus)) {
-                    state.mainTitle = 'Update Stock Count Status';
+                    state.mainTitle = 'Cập nhật trạng thái kiểm kê';
                 } else {
-                    state.mainTitle = 'Edit Stock Count';
+                    state.mainTitle = 'Sửa phiếu kiểm kê';
                 }
 
                 await methods.populateSecondaryData(state.id);
@@ -461,12 +473,12 @@
                     && ![stockCountStatus.cancelled, stockCountStatus.archived].includes(requestedStatus)) {
                     Swal.fire({
                         icon: 'warning',
-                        title: 'Status transition required',
-                        text: 'A confirmed stock count can only be cancelled or archived.'
+                        title: 'Trạng thái không hợp lệ',
+                        text: 'Phiếu kiểm kê đã xác nhận chỉ có thể hủy hoặc lưu trữ.'
                     });
                     return { isValid: false, response: null };
                 }
-                if (state.id && [stockCountStatus.cancelled, stockCountStatus.archived].includes(originalStatus)) {
+                if (state.id && originalStatus === stockCountStatus.cancelled) {
                     return { isValid: false, response: null };
                 }
 
@@ -527,11 +539,11 @@
                             state.originalStatus = state.status;
                             if (state.originalStatus === stockCountStatus.cancelled) {
                                 state.isViewMode = true;
-                                state.mainTitle = 'View Stock Count';
+                                state.mainTitle = 'Xem phiếu kiểm kê';
                             } else if ([stockCountStatus.confirmed, stockCountStatus.archived].includes(state.originalStatus)) {
-                                state.mainTitle = 'Update Stock Count Status';
+                                state.mainTitle = 'Cập nhật trạng thái kiểm kê';
                             } else {
-                                state.mainTitle = 'Edit Stock Count';
+                                state.mainTitle = 'Sửa phiếu kiểm kê';
                             }
                             await methods.populateSecondaryData(state.id);
                             state.showComplexDiv = true;
@@ -539,15 +551,15 @@
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Save Successful',
+                                title: 'Lưu thành công',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
                         } else {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Delete Successful',
-                                text: 'Form will be closed...',
+                                title: 'Xóa thành công',
+                                text: 'Biểu mẫu sẽ được đóng.',
                                 timer: 2000,
                                 showConfirmButton: false
                             });
@@ -560,17 +572,17 @@
                     } else {
                         Swal.fire({
                             icon: 'error',
-                            title: state.deleteMode ? 'Delete Failed' : 'Save Failed',
-                            text: response.data.message ?? 'Please check your data.',
-                            confirmButtonText: 'Try Again'
+                            title: state.deleteMode ? 'Xóa thất bại' : 'Lưu thất bại',
+                            text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                            confirmButtonText: 'Thử lại'
                         });
                     }
                 } catch (error) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'An Error Occurred',
-                        text: error.response?.data?.message ?? 'Please try again.',
-                        confirmButtonText: 'OK'
+                        title: 'Đã xảy ra lỗi',
+                        text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                        confirmButtonText: 'Đồng ý'
                     });
                 } finally {
                     state.isSubmitting = false;
@@ -598,6 +610,7 @@
                 numberText.create();
 
                 await methods.populateProductListLookupData();
+                await methods.populateInventoryStockLookupData();
                 await secondaryGrid.create(state.secondaryData);
 
                 const urlParams = new URLSearchParams(window.location.search);
@@ -648,21 +661,21 @@
                         {
                             field: 'id', isPrimaryKey: true, headerText: 'Id', visible: false
                         },
-                        { field: 'number', headerText: 'Number', width: 150, minWidth: 150 },
-                        { field: 'countDate', headerText: 'Count Date', width: 150, format: 'yyyy-MM-dd' },
-                        { field: 'warehouseName', headerText: 'Warehouse', width: 150, minWidth: 150 },
-                        { field: 'statusName', headerText: 'Status', width: 150, minWidth: 150 },
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'number', headerText: 'Số phiếu', width: 150, minWidth: 150 },
+                        { field: 'countDate', headerText: 'Ngày kiểm kê', width: 150, type: 'string', valueAccessor: (field, data) => DateFormatManager.formatToLocale(data[field]) },
+                        { field: 'warehouseName', headerText: 'Kho', width: 150, minWidth: 150 },
+                        { field: 'statusName', headerText: 'Trạng thái', width: 150, minWidth: 150 },
+                        { field: 'createdAtUtc', headerText: 'Ngày tạo', width: 170, type: 'string', valueAccessor: (field, data) => DateFormatManager.formatDateTimeToLocale(data[field]) }
                     ],
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport', 'Search',
                         { type: 'Separator' },
-                        { text: 'Add', tooltipText: 'Add', prefixIcon: 'e-add', id: 'AddCustom' },
-                        { text: 'Edit', tooltipText: 'Edit', prefixIcon: 'e-edit', id: 'EditCustom' },
-                        { text: 'View', tooltipText: 'View Details', prefixIcon: 'e-eye', id: 'ViewCustom' },
-                        { text: 'Delete', tooltipText: 'Delete', prefixIcon: 'e-delete', id: 'DeleteCustom' },
+                        { text: 'Thêm', tooltipText: 'Thêm', prefixIcon: 'e-add', id: 'AddCustom' },
+                        { text: 'Sửa', tooltipText: 'Sửa', prefixIcon: 'e-edit', id: 'EditCustom' },
+                        { text: 'Xem', tooltipText: 'Xem chi tiết', prefixIcon: 'e-eye', id: 'ViewCustom' },
+                        { text: 'Xóa', tooltipText: 'Xóa', prefixIcon: 'e-delete', id: 'DeleteCustom' },
                         { type: 'Separator' },
-                        { text: 'Print PDF', tooltipText: 'Print PDF', id: 'PrintPDFCustom' },
+                        { text: 'In PDF', tooltipText: 'In PDF', id: 'PrintPDFCustom' },
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
@@ -692,7 +705,7 @@
                         if (args.item.id === 'AddCustom') {
                             state.deleteMode = false;
                             state.isViewMode = false;
-                            state.mainTitle = 'Add Stock Count';
+                            state.mainTitle = 'Thêm phiếu kiểm kê';
                             resetFormState();
                             state.showComplexDiv = false;
                             refreshEditorPermissions();
@@ -717,8 +730,8 @@
                             if (selected.some(record => normalizeStatus(record.status) !== stockCountStatus.draft)) {
                                 Swal.fire({
                                     icon: 'warning',
-                                    title: 'Delete unavailable',
-                                    text: 'Only draft stock counts can be deleted.',
+                                    title: 'Không thể xóa',
+                                    text: 'Chỉ có thể xóa phiếu kiểm kê Nháp.',
                                     heightAuto: false
                                 });
                                 return;
@@ -726,11 +739,11 @@
 
                             const result = await Swal.fire({
                                 icon: 'warning',
-                                title: 'Confirm Delete',
-                                text: 'Are you sure you want to delete the selected stock counts?',
+                                title: 'Xác nhận xóa',
+                                text: 'Bạn có chắc muốn xóa các phiếu kiểm kê đã chọn?',
                                 showCancelButton: true,
-                                confirmButtonText: 'Delete',
-                                cancelButtonText: 'Cancel',
+                                confirmButtonText: 'Xóa',
+                                cancelButtonText: 'Hủy',
                                 heightAuto: false
                             });
                             if (!result.isConfirmed) return;
@@ -742,8 +755,8 @@
                             mainGrid.refresh();
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Delete Successful',
-                                text: 'Selected stock counts were deleted.',
+                                title: 'Xóa thành công',
+                                text: 'Đã xóa các phiếu kiểm kê được chọn.',
                                 heightAuto: false
                             });
                         }
@@ -798,7 +811,7 @@
                         },
                         {
                             field: 'productReferenceCode',
-                            headerText: 'Ref Code',
+                            headerText: 'Mã tham khảo',
                             width: 140,
                             allowEditing: false,
                             disableHtmlEncode: false,
@@ -809,7 +822,7 @@
                         },
                         {
                             field: 'productId',
-                            headerText: 'Product',
+                            headerText: 'Hàng hóa',
                             width: 250,
                             validationRules: { required: true },
                             disableHtmlEncode: false,
@@ -835,20 +848,37 @@
                                         fields: { value: 'id', text: 'name' },
                                         value: args.rowData.productId,
                                         change: function (e) {
-                                            args.rowData.productId = e.value;
-                                            args.rowData.productSerialIds = [];
-                                            args.rowData.productSerialNumbers = '';
                                             const p = state.productListLookupData.find(x => x.id === e.value);
-                                            args.rowData.productReferenceCode = p ? p.referenceCode || '' : '';
-                                            const refCell = args.element.closest('tr').querySelector('input[name="productReferenceCode"]');
-                                            if (refCell) {
-                                                refCell.value = args.rowData.productReferenceCode;
-                                            }
+                                            const stock = state.inventoryStockLookupData.find(x => x.productId === e.value && x.warehouseId === state.warehouseId)?.stock ?? 0;
+                                            const values = {
+                                                productId: e.value,
+                                                productReferenceCode: p?.referenceCode ?? '',
+                                                productSerialIds: [],
+                                                productSerialNumbers: '',
+                                                qtySCSys: stock,
+                                                qtySCCount: 0,
+                                                qtySCDelta: -Number(stock)
+                                            };
+                                            GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
+                                                rowData: args.rowData,
+                                                editorElement: args.element,
+                                                values,
+                                                formatters: {
+                                                    qtySCSys: value => NumberFormatManager.formatToLocale(value ?? 0),
+                                                    qtySCCount: value => NumberFormatManager.formatToLocale(value ?? 0),
+                                                    qtySCDelta: value => NumberFormatManager.formatToLocale(value ?? 0)
+                                                }
+                                            });
                                             if (qtySCCountObj) {
-                                                qtySCCountObj.value = 1;
+                                                qtySCCountObj.value = 0;
+                                                const serialTracked = p?.physical === true && Number(p?.serialTrackingMode ?? 0) > 0;
+                                                qtySCCountObj.decimals = serialTracked ? 0 : 6;
+                                                qtySCCountObj.format = serialTracked ? 'n0' : 'n6';
+                                                qtySCCountObj.readonly = serialTracked;
+                                                qtySCCountObj.dataBind();
                                             }
                                         },
-                                        placeholder: 'Select a Product',
+                                        placeholder: 'Chọn hàng hóa',
                                         floatLabelType: 'Never'
                                     });
 
@@ -856,9 +886,10 @@
                                 }
                             }
                         },
-                        { field: 'qtySCSys', headerText: 'System Stock', width: 100, allowEditing: false, type: 'number', format: 'N0', textAlign: 'Right'},
+                        { field: 'qtySCSys', headerText: 'Tồn hệ thống', width: 120, allowEditing: false, type: 'number', format: 'N6', textAlign: 'Right'},
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
+                            gridGetter: () => secondaryGrid.obj,
                             warehouseIdGetter: (rowData) => state.warehouseId,
                             moduleName: 'StockCount',
                             quantityField: 'qtySCCount',
@@ -867,15 +898,15 @@
                         }),
                         {
                             field: 'qtySCCount',
-                            headerText: 'Counted',
+                            headerText: 'Số lượng thực đếm',
                             width: 200,
                             validationRules: {
                                 required: true,
                                 custom: [(args) => {
                                     return args['value'] >= 0;
-                                }, 'Must be a non-negative number']
+                                }, 'Số lượng thực đếm không được âm.']
                             },
-                            type: 'number', format: 'N0', textAlign: 'Right',
+                            type: 'number', format: 'N6', textAlign: 'Right',
                             edit: {
                                 create: () => {
                                     qtySCCountElem = document.createElement('input');
@@ -888,17 +919,20 @@
                                     qtySCCountObj.destroy();
                                 },
                                 write: function (args) {
+                                    const product = state.productListLookupData.find(x => x.id === args.rowData.productId);
+                                    const serialTracked = product?.physical === true && Number(product?.serialTrackingMode ?? 0) > 0;
                                     qtySCCountObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.qtySCCount ?? 0,
-                                        format: 'n0',
-                                        decimals: 0,
+                                        format: serialTracked ? 'n0' : 'n6',
+                                        decimals: serialTracked ? 0 : 6,
+                                        readonly: serialTracked,
                                         validateDecimalOnType: true,
                                     });
                                     qtySCCountObj.appendTo(qtySCCountElem);
                                 }
                             }
                         },
-                        { field: 'qtySCDelta', headerText: 'Adjustment', width: 100, allowEditing: false, type: 'number', format: '+0.00;-0.00;0.00', textAlign: 'Right' },
+                        { field: 'qtySCDelta', headerText: 'Chênh lệch', width: 120, allowEditing: false, type: 'number', format: '+0.######;-0.######;0', textAlign: 'Right' },
                     ],
                     toolbar: !state.canEditLines ? ['ExcelExport'] : [
                         'ExcelExport',
@@ -937,6 +971,16 @@
                             args.cancel = true;
                             return;
                         }
+                        if (String(args.requestType ?? '').toLowerCase() === 'save') {
+                            const duplicate = (secondaryGrid.obj.getCurrentViewRecords?.() ?? [])
+                                .some(row => row !== args.data && row.productId && row.productId === args.data?.productId
+                                    && (!row.id || !args.data?.id || String(row.id) !== String(args.data.id)));
+                            if (duplicate) {
+                                args.cancel = true;
+                                Swal.fire({ icon: 'warning', title: 'Hàng hóa bị trùng', text: 'Mỗi hàng hóa chỉ được xuất hiện một lần trong phiếu kiểm kê.', confirmButtonText: 'Đồng ý' });
+                                return;
+                            }
+                        }
                         ProductSerialPicker.validateGridSave(args, {
                             productListGetter: () => state.productListLookupData,
                             quantityField: 'qtySCCount',
@@ -953,24 +997,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Save Successful',
+                                        title: 'Lưu thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Save Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Lưu thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }
@@ -982,24 +1026,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Update Successful',
+                                        title: 'Cập nhật thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Update Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Cập nhật thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }
@@ -1011,24 +1055,24 @@
                                 if (response.data.code === 200) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: 'Delete Successful',
+                                        title: 'Xóa thành công',
                                         timer: 2000,
                                         showConfirmButton: false
                                     });
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: 'Delete Failed',
-                                        text: response.data.message ?? 'Please check your data.',
-                                        confirmButtonText: 'Try Again'
+                                        title: 'Xóa thất bại',
+                                        text: response.data.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                                        confirmButtonText: 'Thử lại'
                                     });
                                 }
                             } catch (error) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'An Error Occurred',
-                                    text: error.response?.data?.message ?? 'Please try again.',
-                                    confirmButtonText: 'OK'
+                                    title: 'Đã xảy ra lỗi',
+                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
+                                    confirmButtonText: 'Đồng ý'
                                 });
                             }
                         }

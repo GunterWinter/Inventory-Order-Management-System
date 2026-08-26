@@ -100,9 +100,7 @@ async function searchAndSelectProduct(page, searchText, expectedProductName) {
             const popup = await openActiveGridDropdown(page, editorSelector);
             const filterInput = popup.locator('input.e-input-filter');
             await expect(filterInput).toHaveAttribute('placeholder', expectedSearchPlaceholder);
-            await filterInput.click();
-            await filterInput.press('Control+A');
-            await filterInput.pressSequentially(searchText, { delay: 20 });
+            await filterInput.fill(searchText);
             const options = popup.locator('.e-list-item:visible');
             await expect(options).toHaveCount(1);
             await expect(options.first()).toContainText(expectedProductName);

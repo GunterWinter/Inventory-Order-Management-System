@@ -717,6 +717,7 @@
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
+                            gridGetter: () => secondaryGrid.obj,
                             warehouseIdGetter: (rowData) => null,
                             moduleName: 'TransferIn',
                             moduleIdGetter: () => state.transferOutId,

@@ -39,27 +39,20 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
 {
     private readonly ICommandRepository<PurchaseReturn> _purchaseReturnRepository;
     private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
-    private readonly ICommandRepository<InventoryTransaction> _itemRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
-    private readonly InventoryTransactionService _inventoryTransactionService;
 
     public CreatePurchaseReturnHandler(
         ICommandRepository<PurchaseReturn> purchaseReturnRepository,
         ICommandRepository<PurchaseOrder> purchaseOrderRepository,
-        ICommandRepository<InventoryTransaction> itemRepository,
-        ICommandRepository<Warehouse> warehouseRepository,
         IUnitOfWork unitOfWork,
-        NumberSequenceService numberSequenceService,
-        InventoryTransactionService inventoryTransactionService
+        NumberSequenceService numberSequenceService
         )
     {
         _purchaseReturnRepository = purchaseReturnRepository;
         _purchaseOrderRepository = purchaseOrderRepository;
-        _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
-        _inventoryTransactionService = inventoryTransactionService;
     }
 
     public async Task<CreatePurchaseReturnResult> Handle(CreatePurchaseReturnRequest request, CancellationToken cancellationToken = default)
@@ -80,33 +73,11 @@ public class CreatePurchaseReturnHandler : IRequestHandler<CreatePurchaseReturnR
         entity.Description = request.Description;
         entity.PurchaseOrderId = request.PurchaseOrderId;
 
-        await _purchaseReturnRepository.CreateAsync(entity, cancellationToken);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        var items = request.SkipDefaultItems
-            ? []
-            : await _itemRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.ModuleId == entity.PurchaseOrderId && x.ModuleName == nameof(PurchaseOrder))
-            .Include(x => x.Product)
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in items)
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            if (item?.Product?.Physical ?? false)
-            {
-                await _inventoryTransactionService.PurchaseReturnCreateInvenTrans(
-                    entity.Id,
-                    item.WarehouseId,
-                    item.ProductId,
-                    item.Movement,
-                    entity.CreatedById,
-                    cancellationToken
-                    );
-
-            }
-        }
+            await _purchaseReturnRepository.CreateAsync(entity, ct);
+            await _unitOfWork.SaveAsync(ct);
+        }, cancellationToken);
 
         return new CreatePurchaseReturnResult
         {

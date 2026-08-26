@@ -12,6 +12,7 @@ public sealed class DebtPaymentDto
     public string? Id { get; init; }
     public DateTime? PaymentDate { get; init; }
     public decimal Amount { get; init; }
+    public string? CashAccountName { get; init; }
     public string? Description { get; init; }
 }
 
@@ -103,6 +104,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
             .ApplyIsDeletedFilter(false)
             .Where(x => x.SourceModule == sourceType && x.SourceModuleId != null && documentIds.Contains(x.SourceModuleId))
             .Include(x => x.PaymentList.Where(payment => !payment.IsDeleted))
+                .ThenInclude(x => x.CashAccount)
             .ToListAsync(cancellationToken);
         var transactionMap = transactions
             .GroupBy(x => x.SourceModuleId!)
@@ -120,6 +122,7 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
                         Id = x.Id,
                         PaymentDate = x.PaymentDate,
                         Amount = x.Amount,
+                        CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
                         Description = x.Description
                     }).ToList() ?? [];
                 var paid = transaction?.PaidAmount ?? payments.Sum(x => x.Amount);

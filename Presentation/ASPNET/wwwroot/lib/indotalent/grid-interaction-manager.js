@@ -445,7 +445,11 @@
         grid.selectionSettings = Object.assign({ checkboxOnly: true }, grid.selectionSettings || {}, options.selectionSettings || {}, { type: 'Multiple' });
         if (Array.isArray(grid.toolbar)) {
             const custom = grid.toolbar.filter(item => item !== 'Edit');
-            ['Add', 'Delete', 'Update', 'Cancel'].forEach(item => { if (!custom.includes(item)) custom.push(item); });
+            const actions = [];
+            if (grid.editSettings.allowAdding !== false) actions.push('Add');
+            if (grid.editSettings.allowDeleting !== false) actions.push('Delete');
+            if (grid.editSettings.allowEditing !== false) actions.push('Update', 'Cancel');
+            actions.forEach(item => { if (!custom.includes(item)) custom.push(item); });
             grid.toolbar = custom;
         }
         track(grid, options);

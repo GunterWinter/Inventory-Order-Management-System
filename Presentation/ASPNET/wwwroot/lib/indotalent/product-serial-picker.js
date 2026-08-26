@@ -64,7 +64,7 @@ window.ProductSerialPicker = (() => {
 
     const buildUrl = (options) => {
         const params = new URLSearchParams();
-        ['productId', 'warehouseId', 'moduleName', 'moduleId', 'moduleItemId'].forEach(key => {
+        ['productId', 'warehouseId', 'moduleName', 'moduleId', 'moduleItemId', 'sourceItemId'].forEach(key => {
             if (options[key]) {
                 params.append(key, options[key]);
             }
@@ -134,15 +134,15 @@ window.ProductSerialPicker = (() => {
 
         return ({
         field: 'productSerialNumbers',
-        headerText: options.headerText ?? 'Device Serials',
+        headerText: options.headerText ?? 'Serial thiết bị',
         width: options.width ?? 220,
         valueAccessor: (field, data) => serialText(data.productSerialNumbers)
-            || (data.productSerialIds?.length ? `${data.productSerialIds.length} serials` : ''),
+            || (data.productSerialIds?.length ? `${data.productSerialIds.length} serial` : ''),
         edit: {
             create: () => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'd-flex gap-2 align-items-center';
-                wrapper.innerHTML = '<button type="button" class="btn btn-outline-primary btn-sm">Choose serials</button><span class="text-muted serial-count"></span>';
+                wrapper.innerHTML = '<button type="button" class="btn btn-outline-primary btn-sm">Chọn serial</button><span class="text-muted serial-count"></span>';
                 return wrapper;
             },
             read: () => activeRowData?.productSerialNumbers ?? '',
@@ -171,7 +171,7 @@ window.ProductSerialPicker = (() => {
                 }
                 const refreshLabel = () => {
                     const count = args.rowData.productSerialIds?.length ?? 0;
-                    label.textContent = count ? `${count} serials` : 'None';
+                    label.textContent = count ? `${count} serial` : 'Chưa chọn';
                 };
 
                 refreshLabel();
@@ -180,7 +180,7 @@ window.ProductSerialPicker = (() => {
                     if (!serialEnabled) {
                         Swal.fire({
                             icon: 'info',
-                            title: 'No serial tracking',
+                            title: 'Không theo dõi serial',
                             text: 'Hàng hóa này không sử dụng theo dõi số seri.'
                         });
                         return;
@@ -203,7 +203,8 @@ window.ProductSerialPicker = (() => {
                         warehouseId,
                         moduleName: options.moduleName,
                         moduleId: options.moduleIdGetter?.(args.rowData),
-                        moduleItemId: args.rowData.id,
+                        moduleItemId: options.moduleItemIdGetter?.(args.rowData) ?? args.rowData.id,
+                        sourceItemId: options.sourceItemIdGetter?.(args.rowData),
                         selectedIds: args.rowData.productSerialIds ?? []
                     });
 
@@ -212,6 +213,23 @@ window.ProductSerialPicker = (() => {
                     }
 
                     applySelectionToRow(args.rowData, selectedSerials, quantityField);
+                    if (grid && window.GridInteractionManager?.syncBatchRowValues) {
+                        GridInteractionManager.syncBatchRowValues(grid, {
+                            rowData: args.rowData,
+                            editorElement: args.element,
+                            rowIndex: stableRowIndex,
+                            rowUid,
+                            values: {
+                                productSerialIds: [...args.rowData.productSerialIds],
+                                productSerialNumbers: args.rowData.productSerialNumbers,
+                                [quantityField]: args.rowData[quantityField]
+                            },
+                            formatters: {
+                                productSerialNumbers: value => serialText(value),
+                                [quantityField]: value => window.NumberFormatManager?.formatToLocale?.(value ?? 0) ?? value
+                            }
+                        });
+                    }
                     options.onSelectionApplied?.({
                         rowData: args.rowData,
                         editorElement: args.element,
@@ -261,6 +279,9 @@ window.ProductSerialPicker = (() => {
         }
 
         const productList = options.productListGetter?.() ?? [];
+        if (quantity === 0 && options.allowZeroQuantity === true) {
+            return true;
+        }
         if (!isSerialTrackedProduct(productList, data.productId)) {
             return true;
         }

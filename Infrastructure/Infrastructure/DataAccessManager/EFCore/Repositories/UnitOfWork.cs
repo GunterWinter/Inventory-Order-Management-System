@@ -56,6 +56,21 @@ public class UnitOfWork : IUnitOfWork
         });
     }
 
+    public async Task AcquireTransactionLockAsync(string resource, CancellationToken cancellationToken = default)
+    {
+        if (!_context.Database.IsSqlServer() || _context.Database.CurrentTransaction == null) return;
+
+        await _context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {resource},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51000, N'Không thể khóa chứng từ nguồn để xử lý trả hàng. Vui lòng thử lại.', 1;", cancellationToken);
+    }
+
     public void Save()
     {
         _context.SaveChanges();

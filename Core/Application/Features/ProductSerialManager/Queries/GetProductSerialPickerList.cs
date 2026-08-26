@@ -33,6 +33,7 @@ public class GetProductSerialPickerListRequest : IRequest<GetProductSerialPicker
     public string? ModuleName { get; init; }
     public string? ModuleId { get; init; }
     public string? ModuleItemId { get; init; }
+    public string? SourceItemId { get; init; }
 }
 
 public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSerialPickerListRequest, GetProductSerialPickerListResult>
@@ -65,7 +66,10 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
 
         if (!string.IsNullOrWhiteSpace(request.WarehouseId))
         {
-            query = query.Where(x => x.CurrentWarehouseId == request.WarehouseId || x.Status == ProductSerialStatus.Sold || x.Status == ProductSerialStatus.InTransfer);
+            query = query.Where(x => currentSerialIds.Contains(x.Id)
+                || x.CurrentWarehouseId == request.WarehouseId
+                || x.Status == ProductSerialStatus.Sold
+                || x.Status == ProductSerialStatus.InTransfer);
         }
 
         if (request.ModuleName == nameof(TransferIn) && !string.IsNullOrWhiteSpace(request.ModuleId))
@@ -94,6 +98,8 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 .ToListAsync(cancellationToken);
 
             query = query.Where(x => salesOrderItemIds.Contains(x.SalesOrderItemId!));
+            if (!string.IsNullOrWhiteSpace(request.SourceItemId))
+                query = query.Where(x => x.SalesOrderItemId == request.SourceItemId);
         }
 
         if (request.ModuleName == nameof(PurchaseReturn) && !string.IsNullOrWhiteSpace(request.ModuleId))
@@ -109,6 +115,8 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 .ToListAsync(cancellationToken);
 
             query = query.Where(x => purchaseOrderItemIds.Contains(x.PurchaseOrderItemId!));
+            if (!string.IsNullOrWhiteSpace(request.SourceItemId))
+                query = query.Where(x => x.PurchaseOrderItemId == request.SourceItemId);
         }
 
         var data = await query
@@ -159,12 +167,21 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
                 .ToListAsync(cancellationToken);
         }
 
-        return await _context
+        var activeIds = await _context
             .Set<ProductSerialMovement>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.InventoryTransactionId == request.ModuleItemId && x.ReversedAtUtc == null)
+            .Select(x => x.ProductSerialId!)
+            .ToListAsync(cancellationToken);
+        if (activeIds.Count > 0 || request.ModuleName != nameof(StockCount)) return activeIds;
+
+        return await _context.Set<ProductSerialMovement>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.InventoryTransactionId == request.ModuleItemId)
             .Select(x => x.ProductSerialId!)
+            .Distinct()
             .ToListAsync(cancellationToken);
     }
 }

@@ -74,11 +74,28 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
                 || !Enum.IsDefined(typeof(PurchaseReturnStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu trả hàng mua không hợp lệ.");
             var requestedStatus = (PurchaseReturnStatus)statusValue;
+            if (entity.PurchaseOrderId != request.PurchaseOrderId)
+                throw new InvalidOperationException("Không được thay đổi đơn mua hàng nguồn sau khi tạo phiếu trả.");
+            await _unitOfWork.AcquireTransactionLockAsync($"PurchaseReturn:{entity.PurchaseOrderId}", ct);
             DocumentDateGuard.EnsureCanPost(request.ReturnDate, requestedStatus == PurchaseReturnStatus.Confirmed);
             if (entity.Status == PurchaseReturnStatus.Draft)
             {
                 if (requestedStatus is PurchaseReturnStatus.Cancelled or PurchaseReturnStatus.Archived)
                     throw new InvalidOperationException("Phiếu trả hàng mua Nháp phải được xóa hoặc xác nhận.");
+                if (requestedStatus == PurchaseReturnStatus.Confirmed)
+                {
+                    var lines = await _inventoryTransactionService.PurchaseReturnGetSourceLineList(entity.PurchaseOrderId, entity.Id, ct);
+                    if (!lines.Any(x => x.CurrentReturnQuantity > 0m))
+                        throw new InvalidOperationException("Phiếu trả hàng mua phải có ít nhất một dòng có số lượng trả lớn hơn 0.");
+                    if (lines.Any(x => x.CurrentReturnQuantity > x.AvailableReturnQuantity + 0.000001m))
+                        throw new InvalidOperationException("Số lượng trả đã vượt quá số còn có thể trả. Vui lòng tải lại phiếu.");
+                }
+            }
+            else if (entity.Status == PurchaseReturnStatus.Archived)
+            {
+                var headerChanged = entity.ReturnDate != request.ReturnDate || entity.Description != request.Description;
+                if (requestedStatus != PurchaseReturnStatus.Confirmed || headerChanged)
+                    throw new InvalidOperationException("Phiếu trả hàng mua đã lưu trữ chỉ có thể khôi phục về Đã xác nhận mà không thay đổi nội dung.");
             }
             else
             {

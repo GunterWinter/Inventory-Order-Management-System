@@ -1,5 +1,7 @@
 ﻿using Application.Features.SalesReturnManager.Commands;
 using Application.Features.SalesReturnManager.Queries;
+using Application.Features.InventoryTransactionManager;
+using Application.Features.InventoryTransactionManager.Queries;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
 using MediatR;
@@ -13,6 +15,19 @@ public class SalesReturnController : BaseApiController
 {
     public SalesReturnController(ISender sender) : base(sender)
     {
+    }
+
+    [Authorize]
+    [HttpGet("GetSourceLineList")]
+    public async Task<ActionResult<ApiSuccessResult<List<ReturnSourceLineDto>>>> GetSourceLineListAsync(
+        string? salesOrderId, string? salesReturnId, CancellationToken cancellationToken)
+    {
+        var data = await _sender.Send(new SalesReturnGetSourceLineListRequest
+        {
+            SalesOrderId = salesOrderId,
+            SalesReturnId = salesReturnId
+        }, cancellationToken);
+        return Ok(new ApiSuccessResult<List<ReturnSourceLineDto>> { Code = StatusCodes.Status200OK, Content = data });
     }
 
     [Authorize]

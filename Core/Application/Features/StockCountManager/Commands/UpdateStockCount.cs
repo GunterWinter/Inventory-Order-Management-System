@@ -73,6 +73,11 @@ public class UpdateStockCountHandler : IRequestHandler<UpdateStockCountRequest, 
             {
                 if (requestedStatus is StockCountStatus.Cancelled or StockCountStatus.Archived)
                     throw new InvalidOperationException("Phiếu kiểm kê Nháp phải được xóa hoặc xác nhận.");
+                if (requestedStatus == StockCountStatus.Confirmed
+                    && !await _queryContext.Set<InventoryTransaction>().AsNoTracking()
+                        .AnyAsync(x => !x.IsDeleted && x.ModuleName == nameof(StockCount)
+                            && x.ModuleId == entity.Id, ct))
+                    throw new InvalidOperationException("Phiếu kiểm kê phải có ít nhất một dòng hàng trước khi xác nhận.");
             }
             else if (entity.Status == StockCountStatus.Archived)
             {

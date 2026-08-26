@@ -102,17 +102,17 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
         if (tracking.Physical == true
             && tracking.SerialTrackingMode != SerialTrackingMode.None
             && Math.Abs((request.Quantity ?? 0m) - Math.Round(request.Quantity ?? 0m)) > 0.000001m)
-            throw new InvalidOperationException("Serial-tracked products require a whole-number quantity.");
+            throw new InvalidOperationException("Hàng hóa theo dõi serial yêu cầu số lượng là số nguyên.");
         if (tracking.Physical == true && tracking.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
         {
             if (request.ManufacturerSerialNumbers == null || request.ManufacturerSerialNumbers.Count == 0)
-                throw new InvalidOperationException("Manufacturer serial numbers are required.");
+                throw new InvalidOperationException("Vui lòng nhập mã serial nhà sản xuất.");
             var manufacturerSerials = request.ManufacturerSerialNumbers.Select(x => x.Trim()).ToList();
             if (manufacturerSerials.Any(string.IsNullOrWhiteSpace)
                 || manufacturerSerials.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manufacturerSerials.Count)
-                throw new InvalidOperationException("Manufacturer serial numbers must be non-empty and unique.");
+                throw new InvalidOperationException("Mã serial nhà sản xuất không được để trống hoặc trùng nhau.");
             if (Math.Abs((request.Quantity ?? 0m) - manufacturerSerials.Count) > 0.000001m)
-                throw new InvalidOperationException("Manufacturer serial number count must match quantity.");
+                throw new InvalidOperationException("Số mã serial nhà sản xuất phải bằng số lượng hàng.");
             entity.ManufacturerSerialNumbersJson = JsonSerializer.Serialize(manufacturerSerials);
             entity.Quantity = manufacturerSerials.Count;
         }

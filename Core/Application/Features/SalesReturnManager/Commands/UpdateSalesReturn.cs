@@ -74,7 +74,18 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
                 || !Enum.IsDefined(typeof(SalesReturnStatus), statusValue))
                 throw new InvalidOperationException("Trạng thái phiếu trả hàng bán không hợp lệ.");
             var requestedStatus = (SalesReturnStatus)statusValue;
+            if (entity.SalesOrderId != request.SalesOrderId)
+                throw new InvalidOperationException("Không được thay đổi đơn bán hàng nguồn sau khi tạo phiếu trả.");
+            await _unitOfWork.AcquireTransactionLockAsync($"SalesReturn:{entity.SalesOrderId}", ct);
             DocumentDateGuard.EnsureCanPost(request.ReturnDate, requestedStatus == SalesReturnStatus.Confirmed);
+            if (entity.Status == SalesReturnStatus.Draft && requestedStatus == SalesReturnStatus.Confirmed)
+            {
+                var lines = await _inventoryTransactionService.SalesReturnGetSourceLineList(entity.SalesOrderId, entity.Id, ct);
+                if (!lines.Any(x => x.CurrentReturnQuantity > 0m))
+                    throw new InvalidOperationException("Phiếu trả hàng bán phải có ít nhất một dòng có số lượng trả lớn hơn 0.");
+                if (lines.Any(x => x.CurrentReturnQuantity > x.AvailableReturnQuantity + 0.000001m))
+                    throw new InvalidOperationException("Số lượng trả đã vượt quá số còn có thể trả. Vui lòng tải lại phiếu.");
+            }
             ValidateTransition(entity, requestedStatus, request);
 
             entity.UpdatedById = request.UpdatedById;
@@ -103,6 +114,13 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
         {
             if (requested is SalesReturnStatus.Cancelled or SalesReturnStatus.Archived)
                 throw new InvalidOperationException("Phiếu trả hàng bán Nháp phải được xóa hoặc xác nhận.");
+            return;
+        }
+        if (entity.Status == SalesReturnStatus.Archived)
+        {
+            var archivedHeaderChanged = entity.ReturnDate != request.ReturnDate || entity.Description != request.Description;
+            if (requested != SalesReturnStatus.Confirmed || archivedHeaderChanged)
+                throw new InvalidOperationException("Phiếu trả hàng bán đã lưu trữ chỉ có thể khôi phục về Đã xác nhận mà không thay đổi nội dung.");
             return;
         }
         var headerChanged = entity.ReturnDate != request.ReturnDate

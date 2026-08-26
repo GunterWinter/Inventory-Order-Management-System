@@ -789,6 +789,7 @@
                         },
                         ProductSerialPicker.createGridColumn({
                             productListGetter: () => state.productListLookupData,
+                            gridGetter: () => secondaryGrid.obj,
                             warehouseIdGetter: (rowData) => state.warehouseFromId,
                             moduleName: 'TransferOut',
                             quantityField: 'movement',

@@ -1348,17 +1348,17 @@ const App = {
             const product = state.productListLookupData.find(p => p.id === productId);
             return product?.physical === true && getSerialTrackingMode(productId) === 2;
         };
-        const editManufacturerSerials = async (rowData, refreshQuantity) => {
+        const editManufacturerSerials = async (rowData, refreshQuantity, editorElement = null) => {
             if (!isManufacturerSerialProduct(rowData.productId)) return;
             const serials = [...(rowData.manufacturerSerialNumbers ?? [])];
             const result = await Swal.fire({
-                title: 'Manufacturer serial numbers',
-                html: '<div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Add serial</button>',
-                showCancelButton: true, confirmButtonText: 'Apply',
+                title: 'Mã serial nhà sản xuất',
+                html: '<div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Thêm serial</button>',
+                showCancelButton: true, confirmButtonText: 'Áp dụng', cancelButtonText: 'Hủy',
                 didOpen: () => {
                     const list = document.getElementById('manufacturer-serial-list');
                     const render = () => {
-                        list.innerHTML = serials.map((value, index) => `<div class="input-group mb-1"><input class="form-control manufacturer-serial" value="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><button type="button" class="btn btn-outline-danger manufacturer-serial-delete" data-index="${index}">Delete</button></div>`).join('');
+                        list.innerHTML = serials.map((value, index) => `<div class="input-group mb-1"><input class="form-control manufacturer-serial" value="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><button type="button" class="btn btn-outline-danger manufacturer-serial-delete" data-index="${index}">Xóa</button></div>`).join('');
                         list.querySelectorAll('.manufacturer-serial').forEach((input, i) => input.addEventListener('input', e => serials[i] = e.target.value));
                         list.querySelectorAll('.manufacturer-serial-delete').forEach(button => button.addEventListener('click', () => { serials.splice(Number(button.dataset.index), 1); render(); }));
                     };
@@ -1367,15 +1367,23 @@ const App = {
                 },
                 preConfirm: () => {
                     const normalized = serials.map(x => String(x).trim());
-                    if (normalized.some(x => !x)) { Swal.showValidationMessage('Serial numbers cannot be empty.'); return false; }
-                    if (new Set(normalized.map(x => x.toLowerCase())).size !== normalized.length) { Swal.showValidationMessage('Serial numbers must be unique.'); return false; }
-                    if (!normalized.length) { Swal.showValidationMessage('Add at least one serial number.'); return false; }
+                    if (normalized.some(x => !x)) { Swal.showValidationMessage('Mã serial không được để trống.'); return false; }
+                    if (new Set(normalized.map(x => x.toLowerCase())).size !== normalized.length) { Swal.showValidationMessage('Mã serial không được trùng nhau.'); return false; }
+                    if (!normalized.length) { Swal.showValidationMessage('Vui lòng nhập ít nhất một mã serial.'); return false; }
                     return normalized;
                 }
             });
             if (result.isConfirmed) {
-                rowData.manufacturerSerialNumbers = result.value;
-                rowData.quantity = result.value.length;
+                const values = {
+                    manufacturerSerialNumbers: [...result.value],
+                    quantity: result.value.length
+                };
+                Object.assign(rowData, values);
+                applyPurchaseOrderItemAmounts(rowData, values);
+                values.total = rowData.total;
+                values.taxAmount = rowData.taxAmount;
+                values.afterTaxAmount = rowData.afterTaxAmount;
+                writePurchaseOrderBatchFields(rowData, values, editorElement);
                 if (refreshQuantity && quantityObj) { quantityObj.value = rowData.quantity; quantityObj.readonly = true; quantityObj.dataBind(); }
             }
         };
@@ -1594,30 +1602,30 @@ const App = {
                         },
                         {
                             field: 'manufacturerSerialNumbers',
-                            headerText: 'Manufacturer Serials',
+                            headerText: 'Serial nhà sản xuất',
                             width: 220,
                             valueAccessor: (field, data) => (data.manufacturerSerialNumbers || []).join(', '),
                             edit: {
-                                create: () => { const el = document.createElement('button'); el.type = 'button'; el.className = 'btn btn-outline-primary btn-sm'; el.textContent = 'Edit serials'; return el; },
+                                create: () => { const el = document.createElement('button'); el.type = 'button'; el.className = 'btn btn-outline-primary btn-sm'; el.textContent = 'Sửa serial'; return el; },
                                 read: () => '',
                                 write: (args) => {
                                     const button = args.element;
                                     const enabled = isManufacturerSerialProduct(args.rowData.productId);
                                     button.disabled = !enabled;
-                                    button.textContent = enabled ? 'Edit serials' : 'Not applicable';
-                                    button.addEventListener('click', () => editManufacturerSerials(args.rowData, true));
+                                    button.textContent = enabled ? 'Sửa serial' : 'Không áp dụng';
+                                    button.addEventListener('click', () => editManufacturerSerials(args.rowData, true, button));
                                 }
                             }
                         },
                         {
                             field: 'quantity',
-                            headerText: 'Quantity',
+                            headerText: 'Số lượng',
                             width: 200,
                             validationRules: {
                                 required: true,
                                 custom: [(args) => {
                                     return args['value'] > 0;
-                                }, 'Value must be greater than zero.']
+                                }, 'Giá trị phải lớn hơn 0.']
                             },
                             type: 'number', numericKind: 'decimal', textAlign: 'Right',
                             edit: {
@@ -2026,7 +2034,7 @@ const App = {
                             if (!serials.length || new Set(serials.map(x => x.toLowerCase())).size !== serials.length || serials.length !== Number(data.quantity)) {
                                 args.cancel = true;
                                 args.invalidField = 'manufacturerSerialNumbers';
-                                args.validationFeedback = Swal.fire({ icon: 'warning', title: 'Invalid serial numbers', text: 'Enter unique, non-empty manufacturer serial numbers; quantity must equal the serial count.' });
+                                args.validationFeedback = Swal.fire({ icon: 'warning', title: 'Serial nhà sản xuất không hợp lệ', text: 'Hãy nhập các serial nhà sản xuất không trống, không trùng và có số lượng bằng số serial.' });
                                 return;
                             }
                             data.manufacturerSerialNumbers = serials;

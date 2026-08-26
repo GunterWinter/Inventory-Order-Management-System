@@ -1,6 +1,7 @@
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Application.Common.Repositories;
 
 namespace Application.Features.InventoryTransactionManager.Commands;
 
@@ -33,23 +34,27 @@ public class StockCountUpdateInvenTransValidator : AbstractValidator<StockCountU
 public class StockCountUpdateInvenTransHandler : IRequestHandler<StockCountUpdateInvenTransRequest, StockCountUpdateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IUnitOfWork _unitOfWork;
 
     public StockCountUpdateInvenTransHandler(
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IUnitOfWork unitOfWork
         )
     {
         _inventoryTransactionService = inventoryTransactionService;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<StockCountUpdateInvenTransResult> Handle(StockCountUpdateInvenTransRequest request, CancellationToken cancellationToken = default)
     {
-        var entity = await _inventoryTransactionService.StockCountUpdateInvenTrans(
+        InventoryTransaction? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct => entity = await _inventoryTransactionService.StockCountUpdateInvenTrans(
             request.Id,
             request.ProductId,
             request.QtySCCount,
             request.UpdatedById,
-            cancellationToken,
-            request.ProductSerialIds);
+            ct,
+            request.ProductSerialIds), cancellationToken);
 
         return new StockCountUpdateInvenTransResult
         {

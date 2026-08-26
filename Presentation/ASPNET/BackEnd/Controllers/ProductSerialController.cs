@@ -22,7 +22,8 @@ public class ProductSerialController : BaseApiController
         [FromQuery] string? warehouseId = null,
         [FromQuery] string? moduleName = null,
         [FromQuery] string? moduleId = null,
-        [FromQuery] string? moduleItemId = null)
+        [FromQuery] string? moduleItemId = null,
+        [FromQuery] string? sourceItemId = null)
     {
         var request = new GetProductSerialPickerListRequest
         {
@@ -30,7 +31,8 @@ public class ProductSerialController : BaseApiController
             WarehouseId = warehouseId,
             ModuleName = moduleName,
             ModuleId = moduleId,
-            ModuleItemId = moduleItemId
+            ModuleItemId = moduleItemId,
+            SourceItemId = sourceItemId
         };
         var response = await _sender.Send(request, cancellationToken);
 

@@ -30,6 +30,12 @@ public partial class InventoryTransactionService
             throw new InvalidOperationException(
                 "Chỉ được thêm dòng hàng khi phiếu kiểm kê còn ở trạng thái Nháp.");
         }
+        await ValidateStockCountProductAsync(productId, qtySCCount, cancellationToken);
+        if (await _inventoryTransactionRepository.GetQuery().AnyAsync(x => !x.IsDeleted
+            && x.ModuleName == nameof(StockCount) && x.ModuleId == moduleId && x.ProductId == productId, cancellationToken))
+        {
+            throw new InvalidOperationException("Mỗi hàng hóa chỉ được xuất hiện một lần trong phiếu kiểm kê.");
+        }
 
         var child = new InventoryTransaction();
         child.CreatedById = createdById;
@@ -71,9 +77,18 @@ public partial class InventoryTransactionService
             throw new Exception($"Child entity not found: {id}");
         }
         await EnsureStockCountParentIsDraftAsync(child.ModuleId, cancellationToken);
+        await ValidateStockCountProductAsync(productId, qtySCCount, cancellationToken);
+
+        if (await _inventoryTransactionRepository.GetQuery().AnyAsync(x => !x.IsDeleted
+            && x.Id != child.Id && x.ModuleName == nameof(StockCount)
+            && x.ModuleId == child.ModuleId && x.ProductId == productId, cancellationToken))
+        {
+            throw new InvalidOperationException("Mỗi hàng hóa chỉ được xuất hiện một lần trong phiếu kiểm kê.");
+        }
 
         child.UpdatedById = updatedById;
 
+        if (child.ProductId != productId) child.QtySCSys = null;
         child.ProductId = productId;
         child.QtySCCount = qtySCCount;
 
@@ -138,5 +153,14 @@ public partial class InventoryTransactionService
             throw new InvalidOperationException(
                 "Chỉ được thay đổi dòng hàng khi phiếu kiểm kê còn ở trạng thái Nháp.");
         }
+    }
+
+    private async Task ValidateStockCountProductAsync(string? productId, decimal? quantity, CancellationToken cancellationToken)
+    {
+        if (quantity != decimal.Round(quantity ?? 0m, 6))
+            throw new InvalidOperationException("Số lượng kiểm kê chỉ được có tối đa 6 chữ số thập phân.");
+        if (!await _queryContext.Set<Product>().AsNoTracking()
+            .AnyAsync(x => !x.IsDeleted && x.Id == productId && x.Physical == true, cancellationToken))
+            throw new InvalidOperationException("Phiếu kiểm kê chỉ chấp nhận hàng hóa vật lý.");
     }
 }

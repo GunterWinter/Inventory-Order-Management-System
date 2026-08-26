@@ -13,7 +13,9 @@ const App = {
                         ...document,
                         documentDate: DateFormatManager.parseBusinessDate(document.documentDate),
                         paymentHistory: (document.payments ?? []).map(payment =>
-                            `${payment.paymentDate ?? ''}: ${NumberFormatManager.formatMoneyToLocale(payment.amount ?? 0)}${payment.description ? ` - ${payment.description}` : ''}`
+                            `${DateFormatManager.formatToLocale(payment.paymentDate)}: ${NumberFormatManager.formatMoneyToLocale(payment.amount ?? 0)}`
+                            + `${payment.cashAccountName ? ` - ${payment.cashAccountName}` : ''}`
+                            + `${payment.description ? ` - ${payment.description}` : ''}`
                         ).join('\n')
                     }))
                 }));
@@ -48,22 +50,22 @@ const App = {
                         new ej.grids.Grid({
                             dataSource: args.data.documents ?? [], allowTextWrap: true,
                             columns: [
-                                { field: 'documentDate', headerText: 'Date', width: 120, format: 'yyyy-MM-dd' },
-                                { field: 'number', headerText: 'Document', width: 170 },
-                                { field: 'totalAmount', headerText: 'Obligation', width: 140, format: 'N0', textAlign: 'Right' },
-                                { field: 'paidAmount', headerText: 'Paid', width: 140, format: 'N0', textAlign: 'Right' },
-                                { field: 'remaining', headerText: 'Remaining', width: 140, format: 'N0', textAlign: 'Right' },
-                                { field: 'paymentHistory', headerText: 'Payment History', width: 300 }
+                                { field: 'documentDate', headerText: 'Ngày', width: 120, valueAccessor: (field, data) => DateFormatManager.formatToLocale(data[field]) },
+                                { field: 'number', headerText: 'Chứng từ', width: 170 },
+                                { field: 'totalAmount', headerText: 'Phải thu/trả', width: 140, numericKind: 'money', textAlign: 'Right' },
+                                { field: 'paidAmount', headerText: 'Đã thanh toán', width: 140, numericKind: 'money', textAlign: 'Right' },
+                                { field: 'remaining', headerText: 'Còn lại', width: 140, numericKind: 'money', textAlign: 'Right' },
+                                { field: 'paymentHistory', headerText: 'Lịch sử thanh toán', width: 360 }
                             ],
                             recordClick: event => methods.openDocument(event.rowData),
                             rowDataBound: event => { event.row.style.cursor = 'pointer'; }
                         }).appendTo(host);
                     },
                     columns: [
-                        { field: 'partyName', headerText: 'Partner', width: 260 },
-                        { field: 'totalAmount', headerText: 'Total Obligation', width: 180, format: 'N0', textAlign: 'Right' },
-                        { field: 'paidAmount', headerText: 'Paid', width: 180, format: 'N0', textAlign: 'Right' },
-                        { field: 'remaining', headerText: 'Remaining', width: 180, format: 'N0', textAlign: 'Right' }
+                        { field: 'partyName', headerText: 'Đối tác', width: 260 },
+                        { field: 'totalAmount', headerText: 'Tổng phải thu/trả', width: 180, numericKind: 'money', textAlign: 'Right' },
+                        { field: 'paidAmount', headerText: 'Đã thanh toán', width: 180, numericKind: 'money', textAlign: 'Right' },
+                        { field: 'remaining', headerText: 'Còn lại', width: 180, numericKind: 'money', textAlign: 'Right' }
                     ],
                     aggregates: [{ columns: [
                         { type: 'Sum', field: 'totalAmount', footerTemplate: 'Total: ${Sum}', format: 'N0' },

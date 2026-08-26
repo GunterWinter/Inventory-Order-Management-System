@@ -47,3 +47,16 @@ public class PurchaseReturnGetInvenTransListHandler : IRequestHandler<PurchaseRe
         };
     }
 }
+
+public sealed class PurchaseReturnGetSourceLineListRequest : IRequest<List<ReturnSourceLineDto>>
+{
+    public string? PurchaseOrderId { get; init; }
+    public string? PurchaseReturnId { get; init; }
+}
+
+public sealed class PurchaseReturnGetSourceLineListHandler(InventoryTransactionService service)
+    : IRequestHandler<PurchaseReturnGetSourceLineListRequest, List<ReturnSourceLineDto>>
+{
+    public Task<List<ReturnSourceLineDto>> Handle(PurchaseReturnGetSourceLineListRequest request, CancellationToken cancellationToken)
+        => service.PurchaseReturnGetSourceLineList(request.PurchaseOrderId, request.PurchaseReturnId, cancellationToken);
+}

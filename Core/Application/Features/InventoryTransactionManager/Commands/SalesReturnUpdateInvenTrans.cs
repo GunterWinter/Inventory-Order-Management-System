@@ -1,6 +1,7 @@
 using Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Application.Common.Repositories;
 
 namespace Application.Features.InventoryTransactionManager.Commands;
 
@@ -25,8 +26,6 @@ public class SalesReturnUpdateInvenTransValidator : AbstractValidator<SalesRetur
     public SalesReturnUpdateInvenTransValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
-        RuleFor(x => x.WarehouseId).NotEmpty();
-        RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.Movement).NotEmpty();
         RuleFor(x => x.UpdatedById).NotEmpty();
     }
@@ -35,24 +34,23 @@ public class SalesReturnUpdateInvenTransValidator : AbstractValidator<SalesRetur
 public class SalesReturnUpdateInvenTransHandler : IRequestHandler<SalesReturnUpdateInvenTransRequest, SalesReturnUpdateInvenTransResult>
 {
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly IUnitOfWork _unitOfWork;
 
     public SalesReturnUpdateInvenTransHandler(
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        IUnitOfWork unitOfWork
         )
     {
         _inventoryTransactionService = inventoryTransactionService;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<SalesReturnUpdateInvenTransResult> Handle(SalesReturnUpdateInvenTransRequest request, CancellationToken cancellationToken = default)
     {
-        var entity = await _inventoryTransactionService.SalesReturnUpdateInvenTrans(
-            request.Id,
-            request.WarehouseId,
-            request.ProductId,
-            request.Movement,
-            request.UpdatedById,
-            cancellationToken,
-            request.ProductSerialIds);
+        InventoryTransaction? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct => entity = await _inventoryTransactionService.SalesReturnUpdateInvenTrans(
+            request.Id, request.WarehouseId, request.ProductId, request.Movement,
+            request.UpdatedById, ct, request.ProductSerialIds), cancellationToken);
 
         return new SalesReturnUpdateInvenTransResult
         {

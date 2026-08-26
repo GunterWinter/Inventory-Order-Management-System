@@ -211,7 +211,7 @@ public sealed class ProductOpeningStockService
             ProductId = product.Id,
             QtySCSys = currentStock,
             QtySCCount = countedStock,
-            QtySCDelta = currentStock - countedStock,
+            QtySCDelta = countedStock - currentStock,
             Movement = Math.Abs(delta),
             TransType = delta > 0m ? InventoryTransType.In : InventoryTransType.Out,
             Stock = delta,

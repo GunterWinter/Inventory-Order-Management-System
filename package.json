@@ -11,7 +11,8 @@
     "test:browser:ui": "playwright test Tests/Browser/responsive-shell.spec.js",
     "test:browser:files": "node Tests/browser_file_workflows_smoke.js",
     "test:browser:business": "playwright test Tests/Browser/full-menu-business-regression.spec.js",
-    "test:browser:all": "npm run test:browser && npm run test:browser:documents && npm run test:browser:sales-items && npm run test:browser:cash && npm run test:browser:ui && npm run test:browser:files && npm run test:browser:business",
+    "test:browser:playwright": "playwright test",
+    "test:browser:all": "npm run test:browser && npm run test:browser:documents && npm run test:browser:cash && npm run test:browser:files && npm run test:browser:playwright",
     "test:browser:isolated": "powershell -NoProfile -ExecutionPolicy Bypass -File Tests/run-browser-business-regression.ps1"
   },
   "devDependencies": {
