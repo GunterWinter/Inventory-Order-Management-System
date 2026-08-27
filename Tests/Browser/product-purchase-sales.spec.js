@@ -1211,9 +1211,13 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
     }, key);
 
     const selectMainRecord = async number => {
+        const selectedRows = page.locator('#MainGrid .e-content tr.e-row[aria-selected="true"]');
+        while (await selectedRows.count()) {
+            await selectedRows.first().locator('.e-frame').click();
+        }
         const row = page.locator('#MainGrid .e-row', { hasText: number }).first();
         await expect(row).toBeVisible();
-        await row.locator('td.e-rowcell').first().click();
+        await row.click();
         await expect(page.locator('#EditCustom')).toBeEnabled();
         await page.locator('#EditCustom').locator('xpath=..').click();
         await page.waitForSelector('#MainModal.show');

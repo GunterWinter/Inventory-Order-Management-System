@@ -615,7 +615,8 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: function () {
-                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
+                        const hasSelection = mainGrid.obj.getSelectedRecords().length === 1;
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], hasSelection);
                         mainGrid.obj.autoFitColumns(['number', 'MaterialExportDate', 'warehouseName', 'customerName', 'statusName', 'createdAtUtc']);
                     },
                     excelExportComplete: () => { },

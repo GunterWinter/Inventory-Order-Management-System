@@ -4,12 +4,19 @@ const test = base.extend({
     monitoredPage: async ({ page, baseURL }, use, testInfo) => {
         const errors = [];
         const expectedHttpErrors = [];
+        const expectedHttpErrorPaths = [];
         const origin = new URL(baseURL).origin;
-        page.expectHttpError = (path, status = null) => expectedHttpErrors.push({ path, status });
+        page.expectHttpError = (path, status = null) => {
+            expectedHttpErrors.push({ path, status });
+            expectedHttpErrorPaths.push(path);
+        };
 
         page.on('pageerror', error => errors.push(`JavaScript: ${error.stack || error.message}`));
         page.on('console', message => {
             if (message.type() === 'error') {
+                const locationUrl = message.location()?.url || '';
+                if (message.text().includes('Failed to load resource')
+                    && expectedHttpErrorPaths.some(path => locationUrl.includes(path))) return;
                 errors.push(`Console: ${message.text()} @ ${message.location()?.url || 'unknown'}`);
             }
         });
@@ -75,7 +82,7 @@ async function openSelectedDocument(page, gridSelector, documentId, actionId = '
 
     const row = page.locator(`${gridSelector} .e-content tr.e-row`).nth(rowIndex);
     await expect(row).toBeVisible();
-    await row.locator('td.e-rowcell').first().click();
+    await row.click();
     await expect(page.locator(`#${actionId}`)).toBeEnabled();
     const actionButton = page.locator(`#${actionId}`);
     await actionButton.locator('xpath=..').evaluate(element => element.click());

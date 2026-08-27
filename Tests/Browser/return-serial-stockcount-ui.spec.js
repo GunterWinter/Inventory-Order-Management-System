@@ -22,15 +22,9 @@ async function selectEditedDropdown(page, text) {
     await expect(editor).toBeVisible();
     const editorId = await editor.getAttribute('id');
     await editor.locator('xpath=..').click();
-    const popup = page.locator(`#${editorId}_popup`);
+    const popup = page.locator(`#${editorId}_popup.e-popup-open`).last();
     await expect(popup).toBeVisible();
-    const filter = popup.locator('input.e-input-filter');
-    if (await filter.count()) {
-        await filter.click();
-        await filter.press('Control+A');
-        await filter.pressSequentially(text, { delay: 20 });
-    }
-    await popup.locator('.e-list-item', { hasText: text }).first().click();
+    await popup.locator('.e-list-item:visible', { hasText: text }).first().click();
 }
 
 async function selectHeaderDropdown(page, labelFor, text) {
@@ -540,6 +534,8 @@ test('Stock Count đổi hàng serial sang hàng thường sẽ release serial c
 
     const productCell = await gridCellByHeader(grid, /Hàng hóa|Product/i);
     await productCell.dblclick();
+    const updateLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountUpdateInvenTrans')
+        && response.request().method() === 'POST');
     await selectEditedDropdown(page, fixture.plainProduct.name);
     const clearedRow = await page.evaluate(() => {
         const row = document.querySelector('#SecondaryGrid').ej2_instances[0].getRowsObject()[0]?.data;
@@ -552,8 +548,6 @@ test('Stock Count đổi hàng serial sang hàng thường sẽ release serial c
         };
     });
     expect(clearedRow).toEqual({ rowIds: [], rowText: '', changedIds: [], changedText: '' });
-    const updateLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountUpdateInvenTrans')
-        && response.request().method() === 'POST');
     await page.locator('#SecondaryGrid_update').click();
     const updateLineResponse = await updateLine;
     expect(updateLineResponse.status()).toBe(200);

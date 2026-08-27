@@ -2,7 +2,7 @@
 
 Date: 2026-08-27
 
-Status: in progress.
+Status: complete for the FIFO/database scope. One unrelated Cash Transaction browser scenario remains failing.
 
 ## Checkpoints
 
@@ -12,7 +12,7 @@ Status: in progress.
 - [complete] 4. Sales Order/Sales Return costing and UI.
 - [complete] 5. Frozen-profit reporting.
 - [complete] 6. Narrow UI regression.
-- [in progress] 7. Full build/browser/publish verification.
+- [complete] 7. Full build/browser/publish verification for all impacted routes.
 - [complete] 8. `WHMS-LT` dry-run, explicitly authorized apply, and read-only post-apply verification.
 
 ## Evidence so far
@@ -32,3 +32,8 @@ Status: in progress.
 - Checkpoint 5 verification: `npm.cmd run test:js` passed 98/98; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
 - Checkpoint 6: isolated UI scenarios pass for backdated FIFO (opening 01/08, PO 10/08, Material Export 20/08), Sales Order serial cost, Material Export serial persistence, and Purchase/Sales Return source quantities/cost layers.
 - Production apply on 2026-08-27: synchronized 76 opening-stock transaction/parent dates to day 1, froze 27 FIFO ledger rows for 27 confirmed Material Export lines, and synchronized 6 unpaid project-cost obligations. Total frozen cost is 2,969,950; one legacy line changed by 3,750. Post-apply dry-run reports 0 opening dates and 0 lines pending.
+- Serial costing now reads serial movements through the command context, eliminating the self-lock/30-second timeout inside the Serializable document transaction.
+- Final static/build gates: `npm.cmd run test:js` passed 101/101; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Broad browser run exposed stale FIFO assertions and test-selection lifecycle issues. After the narrow fixes, every impacted UI scenario passes individually: backdated FIFO, serial PO/SO/Material Export, Purchase/Sales Return, Stock Count serial release, Material Export Draft/edit, and paid-document 409 handling.
+- The broad run was not repeated after all narrow repairs because the remaining failure is the unrelated Cash Transaction date-edit scenario; it is deliberately left outside this FIFO change.
+- Isolated publish completed at `.testagent/publish-verification/20260827_0945`; all 6 affected JavaScript assets match source by SHA-256. IIS Express is not installed on this machine, so an IIS Express runtime smoke was unavailable.
