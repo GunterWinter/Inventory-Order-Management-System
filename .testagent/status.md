@@ -1,6 +1,6 @@
 # Implementation and verification status
 
-Date: 2026-08-26
+Date: 2026-08-27
 
 Status: in progress.
 
@@ -11,9 +11,9 @@ Status: in progress.
 - [complete] 3. Product/serial/Material Export UI and decimals.
 - [complete] 4. Sales Order/Sales Return costing and UI.
 - [complete] 5. Frozen-profit reporting.
-- [in progress] 6. Narrow UI regression.
-- [pending] 7. Full build/browser/publish verification.
-- [pending] 8. Read-only `WHMS-LT` dry-run; production apply remains forbidden without separate confirmation.
+- [complete] 6. Narrow UI regression.
+- [in progress] 7. Full build/browser/publish verification.
+- [complete] 8. `WHMS-LT` dry-run, explicitly authorized apply, and read-only post-apply verification.
 
 ## Evidence so far
 
@@ -30,3 +30,5 @@ Status: in progress.
 - Checkpoint 4 verification: `npm.cmd run test:js` passed 97/97; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
 - Checkpoint 5: Inventory Profit Report no longer resolves current inventory cost; it reads frozen `CogsAmount`/`ProfitAmount`, reports allocation sources, and preserves six-decimal display.
 - Checkpoint 5 verification: `npm.cmd run test:js` passed 98/98; `dotnet build Indotalent.sln --no-restore` passed with 0 warnings/errors.
+- Checkpoint 6: isolated UI scenarios pass for backdated FIFO (opening 01/08, PO 10/08, Material Export 20/08), Sales Order serial cost, Material Export serial persistence, and Purchase/Sales Return source quantities/cost layers.
+- Production apply on 2026-08-27: synchronized 76 opening-stock transaction/parent dates to day 1, froze 27 FIFO ledger rows for 27 confirmed Material Export lines, and synchronized 6 unpaid project-cost obligations. Total frozen cost is 2,969,950; one legacy line changed by 3,750. Post-apply dry-run reports 0 opening dates and 0 lines pending.

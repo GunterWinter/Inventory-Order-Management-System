@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.HttpOverrides; 
 using Microsoft.Extensions.FileProviders;
+using Application.Features.InventoryTransactionManager;
 using ASPNET.BackEnd;
 using ASPNET.BackEnd.Common.Middlewares;
 using ASPNET.FrontEnd;
+using Infrastructure.DataAccessManager.EFCore.Contexts;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +28,28 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+var inventoryCostBackfillMode = builder.Configuration["InventoryCostBackfill:Mode"];
+if (!string.IsNullOrWhiteSpace(inventoryCostBackfillMode))
+{
+    if (inventoryCostBackfillMode is not ("dry-run" or "apply"))
+        throw new InvalidOperationException("InventoryCostBackfill:Mode must be 'dry-run' or 'apply'.");
+
+    await using var scope = app.Services.CreateAsyncScope();
+    var dataContext = scope.ServiceProvider.GetRequiredService<DataContext>();
+    var databaseName = dataContext.Database.GetDbConnection().Database;
+    if (inventoryCostBackfillMode == "apply"
+        && builder.Configuration["InventoryCostBackfill:ConfirmDatabase"] != databaseName)
+    {
+        throw new InvalidOperationException(
+            $"Refusing inventory cost backfill for '{databaseName}'. Set InventoryCostBackfill:ConfirmDatabase to the exact database name.");
+    }
+
+    var result = await scope.ServiceProvider.GetRequiredService<InventoryCostBackfillService>()
+        .RunAsync(inventoryCostBackfillMode == "apply");
+    Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+    return;
+}
 
 app.UseForwardedHeaders();
 

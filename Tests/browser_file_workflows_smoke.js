@@ -903,13 +903,13 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
     if (!salesOpeningCostResult.purchaseOrderId
         || !salesOpeningCostResult.salesOrderId
         || !salesOpeningCostResult.salesOrderItemId
-        || salesOpeningCostResult.storedLine?.cogsAmount !== 150
-        || salesOpeningCostResult.storedLine?.profitAmount !== 100
-        || salesOpeningCostResult.reportLine?.unitCost !== 150
-        || salesOpeningCostResult.reportLine?.totalCost !== 150
-        || salesOpeningCostResult.reportLine?.profit !== 100
+        || salesOpeningCostResult.storedLine?.cogsAmount !== 100
+        || salesOpeningCostResult.storedLine?.profitAmount !== 150
+        || salesOpeningCostResult.reportLine?.unitCost !== 100
+        || salesOpeningCostResult.reportLine?.totalCost !== 100
+        || salesOpeningCostResult.reportLine?.profit !== 150
         || salesOpeningCostResult.reportLine?.isFallbackCost !== false
-        || !/PO.*tồn đầu kỳ/i.test(salesOpeningCostResult.reportLine?.costSource || '')
+        || !/tồn đầu kỳ/i.test(salesOpeningCostResult.reportLine?.costSource || '')
         || salesOpeningCostResult.remainingStock !== 10) {
         throw new Error(`Opening-stock Sales Order cost/profit is inconsistent: ${JSON.stringify(salesOpeningCostResult)}`);
     }

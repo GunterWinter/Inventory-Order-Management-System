@@ -372,7 +372,9 @@ public sealed class InventoryCostResolver
         if (quantity <= QuantityTolerance)
             throw new InvalidOperationException("Số lượng xuất FIFO phải lớn hơn 0.");
 
-        var nextBusinessDate = (businessDate ?? AppDateTime.VietnamNow()).Date.AddDays(1);
+        var effectiveBusinessDate = (businessDate ?? AppDateTime.VietnamNow()).Date;
+        var nextBusinessDate = effectiveBusinessDate.AddDays(1);
+        var nextBusinessMonth = new DateTime(effectiveBusinessDate.Year, effectiveBusinessDate.Month, 1).AddMonths(1);
         var rows = await _inventoryTransactionRepository.GetQuery()
             .AsNoTracking()
             .Where(x => !x.IsDeleted
@@ -380,7 +382,10 @@ public sealed class InventoryCostResolver
                 && x.ProductId == productId
                 && x.WarehouseId == warehouseId
                 && x.Id != excludedInventoryTransactionId
-                && (x.MovementDate ?? x.CreatedAtUtc) < nextBusinessDate
+                && ((x.MovementDate ?? x.CreatedAtUtc) < nextBusinessDate
+                    || (x.ModuleName == nameof(StockCount)
+                        && x.ModuleCode == ProductOpeningStockService.OpeningStockModuleCode
+                        && (x.MovementDate ?? x.CreatedAtUtc) < nextBusinessMonth))
                 && (x.Stock ?? 0m) != 0m)
             .OrderBy(x => x.MovementDate ?? x.CreatedAtUtc)
             .ThenBy(x => x.CreatedAtUtc)
@@ -399,6 +404,11 @@ public sealed class InventoryCostResolver
                 x.UnitCost
             })
             .ToListAsync(cancellationToken);
+        rows = rows
+            .OrderBy(x => GetFifoBusinessDate(x.ModuleName, x.ModuleCode, x.MovementDate, x.CreatedAtUtc))
+            .ThenBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .ToList();
 
         var purchaseItemIds = rows
             .Where(x => x.ModuleName == nameof(PurchaseOrder) && x.ModuleItemId != null)
@@ -814,6 +824,19 @@ public sealed class InventoryCostResolver
 
     private static bool IsValidCost(decimal? value)
         => value.HasValue && value.Value >= 0m;
+
+    private static DateTime GetFifoBusinessDate(
+        string? moduleName,
+        string? moduleCode,
+        DateTime? movementDate,
+        DateTime? createdAtUtc)
+    {
+        var date = (movementDate ?? createdAtUtc ?? DateTime.MinValue).Date;
+        return moduleName == nameof(StockCount)
+            && moduleCode == ProductOpeningStockService.OpeningStockModuleCode
+                ? new DateTime(date.Year, date.Month, 1)
+                : date;
+    }
 
     private static decimal RequireFallbackCost(decimal? value, string productId)
     {

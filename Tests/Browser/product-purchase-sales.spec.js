@@ -133,10 +133,21 @@ async function selectStatusByLabel(page, labelFor, text) {
         .locator('input.e-input')
         .first();
     await expect(input).toBeEnabled();
-    await input.locator('xpath=..').click();
-    const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
-    await expect(popup).toBeVisible();
-    await popup.locator('.e-list-item').filter({ hasText: text }).first().click();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        await input.locator('xpath=..').click();
+        const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
+        await expect(popup).toBeVisible();
+        try {
+            await popup.locator('.e-list-item').filter({ hasText: text }).first().click({ timeout: 3000 });
+        } catch (error) {
+            if (!await input.inputValue().then(value => text.test(value))) {
+                if (attempt === 2) throw error;
+                continue;
+            }
+        }
+        await expect(input).toHaveValue(text);
+        return;
+    }
 }
 
 test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ngay khi chọn hàng', async ({ monitoredPage: page }) => {
@@ -724,6 +735,27 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
             ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
         await page.waitForSelector('#MainModal.show');
+        await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
+        await page.locator('#CostAllocateCustom').click();
+        await page.waitForSelector('#CostAllocationModal.show');
+        const cleanupAllocationCell = await gridCellByHeaderIn(
+            page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i);
+        await cleanupAllocationCell.dblclick();
+        const cleanupAllocationInput = page.locator(
+            '#CostAllocationPreviewGrid td.e-editedbatchcell input.e-numerictextbox');
+        await cleanupAllocationInput.click();
+        await cleanupAllocationInput.press('Control+A');
+        await cleanupAllocationInput.pressSequentially('0');
+        await page.locator('#CostAllocationModal .modal-title').click();
+        const removeAllocationPromise = page.waitForResponse(response =>
+            response.url().includes('/PurchaseOrder/AllocatePurchaseOrderCosts')
+            && response.request().method() === 'POST' && response.status() === 200);
+        await page.locator('#CostAllocationSaveButton').click();
+        const removeAllocationResponse = await removeAllocationPromise;
+        expect(removeAllocationResponse.request().postDataJSON().items).toEqual([]);
+        await page.waitForSelector('#CostAllocationModal', { state: 'hidden' });
+        await page.locator('.swal2-cancel').click();
+        await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
         await selectStatusByLabel(page, 'OrderStatus', /Draft|Nháp/i);
         const reopenPoPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder')
             && response.request().method() === 'POST' && response.status() === 200);

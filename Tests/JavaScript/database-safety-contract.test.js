@@ -19,3 +19,12 @@ test('application DI ignores nested feature details and framework interfaces imp
     assert.match(source, /type\.IsClass && !type\.IsAbstract && !type\.IsNested/);
     assert.match(source, /serviceInterface\.Assembly == assembly/);
 });
+
+test('inventory cost backfill apply requires the exact database name and bypasses web startup', () => {
+    const source = read('Presentation/ASPNET/Program.cs');
+
+    assert.match(source, /inventoryCostBackfillMode is not \("dry-run" or "apply"\)/);
+    assert.match(source, /InventoryCostBackfill:ConfirmDatabase.*!= databaseName/s);
+    assert.match(source, /Refusing inventory cost backfill/);
+    assert.match(source, /RunAsync\(inventoryCostBackfillMode == "apply"\)[\s\S]*?return;[\s\S]*?app\.RegisterBackEndBuilder/);
+});
