@@ -96,7 +96,7 @@ const App = {
                         { field: 'warehouseName', headerText: 'Warehouse', width: 100 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 120 },
                         { field: 'productName', headerText: 'Product', width: 100 },
-                        { field: 'movementDate', headerText: 'Movement Date', width: 100, format: 'yyyy-MM-dd' },
+                        { field: 'movementDate', headerText: 'Movement Date', width: 100, type: 'date', format: 'yyyy-MM-dd' },
                         { field: 'number', headerText: 'Number', width: 100 },
                         { field: 'movement', headerText: 'Movement', width: 100, type: 'number', numericKind: 'decimal', textAlign: 'Right' },
                         { field: 'transTypeName', headerText: 'Trans Type', width: 100 },
@@ -107,7 +107,7 @@ const App = {
                         { field: 'moduleNumber', headerText: 'Module Number', width: 100 },
                         { field: 'warehouseFromName', headerText: 'Warehouse From', width: 100 },
                         { field: 'warehouseToName', headerText: 'Warehouse To', width: 100 },
-                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
+                        { field: 'createdAtUtc', headerText: 'Created At', width: 150, type: 'date', format: 'yyyy-MM-dd HH:mm' }
                     ],
                     aggregates: [
                         {

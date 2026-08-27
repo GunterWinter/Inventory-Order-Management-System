@@ -5,6 +5,7 @@ using Application.Features.CashTransactionManager;
 using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -62,9 +63,9 @@ public class PurchaseOrderService
         var order = _orderRepository.GetQuery().ApplyIsDeletedFilter().SingleOrDefault(x => x.Id == orderId);
         if (order == null) return;
         var items = _itemRepository.GetQuery().ApplyIsDeletedFilter().Where(x => x.PurchaseOrderId == orderId).ToList();
-        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0m);
-        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0m);
-        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0m) + (x.TaxAmount ?? 0m)));
+        order.BeforeTaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.Total ?? 0m));
+        order.TaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.TaxAmount ?? 0m));
+        order.AfterTaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0m) + (x.TaxAmount ?? 0m))));
         _orderRepository.Update(order);
         _unitOfWork.Save();
     }
@@ -204,9 +205,10 @@ public class PurchaseOrderService
 
     private async Task ValidateCancellationAsync(PurchaseOrder order, List<InventoryTransaction> transactions, CancellationToken ct)
     {
-        if (await _paymentRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.CashTransaction != null
+        var netPaidAmount = await _paymentRepository.GetQuery().Where(x => !x.IsDeleted && x.CashTransaction != null
             && !x.CashTransaction.IsDeleted && x.CashTransaction.SourceModule == nameof(PurchaseOrder)
-            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0m, ct))
+            && x.CashTransaction.SourceModuleId == order.Id).SumAsync(x => x.Amount, ct);
+        if (netPaidAmount > 0.000001m)
             throw new InvalidOperationException($"Không thể hủy PO {order.Number} vì đã có lịch sử thanh toán. Hãy hoàn tác các lần thanh toán trước.");
         if (await _queryContext.Set<PurchaseReturn>().AnyAsync(x => !x.IsDeleted && x.PurchaseOrderId == order.Id
             && x.Status != PurchaseReturnStatus.Cancelled, ct))

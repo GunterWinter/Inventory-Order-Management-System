@@ -148,7 +148,8 @@ public class UpdateCashTransactionHandler : IRequestHandler<UpdateCashTransactio
             var installmentAmount = requestedPaidAmount - previousPaidAmount;
             if (installmentAmount > 0.000001m)
             {
-                if (string.IsNullOrWhiteSpace(request.CashAccountId))
+                if (!string.IsNullOrWhiteSpace(entity.SourceModule)
+                    && string.IsNullOrWhiteSpace(request.CashAccountId))
                     throw new InvalidOperationException("Phải chọn tài khoản quỹ khi tăng số tiền đã trả.");
                 await _paymentRepository.CreateAsync(new CashTransactionPayment
                 {

@@ -4,7 +4,6 @@ const App = {
             search: '',
             mainData: [],
             totalCount: 0,
-            page: 1,
             pageSize: 20,
             loading: false,
             movementData: [],
@@ -60,22 +59,32 @@ const App = {
         };
 
         const methods = {
-            lookupWarranty: async (page = 1, pageSize = state.pageSize) => {
+            lookupWarranty: async () => {
                 if (searchText.obj) {
                     state.search = searchText.obj.value;
                 }
                 state.search = String(state.search ?? '').trim();
                 state.loading = true;
                 try {
-                    const response = await services.lookupWarranty(state.search, page, pageSize);
-                    const content = response?.data?.content ?? {};
-                    state.page = content.page ?? page;
-                    state.pageSize = content.pageSize ?? pageSize;
-                    state.totalCount = content.totalCount ?? 0;
-                    state.mainData = (content.data ?? []).map(item => ({
+                    const apiPageSize = 200;
+                    const firstResponse = await services.lookupWarranty(state.search, 1, apiPageSize);
+                    const firstContent = firstResponse?.data?.content ?? {};
+                    const totalCount = Number(firstContent.totalCount ?? 0);
+                    const pageCount = Math.ceil(totalCount / apiPageSize);
+                    const remainingResponses = pageCount > 1
+                        ? await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) =>
+                            services.lookupWarranty(state.search, index + 2, apiPageSize)))
+                        : [];
+                    const allItems = [firstContent, ...remainingResponses.map(response => response?.data?.content ?? {})]
+                        .flatMap(content => content.data ?? []);
+
+                    state.totalCount = totalCount;
+                    state.mainData = allItems.map(item => ({
                     ...item,
                     salesOrderDate: item.salesOrderDate ? DateFormatManager.parseBusinessDate(item.salesOrderDate) : null,
                     salesOrderDateText: methods.formatDate(item.salesOrderDate),
+                    issueDate: item.issueDate ? DateFormatManager.parseBusinessDate(item.issueDate) : null,
+                    issueDateText: methods.formatDate(item.issueDate),
                     customerWarrantyEndDate: item.customerWarrantyEndDate ? DateFormatManager.parseBusinessDate(item.customerWarrantyEndDate) : null,
                     customerWarrantyEndDateText: methods.formatDate(item.customerWarrantyEndDate),
                     supplierWarrantyEndDate: item.supplierWarrantyEndDate ? DateFormatManager.parseBusinessDate(item.supplierWarrantyEndDate) : null,
@@ -97,7 +106,7 @@ const App = {
             clearSearch: async () => {
                 state.search = '';
                 searchText.refresh();
-                await methods.lookupWarranty(1, state.pageSize);
+                await methods.lookupWarranty();
             },
             showMovements: (rowData) => {
                 state.selectedSerialNumber = rowData.internalSerialNumber;
@@ -276,6 +285,7 @@ const App = {
             state.mainData = state.mainData.map(item => ({
                 ...item,
                 salesOrderDateText: methods.formatDate(item.salesOrderDate),
+                issueDateText: methods.formatDate(item.issueDate),
                 customerWarrantyEndDateText: methods.formatDate(item.customerWarrantyEndDate),
                 supplierWarrantyEndDateText: methods.formatDate(item.supplierWarrantyEndDate)
             }));
@@ -296,7 +306,7 @@ const App = {
                 await mainGrid.create([]);
                 await movementGrid.create([]);
                 documentModal.create();
-                await methods.lookupWarranty(1, state.pageSize);
+                await methods.lookupWarranty();
                 window.addEventListener('ui:languagechanged', handleLanguageChanged);
             } catch (e) {
                 console.error('page init error:', e);
@@ -312,7 +322,7 @@ const App = {
             create: async (dataSource) => {
                 mainGrid.obj = new ej.grids.Grid({
                     height: '420px',
-                    dataSource: { result: dataSource, count: 0 },
+                    dataSource,
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
@@ -332,10 +342,10 @@ const App = {
                         { field: 'productName', headerText: 'Product', width: 220 },
                         { field: 'statusName', headerText: 'Status', width: 130 },
                         { field: 'warehouseName', headerText: 'Warehouse', width: 170 },
-                        { field: 'salesOrderNumber', headerText: 'SO Number', width: 160 },
+                        { field: 'sourceDocumentNumber', headerText: 'Document Number', width: 160 },
                         { field: 'customerName', headerText: 'Customer', width: 190 },
                         { field: 'customerPhoneNumber', headerText: 'Phone', width: 150 },
-                        { field: 'salesOrderDateText', headerText: 'Sold Date', width: 150 },
+                        { field: 'issueDateText', headerText: 'Issue / Sold Date', width: 160 },
                         { field: 'customerWarrantyEndDateText', headerText: 'Warranty End', width: 160 },
                         { field: 'supplierWarrantyEndDateText', headerText: 'Supplier Warranty End', width: 220 },
                         { field: 'warrantyStatus', headerText: 'Warranty Status', width: 160 }
@@ -348,13 +358,6 @@ const App = {
                         if (args.item.id === 'MainGrid_excelexport') {
                             mainGrid.obj.excelExport();
                         }
-                    },
-                    actionBegin: (args) => {
-                        if (args.requestType !== 'paging') return;
-                        args.cancel = true;
-                        const nextPage = args.currentPage ?? args.pageSettings?.currentPage ?? 1;
-                        const nextSize = args.pageSize ?? args.pageSettings?.pageSize ?? state.pageSize;
-                        methods.lookupWarranty(nextPage, nextSize);
                     }
                 });
 
@@ -362,8 +365,8 @@ const App = {
             },
             refresh: () => {
                 if (mainGrid.obj) {
-                    mainGrid.obj.dataSource = { result: state.mainData, count: state.totalCount };
-                    mainGrid.obj.pageSettings.currentPage = state.page;
+                    mainGrid.obj.dataSource = state.mainData;
+                    mainGrid.obj.pageSettings.currentPage = 1;
                     mainGrid.obj.pageSettings.pageSize = state.pageSize;
                     mainGrid.obj.dataBind();
                 }

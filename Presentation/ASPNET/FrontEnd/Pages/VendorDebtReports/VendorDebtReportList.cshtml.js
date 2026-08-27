@@ -50,7 +50,7 @@ const App = {
                         new ej.grids.Grid({
                             dataSource: args.data.documents ?? [], allowTextWrap: true,
                             columns: [
-                                { field: 'documentDate', headerText: 'Ngày', width: 120, valueAccessor: (field, data) => DateFormatManager.formatToLocale(data[field]) },
+                                { field: 'documentDate', headerText: 'Ngày', width: 120, type: 'date', format: 'yyyy-MM-dd' },
                                 { field: 'number', headerText: 'Chứng từ', width: 170 },
                                 { field: 'totalAmount', headerText: 'Phải thu/trả', width: 140, numericKind: 'money', textAlign: 'Right' },
                                 { field: 'paidAmount', headerText: 'Đã thanh toán', width: 140, numericKind: 'money', textAlign: 'Right' },

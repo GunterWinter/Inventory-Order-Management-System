@@ -37,6 +37,9 @@ public record WarrantyLookupDto
     public string? StatusName { get; init; }
     public string? WarehouseName { get; init; }
     public string? SalesOrderNumber { get; init; }
+    public string? SourceModule { get; init; }
+    public string? SourceDocumentNumber { get; init; }
+    public DateTime? IssueDate { get; init; }
     public string? CustomerName { get; init; }
     public string? CustomerPhoneNumber { get; init; }
     public DateTime? SalesOrderDate { get; init; }
@@ -123,9 +126,41 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
                 FromWarehouseName = x.FromWarehouse != null ? x.FromWarehouse.Name : null,
                 ToWarehouseName = x.ToWarehouse != null ? x.ToWarehouse.Name : null,
                 x.MovementDate,
+                x.CreatedAtUtc,
+                x.ReversedAtUtc,
                 StatusName = x.Status.ToString()
             })
             .ToListAsync(cancellationToken);
+
+        var materialExportIds = rawMovements
+            .Where(x => x.ModuleName == nameof(MaterialExport) && x.ModuleId != null && x.ReversedAtUtc == null)
+            .Select(x => x.ModuleId!)
+            .Distinct()
+            .ToList();
+        var materialExports = await _context.Set<MaterialExport>()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => materialExportIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.Number,
+                x.ExportDate,
+                CustomerName = x.Customer != null ? x.Customer.Name : null,
+                CustomerPhoneNumber = x.Customer != null ? x.Customer.PhoneNumber : null
+            })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var activeMaterialExportBySerial = rawMovements
+            .Where(x => x.ModuleName == nameof(MaterialExport) && x.ModuleId != null
+                && x.ReversedAtUtc == null && !string.IsNullOrWhiteSpace(x.ProductSerialId))
+            .GroupBy(x => x.ProductSerialId!)
+            .ToDictionary(
+                x => x.Key,
+                x => x.OrderByDescending(y => y.MovementDate)
+                    .ThenByDescending(y => y.CreatedAtUtc)
+                    .Select(y => materialExports.GetValueOrDefault(y.ModuleId!))
+                    .FirstOrDefault(y => y != null));
 
         var allocationIds = rawMovements
             .Where(x => x.ModuleName == "CostAllocation" && x.ModuleId != null)
@@ -192,22 +227,30 @@ public class GetWarrantyLookupHandler : IRequestHandler<GetWarrantyLookupRequest
             .ToDictionary(x => x.Key, x => x.Select(y => y.Movement).ToList());
 
         var today = DateTime.UtcNow.Date;
-        var data = serials.Select(x => new WarrantyLookupDto
+        var data = serials.Select(x =>
         {
-            ProductSerialId = x.Id,
-            InternalSerialNumber = x.InternalSerialNumber,
-            ManufacturerSerialNumber = x.ManufacturerSerialNumber,
-            ProductName = x.Product?.Name,
-            StatusName = x.Status.ToString(),
-            WarehouseName = x.CurrentWarehouse?.Name,
-            SalesOrderNumber = x.SalesOrderItem?.SalesOrder?.Number,
-            CustomerName = x.SalesOrderItem?.SalesOrder?.Customer?.Name,
-            CustomerPhoneNumber = x.SalesOrderItem?.SalesOrder?.Customer?.PhoneNumber,
-            SalesOrderDate = x.SalesOrderItem?.SalesOrder?.OrderDate,
-            CustomerWarrantyEndDate = x.CustomerWarrantyEndDate,
-            IsCustomerWarrantyValid = x.CustomerWarrantyEndDate != null && x.CustomerWarrantyEndDate.Value.Date >= today,
-            SupplierWarrantyEndDate = x.SupplierWarrantyEndDate,
-            Movements = movementLookup.TryGetValue(x.Id, out var itemMovements) ? itemMovements : new List<WarrantyLookupMovementDto>()
+            var salesOrder = x.SalesOrderItem?.SalesOrder;
+            activeMaterialExportBySerial.TryGetValue(x.Id, out var materialExport);
+            return new WarrantyLookupDto
+            {
+                ProductSerialId = x.Id,
+                InternalSerialNumber = x.InternalSerialNumber,
+                ManufacturerSerialNumber = x.ManufacturerSerialNumber,
+                ProductName = x.Product?.Name,
+                StatusName = x.Status.ToString(),
+                WarehouseName = x.CurrentWarehouse?.Name,
+                SalesOrderNumber = salesOrder?.Number,
+                SourceModule = salesOrder != null ? nameof(SalesOrder) : materialExport != null ? nameof(MaterialExport) : null,
+                SourceDocumentNumber = salesOrder?.Number ?? materialExport?.Number,
+                IssueDate = salesOrder?.OrderDate ?? materialExport?.ExportDate,
+                CustomerName = salesOrder?.Customer?.Name ?? materialExport?.CustomerName,
+                CustomerPhoneNumber = salesOrder?.Customer?.PhoneNumber ?? materialExport?.CustomerPhoneNumber,
+                SalesOrderDate = salesOrder?.OrderDate,
+                CustomerWarrantyEndDate = x.CustomerWarrantyEndDate,
+                IsCustomerWarrantyValid = x.CustomerWarrantyEndDate != null && x.CustomerWarrantyEndDate.Value.Date >= today,
+                SupplierWarrantyEndDate = x.SupplierWarrantyEndDate,
+                Movements = movementLookup.TryGetValue(x.Id, out var itemMovements) ? itemMovements : new List<WarrantyLookupMovementDto>()
+            };
         }).ToList();
 
         return new GetWarrantyLookupResult

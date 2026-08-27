@@ -87,10 +87,10 @@ const App = {
             const unitPrice = Number(overrides.unitPrice ?? row?.unitPrice ?? 0) || 0;
             const taxId = overrides.taxId ?? row?.taxId ?? null;
             const taxPercentage = Number(state.taxListLookupData.find(tax => tax.id === taxId)?.percentage ?? 0) || 0;
-            const total = quantity * unitPrice;
-            const taxAmount = total * taxPercentage / 100;
+            const total = NumberFormatManager.roundMoney(quantity * unitPrice);
+            const taxAmount = NumberFormatManager.roundMoney(total * taxPercentage / 100);
 
-            return { quantity, unitPrice, taxId, total, taxAmount, afterTaxAmount: total + taxAmount };
+            return { quantity, unitPrice, taxId, total, taxAmount, afterTaxAmount: NumberFormatManager.roundMoney(total + taxAmount) };
         };
         const applyPurchaseOrderItemAmounts = (row, overrides = {}) => {
             if (!row) return null;
@@ -424,6 +424,12 @@ const App = {
                 } catch (error) {
                     throw error;
                 }
+            },
+            getPurchaseOrderPaymentHistory: async (purchaseOrderId) => {
+                return await AxiosManager.get(`/PurchaseOrder/GetPurchaseOrderPaymentHistory?purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`, {});
+            },
+            reversePurchaseOrderPayment: async (data) => {
+                return await AxiosManager.post('/PurchaseOrder/ReversePurchaseOrderPayment', data);
             }
         };
 
@@ -2673,7 +2679,15 @@ const App = {
                 return parsedValue ?? 0;
             };
             const totalAmountValue = resolveMoneyAmount(totalAmount);
-            const paidAmountValue = resolveMoneyAmount(existingPaidAmount);
+            let paidAmountValue = resolveMoneyAmount(existingPaidAmount);
+            let paymentHistory = [];
+            if (existingTransactionId) {
+                const historyResponse = await services.getPurchaseOrderPaymentHistory(orderId);
+                const history = historyResponse?.data?.content ?? {};
+                paymentHistory = history.data ?? [];
+                paidAmountValue = resolveMoneyAmount(history.paidAmount);
+                existingCashAccountId = history.cashAccountId ?? existingCashAccountId;
+            }
             const remainingAmountValue = Math.max(0, totalAmountValue - paidAmountValue);
             const displayAmount = NumberFormatManager.formatToLocale(0, 0, 0);
             const now = new Date();
@@ -2689,6 +2703,18 @@ const App = {
                 ? '<div class="form-text"></div>'
                 : '';
             const statusHtml = ``; // Status is auto-calculated by backend now
+            const paymentHistoryHtml = paymentHistory.length === 0 ? '' : `
+                <div class="mt-3 text-left">
+                    <div class="font-weight-bold mb-2">${text('Lịch sử thanh toán', 'Payment History')}</div>
+                    <div class="table-responsive"><table class="table table-sm mb-0"><tbody>
+                        ${paymentHistory.map(payment => `<tr>
+                            <td>${escapeHtml(DateFormatManager.formatToLocale(payment.paymentDate))}</td>
+                            <td class="text-right">${escapeHtml(NumberFormatManager.formatMoneyToLocale(payment.amount ?? 0))}</td>
+                            <td>${escapeHtml(payment.cashAccountName ?? '')}</td>
+                            <td class="text-right">${payment.canReverse ? `<button type="button" class="btn btn-sm btn-outline-danger" data-reverse-payment-id="${escapeHtml(payment.id)}">${text('Hoàn', 'Reverse')}</button>` : ''}</td>
+                        </tr>`).join('')}
+                    </tbody></table></div>
+                </div>`;
             const descHtml = isSplit
                 ? `<div class="form-group mb-0"><label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label><input id="swal-desc" class="form-control" value="${escapeHtml(displayDescription)}" disabled></div>`
                 : `<div class="form-group mb-0"><label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label><input id="swal-desc" class="form-control" value="${escapeHtml(displayDescription)}"></div>`;
@@ -2714,6 +2740,7 @@ const App = {
                             <div class="form-group mb-3"><label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Số tiền trả lần này', 'Payment This Time')}</label><input id="swal-amount" class="form-control" data-number-format="true" inputmode="numeric" value="${displayAmount}"></div>
                             ${descHtml}
                         </div>
+                        ${paymentHistoryHtml}
                     </div>
                 `,
                 showCancelButton: true,
@@ -2722,6 +2749,26 @@ const App = {
                 focusConfirm: false,
                 didOpen: () => {
                     NumberFormatManager.bindNumericInput(document.getElementById('swal-amount'));
+                    document.querySelectorAll('[data-reverse-payment-id]').forEach(button => {
+                        button.addEventListener('click', async () => {
+                            if (!window.confirm(text('Hoàn toàn bộ lần thanh toán này?', 'Reverse this full payment?'))) return;
+                            button.disabled = true;
+                            try {
+                                const response = await services.reversePurchaseOrderPayment({
+                                    paymentId: button.dataset.reversePaymentId,
+                                    reversalDate: defaultPaymentDate,
+                                    updatedById: StorageManager.getUserId()
+                                });
+                                if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'The payment reversal failed.');
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                Swal.fire({ icon: 'success', title: text('Đã hoàn thanh toán', 'Payment reversed'), timer: 1200, showConfirmButton: false });
+                            } catch (error) {
+                                button.disabled = false;
+                                Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? error.message ?? 'Please try again.' });
+                            }
+                        });
+                    });
                 },
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;

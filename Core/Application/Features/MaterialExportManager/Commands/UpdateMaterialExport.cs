@@ -1,8 +1,6 @@
 using Application.Common.Extensions;
-using Application.Common.CQS.Queries;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
-using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
 using Domain.Entities;
 using Domain.Enums;
@@ -47,44 +45,29 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
     private readonly ICommandRepository<ProductSerialMovement> _movementRepository;
-    private readonly ICommandRepository<CashTransaction> _cashTransactionRepository;
-    private readonly ICommandRepository<CashCategory> _cashCategoryRepository;
-    private readonly ICommandRepository<Customer> _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
     private readonly InventoryCostResolver _inventoryCostResolver;
     private readonly ProductSerialService _productSerialService;
-    private readonly NumberSequenceService _numberSequenceService;
-    private readonly IQueryContext _queryContext;
 
     public UpdateMaterialExportHandler(
         ICommandRepository<MaterialExport> materialExportRepository,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         ICommandRepository<ProductSerial> productSerialRepository,
         ICommandRepository<ProductSerialMovement> movementRepository,
-        ICommandRepository<CashTransaction> cashTransactionRepository,
-        ICommandRepository<CashCategory> cashCategoryRepository,
-        ICommandRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork,
         InventoryTransactionService inventoryTransactionService,
         InventoryCostResolver inventoryCostResolver,
-        ProductSerialService productSerialService,
-        NumberSequenceService numberSequenceService,
-        IQueryContext queryContext)
+        ProductSerialService productSerialService)
     {
         _materialExportRepository = materialExportRepository;
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _productSerialRepository = productSerialRepository;
         _movementRepository = movementRepository;
-        _cashTransactionRepository = cashTransactionRepository;
-        _cashCategoryRepository = cashCategoryRepository;
-        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
         _inventoryCostResolver = inventoryCostResolver;
         _productSerialService = productSerialService;
-        _numberSequenceService = numberSequenceService;
-        _queryContext = queryContext;
     }
 
     public async Task<UpdateMaterialExportResult> Handle(
@@ -129,21 +112,27 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     return;
                 }
 
-                var sourceTransactions = await _cashTransactionRepository.GetQuery()
-                    .ApplyIsDeletedFilter(false)
-                    .Where(x => x.SourceModule == nameof(MaterialExport) && x.SourceModuleId == entity.Id)
-                    .ToListAsync(ct);
-                var sourceTransactionIds = sourceTransactions.Select(x => x.Id).ToList();
-                var hasPayment = sourceTransactions.Any(x => (x.PaidAmount ?? 0m) > 0m)
-                    || await _queryContext.Set<CashTransactionPayment>().AsNoTracking()
-                        .AnyAsync(x => !x.IsDeleted && sourceTransactionIds.Contains(x.CashTransactionId) && x.Amount != 0m, ct);
-                if (hasPayment)
-                    throw new InvalidOperationException($"Không thể chuyển phiếu xuất vật tư {entity.Number} về Nháp hoặc Hủy vì giao dịch chi phí đã có thanh toán. Hãy hoàn tác thanh toán trước.");
-
                 var confirmedLines = await _inventoryTransactionRepository.GetQuery()
                     .ApplyIsDeletedFilter(false)
                     .Where(x => x.ModuleName == nameof(MaterialExport) && x.ModuleId == entity.Id)
                     .ToListAsync(ct);
+                var lineIds = confirmedLines.Select(x => x.Id).ToList();
+                var serialIdsByLine = requestedStatus == MaterialExportStatus.Draft
+                    ? (await _movementRepository.GetQuery()
+                        .ApplyIsDeletedFilter(false)
+                        .Where(x => x.ReversedAtUtc == null && x.InventoryTransactionId != null
+                            && lineIds.Contains(x.InventoryTransactionId))
+                        .Select(x => new { x.InventoryTransactionId, x.ProductSerialId })
+                        .ToListAsync(ct))
+                        .Where(x => !string.IsNullOrWhiteSpace(x.InventoryTransactionId)
+                            && !string.IsNullOrWhiteSpace(x.ProductSerialId))
+                        .GroupBy(x => x.InventoryTransactionId!)
+                        .ToDictionary(
+                            x => x.Key,
+                            x => (IReadOnlyCollection<string>)x.Select(y => y.ProductSerialId!)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList())
+                    : new Dictionary<string, IReadOnlyCollection<string>>();
                 foreach (var line in confirmedLines)
                 {
                     await _productSerialService.ReleaseInventoryTransactionSerialsAsync(line.Id, request.UpdatedById, ct);
@@ -154,10 +143,17 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     line.UpdatedById = request.UpdatedById;
                     _inventoryTransactionRepository.Update(line);
                 }
-                foreach (var sourceTransaction in sourceTransactions)
+                await _unitOfWork.SaveAsync(ct);
+                if (requestedStatus == MaterialExportStatus.Draft)
                 {
-                    sourceTransaction.UpdatedById = request.UpdatedById;
-                    _cashTransactionRepository.Delete(sourceTransaction);
+                    foreach (var line in confirmedLines)
+                    {
+                        if (serialIdsByLine.TryGetValue(line.Id, out var serialIds) && serialIds.Count > 0)
+                        {
+                            await _productSerialService.ApplyInventoryTransactionSerialsAsync(
+                                line, serialIds, request.UpdatedById, ct);
+                        }
+                    }
                 }
                 entity.Status = requestedStatus;
                 entity.UpdatedById = request.UpdatedById;
@@ -206,28 +202,7 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
             {
                 throw new InvalidOperationException("Cần thêm ít nhất một hàng hóa trước khi xác nhận phiếu xuất vật tư.");
             }
-            var selectedCustomer = await _customerRepository.GetQuery()
-                .ApplyIsDeletedFilter(false)
-                .SingleOrDefaultAsync(x => x.Id == request.CustomerId, ct);
-            if (selectedCustomer == null || string.IsNullOrWhiteSpace(selectedCustomer.Name))
-            {
-                throw new InvalidOperationException("The selected customer could not be found.");
-            }
-
-            var existingOffsets = await _cashTransactionRepository.GetQuery()
-                .AnyAsync(x => !x.IsDeleted
-                    && x.SourceModule == nameof(MaterialExport)
-                    && x.SourceModuleId == entity.Id, ct);
-            if (existingOffsets)
-            {
-                throw new InvalidOperationException("Cash transactions already exist for this material export.");
-            }
-
             var selectedAcrossDocument = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var totalProjectCost = 0m;
-            var hasFallbackCost = false;
-            var hasOpeningCost = false;
-            var hasPurchaseCost = false;
 
             foreach (var line in lines)
             {
@@ -260,9 +235,6 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                         line.Id,
                         ct);
                     line.UnitCost = costResolution.UnitCost;
-                    totalProjectCost += costResolution.TotalCost;
-                    hasOpeningCost |= costResolution.IncludesOpeningStock;
-                    hasPurchaseCost |= costResolution.IncludesPurchase;
 
                     line.Status = InventoryTransactionStatus.Confirmed;
                     line.WarehouseId = entity.WarehouseId;
@@ -345,12 +317,9 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     }
                     var serialCost = _inventoryCostResolver.ResolveSerial(serial);
                     lineTotalCost += serialCost.UnitCost;
-                    hasOpeningCost |= serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
-                    hasPurchaseCost |= !serialCost.SourceKey.StartsWith("OPENING:", StringComparison.Ordinal);
                 }
 
                 line.UnitCost = AccountingMath.RoundVnd(lineTotalCost / required);
-                totalProjectCost += AccountingMath.RoundVnd(line.UnitCost.Value * required);
                 line.Status = InventoryTransactionStatus.Confirmed;
                 line.WarehouseId = entity.WarehouseId;
                 line.MovementDate = entity.ExportDate;
@@ -373,74 +342,11 @@ public class UpdateMaterialExportHandler : IRequestHandler<UpdateMaterialExportR
                     ct);
             }
 
-            const string projectAllocationCategoryName = "Phân bổ công trình";
-            var projectAllocationCategory = await _cashCategoryRepository.GetQuery()
-                .ApplyIsDeletedFilter(false)
-                .OrderBy(x => x.CreatedAtUtc)
-                .ThenBy(x => x.Id)
-                .FirstOrDefaultAsync(x => x.Name == projectAllocationCategoryName, ct);
-            if (projectAllocationCategory == null)
-            {
-                projectAllocationCategory = new CashCategory
-                {
-                    CreatedById = request.UpdatedById,
-                    Name = projectAllocationCategoryName,
-                    Description = "Chi phí vật tư phân bổ cho công trình"
-                };
-                await _cashCategoryRepository.CreateAsync(projectAllocationCategory, ct);
-                await _unitOfWork.SaveAsync(ct);
-            }
-
-            if (totalProjectCost > 0m)
-            {
-                var costDescription = hasFallbackCost
-                    ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn hàng hóa dự phòng)"
-                    : hasOpeningCost && !hasPurchaseCost
-                        ? $"Phân bổ công trình cho {selectedCustomer.Name} (giá vốn tồn đầu kỳ)"
-                        : $"Phân bổ công trình cho {selectedCustomer.Name}";
-                await CreateProjectCostTransactionAsync(
-                    entity,
-                    totalProjectCost,
-                    projectAllocationCategory.Id,
-                    costDescription,
-                    request.UpdatedById,
-                    ct);
-            }
-
             entity.Status = MaterialExportStatus.Confirmed;
             _materialExportRepository.Update(entity);
             await _unitOfWork.SaveAsync(ct);
         }, cancellationToken);
 
         return new UpdateMaterialExportResult { Data = entity };
-    }
-
-    private async Task CreateProjectCostTransactionAsync(
-        MaterialExport materialExport,
-        decimal amount,
-        string cashCategoryId,
-        string description,
-        string? userId,
-        CancellationToken cancellationToken)
-    {
-        await _cashTransactionRepository.CreateAsync(new CashTransaction
-        {
-            CreatedById = userId,
-            Number = _numberSequenceService.GenerateNumber(nameof(CashTransaction), "", "CT"),
-            TransactionDate = materialExport.ExportDate ?? DateTime.Today,
-            TransactionType = CashTransactionType.Credit,
-            Status = CashTransactionStatus.Unpaid,
-            Amount = amount,
-            PaidAmount = 0m,
-            Description = description,
-            CashAccountId = null,
-            CashCategoryId = cashCategoryId,
-            CustomerId = materialExport.CustomerId,
-            VendorId = null,
-            SourceModule = nameof(MaterialExport),
-            SourceModuleId = materialExport.Id,
-            SourceDetailId = null,
-            SourceModuleNumber = materialExport.Number
-        }, cancellationToken);
     }
 }

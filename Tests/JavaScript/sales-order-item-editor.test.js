@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const editor = require('../../Presentation/ASPNET/wwwroot/lib/indotalent/sales-order-item-editor.js');
 
@@ -67,4 +69,17 @@ test('serial được chuẩn hóa thành id và chuỗi hiển thị primitive,
     assert.deepEqual(result.ids, ['serial-1', 'serial-2']);
     assert.equal(result.numbers, 'SN-001, SN-002');
     assert.equal(result.quantity, 2);
+});
+
+test('Sales Order chỉ hiển thị giá vốn và lợi nhuận', () => {
+    const source = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/SalesOrders/SalesOrderList.cshtml.js'
+    ), 'utf8');
+
+    assert.match(source, /field: 'cogsAmount'/);
+    assert.match(source, /field: 'profitAmount'/);
+    assert.doesNotMatch(source, /field: 'averageCost'/);
+    assert.doesNotMatch(source, /field: 'costStatus'/);
+    assert.doesNotMatch(source, /cost-layer-details/);
 });

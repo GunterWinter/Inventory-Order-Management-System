@@ -122,10 +122,10 @@ public class UpdatePurchaseOrderItemHandler : IRequestHandler<UpdatePurchaseOrde
             entity.ManufacturerSerialNumbersJson = null;
         }
 
-        entity.Total = AccountingMath.RoundVnd((entity.UnitPrice ?? 0m) * (entity.Quantity ?? 0m));
+        entity.Total = AccountingMath.RoundMoney((entity.UnitPrice ?? 0m) * (entity.Quantity ?? 0m));
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
-        entity.TaxAmount = AccountingMath.RoundVnd((entity.Total ?? 0m) * taxPercentage / 100m);
-        entity.AfterTaxAmount = (entity.Total ?? 0m) + (entity.TaxAmount ?? 0m);
+        entity.TaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) * taxPercentage / 100m);
+        entity.AfterTaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) + (entity.TaxAmount ?? 0m));
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);

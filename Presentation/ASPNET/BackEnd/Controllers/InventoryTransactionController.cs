@@ -38,10 +38,11 @@ public class InventoryTransactionController : BaseApiController
     [Authorize]
     [HttpGet("GetInventoryStockList")]
     public async Task<ActionResult<ApiSuccessResult<GetInventoryStockListResult>>> GetInventoryStockListAsync(
+        [FromQuery] string? salesOrderId,
         CancellationToken cancellationToken
         )
     {
-        var request = new GetInventoryStockListRequest { };
+        var request = new GetInventoryStockListRequest { SalesOrderId = salesOrderId };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetInventoryStockListResult>

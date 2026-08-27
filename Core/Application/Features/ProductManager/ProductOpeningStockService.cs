@@ -18,6 +18,8 @@ public sealed class ProductOpeningStockService
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly ICommandRepository<ProductSerial> _productSerialRepository;
     private readonly ICommandRepository<ProductSerialMovement> _productSerialMovementRepository;
+    private readonly ICommandRepository<PurchaseOrderItem> _purchaseOrderItemRepository;
+    private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
     private readonly ICommandRepository<Warehouse> _warehouseRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NumberSequenceService _numberSequenceService;
@@ -28,6 +30,8 @@ public sealed class ProductOpeningStockService
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         ICommandRepository<ProductSerial> productSerialRepository,
         ICommandRepository<ProductSerialMovement> productSerialMovementRepository,
+        ICommandRepository<PurchaseOrderItem> purchaseOrderItemRepository,
+        ICommandRepository<SalesOrderItem> salesOrderItemRepository,
         ICommandRepository<Warehouse> warehouseRepository,
         IUnitOfWork unitOfWork,
         NumberSequenceService numberSequenceService,
@@ -37,6 +41,8 @@ public sealed class ProductOpeningStockService
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _productSerialRepository = productSerialRepository;
         _productSerialMovementRepository = productSerialMovementRepository;
+        _purchaseOrderItemRepository = purchaseOrderItemRepository;
+        _salesOrderItemRepository = salesOrderItemRepository;
         _warehouseRepository = warehouseRepository;
         _unitOfWork = unitOfWork;
         _numberSequenceService = numberSequenceService;
@@ -246,7 +252,11 @@ public sealed class ProductOpeningStockService
         return await _inventoryTransactionRepository.GetQuery()
                 .AnyAsync(x => x.ProductId == productId, cancellationToken)
             || await _productSerialRepository.GetQuery()
-                .AnyAsync(x => x.ProductId == productId, cancellationToken);
+                .AnyAsync(x => x.ProductId == productId, cancellationToken)
+            || await _purchaseOrderItemRepository.GetQuery()
+                .AnyAsync(x => !x.IsDeleted && x.ProductId == productId, cancellationToken)
+            || await _salesOrderItemRepository.GetQuery()
+                .AnyAsync(x => !x.IsDeleted && x.ProductId == productId, cancellationToken);
     }
 
     private async Task CreateInternalSerialsAsync(

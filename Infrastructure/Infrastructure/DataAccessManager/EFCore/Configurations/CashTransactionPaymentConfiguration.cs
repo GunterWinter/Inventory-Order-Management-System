@@ -17,6 +17,7 @@ public class CashTransactionPaymentConfiguration : BaseEntityConfiguration<CashT
         builder.Property(x => x.PaymentDate).IsRequired();
         builder.Property(x => x.Amount).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(DescriptionConsts.MaxLength).IsRequired(false);
+        builder.Property(x => x.ReversalOfPaymentId).HasMaxLength(IdConsts.MaxLength).IsRequired(false);
 
         builder.HasOne(x => x.CashTransaction)
             .WithMany(x => x.PaymentList)
@@ -34,6 +35,10 @@ public class CashTransactionPaymentConfiguration : BaseEntityConfiguration<CashT
             .HasFilter("[IsDeleted] = 0")
             .IncludeProperties(x => new { x.CashTransactionId, x.Amount });
         builder.HasIndex(x => x.PaymentDate);
+        builder.HasIndex(x => x.ReversalOfPaymentId)
+            .IsUnique()
+            .HasDatabaseName("UX_CashTransactionPayment_ActiveReversal")
+            .HasFilter("[IsDeleted] = 0 AND [ReversalOfPaymentId] IS NOT NULL");
         builder.HasIndex(x => new { x.CashTransactionId, x.PaymentDate })
             .HasDatabaseName("IX_CashTransactionPayment_ActiveTransactionDate")
             .HasFilter("[IsDeleted] = 0")

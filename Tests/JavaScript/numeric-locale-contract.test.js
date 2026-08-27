@@ -27,14 +27,15 @@ test('menu page scripts do not bypass the Vietnamese number manager', () => {
     assert.deepEqual(violations, []);
 });
 
-test('purchase and sales editors explicitly preserve Vietnamese decimal values', () => {
+test('purchase and sales editors use shared two-decimal money and six-decimal quantities', () => {
     const purchase = fs.readFileSync(path.join(pagesRoot, 'PurchaseOrders/PurchaseOrderList.cshtml.js'), 'utf8');
     const sales = fs.readFileSync(path.join(pagesRoot, 'SalesOrders/SalesOrderList.cshtml.js'), 'utf8');
 
     for (const source of [purchase, sales]) {
         assert.match(source, /numericKind:\s*'money'/);
-        assert.match(source, /format:\s*'n6'/);
-        assert.match(source, /decimals:\s*6/);
+        assert.match(source, /NumberFormatManager\.roundMoney\(/);
+        assert.match(source, /numericKind:\s*isSerialTrackedProduct[\s\S]{0,100}'decimal'/);
+        assert.match(source, /decimals:\s*isSerialTrackedProduct[\s\S]{0,100}:\s*6/);
         assert.match(source, /NumberFormatManager\.parseLocaleNumber\(/);
         assert.match(source, /NumberFormatManager\.readNumericTextBoxValue\(priceObj\)/);
         assert.doesNotMatch(source, /priceEditorValue\s*=\s*Number\(priceEditorValue\s*\?\?/);
@@ -48,7 +49,6 @@ test('material export persists six-decimal FIFO summary and exact slice total', 
 
     assert.match(source, /ResolveFifoAsync\(\s*line\.ProductId,\s*entity\.WarehouseId,\s*movement,\s*entity\.ExportDate,\s*line\.Id,\s*ct\)/s);
     assert.match(source, /line\.UnitCost\s*=\s*costResolution\.UnitCost/);
-    assert.match(source, /totalProjectCost\s*\+=\s*costResolution\.TotalCost/);
     assert.match(source, /ReplaceFifoCostAllocationsAsync\([\s\S]{0,180}costResolution\.Slices/);
 });
 

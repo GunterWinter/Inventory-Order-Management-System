@@ -35,7 +35,6 @@ public sealed class InventoryCostBackfillService
     private readonly ICommandRepository<ProductSerial> _productSerials;
     private readonly ICommandRepository<ProductSerialMovement> _serialMovements;
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItems;
-    private readonly ICommandRepository<CashTransaction> _cashTransactions;
     private readonly InventoryCostResolver _costResolver;
     private readonly InventoryTransactionService _inventoryService;
     private readonly IUnitOfWork _unitOfWork;
@@ -47,7 +46,6 @@ public sealed class InventoryCostBackfillService
         ICommandRepository<ProductSerial> productSerials,
         ICommandRepository<ProductSerialMovement> serialMovements,
         ICommandRepository<SalesOrderItem> salesOrderItems,
-        ICommandRepository<CashTransaction> cashTransactions,
         InventoryCostResolver costResolver,
         InventoryTransactionService inventoryService,
         IUnitOfWork unitOfWork)
@@ -58,7 +56,6 @@ public sealed class InventoryCostBackfillService
         _productSerials = productSerials;
         _serialMovements = serialMovements;
         _salesOrderItems = salesOrderItems;
-        _cashTransactions = cashTransactions;
         _costResolver = costResolver;
         _inventoryService = inventoryService;
         _unitOfWork = unitOfWork;
@@ -223,31 +220,6 @@ public sealed class InventoryCostBackfillService
             if (!apply) return;
             await _unitOfWork.SaveAsync(ct);
 
-            foreach (var materialExportId in candidates
-                .Where(x => x.ModuleName == nameof(MaterialExport) && x.ModuleId != null)
-                .Select(x => x.ModuleId!)
-                .Distinct())
-            {
-                var documentTotal = await (from allocation in _costAllocations.GetQuery()
-                    join inventory in _inventoryTransactions.GetQuery()
-                        on allocation.InventoryTransactionId equals inventory.Id
-                    where !allocation.IsDeleted && !inventory.IsDeleted
-                        && inventory.ModuleName == nameof(MaterialExport)
-                        && inventory.ModuleId == materialExportId
-                    select allocation.Total ?? 0m).SumAsync(ct);
-                var cashRows = await _cashTransactions.GetQuery()
-                    .Where(x => !x.IsDeleted && x.SourceModule == nameof(MaterialExport)
-                        && x.SourceModuleId == materialExportId)
-                    .ToListAsync(ct);
-                foreach (var cash in cashRows)
-                {
-                    cash.Amount = documentTotal;
-                    cash.UpdatedAtUtc = AppDateTime.VietnamNow();
-                    cash.UpdatedById = "inventory-cost-backfill";
-                    _cashTransactions.Update(cash);
-                }
-            }
-            await _unitOfWork.SaveAsync(ct);
         }
 
         if (apply)

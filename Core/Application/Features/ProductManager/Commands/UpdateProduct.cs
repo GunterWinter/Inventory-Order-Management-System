@@ -117,7 +117,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductRequest, Update
                 if (await _openingStockService.HasInventoryOrSerialHistoryAsync(entity.Id, ct))
                 {
                     throw new InvalidOperationException(
-                        "Không thể đổi chế độ serial của hàng hóa đã có tồn kho hoặc lịch sử giao dịch.");
+                        "Không thể đổi loại vật lý hoặc chế độ serial của hàng hóa đã được dùng trong chứng từ.");
                 }
             }
 

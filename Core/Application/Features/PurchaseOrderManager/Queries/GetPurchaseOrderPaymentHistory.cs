@@ -14,6 +14,9 @@ public class PurchaseOrderPaymentDto
     public DateTime PaymentDate { get; set; }
     public decimal Amount { get; set; }
     public string? Description { get; set; }
+    public string? ReversalOfPaymentId { get; set; }
+    public bool IsReversal { get; set; }
+    public bool CanReverse { get; set; }
 }
 
 public class GetPurchaseOrderPaymentHistoryResult
@@ -84,9 +87,17 @@ public class GetPurchaseOrderPaymentHistoryHandler
                 CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
                 PaymentDate = x.PaymentDate,
                 Amount = x.Amount,
-                Description = x.Description
+                Description = x.Description,
+                ReversalOfPaymentId = x.ReversalOfPaymentId,
+                IsReversal = x.ReversalOfPaymentId != null
             })
             .ToListAsync(cancellationToken);
+        var reversedPaymentIds = payments
+            .Where(x => x.ReversalOfPaymentId != null)
+            .Select(x => x.ReversalOfPaymentId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var payment in payments)
+            payment.CanReverse = payment.Amount > 0m && !reversedPaymentIds.Contains(payment.Id!);
 
         return new GetPurchaseOrderPaymentHistoryResult
         {

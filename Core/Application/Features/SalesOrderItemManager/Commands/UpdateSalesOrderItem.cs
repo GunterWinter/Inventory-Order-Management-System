@@ -44,8 +44,7 @@ public class UpdateSalesOrderItemValidator : AbstractValidator<UpdateSalesOrderI
         RuleFor(x => x.TaxId).NotEmpty();
         RuleFor(x => x.WarrantyMonths).NotNull().GreaterThanOrEqualTo(0);
         RuleFor(x => x.UnitPrice).NotEmpty();
-        RuleFor(x => x.Quantity).NotNull().GreaterThan(0)
-            .When(x => x.ProductSerialIds == null || x.ProductSerialIds.Count == 0);
+        RuleFor(x => x.Quantity).NotNull().GreaterThanOrEqualTo(0);
     }
 }
 
@@ -105,11 +104,7 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         var isSerialTracked = await _productSerialService.IsProductSerialTrackedAsync(request.ProductId, cancellationToken);
         if (isSerialTracked)
         {
-            if (request.ProductSerialIds == null || request.ProductSerialIds.Count == 0)
-            {
-                throw new Exception("Serial-tracked products require selected serial numbers.");
-            }
-            quantity = request.ProductSerialIds.Count;
+            quantity = request.ProductSerialIds?.Distinct(StringComparer.OrdinalIgnoreCase).Count() ?? 0;
         }
         else if (quantity == null || quantity <= 0m)
         {
@@ -135,10 +130,10 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         entity.UnitPrice = request.UnitPrice;
         entity.Quantity = quantity;
 
-        entity.Total = AccountingMath.RoundVnd((entity.UnitPrice ?? 0m) * (entity.Quantity ?? 0m));
+        entity.Total = AccountingMath.RoundMoney((entity.UnitPrice ?? 0m) * (entity.Quantity ?? 0m));
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
-        entity.TaxAmount = AccountingMath.RoundVnd((entity.Total ?? 0m) * taxPercentage / 100m);
-        entity.AfterTaxAmount = (entity.Total ?? 0m) + (entity.TaxAmount ?? 0m);
+        entity.TaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) * taxPercentage / 100m);
+        entity.AfterTaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) + (entity.TaxAmount ?? 0m));
 
         _repository.Update(entity);
         await _unitOfWork.SaveAsync(cancellationToken);
@@ -170,6 +165,11 @@ public class UpdateSalesOrderItemHandler : IRequestHandler<UpdateSalesOrderItemR
         if (string.IsNullOrWhiteSpace(productId) ||
             string.IsNullOrWhiteSpace(warehouseId) ||
             quantity == null)
+        {
+            return;
+        }
+
+        if (quantity <= 0m)
         {
             return;
         }

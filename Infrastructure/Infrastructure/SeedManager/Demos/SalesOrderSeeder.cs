@@ -120,6 +120,7 @@ public class SalesOrderSeeder
             foreach (var serial in selected)
             {
                 serial.SalesOrderItemId = item.Id;
+                serial.Status = ProductSerialStatus.Reserved;
                 serial.UpdatedById = "demo-seeder";
                 _serials.Update(serial);
             }

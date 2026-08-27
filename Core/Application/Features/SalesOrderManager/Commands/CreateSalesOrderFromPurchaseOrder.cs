@@ -105,10 +105,10 @@ public class CreateSalesOrderFromPurchaseOrderHandler : IRequestHandler<CreateSa
                 : (product?.UnitPrice ?? poItem.UnitPrice ?? 0);
 
             decimal quantity = poItem.Quantity ?? 1;
-            decimal total = AccountingMath.RoundVnd(unitPrice * quantity);
+            decimal total = AccountingMath.RoundMoney(unitPrice * quantity);
             decimal taxRate = poItem.Tax?.Percentage ?? 0;
-            decimal taxAmount = AccountingMath.RoundVnd(total * taxRate / 100m);
-            decimal afterTaxAmount = total + taxAmount;
+            decimal taxAmount = AccountingMath.RoundMoney(total * taxRate / 100m);
+            decimal afterTaxAmount = AccountingMath.RoundMoney(total + taxAmount);
 
             var soItem = new SalesOrderItem
             {

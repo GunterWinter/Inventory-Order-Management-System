@@ -82,7 +82,16 @@ async function openSelectedDocument(page, gridSelector, documentId, actionId = '
 
     const row = page.locator(`${gridSelector} .e-content tr.e-row`).nth(rowIndex);
     await expect(row).toBeVisible();
-    await row.click();
+    const rowCheckbox = row.locator('.e-checkbox-wrapper').first();
+    if (await rowCheckbox.count()) await rowCheckbox.click();
+    else await row.click();
+    // A filtered/paged Syncfusion grid can redraw after the click without
+    // keeping the toolbar selection. Re-apply the primary-key selection.
+    await page.evaluate(({ selector, id }) => {
+        const grid = document.querySelector(selector)?.ej2_instances?.[0];
+        const index = grid?.getRowIndexByPrimaryKey?.(id);
+        if (Number.isInteger(index) && index >= 0) grid.selectRow(index);
+    }, { selector: gridSelector, id: documentId });
     await expect(page.locator(`#${actionId}`)).toBeEnabled();
     const actionButton = page.locator(`#${actionId}`);
     await actionButton.locator('xpath=..').evaluate(element => element.click());

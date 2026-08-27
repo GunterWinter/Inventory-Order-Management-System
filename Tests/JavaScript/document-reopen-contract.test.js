@@ -30,7 +30,17 @@ test('reopening inventory documents releases confirmed serial movements', () => 
     assert.match(inventory, /alreadyConfirmedIds\.Contains\(childId\)[\s\S]{0,160}ReleaseInventoryTransactionSerialsAsync/);
 });
 
-test('PO, SO and Material Export remove only unpaid cash effects when reopening', () => {
+test('Material Export xác nhận trở về Nháp giữ lại đúng serial đã chọn', () => {
+    const source = read('Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs');
+    const serialService = read('Core/Application/Features/ProductSerialManager/ProductSerialService.cs');
+
+    assert.match(source, /serialIdsByLine = requestedStatus == MaterialExportStatus\.Draft/);
+    assert.match(source, /ReleaseInventoryTransactionSerialsAsync\(line\.Id/);
+    assert.match(source, /ApplyInventoryTransactionSerialsAsync\([\s\S]{0,120}line, serialIds/);
+    assert.match(serialService, /transaction\.Status != InventoryTransactionStatus\.Confirmed[\s\S]{0,160}ProductSerialStatus\.Reserved/);
+});
+
+test('PO and SO remove unpaid cash effects while Material Export never touches cash', () => {
     const purchase = read('Core/Application/Features/PurchaseOrderManager/PurchaseOrderService.cs');
     const sales = read('Core/Application/Features/SalesOrderManager/SalesOrderService.cs');
     const materialExport = read('Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs');
@@ -38,8 +48,8 @@ test('PO, SO and Material Export remove only unpaid cash effects when reopening'
     assert.match(purchase, /OrderStatus == PurchaseOrderStatus\.Draft[\s\S]{0,700}ValidateCancellationAsync[\s\S]{0,700}DeleteUnpaidObligationAsync/);
     assert.match(sales, /OrderStatus == SalesOrderStatus\.Draft[\s\S]{0,700}ValidateCancellationAsync[\s\S]{0,700}DeleteUnpaidReceivableAsync/);
     assert.match(materialExport, /requestedStatus is MaterialExportStatus\.Draft or MaterialExportStatus\.Cancelled/);
-    assert.match(materialExport, /hasPayment[\s\S]{0,250}không thể chuyển/i);
     assert.match(materialExport, /line\.Status = requestedStatus == MaterialExportStatus\.Draft/);
+    assert.doesNotMatch(materialExport, /CashTransaction|CashCategory|CreateProjectCostTransaction/);
 });
 
 test('stock report carries and displays product group', () => {

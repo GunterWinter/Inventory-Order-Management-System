@@ -4,7 +4,7 @@
     const GROUP_SEPARATOR = '.';
     const DECIMAL_SEPARATOR = ',';
     const MAX_FRACTION_DIGITS = 6;
-    const MONEY_MIN_FRACTION_DIGITS = 0;
+    const MONEY_FRACTION_DIGITS = 2;
     const MONEY_FORMAT = 'N2';
     const MONEY_FIELD_PATTERN = /(price|amount|balance|debit|credit|receipt|expense|revenue|debt|paid|payment|cost|profit|cogs|subtotal|total|sales)/i;
     const QUANTITY_FIELD_PATTERN = /(quantity|qty|stock|movement)/i;
@@ -52,14 +52,20 @@
     }
 
     function formatMoney(value) {
-        return formatNumber(value, MONEY_MIN_FRACTION_DIGITS, MAX_FRACTION_DIGITS);
+        return formatNumber(roundMoney(value), MONEY_FRACTION_DIGITS, MONEY_FRACTION_DIGITS);
+    }
+
+    function roundMoney(value) {
+        const safeValue = toFiniteNumber(value);
+        const factor = 10 ** MONEY_FRACTION_DIGITS;
+        return Math.sign(safeValue) * Math.round((Math.abs(safeValue) + Number.EPSILON) * factor) / factor;
     }
 
     function formatInteger(value) {
         return formatNumber(value, 0, 0);
     }
 
-    function formatCurrency(value, minimumFractionDigits = MONEY_MIN_FRACTION_DIGITS, maximumFractionDigits = MAX_FRACTION_DIGITS) {
+    function formatCurrency(value, minimumFractionDigits = MONEY_FRACTION_DIGITS, maximumFractionDigits = MONEY_FRACTION_DIGITS) {
         const safeValue = toFiniteNumber(value);
 
         return new Intl.NumberFormat(VI_LOCALE, {
@@ -113,8 +119,9 @@
             && numericKind !== NUMERIC_KIND.decimal
             && (!DECIMAL_FIELD_PATTERN.test(identity) || INTEGER_FIELD_PATTERN.test(identity))) return;
 
-        numericTextBox.format = 'n6';
-        numericTextBox.decimals = MAX_FRACTION_DIGITS;
+        const moneyInput = numericKind === NUMERIC_KIND.money || isMoneyText(identity);
+        numericTextBox.format = moneyInput ? 'n2' : 'n6';
+        numericTextBox.decimals = moneyInput ? MONEY_FRACTION_DIGITS : MAX_FRACTION_DIGITS;
         numericTextBox.validateDecimalOnType = false;
     }
 
@@ -649,6 +656,7 @@
         numericKind: NUMERIC_KIND,
         formatToLocale: formatNumber,
         formatMoneyToLocale: formatMoney,
+        roundMoney,
         formatIntegerToLocale: formatInteger,
         formatCurrencyToLocale: formatCurrency,
         formatEditableValue,

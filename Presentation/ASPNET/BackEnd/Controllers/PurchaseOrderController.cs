@@ -218,6 +218,21 @@ public class PurchaseOrderController : BaseApiController
         });
     }
 
+    [Authorize]
+    [HttpPost("ReversePurchaseOrderPayment")]
+    public async Task<ActionResult<ApiSuccessResult<PayPurchaseOrderResult>>> ReversePurchaseOrderPaymentAsync(
+        [FromBody] ReversePurchaseOrderPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _sender.Send(request, cancellationToken);
+        return Ok(new ApiSuccessResult<PayPurchaseOrderResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(ReversePurchaseOrderPaymentAsync)}",
+            Content = response
+        });
+    }
+
 }
 
 

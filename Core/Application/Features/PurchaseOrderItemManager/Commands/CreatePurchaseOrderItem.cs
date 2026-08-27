@@ -113,10 +113,10 @@ public class CreatePurchaseOrderItemHandler : IRequestHandler<CreatePurchaseOrde
             entity.ManufacturerSerialNumbersJson = null;
         }
 
-        entity.Total = AccountingMath.RoundVnd((entity.Quantity ?? 0m) * (entity.UnitPrice ?? 0m));
+        entity.Total = AccountingMath.RoundMoney((entity.Quantity ?? 0m) * (entity.UnitPrice ?? 0m));
         var taxPercentage = await ResolveTaxPercentageAsync(entity.TaxId, cancellationToken);
-        entity.TaxAmount = AccountingMath.RoundVnd((entity.Total ?? 0m) * taxPercentage / 100m);
-        entity.AfterTaxAmount = (entity.Total ?? 0m) + (entity.TaxAmount ?? 0m);
+        entity.TaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) * taxPercentage / 100m);
+        entity.AfterTaxAmount = AccountingMath.RoundMoney((entity.Total ?? 0m) + (entity.TaxAmount ?? 0m));
 
         await _repository.CreateAsync(entity, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);

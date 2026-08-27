@@ -992,10 +992,11 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
 
         const costTransactions = dataOf(await AxiosManager.get('/CashTransaction/GetCashTransactionList', {}))
             .filter(item => item.sourceModule === 'MaterialExport' && item.sourceModuleId === materialExportId);
-        const sourceItems = costTransactions.length === 1
-            ? (await AxiosManager.get(`/CashTransaction/GetCashTransactionSourceItems?cashTransactionId=${encodeURIComponent(costTransactions[0].id)}`, {}))
-                ?.data?.content?.data ?? []
-            : [];
+        const profitReport = dataOf(await AxiosManager.get(
+            `/CashTransaction/GetCustomerProfitReport?customerId=${encodeURIComponent(customerId)}`, {}
+        ));
+        const materialCostReport = profitReport.find(item =>
+            item.sourceType === 'MaterialExport' && item.sourceModuleId === materialExportId);
         const stockAfterExport = dataOf(await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))
             .find(item => item.productId === productId && item.warehouseId === warehouseId)?.stock ?? 0;
         const selectedAfter = dataOf(await AxiosManager.get(
@@ -1045,7 +1046,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
                 sourceModule: item.sourceModule,
                 sourceModuleId: item.sourceModuleId
             })),
-            sourceItems,
+            materialCostReport,
             stockAfterExport,
             openingAfterExport: productAfter?.openingStockQuantity,
             currentCostPrice: productAfter?.costPrice,
@@ -1064,13 +1065,8 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
     if (!materialOpeningCostResult.materialExportId
         || !materialOpeningCostResult.materialExportLineId
         || !materialOpeningCostResult.secondaryMaterialExportLineId
-        || materialOpeningCostResult.costTransactions.length !== 1
-        || materialOpeningCostResult.costTransactions[0].amount !== 200
-        || materialOpeningCostResult.sourceItems.length !== 2
-        || new Set(materialOpeningCostResult.sourceItems.map(item => item.sourceItemId)).size !== 2
-        || materialOpeningCostResult.sourceItems.some(item => !item.sourceItemId || !item.customerName)
-        || materialOpeningCostResult.sourceItems.reduce((sum, item) => sum + Number(item.total || 0), 0) !== 200
-        || JSON.stringify(materialOpeningCostResult.sourceItems.map(item => item.unitPrice).sort((a, b) => a - b)) !== JSON.stringify([100, 100])
+        || materialOpeningCostResult.costTransactions.length !== 0
+        || materialOpeningCostResult.materialCostReport?.projectCost !== 200
         || materialOpeningCostResult.currentCostPrice !== 777
         || materialOpeningCostResult.stockAfterExport !== 2
         || materialOpeningCostResult.openingAfterExport !== 3

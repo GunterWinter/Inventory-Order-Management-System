@@ -126,7 +126,7 @@ public sealed class GetCashTransactionSourceItemsHandler
                     .Where(number => !string.IsNullOrWhiteSpace(number)))
             }).ToList();
         }
-        else if (transaction.SourceModule is nameof(MaterialExport) or nameof(SalesReturn) or nameof(PurchaseReturn))
+        else if (transaction.SourceModule is nameof(SalesReturn) or nameof(PurchaseReturn))
         {
             items = await LoadInventoryDocumentItemsAsync(
                 transaction.SourceModule,
@@ -171,10 +171,6 @@ public sealed class GetCashTransactionSourceItemsHandler
 
         var customerName = moduleName switch
         {
-            nameof(MaterialExport) => await _context.Set<MaterialExport>().AsNoTracking()
-                .Where(x => x.Id == moduleId && !x.IsDeleted)
-                .Select(x => x.Customer != null ? x.Customer.Name : null)
-                .FirstOrDefaultAsync(cancellationToken),
             nameof(SalesReturn) => await _context.Set<SalesReturn>().AsNoTracking()
                 .Where(x => x.Id == moduleId && !x.IsDeleted)
                 .Select(x => x.SalesOrder != null && x.SalesOrder.Customer != null ? x.SalesOrder.Customer.Name : null)
@@ -241,11 +237,7 @@ public sealed class GetCashTransactionSourceItemsHandler
             var quantity = Math.Abs(line.Movement ?? line.Stock ?? 0m);
             var serials = movementSerials.Where(x => x.InventoryTransactionId == line.Id).ToList();
             decimal unitPrice;
-            if (moduleName == nameof(MaterialExport) && line.UnitCost.HasValue)
-            {
-                unitPrice = line.UnitCost.Value;
-            }
-            else if (serials.Count > 0)
+            if (serials.Count > 0)
             {
                 unitPrice = serials.Average(x => x.UnitCost);
             }

@@ -128,17 +128,16 @@ async function beginProductItemEdit(page) {
 }
 
 async function selectStatusByLabel(page, labelFor, text) {
-    const input = page.locator(`#MainModal label[for="${labelFor}"]`)
-        .locator('xpath=..')
-        .locator('input.e-input')
-        .first();
+    const field = page.locator(`#MainModal label[for="${labelFor}"]`).locator('xpath=..');
+    const control = field.getByRole('listbox').first();
+    const input = control.locator('input.e-input').first();
     await expect(input).toBeEnabled();
     for (let attempt = 0; attempt < 3; attempt += 1) {
-        await input.locator('xpath=..').click();
-        const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
-        await expect(popup).toBeVisible();
         try {
-            await popup.locator('.e-list-item').filter({ hasText: text }).first().click({ timeout: 3000 });
+            await control.click();
+            const option = page.getByRole('option').filter({ hasText: text }).last();
+            await expect(option).toBeVisible({ timeout: 3000 });
+            await option.click();
         } catch (error) {
             if (!await input.inputValue().then(value => text.test(value))) {
                 if (attempt === 2) throw error;
@@ -158,13 +157,13 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const productName = `Dây điện ${key}`;
     const productSearchText = `DAY DIEN ${key.toUpperCase()}`;
     const expectedSalesPrice = 345000.75;
-    const expectedCostPrice = 1232.2323;
+    const expectedCostPrice = 1232.23;
     const expectedOpeningStock = 2.5;
     const expectedSalesQuantity = 1.25;
-    const editedSalesPrice = 456789.125;
-    const editedPurchasePrice = 321987.625;
+    const editedSalesPrice = 456789.13;
+    const editedPurchasePrice = 321987.63;
     const editedPurchaseQuantity = 2.5;
-    const allocatedPurchasePrice = 2232.2323;
+    const allocatedPurchasePrice = 2232.23;
     const fifoPurchaseQuantity = 3;
     const allocatedPurchaseQuantity = 1;
     const fifoExportQuantity = 3;
@@ -214,9 +213,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.locator('input[placeholder="Enter Reference Code (SKU/Custom)"]').fill(`${key}-REF`);
     const costPriceInput = page.locator('input[placeholder="Enter Cost Price"]');
     const salesPriceInput = page.locator('input[placeholder="Enter Unit Price"]');
-    await costPriceInput.pressSequentially('1232,2323');
+    await costPriceInput.pressSequentially('1232,23');
     await salesPriceInput.pressSequentially('345000,75');
-    await expect(costPriceInput).toHaveValue('1.232,2323');
+    await expect(costPriceInput).toHaveValue('1.232,23');
     await expect(salesPriceInput).toHaveValue('345.000,75');
     await page.locator('input[placeholder="Enter Unit Measure"]').fill('PCS');
 
@@ -396,8 +395,8 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const orderSalesPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await orderSalesPriceInput.click();
     await orderSalesPriceInput.press('Control+A');
-    await orderSalesPriceInput.pressSequentially('456789,125');
-    await expect(orderSalesPriceInput).toHaveValue('456.789,125');
+    await orderSalesPriceInput.pressSequentially('456789,13');
+    await expect(orderSalesPriceInput).toHaveValue('456.789,13');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -481,8 +480,8 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const purchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await purchasePriceInput.click();
     await purchasePriceInput.press('Control+A');
-    await purchasePriceInput.pressSequentially('321987,625');
-    await expect(purchasePriceInput).toHaveValue('321.987,625');
+    await purchasePriceInput.pressSequentially('321987,63');
+    await expect(purchasePriceInput).toHaveValue('321.987,63');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -493,14 +492,13 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         };
     })).toEqual({ row: editedPurchasePrice, rendered: editedPurchasePrice });
 
-    // Restore the product's exact cost after exercising the six-decimal editor.
-    // Keep the PO layer exact so FIFO evidence preserves all six decimals.
+    // Restore the product's exact cost after exercising the money editor.
     await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
     const exactPurchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await exactPurchasePriceInput.click();
     await exactPurchasePriceInput.press('Control+A');
-    await exactPurchasePriceInput.pressSequentially('1232,2323');
-    await expect(exactPurchasePriceInput).toHaveValue('1.232,2323');
+    await exactPurchasePriceInput.pressSequentially('1232,23');
+    await expect(exactPurchasePriceInput).toHaveValue('1.232,23');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -545,7 +543,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const allocatedPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await allocatedPriceInput.click();
     await allocatedPriceInput.press('Control+A');
-    await allocatedPriceInput.pressSequentially('2232,2323');
+    await allocatedPriceInput.pressSequentially('2232,23');
     await page.locator('#MainModal .modal-title').click();
     await (await gridCellByHeader(page, /Quantity|Số lượng/i)).dblclick();
     const allocatedQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
@@ -695,22 +693,25 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
                 ?.data?.content?.data ?? [];
             const cash = transactions.find(item => item.sourceModule === 'MaterialExport'
                 && item.sourceModuleId === exportId);
-            const sourceItems = cash
+            const report = header?.customerId
                 ? (await AxiosManager.get(
-                    `/CashTransaction/GetCashTransactionSourceItems?cashTransactionId=${encodeURIComponent(cash.id)}`, {}))
+                    `/CashTransaction/GetCustomerProfitReport?customerId=${encodeURIComponent(header.customerId)}`, {}))
                     ?.data?.content?.data ?? []
                 : [];
-            return { line: lines[0], lookupItem: lookup.find(item => item.productId === lines[0]?.productId), cash, sourceItem: sourceItems[0] };
+            return {
+                line: lines[0],
+                lookupItem: lookup.find(item => item.productId === lines[0]?.productId),
+                cash,
+                reportRow: report.find(item => item.sourceType === 'MaterialExport' && item.sourceModuleId === exportId)
+            };
         }, materialExport.id);
         expect(downstream.line.unitCost).toBe(fifoAverageCost);
         expect(downstream.line.costAllocations).toHaveLength(2);
         expect(downstream.lookupItem?.productName).toBe(productName);
         expect(downstream.lookupItem?.referenceCode).toBe(`${key}-REF`);
         expect(downstream.lookupItem?.stockQuantity).toBe(expectedOpeningStock + fifoPurchaseQuantity - allocatedPurchaseQuantity - fifoExportQuantity);
-        expect(downstream.cash.amount).toBe(fifoTotalCost);
-        expect(downstream.sourceItem.unitPrice).toBe(fifoAverageCost);
-        expect(downstream.sourceItem.quantity).toBe(fifoExportQuantity);
-        expect(downstream.sourceItem.total).toBe(fifoTotalCost);
+        expect(downstream.cash).toBeUndefined();
+        expect(downstream.reportRow?.projectCost).toBe(fifoTotalCost);
 
         // Return the confirmed fixtures to Draft through the visible lifecycle controls
         // so the remainder of this scenario can still exercise Draft-only source rules.
@@ -799,12 +800,13 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     purchaseOrderId = null;
 });
 
-test('Sales Order hiển thị số lượng bằng số serial đã chọn', async ({ monitoredPage: page }) => {
+test('Sales Order Nháp giữ chỗ, bỏ hết và chọn lại serial mà không mất kho', async ({ monitoredPage: page }) => {
     const key = `E2E-SERIAL-QTY-${Date.now()}`;
+    const regularKey = key.replace('SERIAL', 'REGULAR');
     const unitPrice = 125000;
 
     await login(page);
-    const fixture = await page.evaluate(async ({ key, unitPrice }) => {
+    const fixture = await page.evaluate(async ({ key, regularKey, unitPrice }) => {
         const unwrap = response => response?.data?.content?.data ?? [];
         const userId = StorageManager.getUserId();
         const [groups, warehouses, customers, taxes] = await Promise.all([
@@ -829,7 +831,22 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
             defaultWarrantyMonths: 0,
             unitMeasureName: 'PCS',
             productGroupId: group.id,
-            openingStockQuantity: 3,
+            openingStockQuantity: 1,
+            createdById: userId
+        });
+        const regularProductResponse = await AxiosManager.post('/Product/CreateProduct', {
+            name: regularKey,
+            referenceCode: `${regularKey}-REF`,
+            unitPrice,
+            costPrice: 90000,
+            physical: true,
+            serialTrackingMode: 0,
+            internalSerialFixedCode: '',
+            defaultWarehouseId: warehouse.id,
+            defaultWarrantyMonths: 0,
+            unitMeasureName: 'PCS',
+            productGroupId: group.id,
+            openingStockQuantity: 1,
             createdById: userId
         });
         const salesResponse = await AxiosManager.post('/SalesOrder/CreateSalesOrder', {
@@ -840,17 +857,30 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
             salesType: 1,
             createdById: userId
         });
+        const otherSalesResponse = await AxiosManager.post('/SalesOrder/CreateSalesOrder', {
+            orderDate: new Date().toISOString(),
+            orderStatus: '0',
+            description: `${key} OTHER SO`,
+            customerId: customer.id,
+            salesType: 1,
+            createdById: userId
+        });
         return {
             product: productResponse?.data?.content?.data,
+            regularProduct: regularProductResponse?.data?.content?.data,
             salesOrder: salesResponse?.data?.content?.data,
-            tax
+            otherSalesOrder: otherSalesResponse?.data?.content?.data,
+            tax,
+            warehouse
         };
-    }, { key, unitPrice });
+    }, { key, regularKey, unitPrice });
     expect(fixture.product?.id).toBeTruthy();
+    expect(fixture.regularProduct?.id).toBeTruthy();
     expect(fixture.salesOrder?.id).toBeTruthy();
+    expect(fixture.otherSalesOrder?.id).toBeTruthy();
     await expect.poll(() => page.evaluate(async productId => (
         ((await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))?.data?.content?.data ?? [])
-            .some(item => item.productId === productId && Number(item.stock) === 3)
+            .some(item => item.productId === productId && Number(item.stock) === 1)
     ), fixture.product.id)).toBe(true);
 
     await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
@@ -870,12 +900,11 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
     await page.locator('#SecondaryGrid .so-serial-picker').click();
     await page.waitForSelector('#ProductSerialPickerModal.show');
     const serialChecks = page.locator('#ProductSerialPickerBody .product-serial-picker-check');
-    await expect(serialChecks).toHaveCount(3);
+    await expect(serialChecks).toHaveCount(1);
     await expect(page.locator('#ProductSerialPickerModal th')
         .filter({ hasText: /Unit Cost|Giá Vốn Đơn Vị/i })).toHaveCount(1);
     await serialChecks.nth(0).check();
-    await serialChecks.nth(1).check();
-    await expect(page.locator('#ProductSerialPickerSummary')).toContainText('200.000');
+    await expect(page.locator('#ProductSerialPickerSummary')).toContainText('100.000');
     await expect(page.locator('#ProductSerialPickerSummary')).toContainText('100.000');
     await page.locator('#ProductSerialPickerApply').click();
     await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
@@ -894,22 +923,166 @@ test('Sales Order hiển thị số lượng bằng số serial đã chọn', as
         };
     });
     expect(selectedState).toEqual({
-        rowQuantity: 2,
-        rowSerialCount: 2,
-        addedQuantity: 2,
-        addedSerialCount: 2,
-        renderedQuantity: 2
+        rowQuantity: 1,
+        rowSerialCount: 1,
+        addedQuantity: 1,
+        addedSerialCount: 1,
+        renderedQuantity: 1
     });
 
     const quantityAfterTax = await selectTaxAndSaveItem(page, fixture.tax.name, fixture.tax.id);
-    expect(quantityAfterTax).toEqual({ row: 2, rendered: 2 });
+    expect(quantityAfterTax).toEqual({ row: 1, rendered: 1 });
     const persisted = await page.evaluate(async id => (
         (await AxiosManager.get(`/SalesOrderItem/GetSalesOrderItemBySalesOrderIdList?salesOrderId=${encodeURIComponent(id)}`, {}))
             ?.data?.content?.data ?? []
     ), fixture.salesOrder.id);
     expect(persisted).toHaveLength(1);
-    expect(persisted[0].quantity).toBe(2);
-    expect(persisted[0].productSerialIds).toHaveLength(2);
+    expect(persisted[0].quantity).toBe(1);
+    expect(persisted[0].productSerialIds).toHaveLength(1);
+
+    const reservedStock = await page.evaluate(async ({ productId, salesOrderId, otherSalesOrderId }) => {
+        const read = response => (response?.data?.content?.data ?? [])
+            .find(item => item.productId === productId)?.stock ?? 0;
+        const generic = await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {});
+        const contextual = await AxiosManager.get(
+            `/InventoryTransaction/GetInventoryStockList?salesOrderId=${encodeURIComponent(salesOrderId)}`, {});
+        const otherContext = await AxiosManager.get(
+            `/InventoryTransaction/GetInventoryStockList?salesOrderId=${encodeURIComponent(otherSalesOrderId)}`, {});
+        return {
+            generic: Number(read(generic)),
+            contextual: Number(read(contextual)),
+            otherContext: Number(read(otherContext))
+        };
+    }, {
+        productId: fixture.product.id,
+        salesOrderId: fixture.salesOrder.id,
+        otherSalesOrderId: fixture.otherSalesOrder.id
+    });
+    expect(reservedStock).toEqual({ generic: 0, contextual: 1, otherContext: 0 });
+
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+    await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
+        ?.dataSource?.some?.(item => item.id === id), fixture.otherSalesOrder.id);
+    await openSelectedDocument(page, '#MainGrid', fixture.otherSalesOrder.id);
+    await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
+    await beginProductItemEdit(page);
+    const otherOrderProductPopup = await openActiveGridDropdown(
+        page,
+        '#SecondaryGrid td.e-editedbatchcell input.e-input'
+    );
+    await expect(otherOrderProductPopup.locator('.e-list-item:visible').filter({ hasText: key })).toHaveCount(0);
+    const reservedRow = await reloadAndReadItem(page, '/SalesOrders/SalesOrderList', fixture.salesOrder.id);
+    expect(reservedRow.warehouseId).toBe(fixture.warehouse.id);
+    expect(reservedRow.productSerialIds).toHaveLength(1);
+    await expect(page.locator('#SecondaryGrid .e-row').first()).toContainText(fixture.warehouse.name);
+
+    await page.locator('#SecondaryGrid .so-serial-picker').click();
+    await page.waitForSelector('#ProductSerialPickerModal.show');
+    const reservedCheck = page.locator('#ProductSerialPickerBody .product-serial-picker-check');
+    await expect(reservedCheck).toHaveCount(1);
+    await expect(reservedCheck.first()).toBeChecked();
+    await reservedCheck.first().uncheck();
+    await page.locator('#ProductSerialPickerApply').click();
+    await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
+
+    const releaseResponsePromise = page.waitForResponse(response =>
+        response.url().includes('/SalesOrderItem/UpdateSalesOrderItem')
+        && response.request().method() === 'POST' && response.status() === 200);
+    await page.locator('#SecondaryGrid_update').click();
+    const releaseResponse = await releaseResponsePromise;
+    expect(releaseResponse.request().postDataJSON()).toEqual(expect.objectContaining({
+        quantity: 0,
+        productSerialIds: []
+    }));
+    await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10_000 });
+
+    const released = await page.evaluate(async ({ productId, salesOrderId }) => {
+        const items = (await AxiosManager.get(
+            `/SalesOrderItem/GetSalesOrderItemBySalesOrderIdList?salesOrderId=${encodeURIComponent(salesOrderId)}`, {}))
+            ?.data?.content?.data ?? [];
+        const stock = (await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))
+            ?.data?.content?.data ?? [];
+        return {
+            item: items[0],
+            stock: Number(stock.find(row => row.productId === productId)?.stock ?? 0)
+        };
+    }, { productId: fixture.product.id, salesOrderId: fixture.salesOrder.id });
+    expect(released.item).toEqual(expect.objectContaining({
+        productId: fixture.product.id,
+        warehouseId: fixture.warehouse.id,
+        quantity: 0
+    }));
+    expect(released.item.productSerialIds ?? []).toEqual([]);
+    expect(released.stock).toBe(1);
+
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+    const emptyRow = await reloadAndReadItem(page, '/SalesOrders/SalesOrderList', fixture.salesOrder.id);
+    expect(emptyRow).toEqual(expect.objectContaining({
+        warehouseId: fixture.warehouse.id,
+        quantity: 0,
+        productSerialIds: []
+    }));
+    await expect(page.locator('#SecondaryGrid .e-row').first()).toContainText(fixture.warehouse.name);
+
+    await selectStatusByLabel(page, 'OrderStatus', /Confirmed|Đã xác nhận/i);
+    page.expectHttpError('/SalesOrder/UpdateSalesOrder');
+    const blockedConfirmPromise = page.waitForResponse(response =>
+        response.url().includes('/SalesOrder/UpdateSalesOrder')
+        && response.request().method() === 'POST' && response.status() >= 400);
+    await page.locator('#MainSaveButton').click();
+    await page.locator('.swal2-confirm').click();
+    await blockedConfirmPromise;
+    await expect(page.locator('.swal2-html-container')).toContainText('chưa chọn đủ serial thiết bị');
+    await page.locator('.swal2-confirm').click();
+    await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10_000 });
+    const statusAfterBlockedConfirm = await page.evaluate(async id => {
+        const orders = (await AxiosManager.get('/SalesOrder/GetSalesOrderList', {}))?.data?.content?.data ?? [];
+        return Number(orders.find(item => item.id === id)?.orderStatus);
+    }, fixture.salesOrder.id);
+    expect(statusAfterBlockedConfirm).toBe(0);
+
+    await page.locator('#MainModal .btn-close').click();
+    await page.waitForSelector('#MainModal', { state: 'hidden' });
+    await reloadAndReadItem(page, '/SalesOrders/SalesOrderList', fixture.salesOrder.id);
+    await page.locator('#SecondaryGrid .so-serial-picker').click();
+    await page.waitForSelector('#ProductSerialPickerModal.show');
+    await page.locator('#ProductSerialPickerBody .product-serial-picker-check').check();
+    await page.locator('#ProductSerialPickerApply').click();
+    await page.waitForSelector('#ProductSerialPickerModal', { state: 'hidden' });
+    const reserveAgainPromise = page.waitForResponse(response =>
+        response.url().includes('/SalesOrderItem/UpdateSalesOrderItem')
+        && response.request().method() === 'POST' && response.status() === 200);
+    await page.locator('#SecondaryGrid_update').click();
+    expect((await reserveAgainPromise).request().postDataJSON()).toEqual(expect.objectContaining({
+        quantity: 1,
+        productSerialIds: expect.any(Array)
+    }));
+    await expect.poll(() => page.evaluate(async productId => {
+        const stock = (await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))
+            ?.data?.content?.data ?? [];
+        return Number(stock.find(item => item.productId === productId)?.stock ?? 0);
+    }, fixture.product.id)).toBe(0);
+
+    await (await gridCellByHeader(page, /Product|Hàng hóa/i)).dblclick();
+    await searchAndSelectProduct(page, regularKey, regularKey);
+    const switchProductPromise = page.waitForResponse(response =>
+        response.url().includes('/SalesOrderItem/UpdateSalesOrderItem')
+        && response.request().method() === 'POST' && response.status() === 200);
+    await page.locator('#SecondaryGrid_update').click();
+    expect((await switchProductPromise).request().postDataJSON()).toEqual(expect.objectContaining({
+        productId: fixture.regularProduct.id,
+        quantity: 1,
+        productSerialIds: []
+    }));
+    await expect.poll(() => page.evaluate(async productId => {
+        const stock = (await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {}))
+            ?.data?.content?.data ?? [];
+        return Number(stock.find(item => item.productId === productId)?.stock ?? 0);
+    }, fixture.product.id)).toBe(1);
 });
 
 test('Material Export keeps selected serials in added and changed batch records when Update is clicked immediately', async ({ monitoredPage: page }) => {
@@ -1152,7 +1325,7 @@ test('Material Export keeps selected serials in added and changed batch records 
     await expect(materialExportRow).toHaveCount(0);
 });
 
-test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị chặn khi đã thanh toán', async ({ monitoredPage: page }) => {
+test('Material Export đã xác nhận trở về Nháp không phụ thuộc giao dịch quỹ', async ({ monitoredPage: page }) => {
     test.slow();
     await login(page, 'vi');
     const key = `UI-MATERIAL-REOPEN-${Date.now()}`;
@@ -1189,25 +1362,9 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
             }));
             return { document: confirmed, line };
         };
-        const unpaid = await createConfirmed('UNPAID');
-        const paid = await createConfirmed('PAID');
-
-        const [cashResponse, accountsResponse] = await Promise.all([
-            AxiosManager.get('/CashTransaction/GetCashTransactionList', {}),
-            AxiosManager.get('/CashAccount/GetCashAccountList', {})
-        ]);
-        const cash = list(cashResponse).find(item => item.sourceModule === 'MaterialExport'
-            && item.sourceModuleId === paid.document.id);
-        const account = list(accountsResponse)[0];
-        await AxiosManager.post('/CashTransaction/UpdateCashTransaction', {
-            id: cash.id, transactionDate: cash.transactionDate, paymentDate: '2026-08-26',
-            transactionType: cash.transactionType, amount: cash.amount, paidAmount: 1,
-            description: cash.description, cashAccountId: account.id, cashCategoryId: cash.cashCategoryId,
-            customerId: cash.customerId, vendorId: cash.vendorId, sourceModule: cash.sourceModule,
-            sourceModuleId: cash.sourceModuleId, sourceModuleNumber: cash.sourceModuleNumber,
-            updatedById: userId, allocations: []
-        });
-        return { unpaid, paid, product };
+        const first = await createConfirmed('FIRST');
+        const second = await createConfirmed('SECOND');
+        return { first, second, product };
     }, key);
 
     const selectMainRecord = async number => {
@@ -1232,7 +1389,7 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
 
     await page.goto('/MaterialExports/MaterialExportList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
-    await selectMainRecord(fixture.unpaid.document.number);
+    await selectMainRecord(fixture.first.document.number);
     await expect(page.locator('#SecondaryGrid_add')).toHaveCount(0);
     await selectStatus(/Nháp|Draft/i);
     const reopenResponsePromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
@@ -1257,24 +1414,26 @@ test('Material Export đã xác nhận trở về Nháp để sửa, nhưng bị
     await expect.poll(() => page.evaluate(async id => {
         const response = await AxiosManager.get(`/InventoryTransaction/MaterialExportGetInvenTransList?moduleId=${encodeURIComponent(id)}`, {});
         return Number(response?.data?.content?.data?.[0]?.movement);
-    }, fixture.unpaid.document.id)).toBe(2.5);
+    }, fixture.first.document.id)).toBe(2.5);
 
     await page.locator('#MainModal .btn-close').click();
     await page.waitForSelector('#MainModal', { state: 'hidden' });
-    await selectMainRecord(fixture.paid.document.number);
+    await selectMainRecord(fixture.second.document.number);
     await selectStatus(/Nháp|Draft/i);
-    page.expectHttpError('/MaterialExport/UpdateMaterialExport');
-    const blockedResponsePromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
-        && response.request().method() === 'POST' && response.status() >= 400);
+    const secondReopenPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/UpdateMaterialExport')
+        && response.request().method() === 'POST' && response.status() === 200);
     await page.locator('#MainModal .modal-footer .btn-primary').click();
-    await blockedResponsePromise;
-    const warning = page.locator('.swal2-popup');
-    await expect(warning).toBeVisible();
-    await expect(warning.locator('.swal2-html-container')).toContainText('đã có thanh toán');
-    await expect(warning.locator('.swal2-html-container')).toContainText('hoàn tác thanh toán trước');
-    const paidStatus = await page.evaluate(async id => {
-        const response = await AxiosManager.get('/MaterialExport/GetMaterialExportList', {});
-        return response?.data?.content?.data?.find(item => item.id === id)?.status;
-    }, fixture.paid.document.id);
-    expect(Number(paidStatus)).toBe(1);
+    expect((await secondReopenPromise).status()).toBe(200);
+    const stateAfterReopen = await page.evaluate(async id => {
+        const [documents, cash] = await Promise.all([
+            AxiosManager.get('/MaterialExport/GetMaterialExportList', {}),
+            AxiosManager.get('/CashTransaction/GetCashTransactionList', {})
+        ]);
+        return {
+            status: documents?.data?.content?.data?.find(item => item.id === id)?.status,
+            cash: cash?.data?.content?.data?.find(item => item.sourceModule === 'MaterialExport' && item.sourceModuleId === id)
+        };
+    }, fixture.second.document.id);
+    expect(Number(stateAfterReopen.status)).toBe(0);
+    expect(stateAfterReopen.cash).toBeUndefined();
 });

@@ -52,7 +52,6 @@ const App = {
         const getErrorMessage = (error, defaultMsg = 'Vui lòng thử lại.') => {
             if (!error) return defaultMsg;
             if (typeof error === 'string') return error;
-            console.error('SalesOrder Error detail:', error);
             const responseData = error.response?.data;
             if (responseData) {
                 if (typeof responseData === 'string') return responseData;
@@ -123,9 +122,9 @@ const App = {
             const taxId = normalizeLookupId(overrides.taxId ?? row?.taxId);
             const taxPercentage = Number(state.taxListLookupData.find(item =>
                 normalizeLookupId(item.id) === taxId)?.percentage ?? 0) || 0;
-            const total = quantity * unitPrice;
-            const taxAmount = total * taxPercentage / 100;
-            return { quantity, unitPrice, taxId, total, taxAmount, afterTaxAmount: total + taxAmount };
+            const total = NumberFormatManager.roundMoney(quantity * unitPrice);
+            const taxAmount = NumberFormatManager.roundMoney(total * taxPercentage / 100);
+            return { quantity, unitPrice, taxId, total, taxAmount, afterTaxAmount: NumberFormatManager.roundMoney(total + taxAmount) };
         };
         const applySalesOrderItemAmounts = (row, overrides = {}) => {
             if (!row) return null;
@@ -208,10 +207,10 @@ const App = {
         const applySerialSelection = (rowData, selectedSerials) => {
             if (selectedSerials === null) return null;
             const selection = SalesOrderItemEditor.normalizeSerialSelection(selectedSerials);
-            rowData.productSerialIds = selection.ids;
-            rowData.productSerialNumbers = selection.numbers;
-            rowData.quantity = selection.quantity;
-            const amounts = applySalesOrderItemAmounts(rowData);
+            const amounts = getSalesOrderItemAmounts(rowData, {
+                productSerialIds: selection.ids,
+                quantity: selection.quantity
+            });
             return {
                 productSerialIds: selection.ids,
                 productSerialNumbers: selection.numbers,
@@ -219,16 +218,12 @@ const App = {
             };
         };
         const enrichSalesOrderItem = (item) => {
-            const costAllocations = item.costAllocations ?? [];
-            const totalCost = item.cogsAmount ?? costAllocations.reduce((sum, allocation) => sum + Number(allocation.total ?? 0), 0);
             return {
                 ...item,
                 productId: normalizeLookupId(item.productId),
                 warehouseId: normalizeLookupId(item.warehouseId),
                 taxId: normalizeLookupId(item.taxId),
                 availableStock: getAvailableStock(item.productId, item.warehouseId),
-                averageCost: Number(item.quantity ?? 0) > 0 ? Number(totalCost ?? 0) / Number(item.quantity) : null,
-                costStatus: costAllocations.length ? 'Đã chốt' : 'Chưa chốt',
                 productSerialIds: Array.isArray(item.productSerialIds)
                     ? item.productSerialIds.map(normalizeLookupId).filter(Boolean)
                     : [],
@@ -418,7 +413,8 @@ const App = {
             },
             getInventoryStockData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryStockList', {});
+                    const query = state.id ? `?salesOrderId=${encodeURIComponent(state.id)}` : '';
+                    const response = await AxiosManager.get(`/InventoryTransaction/GetInventoryStockList${query}`, {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -652,12 +648,12 @@ const App = {
                     if (!product) return;
 
                     item.unitPrice = SalesOrderItemEditor.resolveUnitPrice(product, normalizedSalesType);
-                    item.total = item.unitPrice * Number(item.quantity ?? 0);
+                    item.total = NumberFormatManager.roundMoney(item.unitPrice * Number(item.quantity ?? 0));
                     const tax = state.taxListLookupData.find(candidate =>
                         normalizeLookupId(candidate.id) === normalizeLookupId(item.taxId));
                     const taxPercentage = Number(tax?.percentage ?? item.taxPercentage ?? 0);
-                    item.taxAmount = item.total * taxPercentage / 100;
-                    item.afterTaxAmount = item.total + item.taxAmount;
+                    item.taxAmount = NumberFormatManager.roundMoney(item.total * taxPercentage / 100);
+                    item.afterTaxAmount = NumberFormatManager.roundMoney(item.total + item.taxAmount);
 
                     if (secondaryGrid.obj && rowIndex < secondaryGrid.obj.getRows().length) {
                         secondaryGrid.obj.updateCell(rowIndex, 'unitPrice', item.unitPrice);
@@ -675,7 +671,7 @@ const App = {
                     priceObj.value = targetPrice;
                     priceObj.dataBind();
                     if (quantityObj && totalObj) {
-                        totalObj.value = targetPrice * (quantityObj.value ?? 0);
+                        totalObj.value = NumberFormatManager.roundMoney(targetPrice * (quantityObj.value ?? 0));
                         totalObj.dataBind();
                     }
                 }
@@ -780,7 +776,8 @@ const App = {
                         });
                     }
                 } catch (error) {
-                    console.error('SalesOrder handleFormSubmit error:', error);
+                    const status = Number(error?.response?.status ?? 0);
+                    (status >= 400 && status < 500 ? console.warn : console.error)('SalesOrder handleFormSubmit error:', error);
                     Swal.fire({
                         icon: 'error',
                         title: 'Có lỗi xảy ra',
@@ -1871,21 +1868,6 @@ const App = {
                                 }
                             }
                         },
-                        {
-                            field: 'averageCost',
-                            headerText: 'Giá vốn bình quân',
-                            allowEditing: false,
-                            width: 170,
-                            textAlign: 'Right',
-                            valueAccessor: (_field, data) => data.averageCost == null ? '' : NumberFormatManager.formatToLocale(data.averageCost, 0, 6)
-                        },
-                        { field: 'costStatus', headerText: 'Trạng thái giá vốn', width: 130, allowEditing: false },
-                        {
-                            headerText: 'Chi tiết giá vốn',
-                            width: 140,
-                            allowEditing: false,
-                            template: '<button type="button" class="btn btn-outline-info btn-sm cost-layer-details">Chi tiết</button>'
-                        },
                     ],
                     toolbar: state.isViewMode ? ['ExcelExport'] : [
                         'ExcelExport',
@@ -1894,10 +1876,6 @@ const App = {
                     ],
                     beforeDataBound: () => { },
                     dataBound: () => secondaryGrid.syncSerialPickerRows(),
-                    recordClick: args => {
-                        if (!args.target?.closest?.('.cost-layer-details')) return;
-                        InventoryCostLayerViewer.show(args.rowData?.costAllocations ?? [], 'Chi tiết giá vốn đơn bán hàng');
-                    },
                     excelExportComplete: () => { },
                     rowSelected: () => {
                         if (secondaryGrid.obj.getSelectedRecords().length == 1) {
@@ -2017,7 +1995,8 @@ const App = {
                             return;
                         }
 
-                        if (!data.quantity || Number(data.quantity) <= 0) {
+                        const isSerialTracked = isSerialTrackedProduct(data.productId);
+                        if (Number(data.quantity) < 0 || (!isSerialTracked && Number(data.quantity) <= 0)) {
                             args.cancel = true;
                             Swal.fire({
                                 icon: 'warning',
@@ -2039,30 +2018,18 @@ const App = {
                             return;
                         }
 
-                        const isSerialTracked = isSerialTrackedProduct(data.productId);
-
                         if (isSerialTracked) {
                             // Sync serial data from rowData (where the picker stored it)
-                            const editedRow = secondaryGrid.obj?.getRowObjectFromUID?.(args.row?.getAttribute?.('data-uid'));
                             const rowData = args.rowData ?? {};
-                            if (rowData.productSerialIds?.length) {
-                                data.productSerialIds = rowData.productSerialIds;
-                                data.productSerialNumbers = rowData.productSerialNumbers;
-                            }
+                            data.productSerialIds = Array.isArray(rowData.productSerialIds) ? rowData.productSerialIds : [];
+                            data.productSerialNumbers = rowData.productSerialNumbers ?? '';
 
                             const selectedSerialCount = data.productSerialIds?.length ?? 0;
-                            if (selectedSerialCount === 0) {
-                                args.cancel = true;
-                                Swal.fire({
-                                    icon: 'warning',
-                                    title: 'Lưu thất bại',
-                                    text: 'Làm ơn chọn số seri thiết bị trước khi lưu.',
-                                    confirmButtonText: 'OK'
-                                });
-                                return;
-                            }
-
                             data.quantity = selectedSerialCount;
+                            applySalesOrderItemAmounts(data);
+                        } else {
+                            data.productSerialIds = [];
+                            data.productSerialNumbers = '';
                         }
 
                         const quantity = Number(data.quantity ?? 0);
@@ -2098,7 +2065,7 @@ const App = {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
-                            if (data?.productSerialIds?.length) {
+                            if (isSerialTrackedProduct(data?.productId)) {
                                 data.quantity = data.productSerialIds.length;
                                 applySalesOrderItemAmounts(data);
                             }
@@ -2139,7 +2106,7 @@ const App = {
                             const salesOrderId = state.id;
                             const userId = StorageManager.getUserId();
                             const data = args.data;
-                            if (data?.productSerialIds?.length) {
+                            if (isSerialTrackedProduct(data?.productId)) {
                                 data.quantity = data.productSerialIds.length;
                                 applySalesOrderItemAmounts(data);
                             }

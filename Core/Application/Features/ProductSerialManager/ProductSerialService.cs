@@ -256,18 +256,18 @@ public class ProductSerialService
         string? userId,
         CancellationToken cancellationToken = default)
     {
-        if (!await IsProductSerialTrackedAsync(item.ProductId, cancellationToken))
-        {
-            return;
-        }
-
-        if (productSerialIds == null || productSerialIds.Count == 0)
-        {
-            throw new Exception("Hàng hóa theo dõi serial yêu cầu chọn đúng mã serial thiết bị.");
-        }
-
-        var serials = await GetSerialsByIdsAsync(productSerialIds, cancellationToken);
-        ValidateSerialCount(productSerialIds, serials);
+        var isSerialTracked = await IsProductSerialTrackedAsync(item.ProductId, cancellationToken);
+        IReadOnlyCollection<string> requestedIds = isSerialTracked ? productSerialIds ?? [] : [];
+        var selectedIds = requestedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var previous = await _productSerialRepository
+            .GetQuery()
+            .ApplyIsDeletedFilter(false)
+            .Where(x => x.SalesOrderItemId == item.Id)
+            .ToListAsync(cancellationToken);
+        var serials = selectedIds.Count == 0
+            ? []
+            : await GetSerialsByIdsAsync(selectedIds, cancellationToken);
+        ValidateSerialCount(requestedIds, serials);
 
         foreach (var serial in serials)
         {
@@ -279,14 +279,7 @@ public class ProductSerialService
             }
         }
 
-        var previous = await _productSerialRepository
-            .GetQuery()
-            .ApplyIsDeletedFilter(false)
-            .Where(x => x.SalesOrderItemId == item.Id)
-            .ToListAsync(cancellationToken);
-
-        var selected = productSerialIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var serial in previous.Where(x => !selected.Contains(x.Id)))
+        foreach (var serial in previous.Where(x => !selectedIds.Contains(x.Id)))
         {
             serial.SalesOrderItemId = null;
             serial.Status = ProductSerialStatus.InStock; // Assuming if unreserved it goes back to InStock (or could be ReturnedByCustomer, but we don't know here easily, so we leave it as InStock for now, it's generally fine)
@@ -302,7 +295,10 @@ public class ProductSerialService
             _productSerialRepository.Update(serial);
         }
 
-        item.Quantity = productSerialIds.Count;
+        if (isSerialTracked)
+        {
+            item.Quantity = selectedIds.Count;
+        }
         await _unitOfWork.SaveAsync(cancellationToken);
     }
 

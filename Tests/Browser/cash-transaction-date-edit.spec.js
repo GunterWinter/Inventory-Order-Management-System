@@ -38,6 +38,17 @@ async function selectCashAccount(page, accountName) {
     await expect(popup).toBeHidden();
 }
 
+async function focusTransaction(page, transaction) {
+    await page.evaluate(number => {
+        const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
+        grid?.search(number);
+    }, transaction.number);
+    await page.waitForFunction(id => {
+        const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
+        return Boolean(grid?.getCurrentViewRecords?.().some(item => item.id === id));
+    }, transaction.id);
+}
+
 test('Cash Transaction cho sửa ngày giao dịch ở trạng thái chưa, một phần và đã thanh toán', async ({ monitoredPage: page }) => {
     test.slow();
     await login(page, 'vi');
@@ -94,6 +105,7 @@ test('Cash Transaction cho sửa ngày giao dịch ở trạng thái chưa, mộ
         const current = cases[index];
 
         if (index > 0) {
+            await focusTransaction(page, fixture.transaction);
             await openSelectedDocument(page, '#MainGrid', fixture.transaction.id);
             await page.waitForSelector('#MainModal.show');
             await enterPaidAmount(page, current.paidAmount);
@@ -107,6 +119,7 @@ test('Cash Transaction cho sửa ngày giao dịch ở trạng thái chưa, mộ
             await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10_000 });
         }
 
+        await focusTransaction(page, fixture.transaction);
         await openSelectedDocument(page, '#MainGrid', fixture.transaction.id);
         await page.waitForSelector('#MainModal.show');
         await expect(page.locator('#MainModal .form-control-plaintext')).toContainText(current.status);
@@ -128,6 +141,7 @@ test('Cash Transaction cho sửa ngày giao dịch ở trạng thái chưa, mộ
         expect(persisted?.transactionDate?.slice(0, 10)).toBe(current.apiDate);
         expect(Number(persisted?.paidAmount)).toBe(current.paidAmount);
 
+        await focusTransaction(page, fixture.transaction);
         await openSelectedDocument(page, '#MainGrid', fixture.transaction.id);
         await page.waitForSelector('#MainModal.show');
         await expect(page.locator('#TransactionDatePicker')).toHaveValue(current.displayDate);

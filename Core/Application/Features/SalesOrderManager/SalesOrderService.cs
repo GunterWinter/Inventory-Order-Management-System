@@ -6,6 +6,7 @@ using Application.Features.InventoryTransactionManager;
 using Application.Features.NumberSequenceManager;
 using Application.Features.ProductSerialManager;
 using Application.Features.WarehouseManager;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -63,9 +64,9 @@ public class SalesOrderService
 
         var items = _salesOrderItemRepository.GetQuery().ApplyIsDeletedFilter()
             .Where(x => x.SalesOrderId == salesOrderId).ToList();
-        order.BeforeTaxAmount = items.Sum(x => x.Total ?? 0m);
-        order.TaxAmount = items.Sum(x => x.TaxAmount ?? 0m);
-        order.AfterTaxAmount = items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0m) + (x.TaxAmount ?? 0m)));
+        order.BeforeTaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.Total ?? 0m));
+        order.TaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.TaxAmount ?? 0m));
+        order.AfterTaxAmount = AccountingMath.RoundMoney(items.Sum(x => x.AfterTaxAmount ?? ((x.Total ?? 0m) + (x.TaxAmount ?? 0m))));
         _salesOrderRepository.Update(order);
         _unitOfWork.Save();
     }
@@ -79,6 +80,11 @@ public class SalesOrderService
             .Include(x => x.SalesOrderItemList.Where(i => !i.IsDeleted)).ThenInclude(x => x.Product)
             .SingleOrDefaultAsync(x => x.Id == salesOrderId, ct);
         if (order == null) return;
+
+        if (order.OrderStatus == SalesOrderStatus.Confirmed)
+        {
+            await ValidateSerialSelectionsAsync(order, ct);
+        }
 
         var physicalItems = order.SalesOrderItemList.Where(IsPhysicalInventoryItem).ToList();
         var transactions = await _inventoryRepository.GetQuery().ApplyIsDeletedFilter(false)
@@ -262,6 +268,25 @@ public class SalesOrderService
             .SumAsync(x => x.Stock ?? 0m, ct);
         if ((item.Quantity ?? 0m) > stock + 0.000001m)
             throw new InvalidOperationException($"Không đủ tồn trong kho đã chọn. Tồn khả dụng: {stock}.");
+    }
+
+    private async Task ValidateSerialSelectionsAsync(SalesOrder order, CancellationToken ct)
+    {
+        foreach (var item in order.SalesOrderItemList.Where(x =>
+                     x.Product?.Physical == true &&
+                     (x.Product.SerialTrackingMode ?? SerialTrackingMode.None) != SerialTrackingMode.None))
+        {
+            var reservedCount = await _queryContext.Set<ProductSerial>().AsNoTracking()
+                .CountAsync(x => !x.IsDeleted &&
+                    x.SalesOrderItemId == item.Id &&
+                    x.ProductId == item.ProductId &&
+                    x.CurrentWarehouseId == item.WarehouseId &&
+                    x.Status == ProductSerialStatus.Reserved, ct);
+            if ((item.Quantity ?? 0m) <= 0m || item.Quantity != reservedCount)
+            {
+                throw new InvalidOperationException($"Không thể xác nhận đơn bán hàng: hàng hóa '{item.Product?.Name}' chưa chọn đủ serial thiết bị.");
+            }
+        }
     }
 
     private static bool IsPhysicalInventoryItem(SalesOrderItem item) => item.Product?.Physical == true

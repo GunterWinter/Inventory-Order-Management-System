@@ -115,20 +115,43 @@ public sealed class GetCashCategorySummaryHandler
             })
             .ToListAsync(cancellationToken);
 
-        var rows = paymentActivities
+        var activityGroups = paymentActivities
             .Concat(legacyActivities)
             .Where(x => x.TransactionType is CashTransactionType.Debit or CashTransactionType.Credit)
             .GroupBy(x => new { x.CashCategoryId, x.CashCategoryName })
-            .Select(group => new CashCategorySummaryItemDto
-            {
-                CashCategoryId = group.Key.CashCategoryId,
-                CashCategoryName = group.Key.CashCategoryName,
-                ReceiptAmount = group.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount),
-                ExpenseAmount = group.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount)
-            })
-            .OrderBy(x => x.CashCategoryId == null ? 1 : 0)
-            .ThenBy(x => x.CashCategoryName)
             .ToList();
+        var categories = await _queryContext.Set<CashCategory>().AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(cancellationToken);
+        var rows = categories.Select(category =>
+            {
+                var activities = activityGroups
+                    .Where(group => group.Key.CashCategoryId == category.Id)
+                    .SelectMany(group => group);
+                return new CashCategorySummaryItemDto
+                {
+                    CashCategoryId = category.Id,
+                    CashCategoryName = category.Name ?? "Uncategorized",
+                    ReceiptAmount = activities.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount),
+                    ExpenseAmount = activities.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount)
+                };
+            })
+            .ToList();
+        var uncategorized = activityGroups
+            .Where(group => group.Key.CashCategoryId == null)
+            .SelectMany(group => group)
+            .ToList();
+        if (uncategorized.Count > 0)
+        {
+            rows.Add(new CashCategorySummaryItemDto
+            {
+                CashCategoryName = "Uncategorized",
+                ReceiptAmount = uncategorized.Where(x => x.TransactionType == CashTransactionType.Debit).Sum(x => x.Amount),
+                ExpenseAmount = uncategorized.Where(x => x.TransactionType == CashTransactionType.Credit).Sum(x => x.Amount)
+            });
+        }
 
         var totalReceipt = rows.Sum(x => x.ReceiptAmount);
         var totalExpense = rows.Sum(x => x.ExpenseAmount);

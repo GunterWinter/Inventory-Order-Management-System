@@ -161,29 +161,45 @@ public sealed class GetCustomerProfitReportHandler
             .ToListAsync(cancellationToken);
         rows.AddRange(purchaseAllocations);
 
-        // Material exports are accounting cost records. Their full amount is recognized
-        // on confirmation, independently from PaidAmount.
-        var materialCosts = await _queryContext.Set<CashTransaction>().AsNoTracking()
+        var materialCostLines = await _queryContext.Set<MaterialExportItem>().AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.TransactionType == CashTransactionType.Credit
-                && x.SourceModule == nameof(MaterialExport)
-                && x.CustomerId != null
-                && (customerId == null || x.CustomerId == customerId)
-                && (!fromDate.HasValue || x.TransactionDate >= fromDate.Value)
-                && (!toDateExclusive.HasValue || x.TransactionDate < toDateExclusive.Value))
-            .Select(x => new CustomerProfitReportItemDto
+            .Where(x => x.MaterialExport != null
+                && x.MaterialExport.CustomerId != null
+                && (x.MaterialExport.Status == MaterialExportStatus.Confirmed
+                    || x.MaterialExport.Status == MaterialExportStatus.Archived)
+                && (customerId == null || x.MaterialExport.CustomerId == customerId)
+                && (!fromDate.HasValue || x.MaterialExport.ExportDate >= fromDate.Value)
+                && (!toDateExclusive.HasValue || x.MaterialExport.ExportDate < toDateExclusive.Value))
+            .Select(x => new
             {
                 Id = x.Id,
-                CustomerId = x.CustomerId,
-                CustomerName = x.Customer != null ? x.Customer.Name : null,
-                Number = x.SourceModuleNumber ?? x.Number,
-                TransactionDate = x.TransactionDate,
-                Description = x.Description,
-                SourceType = nameof(MaterialExport),
-                SourceModuleId = x.SourceModuleId,
-                ProjectCost = x.Amount ?? 0m
+                MaterialExportId = x.MaterialExportId!,
+                CustomerId = x.MaterialExport!.CustomerId,
+                CustomerName = x.MaterialExport.Customer != null ? x.MaterialExport.Customer.Name : null,
+                x.MaterialExport.Number,
+                TransactionDate = x.MaterialExport.ExportDate,
+                x.MaterialExport.Description,
+                ProjectCost = x.Total ?? 0m
             })
             .ToListAsync(cancellationToken);
+        var materialCosts = materialCostLines
+            .GroupBy(x => x.MaterialExportId)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new CustomerProfitReportItemDto
+                {
+                    Id = first.MaterialExportId,
+                    CustomerId = first.CustomerId,
+                    CustomerName = first.CustomerName,
+                    Number = first.Number,
+                    TransactionDate = first.TransactionDate,
+                    Description = first.Description,
+                    SourceType = nameof(MaterialExport),
+                    SourceModuleId = first.MaterialExportId,
+                    ProjectCost = group.Sum(x => x.ProjectCost)
+                };
+            });
         rows.AddRange(materialCosts);
 
         // A manual cost transaction with allocation rows is represented only by those
@@ -194,7 +210,6 @@ public sealed class GetCustomerProfitReportHandler
                 && x.CashTransaction != null
                 && !x.CashTransaction.IsDeleted
                 && x.CashTransaction.TransactionType == CashTransactionType.Credit
-                && x.CashTransaction.SourceModule != nameof(MaterialExport)
                 && x.CashTransaction.SourceModule != nameof(PurchaseOrder)
                 && (customerId == null || x.CustomerId == customerId)
                 && (!fromDate.HasValue || x.CashTransaction.TransactionDate >= fromDate.Value)

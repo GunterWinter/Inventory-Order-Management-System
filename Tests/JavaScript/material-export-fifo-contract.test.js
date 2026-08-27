@@ -64,7 +64,7 @@ test('serial picker and material export expose exact frozen cost evidence in the
     assert.match(materialExport, /InventoryCostLayerViewer\.show\(args\.rowData\?\.costAllocations/);
 });
 
-test('sales UI shows frozen COGS and returns exact selected source cost layers', () => {
+test('sales UI keeps frozen COGS and profit while returns keep exact source cost layers', () => {
     const salesOrder = fs.readFileSync(path.resolve(
         __dirname,
         '../../Presentation/ASPNET/FrontEnd/Pages/SalesOrders/SalesOrderList.cshtml.js'), 'utf8');
@@ -72,8 +72,9 @@ test('sales UI shows frozen COGS and returns exact selected source cost layers',
         __dirname,
         '../../Presentation/ASPNET/FrontEnd/Pages/SalesReturns/SalesReturnList.cshtml.js'), 'utf8');
 
-    assert.match(salesOrder, /averageCost:[\s\S]{0,100}totalCost/);
-    assert.match(salesOrder, /InventoryCostLayerViewer\.show\([\s\S]{0,100}costAllocations/);
+    assert.match(salesOrder, /field:\s*'cogsAmount'/);
+    assert.match(salesOrder, /field:\s*'profitAmount'/);
+    assert.doesNotMatch(salesOrder, /field:\s*'averageCost'|InventoryCostLayerViewer\.show/);
     assert.match(salesReturn, /InventoryCostLayerViewer\.select\(args\.rowData\.costLayers/);
     assert.match(salesReturn, /costLayerSelections:\s*selected\.selections/);
     assert.match(salesReturn, /productSerialIds, costLayers/);

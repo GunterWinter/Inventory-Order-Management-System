@@ -56,10 +56,6 @@ public class CreateCashTransactionValidator : AbstractValidator<CreateCashTransa
             .GreaterThanOrEqualTo(0)
             .LessThanOrEqualTo(x => x.Amount)
             .When(x => x.PaidAmount.HasValue);
-        RuleFor(x => x.CashAccountId)
-            .NotEmpty()
-            .When(x => (x.PaidAmount ?? 0m) > 0m)
-            .WithMessage("Phải chọn tài khoản quỹ khi nhập số tiền đã trả.");
         RuleFor(x => x.TransactionDate)
             .Must(value => !value.HasValue || value.Value.Date <= AppDateTime.VietnamNow().Date)
             .WithMessage("Ngày giao dịch không được lớn hơn ngày hiện tại.");

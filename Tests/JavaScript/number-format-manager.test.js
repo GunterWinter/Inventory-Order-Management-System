@@ -101,8 +101,9 @@ test('uses only the comma as the Vietnamese decimal separator', () => {
 test('formats accounting money with Vietnamese grouping and a decimal comma', () => {
     const manager = loadManager();
 
-    assert.equal(manager.formatMoneyToLocale(10000000), '10.000.000');
-    assert.equal(manager.formatMoneyToLocale(12350.231), '12.350,231');
+    assert.equal(manager.formatMoneyToLocale(10000000), '10.000.000,00');
+    assert.equal(manager.formatMoneyToLocale(12350.231), '12.350,23');
+    assert.equal(manager.roundMoney(6300927.576), 6300927.58);
 });
 
 test('handles negative, empty and six-digit Vietnamese decimals', () => {
@@ -126,13 +127,20 @@ test('explicit numeric policies distinguish money decimals and integers', () => 
     manager.configureNumericTextBox(money, { kind: manager.numericKind.money, step: 0.01 });
     manager.configureNumericTextBox(integer, { kind: manager.numericKind.integer, min: 0 });
 
-    assert.equal(money.format, 'n6');
-    assert.equal(money.decimals, 6);
+    assert.equal(money.format, 'n2');
+    assert.equal(money.decimals, 2);
     assert.equal(money.step, 0.01);
     assert.equal(integer.format, 'n0');
     assert.equal(integer.decimals, 0);
     assert.equal(integer.validateDecimalOnType, true);
-    assert.equal(manager.createGridValueAccessor(manager.numericKind.money)('amount', { amount: 1234.5 }), '1.234,5');
+    assert.equal(manager.createGridValueAccessor(manager.numericKind.money)('amount', { amount: 1234.5 }), '1.234,50');
+});
+
+test('keeps commercial money at two decimals while generic quantities retain six', () => {
+    const manager = loadManager();
+
+    assert.equal(manager.formatMoneyToLocale(466735.376), '466.735,38');
+    assert.equal(manager.formatToLocale(2.123456), '2,123456');
 });
 
 test('grid reads the latest Vietnamese decimal after blur even when Syncfusion overwrites its value', () => {

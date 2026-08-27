@@ -31,9 +31,15 @@ async function selectHeaderDropdown(page, labelFor, text) {
     const input = page.locator(`#MainModal label[for="${labelFor}"]`)
         .locator('xpath=..').locator('input.e-input').first();
     await expect(input).toBeEnabled();
-    await input.locator('xpath=..').click();
+    await input.locator('xpath=..').click({ force: true });
     const popup = page.locator('.e-ddl.e-popup.e-popup-open').last();
-    await expect(popup).toBeVisible();
+    try {
+        await popup.waitFor({ state: 'visible', timeout: 3_000 });
+    } catch {
+        // Syncfusion may redraw the popup after the first wrapper click.
+        await input.locator('xpath=..').click({ force: true });
+        await popup.waitFor({ state: 'visible', timeout: 10_000 });
+    }
     await popup.locator('.e-list-item').filter({ hasText: text }).first().click();
 }
 

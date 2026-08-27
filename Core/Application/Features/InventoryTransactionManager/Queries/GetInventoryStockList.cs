@@ -35,6 +35,7 @@ public class GetInventoryStockListResult
 public class GetInventoryStockListRequest : IRequest<GetInventoryStockListResult>
 {
     public bool IsDeleted { get; init; } = false;
+    public string? SalesOrderId { get; init; }
 }
 
 
@@ -99,7 +100,12 @@ public class GetInventoryStockListHandler : IRequestHandler<GetInventoryStockLis
                 x.Product.SerialTrackingMode != SerialTrackingMode.None &&
                 x.CurrentWarehouse != null &&
                 x.CurrentWarehouse.SystemWarehouse == false &&
-                (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer))
+                (x.Status == ProductSerialStatus.InStock ||
+                 x.Status == ProductSerialStatus.ReturnedByCustomer ||
+                 (request.SalesOrderId != null &&
+                  x.Status == ProductSerialStatus.Reserved &&
+                  x.SalesOrderItem != null &&
+                  x.SalesOrderItem.SalesOrderId == request.SalesOrderId)))
             .GroupBy(x => new
             {
                 x.CurrentWarehouseId,

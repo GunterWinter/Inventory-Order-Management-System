@@ -88,7 +88,6 @@ const App = {
         const sourceModulesWithItems = new Set([
             'purchaseorder',
             'salesorder',
-            'materialexport',
             'salesreturn',
             'purchasereturn'
         ]);
@@ -112,7 +111,7 @@ const App = {
                 state.errors.paidAmount = 'Paid amount cannot exceed the original amount.';
                 isValid = false;
             }
-            if (Number(state.paidAmount ?? 0) > Number(state.originalPaidAmount ?? 0) && !state.cashAccountId) {
+            if (state.sourceModule && Number(state.paidAmount ?? 0) > Number(state.originalPaidAmount ?? 0) && !state.cashAccountId) {
                 state.errors.cashAccountId = 'Phải chọn tài khoản quỹ khi ghi nhận thanh toán.';
                 isValid = false;
             }
@@ -614,6 +613,18 @@ const App = {
                     if (!methods.validateAllocations()) {
                         Swal.fire({ icon: 'error', title: 'Phân bổ chưa hợp lệ', text: 'Tổng giá trị phân bổ phải bằng số tiền của giao dịch.' });
                         return;
+                    }
+
+                    if (methods.isManualTransaction() && !state.cashAccountId) {
+                        const warning = await Swal.fire({
+                            icon: 'warning',
+                            title: 'Chưa chọn tài khoản quỹ',
+                            text: 'Nếu để trống tài khoản quỹ thì chỉ biết chi/thu của giao dịch',
+                            showCancelButton: true,
+                            confirmButtonText: 'Tiếp tục',
+                            cancelButtonText: 'Quay lại'
+                        });
+                        if (!warning.isConfirmed) return;
                     }
 
 

@@ -11,4 +11,5 @@ public class CashTransactionPayment : BaseEntity
     public DateTime PaymentDate { get; set; }
     public decimal Amount { get; set; }
     public string? Description { get; set; }
+    public string? ReversalOfPaymentId { get; set; }
 }
