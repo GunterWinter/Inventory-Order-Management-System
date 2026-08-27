@@ -18,6 +18,7 @@ public partial class InventoryTransactionService
     private readonly IQueryContext _queryContext;
     private readonly ICommandRepository<InventoryTransaction> _inventoryTransactionRepository;
     private readonly ICommandRepository<StockCount> _stockCountRepository;
+    private readonly ICommandRepository<ProductSerialMovement> _serialMovementRepository;
     private readonly ICommandRepository<MaterialExportItem> _costAllocationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProductSerialService _productSerialService;
@@ -31,6 +32,7 @@ public partial class InventoryTransactionService
         IQueryContext queryContext,
         ICommandRepository<InventoryTransaction> inventoryTransactionRepository,
         ICommandRepository<StockCount> stockCountRepository,
+        ICommandRepository<ProductSerialMovement> serialMovementRepository,
         ICommandRepository<MaterialExportItem> costAllocationRepository,
         IUnitOfWork unitOfWork,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
@@ -43,6 +45,7 @@ public partial class InventoryTransactionService
         _queryContext = queryContext;
         _inventoryTransactionRepository = inventoryTransactionRepository;
         _stockCountRepository = stockCountRepository;
+        _serialMovementRepository = serialMovementRepository;
         _costAllocationRepository = costAllocationRepository;
         _unitOfWork = unitOfWork;
         _salesOrderItemRepository = salesOrderItemRepository;

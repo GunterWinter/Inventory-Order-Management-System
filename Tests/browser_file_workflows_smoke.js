@@ -813,7 +813,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         const createPurchaseResponse = await AxiosManager.post('/PurchaseOrder/CreatePurchaseOrder', {
             orderDate,
             orderStatus: '0',
-            description: `${testKey} weighted opening and purchase cost`,
+            description: `${testKey} opening and purchase FIFO cost`,
             vendorId: vendor.id,
             createdById: userId
         });
@@ -1065,12 +1065,12 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         || !materialOpeningCostResult.materialExportLineId
         || !materialOpeningCostResult.secondaryMaterialExportLineId
         || materialOpeningCostResult.costTransactions.length !== 1
-        || materialOpeningCostResult.costTransactions[0].amount !== 250
+        || materialOpeningCostResult.costTransactions[0].amount !== 200
         || materialOpeningCostResult.sourceItems.length !== 2
         || new Set(materialOpeningCostResult.sourceItems.map(item => item.sourceItemId)).size !== 2
         || materialOpeningCostResult.sourceItems.some(item => !item.sourceItemId || !item.customerName)
-        || materialOpeningCostResult.sourceItems.reduce((sum, item) => sum + Number(item.total || 0), 0) !== 250
-        || JSON.stringify(materialOpeningCostResult.sourceItems.map(item => item.unitPrice).sort((a, b) => a - b)) !== JSON.stringify([100, 150])
+        || materialOpeningCostResult.sourceItems.reduce((sum, item) => sum + Number(item.total || 0), 0) !== 200
+        || JSON.stringify(materialOpeningCostResult.sourceItems.map(item => item.unitPrice).sort((a, b) => a - b)) !== JSON.stringify([100, 100])
         || materialOpeningCostResult.currentCostPrice !== 777
         || materialOpeningCostResult.stockAfterExport !== 2
         || materialOpeningCostResult.openingAfterExport !== 3

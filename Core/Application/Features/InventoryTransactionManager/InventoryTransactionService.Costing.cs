@@ -123,8 +123,8 @@ public partial class InventoryTransactionService
     {
         await DeleteCostAllocationsAsync(transaction.Id, userId, cancellationToken);
         var serialIds = serials.Select(x => x.Id).ToList();
-        var receiptRows = await (from movement in _queryContext.Set<ProductSerialMovement>().AsNoTracking()
-            join inventory in _queryContext.Set<InventoryTransaction>().AsNoTracking()
+        var receiptRows = await (from movement in _serialMovementRepository.GetQuery().AsNoTracking()
+            join inventory in _inventoryTransactionRepository.GetQuery().AsNoTracking()
                 on movement.InventoryTransactionId equals inventory.Id
             where !movement.IsDeleted && movement.ReversedAtUtc == null
                 && movement.ProductSerialId != null && serialIds.Contains(movement.ProductSerialId)

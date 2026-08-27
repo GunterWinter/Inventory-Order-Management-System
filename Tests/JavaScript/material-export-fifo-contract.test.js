@@ -25,11 +25,15 @@ test('confirmed material exports freeze exact FIFO or serial allocations', () =>
     const source = fs.readFileSync(path.resolve(
         __dirname,
         '../../Core/Application/Features/MaterialExportManager/Commands/UpdateMaterialExport.cs'), 'utf8');
+    const costing = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Core/Application/Features/InventoryTransactionManager/InventoryTransactionService.Costing.cs'), 'utf8');
 
     assert.match(source, /ResolveFifoAsync\([\s\S]{0,220}entity\.ExportDate[\s\S]{0,100}line\.Id/);
     assert.match(source, /ReplaceFifoCostAllocationsAsync\(/);
     assert.match(source, /ReplaceSerialCostAllocationsAsync\(/);
     assert.match(source, /DeleteCostAllocationsAsync\(/);
+    assert.match(costing, /_serialMovementRepository\.GetQuery\(\)[\s\S]{0,160}_inventoryTransactionRepository\.GetQuery\(\)/);
 });
 
 test('opening stock uses the first day of its month and corrections retain that effective date', () => {

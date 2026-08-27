@@ -494,8 +494,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     })).toEqual({ row: editedPurchasePrice, rendered: editedPurchasePrice });
 
     // Restore the product's exact cost after exercising the six-decimal editor.
-    // Opening stock and the PO then share one source cost, so weighted costing
-    // must remain 1.232,2323 instead of producing 1.232,231232.
+    // Keep the PO layer exact so FIFO evidence preserves all six decimals.
     await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
     const exactPurchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await exactPurchasePriceInput.click();
