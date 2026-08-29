@@ -850,8 +850,8 @@ const QuickAddHelper = (() => {
                         <div class="qa-field"><label class="qa-label">Unit Measure</label><input id="qa-p-unit" class="qa-input" placeholder="Piece, Box, Kg..."></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="number" min="0" value="0"></div>
-                        <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="number" min="0" value="0"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" value="0,00"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" value="0,00"></div>
                         <div class="qa-field qa-col-4">
                             <label class="qa-label">Warehouse</label>
                             <div class="quick-add-wrapper">
@@ -924,7 +924,9 @@ const QuickAddHelper = (() => {
                     ? (openingStockRaw === '' ? 0 : NumberFormatManager.parseLocaleNumber(openingStockRaw))
                     : null;
                 const costPriceRaw = document.getElementById('qa-p-costprice').value.trim();
-                const costPrice = costPriceRaw === '' ? null : parseFloat(costPriceRaw);
+                const costPrice = costPriceRaw === '' ? null : NumberFormatManager.parseLocaleNumber(costPriceRaw);
+                const unitPriceRaw = document.getElementById('qa-p-unitprice').value.trim();
+                const unitPrice = unitPriceRaw === '' ? 0 : NumberFormatManager.parseLocaleNumber(unitPriceRaw);
 
                 if (physical && serialTrackingMode === 1 && (fixedCode.length < 2 || fixedCode.length > 4)) {
                     Swal.showValidationMessage('Fixed Code must be 2-4 letters or digits.');
@@ -936,6 +938,10 @@ const QuickAddHelper = (() => {
                 }
                 if (openingStockApplies && openingStockQuantity < 0) {
                     Swal.showValidationMessage('Opening stock must be zero or greater.');
+                    return false;
+                }
+                if (costPrice == null || costPrice < 0 || unitPrice == null || unitPrice < 0) {
+                    Swal.showValidationMessage('Giá vốn và giá bán phải là số hợp lệ không âm.');
                     return false;
                 }
                 if (openingStockApplies && serialTrackingMode === 1 && !Number.isInteger(openingStockQuantity)) {
@@ -960,7 +966,7 @@ const QuickAddHelper = (() => {
                     name, productGroupId, unitMeasureName,
                     referenceCode: document.getElementById('qa-p-refcode').value.trim(),
                     costPrice,
-                    unitPrice: parseFloat(document.getElementById('qa-p-unitprice').value) || 0,
+                    unitPrice,
                     defaultWarehouseId,
                     defaultWarrantyMonths: parseInt(document.getElementById('qa-p-warranty').value) || 0,
                     physical,
@@ -984,6 +990,10 @@ const QuickAddHelper = (() => {
                 const fixedCodeSection = document.getElementById('qa-p-fixedcode-section');
                 const fixedCodeInput = document.getElementById('qa-p-fixedcode');
                 const openingStockInput = document.getElementById('qa-p-opening-stock');
+                const moneyInputs = [
+                    document.getElementById('qa-p-costprice'),
+                    document.getElementById('qa-p-unitprice')
+                ];
                 const openingStockHelp = document.getElementById('qa-p-opening-stock-help');
 
                 const refreshProductTrackingFields = () => {
@@ -1024,6 +1034,10 @@ const QuickAddHelper = (() => {
                     const parsed = NumberFormatManager.parseLocaleNumber(openingStockInput.value);
                     if (parsed != null) openingStockInput.value = NumberFormatManager.formatToLocale(parsed);
                 });
+                moneyInputs.forEach(input => input?.addEventListener('blur', () => {
+                    const parsed = NumberFormatManager.parseLocaleNumber(input.value);
+                    if (parsed != null) input.value = NumberFormatManager.formatMoneyToLocale(parsed);
+                }));
                 refreshProductTrackingFields();
             },
             willClose: () => {

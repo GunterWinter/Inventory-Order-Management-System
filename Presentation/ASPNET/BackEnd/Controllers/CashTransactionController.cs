@@ -1,5 +1,6 @@
-using Application.Features.CashTransactionManager.Commands;
+using Application.Features.CashTransactionManager;
 using Application.Features.CashTransactionManager.Queries;
+using Application.Features.CashTransactionManager.Commands;
 using ASPNET.BackEnd.Common.Base;
 using ASPNET.BackEnd.Common.Models;
 using MediatR;
@@ -74,11 +75,10 @@ public class CashTransactionController : BaseApiController
     [Authorize]
     [HttpGet("GetCashTransactionList")]
     public async Task<ActionResult<ApiSuccessResult<GetCashTransactionListResult>>> GetCashTransactionListAsync(
-        CancellationToken cancellationToken,
-        [FromQuery] bool isDeleted = false
+        [FromQuery] GetCashTransactionListRequest request,
+        CancellationToken cancellationToken
         )
     {
-        var request = new GetCashTransactionListRequest { IsDeleted = isDeleted };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetCashTransactionListResult>
@@ -93,10 +93,11 @@ public class CashTransactionController : BaseApiController
     [HttpGet("GetPaymentStatusLookup")]
     public async Task<ActionResult<ApiSuccessResult<GetPaymentStatusLookupResult>>> GetPaymentStatusLookupAsync(
         CancellationToken cancellationToken,
-        [FromQuery] string sourceModule = ""
+        [FromQuery] string sourceModule = "",
+        [FromQuery] string? sourceModuleIds = null
         )
     {
-        var request = new GetPaymentStatusLookupRequest { SourceModule = sourceModule };
+        var request = new GetPaymentStatusLookupRequest { SourceModule = sourceModule, SourceModuleIds = sourceModuleIds };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetPaymentStatusLookupResult>
@@ -201,6 +202,20 @@ public class CashTransactionController : BaseApiController
         {
             Code = StatusCodes.Status200OK,
             Message = $"Success executing {nameof(GetCashTransactionCostAllocationsAsync)}",
+            Content = response
+        });
+    }
+    [Authorize]
+    [HttpPost("ReversePayment")]
+    public async Task<ActionResult<ApiSuccessResult<PaymentReversalResult>>> ReversePaymentAsync(
+        [FromBody] ReverseCashTransactionPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _sender.Send(request, cancellationToken);
+        return Ok(new ApiSuccessResult<PaymentReversalResult>
+        {
+            Code = StatusCodes.Status200OK,
+            Message = $"Success executing {nameof(ReversePaymentAsync)}",
             Content = response
         });
     }

@@ -57,19 +57,23 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
     private sealed class DocumentSource
     {
         public DocumentSource() { }
-        public DocumentSource(string id, string partyId, string? number, DateTime? date, decimal amount)
+        public DocumentSource(string id, string partyId, string? number, DateTime? date, decimal amount, string sourceType, int sign = 1)
         {
             Id = id;
             PartyId = partyId;
             Number = number;
             Date = date;
             Amount = amount;
+            SourceType = sourceType;
+            Sign = sign;
         }
         public string Id { get; private set; } = string.Empty;
         public string PartyId { get; private set; } = string.Empty;
         public string? Number { get; private set; }
         public DateTime? Date { get; private set; }
         public decimal Amount { get; private set; }
+        public string SourceType { get; private set; } = string.Empty;
+        public int Sign { get; private set; } = 1;
     }
     private readonly IQueryContext _queryContext;
     public GetDebtReportHandler(IQueryContext queryContext) => _queryContext = queryContext;
@@ -83,8 +87,16 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
         {
             sources = await _queryContext.Set<PurchaseOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed && x.VendorId != null)
-                .Select(x => new DocumentSource(x.Id, x.VendorId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0m))
+                .Select(x => new DocumentSource(x.Id, x.VendorId!, x.Number, x.OrderDate,
+                    x.AfterTaxAmount ?? 0m, nameof(PurchaseOrder), 1))
                 .ToListAsync(cancellationToken);
+            sources.AddRange(await (from item in _queryContext.Set<PurchaseReturn>().AsNoTracking().ApplyIsDeletedFilter(false)
+                join order in _queryContext.Set<PurchaseOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
+                    on item.PurchaseOrderId equals order.Id
+                where (item.Status == PurchaseReturnStatus.Confirmed || item.Status == PurchaseReturnStatus.Archived)
+                    && order.VendorId != null
+                select new DocumentSource(item.Id, order.VendorId!, item.Number, item.ReturnDate,
+                    0m, nameof(PurchaseReturn), -1)).ToListAsync(cancellationToken));
             partyNames = await _queryContext.Set<Vendor>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
         }
@@ -92,50 +104,64 @@ public sealed class GetDebtReportHandler : IRequestHandler<GetDebtReportRequest,
         {
             sources = await _queryContext.Set<SalesOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed && x.CustomerId != null)
-                .Select(x => new DocumentSource(x.Id, x.CustomerId!, x.Number, x.OrderDate, x.AfterTaxAmount ?? 0m))
+                .Select(x => new DocumentSource(x.Id, x.CustomerId!, x.Number, x.OrderDate,
+                    x.AfterTaxAmount ?? 0m, nameof(SalesOrder), 1))
                 .ToListAsync(cancellationToken);
+            sources.AddRange(await (from item in _queryContext.Set<SalesReturn>().AsNoTracking().ApplyIsDeletedFilter(false)
+                join order in _queryContext.Set<SalesOrder>().AsNoTracking().ApplyIsDeletedFilter(false)
+                    on item.SalesOrderId equals order.Id
+                where (item.Status == SalesReturnStatus.Confirmed || item.Status == SalesReturnStatus.Archived)
+                    && order.CustomerId != null
+                select new DocumentSource(item.Id, order.CustomerId!, item.Number, item.ReturnDate,
+                    0m, nameof(SalesReturn), -1)).ToListAsync(cancellationToken));
             partyNames = await _queryContext.Set<Customer>().AsNoTracking().ApplyIsDeletedFilter(false)
                 .ToDictionaryAsync(x => x.Id, x => x.Name ?? "N/A", cancellationToken);
         }
 
-        var sourceType = isVendor ? nameof(PurchaseOrder) : nameof(SalesOrder);
+        var sourceTypes = isVendor
+            ? new[] { nameof(PurchaseOrder), nameof(PurchaseReturn) }
+            : new[] { nameof(SalesOrder), nameof(SalesReturn) };
         var documentIds = sources.Select(x => x.Id).ToList();
         var transactions = await _queryContext.Set<CashTransaction>().AsNoTracking()
             .ApplyIsDeletedFilter(false)
-            .Where(x => x.SourceModule == sourceType && x.SourceModuleId != null && documentIds.Contains(x.SourceModuleId))
+            .Where(x => x.SourceModule != null && sourceTypes.Contains(x.SourceModule)
+                && x.SourceModuleId != null && documentIds.Contains(x.SourceModuleId))
             .Include(x => x.PaymentList.Where(payment => !payment.IsDeleted))
                 .ThenInclude(x => x.CashAccount)
             .ToListAsync(cancellationToken);
         var transactionMap = transactions
-            .GroupBy(x => x.SourceModuleId!)
+            .GroupBy(x => $"{x.SourceModule}|{x.SourceModuleId}")
             .ToDictionary(x => x.Key, x => x.OrderByDescending(item => item.CreatedAtUtc).First());
 
         var data = sources.GroupBy(x => x.PartyId).Select(group =>
         {
             var documents = group.Select(source =>
             {
-                transactionMap.TryGetValue(source.Id, out var transaction);
+                transactionMap.TryGetValue($"{source.SourceType}|{source.Id}", out var transaction);
                 var payments = transaction?.PaymentList
                     .OrderByDescending(x => x.PaymentDate)
                     .Select(x => new DebtPaymentDto
                     {
                         Id = x.Id,
                         PaymentDate = x.PaymentDate,
-                        Amount = x.Amount,
+                        Amount = source.Sign * x.Amount,
                         CashAccountName = x.CashAccount != null ? x.CashAccount.Name : null,
                         Description = x.Description
                     }).ToList() ?? [];
-                var paid = transaction?.PaidAmount ?? payments.Sum(x => x.Amount);
-                paid = Math.Min(source.Amount, Math.Max(0m, paid));
+                var unsignedAmount = transaction?.Amount ?? source.Amount;
+                var unsignedPaid = transaction?.PaidAmount ?? transaction?.PaymentList.Sum(x => x.Amount) ?? 0m;
+                unsignedPaid = Math.Min(unsignedAmount, Math.Max(0m, unsignedPaid));
+                var total = source.Sign * unsignedAmount;
+                var paid = source.Sign * unsignedPaid;
                 return new DebtDocumentDto
                 {
                     Id = source.Id,
                     Number = source.Number,
                     DocumentDate = source.Date,
-                    SourceType = sourceType,
-                    TotalAmount = source.Amount,
+                    SourceType = source.SourceType,
+                    TotalAmount = total,
                     PaidAmount = paid,
-                    Remaining = Math.Max(0m, source.Amount - paid),
+                    Remaining = total - paid,
                     Payments = payments
                 };
             }).OrderByDescending(x => x.DocumentDate).ToList();

@@ -1,6 +1,7 @@
 using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
+using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Common;
@@ -42,18 +43,21 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
     private readonly ICommandRepository<SalesOrder> _salesOrderRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ReturnFinancialService _returnFinancialService;
 
     public UpdateSalesReturnHandler(
         ICommandRepository<SalesReturn> repository,
         ICommandRepository<SalesOrder> salesOrderRepository,
         IUnitOfWork unitOfWork,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        ReturnFinancialService returnFinancialService
         )
     {
         _repository = repository;
         _salesOrderRepository = salesOrderRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _returnFinancialService = returnFinancialService;
     }
 
     public async Task<UpdateSalesReturnResult> Handle(UpdateSalesReturnRequest request, CancellationToken cancellationToken)
@@ -77,6 +81,12 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
             if (entity.SalesOrderId != request.SalesOrderId)
                 throw new InvalidOperationException("Không được thay đổi đơn bán hàng nguồn sau khi tạo phiếu trả.");
             await _unitOfWork.AcquireTransactionLockAsync($"SalesReturn:{entity.SalesOrderId}", ct);
+            if (entity.Status is SalesReturnStatus.Confirmed or SalesReturnStatus.Archived
+                && requestedStatus is SalesReturnStatus.Draft or SalesReturnStatus.Cancelled)
+            {
+                await _returnFinancialService.EnsureCanDeactivateAsync(nameof(SalesReturn), entity.Id, ct);
+                await _inventoryTransactionService.ValidateSalesReturnReversalAsync(entity.Id, ct);
+            }
             DocumentDateGuard.EnsureCanPost(request.ReturnDate, requestedStatus == SalesReturnStatus.Confirmed);
             if (entity.Status == SalesReturnStatus.Draft && requestedStatus == SalesReturnStatus.Confirmed)
             {
@@ -103,6 +113,8 @@ public class UpdateSalesReturnHandler : IRequestHandler<UpdateSalesReturnRequest
                 entity.Id, nameof(SalesReturn), entity.ReturnDate,
                 (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
                 entity.UpdatedById, null, ct);
+            await _returnFinancialService.SynchronizeSalesReturnsAsync(
+                entity.SalesOrderId!, entity.UpdatedById, ct);
         }, cancellationToken);
 
         return new UpdateSalesReturnResult

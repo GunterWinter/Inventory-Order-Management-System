@@ -60,11 +60,10 @@ public class VendorController : BaseApiController
     [Authorize]
     [HttpGet("GetVendorList")]
     public async Task<ActionResult<ApiSuccessResult<GetVendorListResult>>> GetVendorListAsync(
-        CancellationToken cancellationToken,
-        [FromQuery] bool isDeleted = false
+        [FromQuery] GetVendorListRequest request,
+        CancellationToken cancellationToken
         )
     {
-        var request = new GetVendorListRequest { IsDeleted = isDeleted };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetVendorListResult>

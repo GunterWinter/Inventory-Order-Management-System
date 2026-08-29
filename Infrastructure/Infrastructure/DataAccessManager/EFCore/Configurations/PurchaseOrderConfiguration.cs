@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Infrastructure.DataAccessManager.EFCore.Common;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using static Domain.Common.Constants;
 
@@ -21,6 +22,8 @@ public class PurchaseOrderConfiguration : BaseEntityConfiguration<PurchaseOrder>
         builder.Property(x => x.AfterTaxAmount).IsRequired(false);
 
         builder.HasIndex(e => e.Number);
+        builder.HasIndex(e => new { e.IsDeleted, e.OrderDate, e.Id })
+            .HasDatabaseName("IX_PurchaseOrder_ActiveList");
     }
 }
 

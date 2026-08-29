@@ -2,6 +2,7 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
+            mainTotalCount: 0,
             deleteMode: false,
             mainTitle: null,
             id: '',
@@ -173,8 +174,8 @@ const App = {
         };
 
         const services = {
-            getMainData: async () => {
-                return await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
+            getMainData: async (gridState = {}) => {
+                return await AxiosManager.get('/CashTransaction/GetCashTransactionList' + ServerGridManager.buildQuery(gridState), {});
             },
             getCashAccountList: async () => {
                 return await AxiosManager.get('/CashAccount/GetCashAccountList', {});
@@ -209,6 +210,13 @@ const App = {
                 return await AxiosManager.get(
                     `/PurchaseOrder/GetPurchaseOrderPaymentHistory?cashTransactionId=${encodeURIComponent(cashTransactionId)}`,
                     {});
+            },
+            reversePayment: async (paymentId) => {
+                return await AxiosManager.post('/CashTransaction/ReversePayment', {
+                    paymentId,
+                    reversalDate: DateFormatManager.formatForApiDate(new Date()),
+                    updatedById: StorageManager.getUserId()
+                });
             }
         };
 
@@ -216,10 +224,9 @@ const App = {
             formatMoney: value => NumberFormatManager.formatMoneyToLocale(value ?? 0),
             formatNumber: value => NumberFormatManager.formatToLocale(value ?? 0),
             formatDate: value => DateFormatManager.formatToLocale(value),
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                const rawData = response?.data?.content?.data ?? [];
-                state.mainData = rawData.map(item => {
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const dataSource = ServerGridManager.unwrap(response, item => {
                     let partnerName = '';
                     if (item.customerName && item.vendorName) partnerName = item.customerName;
                     else if (item.customerName) partnerName = item.customerName;
@@ -236,6 +243,9 @@ const App = {
                         ,allocations: item.allocations ?? []
                     };
                 });
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
             populateCashAccountList: async () => {
                 const response = await services.getCashAccountList();
@@ -281,6 +291,30 @@ const App = {
                         ?? 'Không thể tải chi tiết chứng từ nguồn.';
                 } finally {
                     state.sourceDetailsLoading = false;
+                }
+            },
+            reversePayment: async (payment) => {
+                if (!payment?.canReverse) return;
+                const confirmed = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Hoàn thanh toán?',
+                    text: `Hoàn toàn bộ ${methods.formatMoney(payment.amount)} về tài khoản quỹ ban đầu?`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Hoàn',
+                    cancelButtonText: 'Không'
+                });
+                if (!confirmed.isConfirmed) return;
+                try {
+                    const response = await services.reversePayment(payment.id);
+                    if (response?.data?.code !== 200)
+                        throw new Error(response?.data?.message ?? 'Không thể hoàn thanh toán.');
+                    state.paidAmount = response.data.content.paidAmount;
+                    state.originalPaidAmount = state.paidAmount;
+                    await Promise.all([methods.loadSourceDetails(), methods.populateMainData(), methods.populateCashAccountList()]);
+                    mainGrid.refresh();
+                    Swal.fire({ icon: 'success', title: 'Đã hoàn thanh toán', timer: 1200, showConfirmButton: false });
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Không thể hoàn thanh toán', text: error.response?.data?.message ?? error.message });
                 }
             },
             isEditableSource: () => !!state.sourceModule,
@@ -789,7 +823,7 @@ const App = {
                 await methods.populateCashCategoryList();
                 await methods.populatePartnerList();
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
 
                 transactionDatePicker.create();
                 transactionTypeDropDown.create();
@@ -811,7 +845,7 @@ const App = {
                     resetFormState();
                     requestAnimationFrame(() => {
                         if (!mainGrid.obj?.isDestroyed) {
-                            mainGrid.obj.setProperties({ dataSource: state.mainData }, true);
+                            mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } }, true);
                             mainGrid.obj.refresh();
                         }
                     });
@@ -829,11 +863,14 @@ const App = {
                 mainGrid.obj = new ej.grids.Grid({
                     height: '240px',
                     dataSource: dataSource,
-                    allowFiltering: true, allowSorting: true, allowSelection: true, allowGrouping: true,
+                    allowFiltering: true, allowSorting: true, allowSelection: true, allowGrouping: false,
                     allowTextWrap: true, allowResizing: true, allowPaging: true, allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true, showColumnMenu: true, gridLines: 'Horizontal',
                     columns: [
@@ -1003,7 +1040,7 @@ const App = {
                 });
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
-            refresh: () => { mainGrid.obj.setProperties({ dataSource: state.mainData }); }
+            refresh: () => { mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } }); }
         };
 
         const mainModal = {

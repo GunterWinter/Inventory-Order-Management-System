@@ -41,9 +41,12 @@ public class CashTransactionAllocationDto
 public class GetCashTransactionListResult
 {
     public List<GetCashTransactionListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetCashTransactionListRequest : IRequest<GetCashTransactionListResult>
+public class GetCashTransactionListRequest : PagedListRequest, IRequest<GetCashTransactionListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -64,6 +67,25 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
             .AsNoTracking()
             .ApplyIsDeletedFilter(request.IsDeleted)
             .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Number != null && x.Number.Contains(search))
+                || (x.SourceModuleNumber != null && x.SourceModuleNumber.Contains(search))
+                || (x.Description != null && x.Description.Contains(search))
+                || (x.Customer != null && x.Customer.Name != null && x.Customer.Name.Contains(search))
+                || (x.Vendor != null && x.Vendor.Name != null && x.Vendor.Name.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "number" => request.Descending ? query.OrderByDescending(x => x.Number).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Number).ThenBy(x => x.Id),
+            "amount" => request.Descending ? query.OrderByDescending(x => x.Amount).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Amount).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id) : query.OrderBy(x => x.TransactionDate).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
 
         var entities = await query
             .Select(x => new GetCashTransactionListDto
@@ -99,7 +121,10 @@ public class GetCashTransactionListHandler : IRequestHandler<GetCashTransactionL
 
         return new GetCashTransactionListResult
         {
-            Data = entities
+            Data = entities,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 }

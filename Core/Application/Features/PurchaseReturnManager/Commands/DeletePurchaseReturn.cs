@@ -46,32 +46,25 @@ public class DeletePurchaseReturnHandler : IRequestHandler<DeletePurchaseReturnR
     public async Task<DeletePurchaseReturnResult> Handle(DeletePurchaseReturnRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        PurchaseReturn? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
-        }
-
-        entity.UpdatedById = request.DeletedById;
-
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(PurchaseReturn),
-            entity.ReturnDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+            if (entity.Status != PurchaseReturnStatus.Draft)
+                throw new InvalidOperationException("Chỉ được xóa phiếu trả hàng mua ở trạng thái Nháp.");
+            entity.UpdatedById = request.DeletedById;
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id, nameof(PurchaseReturn), entity.ReturnDate,
+                (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
+                entity.UpdatedById, null, ct);
+        }, cancellationToken);
 
         return new DeletePurchaseReturnResult
         {
-            Data = entity
+            Data = entity!
         };
     }
 }

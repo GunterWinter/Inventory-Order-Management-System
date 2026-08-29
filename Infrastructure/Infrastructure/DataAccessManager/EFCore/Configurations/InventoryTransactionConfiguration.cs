@@ -35,6 +35,8 @@ public class InventoryTransactionConfiguration : BaseEntityConfiguration<Invento
         builder.HasIndex(e => e.ModuleCode);
         builder.HasIndex(e => new { e.IsDeleted, e.Status, e.ProductId, e.WarehouseId })
             .HasDatabaseName("IX_InventoryTransaction_StockLookup");
+        builder.HasIndex(e => new { e.IsDeleted, e.Status, e.MovementDate, e.Id })
+            .HasDatabaseName("IX_InventoryTransaction_ActiveList");
         builder.HasIndex(e => new { e.ModuleName, e.ModuleId, e.ModuleItemId })
             .HasDatabaseName("IX_InventoryTransaction_ActiveModuleItem")
             .HasFilter("[IsDeleted] = 0")

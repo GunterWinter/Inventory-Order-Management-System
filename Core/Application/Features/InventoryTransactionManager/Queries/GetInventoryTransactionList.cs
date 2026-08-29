@@ -80,9 +80,12 @@ public class GetInventoryTransactionListProfile : Profile
 public class GetInventoryTransactionListResult
 {
     public List<GetInventoryTransactionListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetInventoryTransactionListRequest : IRequest<GetInventoryTransactionListResult>
+public class GetInventoryTransactionListRequest : PagedListRequest, IRequest<GetInventoryTransactionListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -115,8 +118,25 @@ public class GetInventoryTransactionListHandler : IRequestHandler<GetInventoryTr
                 (x.Status == InventoryTransactionStatus.Confirmed
                     || x.Status == InventoryTransactionStatus.Archived)
             )
-            .OrderByDescending(x => x.CreatedAtUtc)
             .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Number != null && x.Number.Contains(search))
+                || (x.ModuleNumber != null && x.ModuleNumber.Contains(search))
+                || (x.Product != null && x.Product.Name != null && x.Product.Name.Contains(search))
+                || (x.Product != null && x.Product.ReferenceCode != null && x.Product.ReferenceCode.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "number" => request.Descending ? query.OrderByDescending(x => x.Number).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Number).ThenBy(x => x.Id),
+            "movement" => request.Descending ? query.OrderByDescending(x => x.Movement).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Movement).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.MovementDate).ThenByDescending(x => x.Id) : query.OrderBy(x => x.MovementDate).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
 
         var entities = await query.ToListAsync(cancellationToken);
 
@@ -124,7 +144,10 @@ public class GetInventoryTransactionListHandler : IRequestHandler<GetInventoryTr
 
         return new GetInventoryTransactionListResult
         {
-            Data = dtos
+            Data = dtos,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 

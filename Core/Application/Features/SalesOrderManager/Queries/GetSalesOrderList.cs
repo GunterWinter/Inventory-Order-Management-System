@@ -50,9 +50,12 @@ public class GetSalesOrderListProfile : Profile
 public class GetSalesOrderListResult
 {
     public List<GetSalesOrderListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetSalesOrderListRequest : IRequest<GetSalesOrderListResult>
+public class GetSalesOrderListRequest : PagedListRequest, IRequest<GetSalesOrderListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -78,13 +81,33 @@ public class GetSalesOrderListHandler : IRequestHandler<GetSalesOrderListRequest
             .Include(x => x.Customer)
             .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Number != null && x.Number.Contains(search))
+                || (x.Customer != null && x.Customer.Name != null && x.Customer.Name.Contains(search))
+                || (x.Description != null && x.Description.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "number" => request.Descending ? query.OrderByDescending(x => x.Number).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Number).ThenBy(x => x.Id),
+            "aftertaxamount" => request.Descending ? query.OrderByDescending(x => x.AfterTaxAmount).ThenByDescending(x => x.Id) : query.OrderBy(x => x.AfterTaxAmount).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.OrderDate).ThenByDescending(x => x.Id) : query.OrderBy(x => x.OrderDate).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
+
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetSalesOrderListDto>>(entities);
 
         return new GetSalesOrderListResult
         {
-            Data = dtos
+            Data = dtos,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 

@@ -1,5 +1,14 @@
 # Test research: FIFO inventory costing
 
+## Follow-up 2026-08-29: reversal, return debt, locale and large lists
+
+- Scope is limited to PO/SO/PR/SR payment reversal, return stock/debt reversal, Draft-only deletion, Material Export reopen/edit, Quick Add Vietnamese money, seven high-volume list endpoints, debt report, dashboard and affected localization.
+- Payment history is immutable: reversal must add one linked negative payment, recalculate the originating cash account, and allow a source document to reopen only when net payments are zero.
+- Confirmed returns reduce the source order debt proportionally after tax. Purchase Return is cash debit/receivable from vendor; Sales Return is cash credit/refund owed to customer. Cancelling a paid return is blocked until all refund payments are reversed.
+- Sales Return cancellation must also reject removal of returned stock when downstream confirmed movements have consumed it. Purchase Return cancellation restores its stock-out.
+- High-volume proof requires bounded server paging and matching list indexes; a disposable browser database remains mandatory for mutation scenarios.
+- Correct money display is `321.987,63`, with `.` grouping and `,` decimal; API payload remains a canonical numeric value.
+
 Date: 2026-08-26
 
 - Scope: database reset safety, DI startup, document-date FIFO for Material Export and physical Sales Order, exact serial cost, Sales Return source-layer reversal, frozen inventory-profit reporting, Vietnamese decimals, and all affected UI paths.

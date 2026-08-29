@@ -247,9 +247,10 @@ public class SalesOrderService
 
     private async Task ValidateCancellationAsync(SalesOrder order, List<InventoryTransaction> transactions, CancellationToken ct)
     {
-        if (await _paymentRepository.GetQuery().AnyAsync(x => !x.IsDeleted && x.CashTransaction != null
+        var netPaidAmount = await _paymentRepository.GetQuery().Where(x => !x.IsDeleted && x.CashTransaction != null
             && !x.CashTransaction.IsDeleted && x.CashTransaction.SourceModule == nameof(SalesOrder)
-            && x.CashTransaction.SourceModuleId == order.Id && x.Amount > 0m, ct))
+            && x.CashTransaction.SourceModuleId == order.Id).SumAsync(x => x.Amount, ct);
+        if (netPaidAmount > 0.000001m)
             throw new InvalidOperationException($"Không thể hủy SO {order.Number} vì đã có lịch sử thu tiền. Hãy hoàn tác các lần thanh toán trước.");
         if (await _queryContext.Set<SalesReturn>().AsNoTracking().AnyAsync(x => !x.IsDeleted
             && x.SalesOrderId == order.Id && x.Status != SalesReturnStatus.Cancelled, ct))

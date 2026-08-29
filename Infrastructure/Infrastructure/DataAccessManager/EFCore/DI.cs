@@ -55,7 +55,11 @@ public static class DI
             default:
                 void ConfigureSqlServer(DbContextOptionsBuilder options)
                 {
-                    options.UseSqlServer(connectionString);
+                    options.UseSqlServer(connectionString, sqlOptions =>
+                        sqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(5),
+                            errorNumbersToAdd: null));
                     if (environment.IsDevelopment() && configuration.GetValue<bool>("DataAccess:LogSql"))
                     {
                         options.LogTo(Log.Information, LogLevel.Information);
@@ -89,25 +93,63 @@ public static class DI
 
         // Create database using DataContext
         var dataContext = serviceProvider.GetRequiredService<DataContext>();
-        // Demo runs are intentionally disposable; production/non-demo runs must
-        // never delete an existing database.
-        if (resetDatabase)
+        // IIS can start before the SQL Server service. Keep startup alive long
+        // enough for SQL Server to accept connections instead of failing the app pool.
+        // ponytail: fixed 60-second startup window; move this to deployment health
+        // checks if SQL startup routinely takes longer.
+        const int maxAttempts = 20;
+        var retryDelay = TimeSpan.FromSeconds(3);
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            var databaseName = dataContext.Database.GetDbConnection().Database;
-            if (!DisposableDatabaseName.IsMatch(databaseName))
+            try
             {
-                throw new InvalidOperationException(
-                    $"Refusing to reset database '{databaseName}'. Demo reset is allowed only for WHMS_UiRegression_* databases.");
+                // Demo runs are intentionally disposable; production/non-demo runs must
+                // never delete an existing database.
+                if (resetDatabase)
+                {
+                    var databaseName = dataContext.Database.GetDbConnection().Database;
+                    if (!DisposableDatabaseName.IsMatch(databaseName))
+                    {
+                        throw new InvalidOperationException(
+                            $"Refusing to reset database '{databaseName}'. Demo reset is allowed only for WHMS_UiRegression_* databases.");
+                    }
+
+                    dataContext.Database.EnsureDeleted();
+                }
+                dataContext.Database.EnsureCreated();
+                // Keep only legacy column compatibility here. New tables should come from the EF model
+                // when the database is recreated from scratch.
+                EnsureCompatibilityColumns(dataContext);
+                return host;
             }
-
-            dataContext.Database.EnsureDeleted();
+            catch (Exception ex) when (attempt < maxAttempts && IsSqlConnectivityFailure(ex))
+            {
+                Log.Warning(
+                    ex,
+                    "SQL Server chưa sẵn sàng khi IIS khởi động. Thử lại lần {Attempt}/{MaxAttempts} sau {RetryDelaySeconds} giây.",
+                    attempt,
+                    maxAttempts,
+                    retryDelay.TotalSeconds);
+                Thread.Sleep(retryDelay);
+            }
         }
-        dataContext.Database.EnsureCreated();
-        // Keep only legacy column compatibility here. New tables should come from the EF model
-        // when the database is recreated from scratch.
-        EnsureCompatibilityColumns(dataContext);
 
-        return host;
+        // The final SQL exception is rethrown by the last loop iteration.
+        throw new InvalidOperationException("Không thể kết nối SQL Server trong thời gian khởi động ứng dụng.");
+    }
+
+    private static bool IsSqlConnectivityFailure(Exception exception)
+    {
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current is Microsoft.Data.SqlClient.SqlException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void EnsureCompatibilityColumns(DataContext dataContext)
@@ -156,6 +198,10 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.ProductSerial', N'UnitCost') IS NULL ALTER TABLE [dbo].[ProductSerial] ADD [UnitCost] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.InventoryTransaction', N'UnitCost') IS NULL ALTER TABLE [dbo].[InventoryTransaction] ADD [UnitCost] decimal(19,6) NULL;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_StockLookup] ON [dbo].[InventoryTransaction] ([IsDeleted], [Status], [ProductId], [WarehouseId]) INCLUDE ([Stock], [CreatedAtUtc]);",
+            "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_ActiveList' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_ActiveList] ON [dbo].[InventoryTransaction] ([IsDeleted], [Status], [MovementDate], [Id]);",
+            "IF OBJECT_ID(N'[dbo].[PurchaseOrder]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_PurchaseOrder_ActiveList' AND [object_id] = OBJECT_ID(N'[dbo].[PurchaseOrder]')) CREATE INDEX [IX_PurchaseOrder_ActiveList] ON [dbo].[PurchaseOrder] ([IsDeleted], [OrderDate], [Id]);",
+            "IF OBJECT_ID(N'[dbo].[SalesOrder]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_SalesOrder_ActiveList' AND [object_id] = OBJECT_ID(N'[dbo].[SalesOrder]')) CREATE INDEX [IX_SalesOrder_ActiveList] ON [dbo].[SalesOrder] ([IsDeleted], [OrderDate], [Id]);",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_CashTransaction_ActiveList' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) CREATE INDEX [IX_CashTransaction_ActiveList] ON [dbo].[CashTransaction] ([IsDeleted], [TransactionDate], [Id]);",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_InventoryTransaction_ActiveModuleItem' AND [object_id] = OBJECT_ID(N'[dbo].[InventoryTransaction]')) CREATE INDEX [IX_InventoryTransaction_ActiveModuleItem] ON [dbo].[InventoryTransaction] ([ModuleName], [ModuleId], [ModuleItemId]) INCLUDE ([Status], [ProductId], [WarehouseId], [Movement], [Stock]) WHERE [IsDeleted] = 0;",
             "IF OBJECT_ID(N'[dbo].[InventoryTransaction]', N'U') IS NOT NULL UPDATE [dbo].[InventoryTransaction] SET [QtySCDelta] = CASE WHEN [TransType] = 1 THEN ABS(ISNULL([QtySCDelta], 0)) WHEN [TransType] = -1 THEN -ABS(ISNULL([QtySCDelta], 0)) ELSE ISNULL([QtySCCount], 0) - ISNULL([QtySCSys], 0) END WHERE [ModuleName] = N'StockCount' AND [QtySCDelta] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[ProductSerial]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_ProductSerial_StockLookup' AND [object_id] = OBJECT_ID(N'[dbo].[ProductSerial]')) CREATE INDEX [IX_ProductSerial_StockLookup] ON [dbo].[ProductSerial] ([IsDeleted], [Status], [ProductId], [CurrentWarehouseId]) INCLUDE ([CreatedAtUtc]);",
@@ -308,7 +354,9 @@ public static class DI
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_MaterialExportOffset' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) DROP INDEX [UX_CashTransaction_MaterialExportOffset] ON [dbo].[CashTransaction];",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_MaterialExportObligation' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceModuleId] IS NOT NULL GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_MaterialExportObligation] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'MaterialExport' AND [SourceModuleId] IS NOT NULL;",
             "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_PurchaseOrderObligation' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseOrder' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_PurchaseOrderObligation] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseOrder';",
-            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_SalesOrderPayment' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_SalesOrderPayment] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder';"
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_SalesOrderPayment' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_SalesOrderPayment] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesOrder';",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_PurchaseReturnRefund' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseReturn' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_PurchaseReturnRefund] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'PurchaseReturn';",
+            "IF OBJECT_ID(N'[dbo].[CashTransaction]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'UX_CashTransaction_SalesReturnRefund' AND [object_id] = OBJECT_ID(N'[dbo].[CashTransaction]')) AND NOT EXISTS (SELECT 1 FROM [dbo].[CashTransaction] WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesReturn' GROUP BY [SourceModule], [SourceModuleId], [TransactionType] HAVING COUNT(*) > 1) CREATE UNIQUE INDEX [UX_CashTransaction_SalesReturnRefund] ON [dbo].[CashTransaction] ([SourceModule], [SourceModuleId], [TransactionType]) WHERE [IsDeleted] = 0 AND [SourceModule] = N'SalesReturn';"
         };
 
         foreach (var command in commands)

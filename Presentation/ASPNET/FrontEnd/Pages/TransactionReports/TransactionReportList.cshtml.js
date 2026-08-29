@@ -1,7 +1,8 @@
 const App = {
     setup() {
         const state = Vue.reactive({
-            mainData: []
+            mainData: [],
+            mainTotalCount: 0
         });
 
         const mainGridRef = Vue.ref(null);
@@ -23,9 +24,9 @@ const App = {
         });
 
         const services = {
-            getMainData: async () => {
+            getMainData: async (gridState = {}) => {
                 try {
-                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryTransactionList', {});
+                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryTransactionList' + ServerGridManager.buildQuery(gridState), {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -34,13 +35,17 @@ const App = {
         };
 
         const methods = {
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                state.mainData = response?.data?.content?.data.map(item => ({
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const dataSource = ServerGridManager.unwrap(response, item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
-                    movementDate: DateFormatManager.parseBusinessDate(item.movementDate)
+                    movementDate: DateFormatManager.parseBusinessDate(item.movementDate),
+                    movementDateText: DateFormatManager.formatToLocale(item.movementDate)
                 }));
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
             onMainModalHidden: () => {
             }
@@ -52,7 +57,7 @@ const App = {
                 await SecurityManager.validateToken();
 
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
                 window.addEventListener('resize', resizeGrid);
 
             } catch (e) {
@@ -73,17 +78,17 @@ const App = {
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
-                    allowGrouping: true,
-                    groupSettings: {
-                        columns: ['productName']
-                    },
+                    allowGrouping: false,
                     allowTextWrap: true,
                     allowResizing: true,
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true,
                     showColumnMenu: true,
@@ -96,7 +101,7 @@ const App = {
                         { field: 'warehouseName', headerText: 'Warehouse', width: 100 },
                         { field: 'productReferenceCode', headerText: 'Ref Code', width: 120 },
                         { field: 'productName', headerText: 'Product', width: 100 },
-                        { field: 'movementDate', headerText: 'Movement Date', width: 100, type: 'date', format: 'yyyy-MM-dd' },
+                        { field: 'movementDateText', headerText: 'Movement Date', width: 120, type: 'string', valueAccessor: (_field, data) => data.movementDateText ?? '' },
                         { field: 'number', headerText: 'Number', width: 100 },
                         { field: 'movement', headerText: 'Movement', width: 100, type: 'number', numericKind: 'decimal', textAlign: 'Right' },
                         { field: 'transTypeName', headerText: 'Trans Type', width: 100 },
@@ -153,7 +158,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: state.mainData });
+                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
             }
         };
 

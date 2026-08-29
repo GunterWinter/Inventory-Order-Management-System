@@ -46,32 +46,25 @@ public class DeleteTransferInHandler : IRequestHandler<DeleteTransferInRequest, 
     public async Task<DeleteTransferInResult> Handle(DeleteTransferInRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        TransferIn? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
-        }
-
-        entity.UpdatedById = request.DeletedById;
-
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(TransferIn),
-            entity.TransferReceiveDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+            if (entity.Status != TransferStatus.Draft)
+                throw new InvalidOperationException("Chỉ được xóa phiếu nhập chuyển kho ở trạng thái Nháp.");
+            entity.UpdatedById = request.DeletedById;
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id, nameof(TransferIn), entity.TransferReceiveDate,
+                (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
+                entity.UpdatedById, null, ct);
+        }, cancellationToken);
 
         return new DeleteTransferInResult
         {
-            Data = entity
+            Data = entity!
         };
     }
 }

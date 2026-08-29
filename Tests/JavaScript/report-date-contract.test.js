@@ -10,6 +10,7 @@ test('debt and inventory transaction report grids declare real date columns', ()
     const inventory = read('Presentation/ASPNET/FrontEnd/Pages/TransactionReports/TransactionReportList.cshtml.js');
 
     assert.match(debt, /field: 'documentDate'[\s\S]{0,100}type: 'date'[\s\S]{0,80}format: 'yyyy-MM-dd'/);
-    assert.match(inventory, /field: 'movementDate'[\s\S]{0,100}type: 'date'[\s\S]{0,80}format: 'yyyy-MM-dd'/);
+    assert.match(inventory, /movementDateText:\s*DateFormatManager\.formatToLocale\(item\.movementDate\)/);
+    assert.match(inventory, /field: 'movementDateText'[\s\S]{0,100}type: 'string'/);
     assert.match(inventory, /field: 'createdAtUtc'[\s\S]{0,100}type: 'date'[\s\S]{0,80}format: 'yyyy-MM-dd HH:mm'/);
 });

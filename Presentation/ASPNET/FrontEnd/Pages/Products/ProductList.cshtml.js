@@ -12,6 +12,7 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
+            mainTotalCount: 0,
             deleteMode: false,
             productGroupListLookupData: [],
             unitMeasureListLookupData: [],
@@ -285,9 +286,9 @@ const App = {
         };
 
         const services = {
-            getMainData: async () => {
+            getMainData: async (gridState = {}) => {
                 try {
-                    const response = await AxiosManager.get('/Product/GetProductList', {});
+                    const response = await AxiosManager.get('/Product/GetProductList' + ServerGridManager.buildQuery(gridState), {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -372,12 +373,15 @@ const App = {
                 const response = await services.getWarehouseListLookupData();
                 state.warehouseListLookupData = response?.data?.content?.data?.filter(item => item.systemWarehouse === false) ?? [];
             },
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                state.mainData = response?.data?.content?.data.map(item => ({
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const dataSource = ServerGridManager.unwrap(response, item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
         };
 
@@ -888,7 +892,7 @@ const App = {
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', resetFormState);
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
 
             } catch (e) {
                 console.error('page init error:', e);
@@ -910,17 +914,17 @@ const App = {
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
-                    allowGrouping: true,
-                    groupSettings: {
-                        columns: ['productGroupName']
-                    },
+                    allowGrouping: false,
                     allowTextWrap: true,
                     allowResizing: true,
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -1109,7 +1113,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: state.mainData });
+                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
             }
         };
 

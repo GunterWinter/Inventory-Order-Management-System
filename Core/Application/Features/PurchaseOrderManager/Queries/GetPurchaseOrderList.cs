@@ -44,9 +44,12 @@ public class GetPurchaseOrderListProfile : Profile
 public class GetPurchaseOrderListResult
 {
     public List<GetPurchaseOrderListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetPurchaseOrderListRequest : IRequest<GetPurchaseOrderListResult>
+public class GetPurchaseOrderListRequest : PagedListRequest, IRequest<GetPurchaseOrderListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -72,13 +75,33 @@ public class GetPurchaseOrderListHandler : IRequestHandler<GetPurchaseOrderListR
             .Include(x => x.Vendor)
             .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Number != null && x.Number.Contains(search))
+                || (x.Vendor != null && x.Vendor.Name != null && x.Vendor.Name.Contains(search))
+                || (x.Description != null && x.Description.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "number" => request.Descending ? query.OrderByDescending(x => x.Number).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Number).ThenBy(x => x.Id),
+            "aftertaxamount" => request.Descending ? query.OrderByDescending(x => x.AfterTaxAmount).ThenByDescending(x => x.Id) : query.OrderBy(x => x.AfterTaxAmount).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.OrderDate).ThenByDescending(x => x.Id) : query.OrderBy(x => x.OrderDate).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
+
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetPurchaseOrderListDto>>(entities);
 
         return new GetPurchaseOrderListResult
         {
-            Data = dtos
+            Data = dtos,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 

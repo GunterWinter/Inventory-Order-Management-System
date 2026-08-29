@@ -188,9 +188,15 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         throw new Error(`Allocated receipt was not returned with two details: ${JSON.stringify(createdListRow)}`);
     }
 
-    await page.evaluate(description => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.search(description), uniqueDescription);
-    await page.waitForSelector('#MainGrid .e-row');
-    await page.locator('#MainGrid .e-row').first().dblclick();
+    await page.evaluate(() => {
+        const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
+        if (!grid) return;
+        grid.pageSettings.pageSize = 200;
+        grid.dataBind();
+    });
+    await page.waitForFunction(description =>
+        Array.from(document.querySelectorAll('#MainGrid .e-row')).some(row => row.textContent.includes(description)), uniqueDescription);
+    await page.locator('#MainGrid .e-row').filter({ hasText: uniqueDescription }).first().dblclick();
     await page.waitForSelector('#MainModal.show');
     if (await page.locator('#MainModal .allocation-row').count() !== 2) {
         throw new Error('Viewing the saved receipt did not show its allocation details.');
@@ -320,7 +326,7 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     }
     const salesPaymentTarget = await page.evaluate(() => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
-        const record = grid.dataSource.find(item => item.paymentStatusClass === 'unpaid');
+        const record = (grid.dataSource?.result ?? grid.dataSource).find(item => item.paymentStatusClass === 'unpaid');
         if (!record) return null;
         grid.search(record.number);
         return { id: record.id, number: record.number };
@@ -357,7 +363,8 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     await page.locator('.sales-order-payment-popup .swal2-confirm').click();
     if ((await salesPaymentResponsePromise).status() !== 200) throw new Error('Sales Order payment failed.');
     await page.waitForFunction(id => {
-        const row = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.find(item => item.id === id);
+        const source = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource;
+        const row = (source?.result ?? source ?? []).find(item => item.id === id);
         return row?.paymentStatusClass === 'paid';
     }, salesPaymentTarget.id);
     await page.waitForFunction(id => {
@@ -370,28 +377,24 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
     await page.goto(`${baseUrl}/PurchaseOrders/PurchaseOrderList`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
     await page.waitForSelector('#MainGrid.e-grid');
-    await page.waitForFunction(() => Array.isArray(document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource));
+    await page.waitForFunction(() => {
+        const source = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource;
+        return Array.isArray(source) || Array.isArray(source?.result);
+    });
     const purchasePaymentTarget = await page.evaluate(() => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
-        const record = grid.dataSource.find(item => item.paymentStatusClass === 'unpaid');
+        const record = (grid.dataSource?.result ?? grid.dataSource).find(item => item.paymentStatusClass === 'unpaid');
         if (!record) return null;
-        grid.search(record.number);
         return { id: record.id, number: record.number };
     });
     if (purchasePaymentTarget) {
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
             ?.getCurrentViewRecords?.().some(item => item.id === id), purchasePaymentTarget.id);
-        await page.evaluate(() => {
-            const content = document.querySelector('#MainGrid .e-content');
-            if (content) content.scrollLeft = content.scrollWidth;
-        });
-        await page.evaluate(id => {
-            const grid = document.querySelector('#MainGrid').ej2_instances[0];
-            const rowIndex = grid.getCurrentViewRecords().findIndex(item => item.id === id);
-            const button = grid.getRowByIndex(rowIndex)?.querySelector('.payment-status-action');
-            if (!button) throw new Error('The Purchase Order payment button was not rendered.');
-            button.click();
-        }, purchasePaymentTarget.id);
+        const purchasePaymentButton = page.locator('#MainGrid .e-row')
+            .filter({ hasText: purchasePaymentTarget.number })
+            .locator('.payment-status-action');
+        await purchasePaymentButton.waitFor();
+        await purchasePaymentButton.click();
         await page.waitForSelector('.purchase-order-payment-popup');
         const purchasePopupStyle = await page.locator('.purchase-order-payment-popup #swal-account').evaluate(select => {
             const dropdown = select.ej2_instances?.[0];
@@ -421,7 +424,8 @@ async function selectSearchableNativeOption(page, select, optionSelector) {
         await page.locator('.purchase-order-payment-popup .swal2-confirm').click();
         if ((await purchasePaymentResponsePromise).status() !== 200) throw new Error('Purchase Order payment failed.');
         await page.waitForFunction(id => {
-            const row = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.find(item => item.id === id);
+            const source = document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource;
+            const row = (source?.result ?? source ?? []).find(item => item.id === id);
             return row?.paymentStatusClass === 'paid';
         }, purchasePaymentTarget.id);
         const purchaseStatusText = await page.evaluate(id => {

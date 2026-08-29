@@ -1,6 +1,7 @@
 using Application.Common.Extensions;
 using Application.Common.Repositories;
 using Application.Features.InventoryTransactionManager;
+using Application.Features.CashTransactionManager;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Common;
@@ -42,18 +43,21 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
     private readonly ICommandRepository<PurchaseOrder> _purchaseOrderRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly InventoryTransactionService _inventoryTransactionService;
+    private readonly ReturnFinancialService _returnFinancialService;
 
     public UpdatePurchaseReturnHandler(
         ICommandRepository<PurchaseReturn> repository,
         ICommandRepository<PurchaseOrder> purchaseOrderRepository,
         IUnitOfWork unitOfWork,
-        InventoryTransactionService inventoryTransactionService
+        InventoryTransactionService inventoryTransactionService,
+        ReturnFinancialService returnFinancialService
         )
     {
         _repository = repository;
         _purchaseOrderRepository = purchaseOrderRepository;
         _unitOfWork = unitOfWork;
         _inventoryTransactionService = inventoryTransactionService;
+        _returnFinancialService = returnFinancialService;
     }
 
     public async Task<UpdatePurchaseReturnResult> Handle(UpdatePurchaseReturnRequest request, CancellationToken cancellationToken)
@@ -77,6 +81,9 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
             if (entity.PurchaseOrderId != request.PurchaseOrderId)
                 throw new InvalidOperationException("Không được thay đổi đơn mua hàng nguồn sau khi tạo phiếu trả.");
             await _unitOfWork.AcquireTransactionLockAsync($"PurchaseReturn:{entity.PurchaseOrderId}", ct);
+            if (entity.Status is PurchaseReturnStatus.Confirmed or PurchaseReturnStatus.Archived
+                && requestedStatus is PurchaseReturnStatus.Draft or PurchaseReturnStatus.Cancelled)
+                await _returnFinancialService.EnsureCanDeactivateAsync(nameof(PurchaseReturn), entity.Id, ct);
             DocumentDateGuard.EnsureCanPost(request.ReturnDate, requestedStatus == PurchaseReturnStatus.Confirmed);
             if (entity.Status == PurchaseReturnStatus.Draft)
             {
@@ -123,6 +130,8 @@ public class UpdatePurchaseReturnHandler : IRequestHandler<UpdatePurchaseReturnR
                 entity.UpdatedById,
                 null,
                 ct);
+            await _returnFinancialService.SynchronizePurchaseReturnsAsync(
+                entity.PurchaseOrderId!, entity.UpdatedById, ct);
         }, cancellationToken);
 
         return new UpdatePurchaseReturnResult

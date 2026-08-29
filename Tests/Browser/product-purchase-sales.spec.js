@@ -82,7 +82,7 @@ async function reloadAndReadItem(page, route, documentId) {
     await page.goto(route, { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.id === id), documentId);
+        ?.getCurrentViewRecords?.().some(item => item.id === id), documentId);
     await openSelectedDocument(page, '#MainGrid', documentId);
     await page.waitForFunction(() => (
         document.querySelector('#MainModal.show #SecondaryGrid')?.ej2_instances?.[0]?.dataSource?.length > 0
@@ -255,7 +255,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.goto('/StockReports/StockReportList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.productId === id), productId);
+        ?.getCurrentViewRecords?.().some(item => item.productId === id), productId);
     const stockView = await page.evaluate(id => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
         const record = grid.dataSource.find(item => item.productId === id);
@@ -270,17 +270,17 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
 
     await page.goto('/TransactionReports/TransactionReportList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
-    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.dataSource?.length > 0);
+    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.getCurrentViewRecords?.().length > 0);
     const transactionView = await page.evaluate(() => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
-        return { groupColumns: grid.groupSettings?.columns ?? [], dataCount: grid.dataSource.length };
+        return { groupColumns: grid.groupSettings?.columns ?? [], dataCount: grid.getCurrentViewRecords().length };
     });
-    expect(transactionView.groupColumns).toEqual(['productName']);
+    expect(transactionView.groupColumns).toEqual([]);
     expect(transactionView.dataCount).toBeGreaterThan(0);
     await expect(page.locator('#MainGrid tr', { hasText: key }).first()).toContainText('2,5');
     const transactionRecord = await page.evaluate(id => {
         const grid = document.querySelector('#MainGrid').ej2_instances[0];
-        const record = grid.dataSource.find(item => item.productId === id);
+        const record = grid.getCurrentViewRecords().find(item => item.productId === id);
         return {
             productName: record?.productName,
             movement: record?.movement,
@@ -371,7 +371,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.id === id), salesOrderId);
+        ?.getCurrentViewRecords?.().some(item => item.id === id), salesOrderId);
     await openSelectedDocument(page, '#MainGrid', salesOrderId);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
     await beginProductItemEdit(page);
@@ -457,7 +457,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.goto('/PurchaseOrders/PurchaseOrderList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
+        ?.getCurrentViewRecords?.().some(item => item.id === id), purchaseOrderId);
     await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
     await beginProductItemEdit(page);
@@ -659,7 +659,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await page.reload({ waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), materialExport.id);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), materialExport.id);
         await openSelectedDocument(page, '#MainGrid', materialExport.id);
         await page.waitForFunction(() => (
             document.querySelector('#MainModal.show #SecondaryGrid')?.ej2_instances?.[0]?.dataSource?.length === 1
@@ -732,7 +732,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await page.goto('/PurchaseOrders/PurchaseOrderList', { waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
         await page.waitForSelector('#MainModal.show');
         await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
@@ -886,7 +886,7 @@ test('Sales Order Nháp giữ chỗ, bỏ hết và chọn lại serial mà khô
     await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.id === id), fixture.salesOrder.id);
+        ?.getCurrentViewRecords?.().some(item => item.id === id), fixture.salesOrder.id);
     await openSelectedDocument(page, '#MainGrid', fixture.salesOrder.id);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
     await page.waitForTimeout(500);
@@ -965,7 +965,7 @@ test('Sales Order Nháp giữ chỗ, bỏ hết và chọn lại serial mà khô
     await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
     await waitForVuePage(page);
     await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-        ?.dataSource?.some?.(item => item.id === id), fixture.otherSalesOrder.id);
+        ?.getCurrentViewRecords?.().some(item => item.id === id), fixture.otherSalesOrder.id);
     await openSelectedDocument(page, '#MainGrid', fixture.otherSalesOrder.id);
     await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
     await beginProductItemEdit(page);

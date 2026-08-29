@@ -46,32 +46,25 @@ public class DeleteScrappingHandler : IRequestHandler<DeleteScrappingRequest, De
     public async Task<DeleteScrappingResult> Handle(DeleteScrappingRequest request, CancellationToken cancellationToken)
     {
 
-        var entity = await _repository.GetAsync(request.Id ?? string.Empty, cancellationToken);
-
-        if (entity == null)
+        Scrapping? entity = null;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
-        }
-
-        entity.UpdatedById = request.DeletedById;
-
-        _repository.Delete(entity);
-        await _unitOfWork.SaveAsync(cancellationToken);
-
-        await _inventoryTransactionService.PropagateParentUpdate(
-            entity.Id,
-            nameof(Scrapping),
-            entity.ScrappingDate,
-            (InventoryTransactionStatus?)entity.Status,
-            entity.IsDeleted,
-            entity.UpdatedById,
-            null,
-            cancellationToken
-            );
+            entity = await _repository.GetAsync(request.Id ?? string.Empty, ct)
+                ?? throw new InvalidOperationException("Dữ liệu không còn tồn tại hoặc đã bị xóa. Vui lòng tải lại danh sách.");
+            if (entity.Status != ScrappingStatus.Draft)
+                throw new InvalidOperationException("Chỉ được xóa phiếu hủy hàng ở trạng thái Nháp.");
+            entity.UpdatedById = request.DeletedById;
+            _repository.Delete(entity);
+            await _unitOfWork.SaveAsync(ct);
+            await _inventoryTransactionService.PropagateParentUpdate(
+                entity.Id, nameof(Scrapping), entity.ScrappingDate,
+                (InventoryTransactionStatus?)entity.Status, entity.IsDeleted,
+                entity.UpdatedById, null, ct);
+        }, cancellationToken);
 
         return new DeleteScrappingResult
         {
-            Data = entity
+            Data = entity!
         };
     }
 }

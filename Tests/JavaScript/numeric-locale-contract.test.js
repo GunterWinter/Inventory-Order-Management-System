@@ -92,3 +92,16 @@ test('inventory movement editors distinguish serial integers from non-serial dec
         assert.match(source, /decimals:\s*serialTracked\s*\?\s*0\s*:\s*6/, file);
     }
 });
+
+test('Quick Add keeps Vietnamese grouped money visible and sends a parsed canonical number', () => {
+    const source = fs.readFileSync(path.resolve(
+        __dirname,
+        '../../Presentation/ASPNET/wwwroot/lib/indotalent/quick-add-helper.js'), 'utf8');
+
+    assert.match(source, /id="qa-p-costprice"[^>]*type="text"[^>]*inputmode="decimal"[^>]*data-number-format="true"/);
+    assert.match(source, /id="qa-p-unitprice"[^>]*type="text"[^>]*inputmode="decimal"[^>]*data-number-format="true"/);
+    assert.match(source, /costPriceRaw[\s\S]{0,160}NumberFormatManager\.parseLocaleNumber\(costPriceRaw\)/);
+    assert.match(source, /unitPriceRaw[\s\S]{0,160}NumberFormatManager\.parseLocaleNumber\(unitPriceRaw\)/);
+    assert.match(source, /formatMoneyToLocale\(parsed\)/);
+    assert.doesNotMatch(source, /id="qa-p-(?:costprice|unitprice)"[^>]*type="number"/);
+});

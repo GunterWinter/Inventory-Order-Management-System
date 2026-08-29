@@ -18,7 +18,8 @@ async function openDocumentPage(page, pagePath) {
     await page.waitForFunction(() => {
         const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
         const secondaryGrid = document.querySelector('#SecondaryGrid')?.ej2_instances?.[0];
-        return grid && secondaryGrid && Array.isArray(grid.dataSource);
+        return grid && secondaryGrid
+            && (Array.isArray(grid.dataSource) || Array.isArray(grid.dataSource?.result));
     });
 }
 

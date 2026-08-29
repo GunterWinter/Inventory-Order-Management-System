@@ -50,6 +50,8 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
 
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.TransactionDate);
+        builder.HasIndex(e => new { e.IsDeleted, e.TransactionDate, e.Id })
+            .HasDatabaseName("IX_CashTransaction_ActiveList");
         builder.HasIndex(e => new { e.CashAccountId, e.TransactionType })
             .HasDatabaseName("IX_CashTransaction_ActiveBalance")
             .HasFilter("[IsDeleted] = 0")
@@ -68,5 +70,13 @@ public class CashTransactionConfiguration : BaseEntityConfiguration<CashTransact
             .HasDatabaseName("UX_CashTransaction_SalesOrderPayment")
             .IsUnique()
             .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'SalesOrder'");
+        builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.TransactionType })
+            .HasDatabaseName("UX_CashTransaction_PurchaseReturnRefund")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'PurchaseReturn'");
+        builder.HasIndex(e => new { e.SourceModule, e.SourceModuleId, e.TransactionType })
+            .HasDatabaseName("UX_CashTransaction_SalesReturnRefund")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [SourceModule] = N'SalesReturn'");
     }
 }

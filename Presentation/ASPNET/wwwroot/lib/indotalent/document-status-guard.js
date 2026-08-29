@@ -5,6 +5,10 @@
         return FINAL_STATUS_VALUES.has(String(status ?? ''));
     }
 
+    function isDraft(status) {
+        return String(status ?? '') === '0';
+    }
+
     async function confirmIfFinalStatus(status) {
         const statusValue = String(status ?? '');
         if (!isFinalStatus(statusValue)) {
@@ -32,6 +36,7 @@
 
     window.DocumentStatusGuard = {
         isFinalStatus,
+        isDraft,
         confirmIfFinalStatus
     };
 })(window);

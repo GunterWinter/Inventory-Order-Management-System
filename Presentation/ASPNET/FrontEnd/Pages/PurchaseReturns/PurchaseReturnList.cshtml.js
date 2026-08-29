@@ -554,18 +554,16 @@
                     },
                     excelExportComplete: () => { },
                     rowSelected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
+                        const selected = mainGrid.obj.getSelectedRecords();
+                        const hasOne = selected.length === 1;
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'PrintPDFCustom'], hasOne);
+                        mainGrid.obj.toolbarModule.enableItems(['DeleteCustom'], hasOne && DocumentStatusGuard.isDraft(selected[0]?.status));
                     },
                     rowDeselected: () => {
-                        if (mainGrid.obj.getSelectedRecords().length == 1) {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], true);
-                        } else {
-                            mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'DeleteCustom', 'PrintPDFCustom'], false);
-                        }
+                        const selected = mainGrid.obj.getSelectedRecords();
+                        const hasOne = selected.length === 1;
+                        mainGrid.obj.toolbarModule.enableItems(['EditCustom', 'ViewCustom', 'PrintPDFCustom'], hasOne);
+                        mainGrid.obj.toolbarModule.enableItems(['DeleteCustom'], hasOne && DocumentStatusGuard.isDraft(selected[0]?.status));
                     },
                     rowSelecting: () => {
                         if (mainGrid.obj.getSelectedRecords().length) {

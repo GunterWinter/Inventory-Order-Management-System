@@ -2,6 +2,7 @@ using Application.Common.CQS.Queries;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,11 +74,29 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
             .SumAsync(x => x.BeforeTaxAmount ?? 0m, cancellationToken);
 
+        var salesReturnRevenue = await (from line in _context.Set<InventoryTransaction>().AsNoTracking()
+            join item in _context.Set<SalesOrderItem>().AsNoTracking() on line.ModuleItemId equals item.Id
+            where !line.IsDeleted && !item.IsDeleted
+                && line.ModuleName == nameof(SalesReturn)
+                && line.Status == InventoryTransactionStatus.Confirmed
+                && (item.Quantity ?? 0m) > 0m
+            select (line.Movement ?? 0m) * (item.Total ?? 0m) / item.Quantity!.Value)
+            .SumAsync(cancellationToken);
+        confirmedSalesAmount = AccountingMath.RoundMoney(confirmedSalesAmount - salesReturnRevenue);
+
         var customerObligationAmount = await _context.Set<SalesOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == SalesOrderStatus.Confirmed)
             .SumAsync(x => x.AfterTaxAmount ?? 0m, cancellationToken);
+
+        var salesReturnAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(SalesReturn)
+                && _context.Set<SalesReturn>().Any(item => item.Id == x.SourceModuleId
+                    && !item.IsDeleted
+                    && (item.Status == SalesReturnStatus.Confirmed || item.Status == SalesReturnStatus.Archived)))
+            .SumAsync(x => x.Amount ?? 0m, cancellationToken);
 
         var confirmedPurchaseAmount = await _context.Set<PurchaseOrder>()
             .AsNoTracking()
@@ -85,11 +104,29 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
             .SumAsync(x => x.BeforeTaxAmount ?? 0m, cancellationToken);
 
+        var purchaseReturnValue = await (from line in _context.Set<InventoryTransaction>().AsNoTracking()
+            join item in _context.Set<PurchaseOrderItem>().AsNoTracking() on line.ModuleItemId equals item.Id
+            where !line.IsDeleted && !item.IsDeleted
+                && line.ModuleName == nameof(PurchaseReturn)
+                && line.Status == InventoryTransactionStatus.Confirmed
+                && (item.Quantity ?? 0m) > 0m
+            select (line.Movement ?? 0m) * (item.Total ?? 0m) / item.Quantity!.Value)
+            .SumAsync(cancellationToken);
+        confirmedPurchaseAmount = AccountingMath.RoundMoney(confirmedPurchaseAmount - purchaseReturnValue);
+
         var vendorObligationAmount = await _context.Set<PurchaseOrder>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.OrderStatus == PurchaseOrderStatus.Confirmed)
             .SumAsync(x => x.AfterTaxAmount ?? 0m, cancellationToken);
+
+        var purchaseReturnAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(PurchaseReturn)
+                && _context.Set<PurchaseReturn>().Any(item => item.Id == x.SourceModuleId
+                    && !item.IsDeleted
+                    && (item.Status == PurchaseReturnStatus.Confirmed || item.Status == PurchaseReturnStatus.Archived)))
+            .SumAsync(x => x.Amount ?? 0m, cancellationToken);
 
         var salesPaidAmount = await _context.Set<CashTransaction>()
             .AsNoTracking()
@@ -113,6 +150,15 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
                     && order.OrderStatus == PurchaseOrderStatus.Confirmed))
             .SumAsync(x => x.PaidAmount ?? 0m, cancellationToken);
 
+        var salesReturnPaidAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(SalesReturn))
+            .SumAsync(x => x.PaidAmount ?? 0m, cancellationToken);
+        var purchaseReturnPaidAmount = await _context.Set<CashTransaction>()
+            .AsNoTracking().ApplyIsDeletedFilter(false)
+            .Where(x => x.SourceModule == nameof(PurchaseReturn))
+            .SumAsync(x => x.PaidAmount ?? 0m, cancellationToken);
+
         var cashBalance = await _context.Set<CashAccount>()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
@@ -131,6 +177,8 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             .ApplyIsDeletedFilter(false)
             .CountAsync(x => x.Status == MaterialExportStatus.Confirmed, cancellationToken);
 
+        var customerBalance = customerObligationAmount - salesReturnAmount - salesPaidAmount + salesReturnPaidAmount;
+        var vendorBalance = vendorObligationAmount - purchaseReturnAmount - purchasePaidAmount + purchaseReturnPaidAmount;
         var cardsDashboardData = new CardsItem
         {
             SalesTotal = salesTotal,
@@ -142,8 +190,10 @@ public class GetCardsDashboardHandler : IRequestHandler<GetCardsDashboardRequest
             ConfirmedSalesAmount = confirmedSalesAmount,
             ConfirmedPurchaseAmount = confirmedPurchaseAmount,
             CashBalance = cashBalance,
-            CustomerReceivable = Math.Max(0m, customerObligationAmount - salesPaidAmount),
-            VendorDebt = Math.Max(0m, vendorObligationAmount - purchasePaidAmount),
+            CustomerReceivable = Math.Max(0m, customerBalance),
+            CustomerCredit = Math.Max(0m, -customerBalance),
+            VendorDebt = Math.Max(0m, vendorBalance),
+            VendorCredit = Math.Max(0m, -vendorBalance),
             InventoryQuantity = inventoryQuantity,
             MaterialExportCount = materialExportCount
         };

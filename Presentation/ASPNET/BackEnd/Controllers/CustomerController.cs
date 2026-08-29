@@ -60,11 +60,10 @@ public class CustomerController : BaseApiController
     [Authorize]
     [HttpGet("GetCustomerList")]
     public async Task<ActionResult<ApiSuccessResult<GetCustomerListResult>>> GetCustomerListAsync(
-        CancellationToken cancellationToken,
-        [FromQuery] bool isDeleted = false
+        [FromQuery] GetCustomerListRequest request,
+        CancellationToken cancellationToken
         )
     {
-        var request = new GetCustomerListRequest { IsDeleted = isDeleted };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetCustomerListResult>

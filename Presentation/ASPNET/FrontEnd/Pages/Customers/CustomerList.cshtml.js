@@ -2,6 +2,7 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
+            mainTotalCount: 0,
             deleteMode: false,
             customerGroupListLookupData: [],
             customerCategoryListLookupData: [],
@@ -69,9 +70,9 @@ const App = {
         const customerCategoryIdRef = Vue.ref(null);
 
         const services = {
-            getMainData: async () => {
+            getMainData: async (gridState = {}) => {
                 try {
-                    const response = await AxiosManager.get('/Customer/GetCustomerList', {});
+                    const response = await AxiosManager.get('/Customer/GetCustomerList' + ServerGridManager.buildQuery(gridState), {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -172,12 +173,15 @@ const App = {
                 const response = await services.getCustomerCategoryListLookupData();
                 state.customerCategoryListLookupData = response?.data?.content?.data;
             },
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                state.mainData = response?.data?.content?.data.map(item => ({
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const dataSource = ServerGridManager.unwrap(response, item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
                 }));
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
             populateSecondaryData: async (customerId) => {
                 const response = await services.getSecondaryData(customerId);
@@ -769,15 +773,17 @@ const App = {
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
-                    allowGrouping: true,
-                    groupSettings: { columns: ['customerCategoryName'] },
+                    allowGrouping: false,
                     allowTextWrap: true,
                     allowResizing: true,
                     allowPaging: true,
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -911,7 +917,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: state.mainData });
+                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
             }
         };
 
@@ -1058,7 +1064,7 @@ const App = {
                 await SecurityManager.validateToken();
 
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
                 await methods.populateCustomerGroupListLookupData();
                 customerGroupListLookup.create();
                 await methods.populateCustomerCategoryListLookupData();

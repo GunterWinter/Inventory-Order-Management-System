@@ -1,5 +1,14 @@
 # Test plan: FIFO inventory costing
 
+## Follow-up plan 2026-08-29
+
+1. [complete] Make PO/SO/PR/SR payment reversal share one linked negative-payment service and use net payment guards.
+2. [complete] Synchronize confirmed return values into cash/debt, reports and dashboard; reverse them atomically on Draft/Cancel.
+3. [complete] Enforce Draft-only delete and validate Sales Return stock before reversing the return.
+4. [complete] Preserve Vietnamese Quick Add money display and canonical parsing.
+5. [complete] Add bounded server paging/search/sort and active-list indexes for the seven planned high-volume grids.
+6. [complete] Run focused JavaScript, build, isolated browser and publish verification; record assertion review.
+
 ## Final follow-up override (2026-08-28)
 
 - [complete] Tasks 1-11 code and verification.

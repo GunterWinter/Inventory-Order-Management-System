@@ -2,6 +2,7 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
+            mainTotalCount: 0,
             deleteMode: false,
             vendorListLookupData: [],
             taxListLookupData: [],
@@ -227,9 +228,9 @@ const App = {
         };
 
         const services = {
-            getMainData: async () => {
+            getMainData: async (gridState = {}) => {
                 try {
-                    const response = await AxiosManager.get('/PurchaseOrder/GetPurchaseOrderList', {});
+                    const response = await AxiosManager.get('/PurchaseOrder/GetPurchaseOrderList' + ServerGridManager.buildQuery(gridState), {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -351,9 +352,10 @@ const App = {
                     throw error;
                 }
             },
-            getPaymentStatusLookup: async () => {
+            getPaymentStatusLookup: async (sourceIds = []) => {
                 try {
-                    const response = await AxiosManager.get('/CashTransaction/GetPaymentStatusLookup?sourceModule=PurchaseOrder', {});
+                    const ids = sourceIds.map(encodeURIComponent).join(',');
+                    const response = await AxiosManager.get('/CashTransaction/GetPaymentStatusLookup?sourceModule=PurchaseOrder&sourceModuleIds=' + ids, {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -477,12 +479,13 @@ const App = {
                 const allData = response?.data?.content?.data ?? [];
                 state.purchaseOrderStatusListLookupData = allData;
             },
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                const paymentResponse = await services.getPaymentStatusLookup();
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const rawData = response?.data?.content?.data ?? [];
+                const paymentResponse = rawData.length ? await services.getPaymentStatusLookup(rawData.map(item => item.id)) : null;
                 state.paymentStatusLookupData = paymentResponse?.data?.content?.data ?? [];
                 const paymentMap = new Map(state.paymentStatusLookupData.map(p => [p.sourceModuleId, p]));
-                state.mainData = response?.data?.content?.data.map(item => {
+                const dataSource = ServerGridManager.unwrap(response, item => {
                     const payment = paymentMap.get(item.id);
                     const isConfirmed = item.orderStatus === 2;
                     let paymentStatusText = '';
@@ -521,6 +524,9 @@ const App = {
                         cashTransactionIsSplit: payment?.isSplit ?? false
                     };
                 });
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
             populateSecondaryData: async (purchaseOrderId) => {
                 try {
@@ -1091,8 +1097,7 @@ const App = {
                             }
                         }
                     },
-                    allowGrouping: true,
-                    groupSettings: { columns: ['vendorName'] },
+                    allowGrouping: false,
                     allowTextWrap: true,
                     allowResizing: true,
                     allowFreezing: true,
@@ -1100,7 +1105,10 @@ const App = {
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -1332,7 +1340,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: state.mainData });
+                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
             }
         };
 
@@ -2843,7 +2851,7 @@ const App = {
                 await methods.populateCashAccountList();
                 await methods.populateCashCategoryList();
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);

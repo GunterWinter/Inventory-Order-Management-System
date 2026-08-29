@@ -61,9 +61,12 @@ public class GetProductListProfile : Profile
 public class GetProductListResult
 {
     public List<GetProductListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetProductListRequest : IRequest<GetProductListResult>
+public class GetProductListRequest : PagedListRequest, IRequest<GetProductListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -89,6 +92,24 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
             .Include(x => x.ProductGroup)
             .Include(x => x.DefaultWarehouse)
             .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Name != null && x.Name.Contains(search))
+                || (x.Number != null && x.Number.Contains(search))
+                || (x.ReferenceCode != null && x.ReferenceCode.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "referencecode" => request.Descending ? query.OrderByDescending(x => x.ReferenceCode).ThenByDescending(x => x.Id) : query.OrderBy(x => x.ReferenceCode).ThenBy(x => x.Id),
+            "unitprice" => request.Descending ? query.OrderByDescending(x => x.UnitPrice).ThenByDescending(x => x.Id) : query.OrderBy(x => x.UnitPrice).ThenBy(x => x.Id),
+            "createdatutc" => request.Descending ? query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id) : query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Name).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
 
         var entities = await query.ToListAsync(cancellationToken);
 
@@ -141,7 +162,10 @@ public class GetProductListHandler : IRequestHandler<GetProductListRequest, GetP
 
         return new GetProductListResult
         {
-            Data = dtos
+            Data = dtos,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 

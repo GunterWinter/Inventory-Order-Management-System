@@ -100,3 +100,28 @@ test('cash allocation renders exactly one searchable customer control per row', 
     await page.locator('#MainModal .allocation-remove-button').click();
     await expect(page.locator('#MainModal .allocation-row')).toHaveCount(0);
 });
+
+test('inventory transaction report keeps the API business date in the rendered grid', async ({ monitoredPage: page }) => {
+    await login(page, 'vi');
+    await page.goto('/TransactionReports/TransactionReportList', { waitUntil: 'domcontentloaded' });
+    await waitForPage(page);
+    await page.waitForFunction(() => document.querySelector('#MainGrid')?.ej2_instances?.[0]?.getCurrentViewRecords?.().length > 0);
+
+    const dateState = await page.evaluate(async () => {
+        const response = await AxiosManager.get('/InventoryTransaction/GetInventoryTransactionList?page=1&pageSize=50', {});
+        const gridRecord = document.querySelector('#MainGrid').ej2_instances[0].getCurrentViewRecords()[0];
+        const apiRecord = response?.data?.content?.data?.find(item => item.id === gridRecord?.id);
+        return {
+            recordId: gridRecord?.id,
+            apiMovementDate: apiRecord?.movementDate,
+            expectedText: DateFormatManager.formatToLocale(apiRecord?.movementDate),
+            gridMovementDateText: gridRecord?.movementDateText,
+            firstRowText: document.querySelector('#MainGrid .e-content tr.e-row')?.innerText ?? ''
+        };
+    });
+
+    expect(dateState.apiMovementDate).toBeTruthy();
+    expect(dateState.gridMovementDateText).toBe(dateState.expectedText);
+    expect(dateState.firstRowText).toContain(dateState.expectedText);
+    expect(dateState.firstRowText).not.toMatch(/\b2000\b|Invalid Date/);
+});

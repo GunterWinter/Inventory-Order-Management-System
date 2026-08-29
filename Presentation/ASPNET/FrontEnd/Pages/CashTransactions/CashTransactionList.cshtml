@@ -235,10 +235,11 @@
                                     <div class="card-header"><h5>Lịch sử thanh toán</h5></div>
                                     <div class="card-body table-responsive">
                                         <table class="table table-sm table-bordered mb-0">
-                                            <thead><tr><th>Ngày thanh toán</th><th>Tài khoản quỹ</th><th class="text-end">Số tiền</th><th>Diễn giải</th></tr></thead>
+                                            <thead><tr><th>Ngày thanh toán</th><th>Tài khoản quỹ</th><th class="text-end">Số tiền</th><th>Diễn giải</th><th></th></tr></thead>
                                             <tbody>
                                                 <tr v-for="payment in state.paymentHistory" v-bind:key="payment.id">
                                                     <td>{{ methods.formatDate(payment.paymentDate) }}</td><td>{{ payment.cashAccountName }}</td><td class="text-end">{{ methods.formatMoney(payment.amount) }}</td><td>{{ payment.description }}</td>
+                                                    <td><button v-if="payment.canReverse" type="button" class="btn btn-sm btn-outline-danger" v-on:click="methods.reversePayment(payment)">Hoàn</button></td>
                                                 </tr>
                                             </tbody>
                                         </table>

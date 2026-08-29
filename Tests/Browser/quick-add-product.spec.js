@@ -260,7 +260,7 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         await page.goto('/PurchaseOrders/PurchaseOrderList', { waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
         await page.waitForSelector('#MainModal.show #SecondaryGrid.e-grid');
 
@@ -299,8 +299,10 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
 
         await page.locator('#qa-p-name').fill(key);
         await page.locator('#qa-p-unit').fill('PCS');
-        await page.locator('#qa-p-costprice').fill('1000');
-        await page.locator('#qa-p-unitprice').fill('1500');
+        await page.locator('#qa-p-costprice').fill('321987,63');
+        await expect(page.locator('#qa-p-costprice')).toHaveValue('321.987,63');
+        await page.locator('#qa-p-unitprice').fill('321987,63');
+        await expect(page.locator('#qa-p-unitprice')).toHaveValue('321.987,63');
         await page.locator('#qa-p-serial-auto').check();
         await expect(page.locator('#qa-p-fixedcode-section')).toBeVisible();
         await page.locator('#qa-p-opening-stock').fill('1,5');
@@ -361,6 +363,8 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         expect(response.status()).toBe(200);
         expect(request.postDataJSON()).toMatchObject({
             name: key,
+            costPrice: 321987.63,
+            unitPrice: 321987.63,
             physical: true,
             serialTrackingMode: 0,
             internalSerialFixedCode: null,
@@ -466,7 +470,7 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         await page.reload({ waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
         await page.waitForFunction(firstId => {
             const rows = document.querySelector('#SecondaryGrid')?.ej2_instances?.[0]?.dataSource ?? [];
@@ -579,7 +583,7 @@ test('PO/SO complex partner Quick Add refreshes the active searchable dropdown',
         await page.goto('/PurchaseOrders/PurchaseOrderList', { waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), purchaseOrderId);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), purchaseOrderId);
         await openSelectedDocument(page, '#MainGrid', purchaseOrderId);
         await page.waitForSelector('#MainModal.show');
         await completeComplexPartnerQuickAdd(page, {
@@ -598,7 +602,7 @@ test('PO/SO complex partner Quick Add refreshes the active searchable dropdown',
         await page.goto('/SalesOrders/SalesOrderList', { waitUntil: 'domcontentloaded' });
         await waitForVuePage(page);
         await page.waitForFunction(id => document.querySelector('#MainGrid')?.ej2_instances?.[0]
-            ?.dataSource?.some?.(item => item.id === id), salesOrderId);
+            ?.getCurrentViewRecords?.().some(item => item.id === id), salesOrderId);
         await openSelectedDocument(page, '#MainGrid', salesOrderId);
         await page.waitForSelector('#MainModal.show');
         await completeComplexPartnerQuickAdd(page, {

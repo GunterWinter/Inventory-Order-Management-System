@@ -1,4 +1,4 @@
-const { test, expect, login, waitForVuePage } = require('./fixtures');
+const { test, expect, login, waitForVuePage, selectOpenDropdownOption } = require('./fixtures');
 
 async function openDocumentFromGrid(page, number) {
     const row = page.locator('#MainGrid .e-row', { hasText: number }).first();
@@ -274,7 +274,12 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
             returnDate: now, status: '0', description: `${key}-SR-CURRENT`, salesOrderId: so.id, createdById: userId
         }));
 
-        return { purchaseReturn, salesReturn, purchaseProduct, salesProduct };
+        const taxRate = Number(tax.percentage ?? 0) / 100;
+        return {
+            purchaseReturn, salesReturn, purchaseProduct, salesProduct,
+            expectedPurchaseReturnAmount: NumberFormatManager.roundMoney(80000 * 2.5 * (1 + taxRate)),
+            expectedSalesReturnAmount: NumberFormatManager.roundMoney(100000 * 2.5 * (1 + taxRate))
+        };
     }, key);
 
     for (const scenario of [
@@ -283,14 +288,26 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
             number: fixture.purchaseReturn.number,
             product: fixture.purchaseProduct.name,
             createUrl: '/InventoryTransaction/PurchaseReturnCreateInvenTrans',
-            sourceLabel: /Purchase Order|Đơn mua hàng/i
+            sourceLabel: /Purchase Order|Đơn mua hàng/i,
+            module: 'PurchaseReturn',
+            partyType: 'Vendor',
+            transactionType: 0,
+            expectedAmount: fixture.expectedPurchaseReturnAmount,
+            updateUrl: '/PurchaseReturn/UpdatePurchaseReturn',
+            sourceUrl: `/PurchaseReturn/GetSourceLineList?purchaseOrderId=${encodeURIComponent(fixture.purchaseReturn.purchaseOrderId)}&purchaseReturnId=${encodeURIComponent(fixture.purchaseReturn.id)}`
         },
         {
             route: '/SalesReturns/SalesReturnList',
             number: fixture.salesReturn.number,
             product: fixture.salesProduct.name,
             createUrl: '/InventoryTransaction/SalesReturnCreateInvenTrans',
-            sourceLabel: /Sales Order|Đơn bán hàng/i
+            sourceLabel: /Sales Order|Đơn bán hàng/i,
+            module: 'SalesReturn',
+            partyType: 'Customer',
+            transactionType: 1,
+            expectedAmount: fixture.expectedSalesReturnAmount,
+            updateUrl: '/SalesReturn/UpdateSalesReturn',
+            sourceUrl: `/SalesReturn/GetSourceLineList?salesOrderId=${encodeURIComponent(fixture.salesReturn.salesOrderId)}&salesReturnId=${encodeURIComponent(fixture.salesReturn.id)}`
         }
     ]) {
         await page.goto(scenario.route, { waitUntil: 'domcontentloaded' });
@@ -335,6 +352,111 @@ test('Purchase/Sales Return hiện toàn bộ dòng nguồn ở 0 và trừ ph�
         await waitForVuePage(page);
         await openDocumentFromGrid(page, scenario.number);
         await expect(await gridCellByHeader(page.locator('#SecondaryGrid'), /Số lượng trả lần này/i)).toHaveText(/2,5/);
+
+        await selectHeaderDropdown(page, 'Status', /Đã xác nhận|Confirmed/i);
+        await submitDocumentStatus(page, scenario.updateUrl);
+        const confirmedFinancial = await page.evaluate(async ({ module, returnId, partyType }) => {
+            const [payments, debt] = await Promise.all([
+                AxiosManager.get(`/CashTransaction/GetPaymentStatusLookup?sourceModule=${module}&sourceModuleIds=${encodeURIComponent(returnId)}`, {}),
+                AxiosManager.get(`/CashTransaction/GetDebtReport?partyType=${partyType}`, {})
+            ]);
+            const transaction = payments?.data?.content?.data?.find(item => item.sourceModuleId === returnId);
+            const documents = (debt?.data?.content?.data ?? []).flatMap(item => item.documents ?? []);
+            return { transaction, debt: documents.find(item => item.id === returnId) };
+        }, { module: scenario.module, returnId: scenario.module === 'PurchaseReturn' ? fixture.purchaseReturn.id : fixture.salesReturn.id, partyType: scenario.partyType });
+        expect(confirmedFinancial.transaction).toEqual(expect.objectContaining({
+            sourceModule: scenario.module,
+            transactionType: scenario.transactionType,
+            amount: scenario.expectedAmount,
+            paidAmount: 0
+        }));
+        expect(confirmedFinancial.debt).toEqual(expect.objectContaining({
+            totalAmount: -scenario.expectedAmount,
+            remaining: -scenario.expectedAmount
+        }));
+
+        if (scenario.module === 'SalesReturn') {
+            await page.locator('#MainModal .btn-close').click();
+            await page.waitForSelector('#MainModal', { state: 'hidden' });
+            await page.goto('/CashTransactions/CashTransactionList', { waitUntil: 'domcontentloaded' });
+            await waitForVuePage(page);
+            const cashRow = page.locator('#MainGrid .e-row', { hasText: scenario.number }).first();
+            await expect(cashRow).toBeVisible();
+            await cashRow.click();
+            await page.locator('#EditCustom').locator('xpath=..').click();
+            await page.waitForSelector('#MainModal.show');
+
+            await page.locator('[role="listbox"][aria-owns="CashAccountDropDown_options"]').click();
+            await selectOpenDropdownOption(page, '');
+            const paidInput = page.locator('#PaidAmountInput');
+            await paidInput.click();
+            await paidInput.press('Control+A');
+            await paidInput.pressSequentially(String(scenario.expectedAmount).replace('.', ','));
+            const payResponse = page.waitForResponse(response => response.url().includes('/CashTransaction/UpdateCashTransaction')
+                && response.request().method() === 'POST');
+            await page.locator('#MainSaveButton').click();
+            expect((await payResponse).status()).toBe(200);
+            await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
+            await page.waitForSelector('#MainModal', { state: 'hidden', timeout: 10_000 });
+
+            await page.goto('/SalesReturns/SalesReturnList', { waitUntil: 'domcontentloaded' });
+            await waitForVuePage(page);
+            await openDocumentFromGrid(page, scenario.number);
+            await selectHeaderDropdown(page, 'Status', /Nháp|Draft/i);
+            page.expectHttpError('/SalesReturn/UpdateSalesReturn');
+            const blockedResponse = page.waitForResponse(response => response.url().includes('/SalesReturn/UpdateSalesReturn')
+                && response.request().method() === 'POST');
+            await page.locator('#MainSaveButton').click();
+            expect((await blockedResponse).status()).toBeGreaterThanOrEqual(400);
+            const blockedPopup = page.locator('.swal2-popup').filter({ hasText: /hoàn tiền|hoàn tác/i });
+            await expect(blockedPopup).toBeVisible();
+            await blockedPopup.locator('.swal2-confirm').click();
+            await page.locator('#MainModal .btn-close').click();
+            await page.waitForSelector('#MainModal', { state: 'hidden' });
+
+            await page.goto('/CashTransactions/CashTransactionList', { waitUntil: 'domcontentloaded' });
+            await waitForVuePage(page);
+            const paidCashRow = page.locator('#MainGrid .e-row', { hasText: scenario.number }).first();
+            await paidCashRow.click();
+            await page.locator('#EditCustom').locator('xpath=..').click();
+            await page.waitForSelector('#MainModal.show');
+            const reverseButton = page.locator('#MainModal button', { hasText: 'Hoàn' }).first();
+            await expect(reverseButton).toBeVisible();
+            const reverseResponse = page.waitForResponse(response => response.url().includes('/CashTransaction/ReversePayment')
+                && response.request().method() === 'POST');
+            await reverseButton.click();
+            await page.locator('.swal2-confirm').click();
+            expect((await reverseResponse).status()).toBe(200);
+            await expect.poll(() => page.evaluate(async returnId => {
+                const response = await AxiosManager.get(`/CashTransaction/GetPaymentStatusLookup?sourceModule=SalesReturn&sourceModuleIds=${encodeURIComponent(returnId)}`, {});
+                return Number(response?.data?.content?.data?.[0]?.paidAmount ?? -1);
+            }, fixture.salesReturn.id)).toBe(0);
+            await page.locator('#MainModal .btn-close').click();
+            await page.waitForSelector('#MainModal', { state: 'hidden' });
+            await page.goto('/SalesReturns/SalesReturnList', { waitUntil: 'domcontentloaded' });
+            await waitForVuePage(page);
+            await openDocumentFromGrid(page, scenario.number);
+        }
+
+        await selectHeaderDropdown(page, 'Status', /Nháp|Draft/i);
+        await submitDocumentStatus(page, scenario.updateUrl);
+        const reversedFinancial = await page.evaluate(async ({ module, returnId, sourceUrl }) => {
+            const [payments, sourceLines] = await Promise.all([
+                AxiosManager.get(`/CashTransaction/GetPaymentStatusLookup?sourceModule=${module}&sourceModuleIds=${encodeURIComponent(returnId)}`, {}),
+                AxiosManager.get(sourceUrl, {})
+            ]);
+            return {
+                transactions: payments?.data?.content?.data ?? [],
+                line: (sourceLines?.data?.content?.data ?? sourceLines?.data?.content ?? [])[0]
+            };
+        }, {
+            module: scenario.module,
+            returnId: scenario.module === 'PurchaseReturn' ? fixture.purchaseReturn.id : fixture.salesReturn.id,
+            sourceUrl: scenario.sourceUrl
+        });
+        expect(reversedFinancial.transactions).toEqual([]);
+        expect(Number(reversedFinancial.line.currentReturnQuantity)).toBe(2.5);
+        expect(Number(reversedFinancial.line.availableReturnQuantity)).toBe(6);
     }
 
     await page.goto('/MovementReports/MovementReportList', { waitUntil: 'domcontentloaded' });

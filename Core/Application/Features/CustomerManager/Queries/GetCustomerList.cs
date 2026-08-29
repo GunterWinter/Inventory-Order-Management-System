@@ -56,9 +56,12 @@ public class GetCustomerListProfile : Profile
 public class GetCustomerListResult
 {
     public List<GetCustomerListDto>? Data { get; init; }
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
 }
 
-public class GetCustomerListRequest : IRequest<GetCustomerListResult>
+public class GetCustomerListRequest : PagedListRequest, IRequest<GetCustomerListResult>
 {
     public bool IsDeleted { get; init; } = false;
 }
@@ -85,13 +88,33 @@ public class GetCustomerListHandler : IRequestHandler<GetCustomerListRequest, Ge
             .Include(x => x.CustomerCategory)
             .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => (x.Name != null && x.Name.Contains(search))
+                || (x.Number != null && x.Number.Contains(search))
+                || (x.PhoneNumber != null && x.PhoneNumber.Contains(search)));
+        }
+        query = request.SortField?.ToLowerInvariant() switch
+        {
+            "number" => request.Descending ? query.OrderByDescending(x => x.Number).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Number).ThenBy(x => x.Id),
+            "createdatutc" => request.Descending ? query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id) : query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id),
+            _ => request.Descending ? query.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id) : query.OrderBy(x => x.Name).ThenBy(x => x.Id)
+        };
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (request.NormalizedPageSize is int pageSize)
+            query = query.Skip((request.NormalizedPage - 1) * pageSize).Take(pageSize);
+
         var entities = await query.ToListAsync(cancellationToken);
 
         var dtos = _mapper.Map<List<GetCustomerListDto>>(entities);
 
         return new GetCustomerListResult
         {
-            Data = dtos
+            Data = dtos,
+            TotalCount = totalCount,
+            Page = request.NormalizedPage,
+            PageSize = request.NormalizedPageSize ?? totalCount
         };
     }
 

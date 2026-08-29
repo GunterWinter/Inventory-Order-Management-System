@@ -20,10 +20,10 @@ public class InventoryTransactionController : BaseApiController
     [Authorize]
     [HttpGet("GetInventoryTransactionList")]
     public async Task<ActionResult<ApiSuccessResult<GetInventoryTransactionListResult>>> GetInventoryTransactionListAsync(
+        [FromQuery] GetInventoryTransactionListRequest request,
         CancellationToken cancellationToken
         )
     {
-        var request = new GetInventoryTransactionListRequest { };
         var response = await _sender.Send(request, cancellationToken);
 
         return Ok(new ApiSuccessResult<GetInventoryTransactionListResult>

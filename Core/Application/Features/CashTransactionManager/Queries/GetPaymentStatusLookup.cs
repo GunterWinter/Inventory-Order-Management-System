@@ -12,6 +12,7 @@ public record GetPaymentStatusLookupDto
     public string? SourceModuleId { get; init; }
     public string? SourceModule { get; init; }
     public CashTransactionStatus? Status { get; init; }
+    public CashTransactionType? TransactionType { get; init; }
     public string? CashTransactionId { get; init; }
     public DateTime? TransactionDate { get; init; }
     public string? CashAccountId { get; init; }
@@ -30,6 +31,7 @@ public class GetPaymentStatusLookupResult
 public class GetPaymentStatusLookupRequest : IRequest<GetPaymentStatusLookupResult>
 {
     public string? SourceModule { get; init; }
+    public string? SourceModuleIds { get; init; }
 }
 
 public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLookupRequest, GetPaymentStatusLookupResult>
@@ -50,6 +52,13 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
             .Where(x => x.SourceModule == request.SourceModule && x.SourceModuleId != null)
             .AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(request.SourceModuleIds))
+        {
+            var sourceIds = request.SourceModuleIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(200).ToList();
+            query = query.Where(x => sourceIds.Contains(x.SourceModuleId!));
+        }
+
         var transactions = await query
             .OrderByDescending(x => x.CreatedAtUtc)
             .ThenByDescending(x => x.Id)
@@ -58,6 +67,7 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
                 SourceModuleId = x.SourceModuleId,
                 SourceModule = x.SourceModule,
                 Status = x.Status,
+                TransactionType = x.TransactionType,
                 CashTransactionId = x.Id,
                 TransactionDate = x.TransactionDate,
                 CashAccountId = x.CashAccountId,
@@ -80,6 +90,7 @@ public class GetPaymentStatusLookupHandler : IRequestHandler<GetPaymentStatusLoo
                     SourceModuleId = g.Key,
                     SourceModule = latest.SourceModule,
                     Status = latest.Status,
+                    TransactionType = latest.TransactionType,
                     CashTransactionId = latest.CashTransactionId,
                     TransactionDate = latest.TransactionDate,
                     CashAccountId = latest.CashAccountId,

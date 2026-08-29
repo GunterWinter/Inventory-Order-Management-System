@@ -269,13 +269,13 @@ public partial class InventoryTransactionService
         string? userId,
         CancellationToken cancellationToken)
     {
-        var saleTransactionId = await _queryContext.Set<InventoryTransaction>()
+        var saleTransactionId = await _inventoryTransactionRepository.GetQuery()
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.ModuleName == nameof(SalesOrder)
                 && x.ModuleItemId == source.SourceItemId)
             .Select(x => x.Id)
             .SingleAsync(cancellationToken);
-        var sourceAllocations = await _queryContext.Set<MaterialExportItem>()
+        var sourceAllocations = await _costAllocationRepository.GetQuery()
             .AsNoTracking()
             .ApplyIsDeletedFilter(false)
             .Where(x => x.InventoryTransactionId == saleTransactionId)
@@ -313,10 +313,10 @@ public partial class InventoryTransactionService
             throw new InvalidOperationException("Tổng số lượng chọn theo lớp giá vốn phải bằng số lượng trả hàng.");
 
         var selectedIds = selected.Select(x => x.Source.Id).ToList();
-        var previousUsage = await (from allocation in _queryContext.Set<MaterialExportItem>().AsNoTracking()
-            join line in _queryContext.Set<InventoryTransaction>().AsNoTracking()
+        var previousUsage = await (from allocation in _costAllocationRepository.GetQuery().AsNoTracking()
+            join line in _inventoryTransactionRepository.GetQuery().AsNoTracking()
                 on allocation.InventoryTransactionId equals line.Id
-            join header in _queryContext.Set<SalesReturn>().AsNoTracking()
+            join header in _salesReturnRepository.GetQuery().AsNoTracking()
                 on line.ModuleId equals header.Id
             where !allocation.IsDeleted && !line.IsDeleted && !header.IsDeleted
                 && line.Id != returnLine.Id

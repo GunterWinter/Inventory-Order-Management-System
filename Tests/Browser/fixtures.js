@@ -73,10 +73,11 @@ async function selectOpenDropdownOption(page, text) {
 async function openSelectedDocument(page, gridSelector, documentId, actionId = 'EditCustom') {
     const rowIndex = await page.evaluate(({ gridSelector, documentId }) => {
         const grid = document.querySelector(gridSelector)?.ej2_instances?.[0];
-        const record = grid?.dataSource?.find?.(item => item.id === documentId);
+        const records = Array.isArray(grid?.dataSource) ? grid.dataSource : (grid?.dataSource?.result ?? []);
+        const record = records.find(item => item.id === documentId);
         if (!grid || !record) return -1;
         return grid.getRowIndexByPrimaryKey?.(documentId)
-            ?? grid.dataSource.findIndex(item => item.id === documentId);
+            ?? records.findIndex(item => item.id === documentId);
     }, { gridSelector, documentId });
     if (rowIndex < 0) throw new Error(`Không tìm thấy chứng từ ${documentId}.`);
 

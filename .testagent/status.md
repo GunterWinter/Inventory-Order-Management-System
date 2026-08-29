@@ -1,5 +1,25 @@
 # Implementation and verification status
 
+## Follow-up checkpoint 2026-08-29
+
+- Implementation complete; verification in progress.
+- JavaScript baseline after implementation: 113/114 passed; the sole failure was the pre-existing PO reversal contract still inspecting the old handler after logic moved into the shared reversal service. The test has been updated to assert the shared implementation and all supported source modules.
+- Solution build after backend/UI paging changes: passed with 0 warnings and 0 errors.
+- Final JavaScript gate: 120/120 passed; final solution build passed with 0 warnings and 0 errors.
+- Isolated UI: Quick Add `321.987,63`, Material Export Confirmed -> Draft/edit, and the complete Purchase/Sales Return debt/payment/reversal/source-availability flow passed on disposable databases.
+- Full-menu browser gate rendered all 41 authorized routes with screenshot evidence. Manual screenshot review found the inventory-transaction date cell rendering a JavaScript date string; the grid now displays the shared localized text field and has a direct API-to-grid assertion. The final browser rerun of that one assertion was unavailable after the execution approval quota was exhausted; its static contract and all JavaScript checks pass.
+- Final IIS publish: `.testagent/publish-verification/20260829_return_reversal_date_final`; all 17 affected JS assets match source SHA-256. Publish completed with two non-fatal warnings for locked stale compressed files under `obj/Release`.
+- Scalability change is bounded server paging/search/sort (maximum 200 rows) plus active-list indexes. This is not a claim of a measured one-million-row load test; no million-row dataset was generated.
+
+## Final verification checkpoint 2026-08-29
+
+- Full isolated browser runner passed: Dashboard, document modal, Cash allocation/payment, file workflows, and Playwright business suite (16/16; 7.2 minutes) on `WHMS_UiRegression_FullFinal5_20260829`; disposable database cleanup completed.
+- The final browser run covered the corrected Transaction Report date renderer and Cash allocation reopen/payment flows; no failed requests or console errors caused a test failure.
+- JavaScript gate after the final changes: 121/121 passed, including Syncfusion object-search handling in `ServerGridManager`.
+- `dotnet build Indotalent.sln --no-restore`: 0 warnings, 0 errors; 27 changed JavaScript files passed `node --check`.
+- Final Release publish: `.testagent/publish-verification/20260829_full_final`; 16 affected static JS assets exist in publish output and all SHA-256 hashes match source. Publish emitted two non-fatal locked-stale-compressed-file warnings under `obj/Release`; output was produced successfully.
+- IIS Express is not installed on this machine, so runtime IIS smoke remains unavailable. The full UI run used isolated Kestrel, not IIS.
+
 ## Final follow-up checkpoint (2026-08-28)
 
 - Test-gap/assertion review: focused high-risk paths (money rounding, source-module cash exclusion, PO reversal/cancel guard, report dates, warranty paging/filtering, serial lifecycle and product-history guard) have direct equality, negative, state/side-effect, and structural assertions. No new test is assertion-free or only a presence check; mutation execution was not requested, so survivor claims are not made.

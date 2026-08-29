@@ -2,6 +2,7 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
+            mainTotalCount: 0,
             deleteMode: false,
             customerListLookupData: [],
             taxListLookupData: [],
@@ -285,9 +286,9 @@ const App = {
         };
 
         const services = {
-            getMainData: async () => {
+            getMainData: async (gridState = {}) => {
                 try {
-                    const response = await AxiosManager.get('/SalesOrder/GetSalesOrderList', {});
+                    const response = await AxiosManager.get('/SalesOrder/GetSalesOrderList' + ServerGridManager.buildQuery(gridState), {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -420,9 +421,10 @@ const App = {
                     throw error;
                 }
             },
-            getPaymentStatusLookup: async () => {
+            getPaymentStatusLookup: async (sourceIds = []) => {
                 try {
-                    const response = await AxiosManager.get('/CashTransaction/GetPaymentStatusLookup?sourceModule=SalesOrder', {});
+                    const ids = sourceIds.map(encodeURIComponent).join(',');
+                    const response = await AxiosManager.get('/CashTransaction/GetPaymentStatusLookup?sourceModule=SalesOrder&sourceModuleIds=' + ids, {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -446,6 +448,16 @@ const App = {
             },
             upsertSalesOrderPayment: async (data) => {
                 return await AxiosManager.post('/SalesOrder/UpsertSalesOrderPayment', data);
+            },
+            getPaymentHistory: async (cashTransactionId) => {
+                return await AxiosManager.get(`/PurchaseOrder/GetPurchaseOrderPaymentHistory?cashTransactionId=${encodeURIComponent(cashTransactionId)}`, {});
+            },
+            reversePayment: async (paymentId) => {
+                return await AxiosManager.post('/CashTransaction/ReversePayment', {
+                    paymentId,
+                    reversalDate: DateFormatManager.formatForApiDate(new Date()),
+                    updatedById: StorageManager.getUserId()
+                });
             }
         };
 
@@ -497,12 +509,13 @@ const App = {
                 const response = await services.getSalesTypeListLookupData();
                 state.salesTypeListLookupData = response?.data?.content?.data;
             },
-            populateMainData: async () => {
-                const response = await services.getMainData();
-                const paymentResponse = await services.getPaymentStatusLookup();
+            populateMainData: async (gridState = {}) => {
+                const response = await services.getMainData(gridState);
+                const rawData = response?.data?.content?.data ?? [];
+                const paymentResponse = rawData.length ? await services.getPaymentStatusLookup(rawData.map(item => item.id)) : null;
                 state.paymentStatusLookupData = paymentResponse?.data?.content?.data ?? [];
                 const paymentMap = new Map(state.paymentStatusLookupData.map(p => [p.sourceModuleId, p]));
-                state.mainData = response?.data?.content?.data.map(item => {
+                const dataSource = ServerGridManager.unwrap(response, item => {
                     const payment = paymentMap.get(item.id);
                     const isConfirmed = item.orderStatus === 2;
                     let paymentStatusText = '';
@@ -542,6 +555,9 @@ const App = {
                         cashTransactionIsSplit: payment?.isSplit ?? false
                     };
                 });
+                state.mainData = dataSource.result;
+                state.mainTotalCount = dataSource.count;
+                return dataSource;
             },
             populateSecondaryData: async (salesOrderId) => {
                 try {
@@ -975,8 +991,7 @@ const App = {
                     allowFiltering: true,
                     allowSorting: true,
                     allowSelection: true,
-                    allowGrouping: true,
-                    groupSettings: { columns: ['customerName'] },
+                    allowGrouping: false,
                     allowTextWrap: true,
                     allowResizing: true,
                     allowFreezing: true,
@@ -984,7 +999,10 @@ const App = {
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
+                    dataStateChange: async args => {
+                        mainGrid.obj.dataSource = await methods.populateMainData(args);
+                    },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -1170,7 +1188,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: state.mainData });
+                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
             }
         };
 
@@ -2269,6 +2287,17 @@ const App = {
             const totalAmountValue = methods.resolvePaymentAmount(order.afterTaxAmount);
             const paidAmountValue = methods.resolvePaymentAmount(order.cashTransactionPaidAmount);
             const remainingAmountValue = Math.max(0, totalAmountValue - paidAmountValue);
+            const paymentHistory = order.cashTransactionId
+                ? (await services.getPaymentHistory(order.cashTransactionId))?.data?.content?.data ?? []
+                : [];
+            const paymentRows = paymentHistory.map(payment => `
+                <tr>
+                    <td>${escapeHtml(DateFormatManager.formatToLocale(payment.paymentDate))}</td>
+                    <td>${escapeHtml(payment.cashAccountName ?? '')}</td>
+                    <td class="text-right">${NumberFormatManager.formatMoneyToLocale(payment.amount)}</td>
+                    <td>${escapeHtml(payment.description ?? '')}</td>
+                    <td>${payment.canReverse ? `<button type="button" class="btn btn-sm btn-outline-danger reverse-sales-payment" data-payment-id="${escapeHtml(payment.id)}">Hoàn</button>` : ''}</td>
+                </tr>`).join('');
             const displayDescription = order.cashTransactionDescription
                 ?? text(`Thanh toán đơn bán hàng ${orderNumber}`, `Sales order payment ${orderNumber}`);
             const accountOptions = state.cashAccountListData
@@ -2312,6 +2341,7 @@ const App = {
                                 <textarea id="swal-desc" class="form-control" rows="2">${escapeHtml(displayDescription)}</textarea>
                             </div>
                         </div>
+                        ${paymentRows ? `<div class="table-responsive mt-3"><table class="table table-sm table-bordered mb-0"><thead><tr><th>Ngày</th><th>Tài khoản quỹ</th><th class="text-right">Số tiền</th><th>Diễn giải</th><th></th></tr></thead><tbody>${paymentRows}</tbody></table></div>` : ''}
                     </div>
                 `,
                 showCancelButton: true,
@@ -2320,6 +2350,20 @@ const App = {
                 focusConfirm: false,
                 didOpen: () => {
                     NumberFormatManager.bindNumericInput(document.getElementById('swal-amount'));
+                    document.querySelectorAll('.reverse-sales-payment').forEach(button => button.addEventListener('click', async () => {
+                        try {
+                            button.disabled = true;
+                            const response = await services.reversePayment(button.dataset.paymentId);
+                            if (response?.data?.code !== 200) throw new Error(response?.data?.message ?? 'Không thể hoàn thanh toán.');
+                            Swal.close();
+                            await methods.populateMainData();
+                            mainGrid.refresh();
+                            await Swal.fire({ icon: 'success', title: 'Đã hoàn thanh toán', timer: 1200, showConfirmButton: false });
+                        } catch (error) {
+                            button.disabled = false;
+                            Swal.showValidationMessage(getErrorMessage(error, 'Không thể hoàn thanh toán.'));
+                        }
+                    }));
                 },
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
@@ -2384,7 +2428,7 @@ const App = {
                 await methods.populateCashAccountList();
                 await methods.populateCashCategoryList();
                 await methods.populateMainData();
-                await mainGrid.create(state.mainData);
+                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);

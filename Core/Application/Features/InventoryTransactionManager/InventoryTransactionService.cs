@@ -25,6 +25,7 @@ public partial class InventoryTransactionService
     private readonly InventoryCostResolver _inventoryCostResolver;
 
     private readonly ICommandRepository<SalesOrderItem> _salesOrderItemRepository;
+    private readonly ICommandRepository<SalesReturn> _salesReturnRepository;
 
     public InventoryTransactionService(
         NumberSequenceService numberSequenceService,
@@ -36,6 +37,7 @@ public partial class InventoryTransactionService
         ICommandRepository<MaterialExportItem> costAllocationRepository,
         IUnitOfWork unitOfWork,
         ICommandRepository<SalesOrderItem> salesOrderItemRepository,
+        ICommandRepository<SalesReturn> salesReturnRepository,
         ProductSerialService productSerialService,
         InventoryCostResolver inventoryCostResolver
         )
@@ -49,6 +51,7 @@ public partial class InventoryTransactionService
         _costAllocationRepository = costAllocationRepository;
         _unitOfWork = unitOfWork;
         _salesOrderItemRepository = salesOrderItemRepository;
+        _salesReturnRepository = salesReturnRepository;
         _productSerialService = productSerialService;
         _inventoryCostResolver = inventoryCostResolver;
     }
@@ -218,6 +221,50 @@ public partial class InventoryTransactionService
                 throw new InvalidOperationException(
                     $"Không đủ tồn kho cho {requested.ProductName ?? requested.ProductId}. " +
                     $"Khả dụng: {availableStock}; yêu cầu: {requested.Quantity}.");
+            }
+        }
+    }
+
+    public async Task ValidateSalesReturnReversalAsync(
+        string? salesReturnId,
+        CancellationToken cancellationToken = default)
+    {
+        var lines = await _inventoryTransactionRepository.GetQuery()
+            .AsNoTracking()
+            .ApplyIsDeletedFilter(false)
+            .Include(x => x.Product)
+            .Where(x => x.ModuleName == nameof(SalesReturn)
+                && x.ModuleId == salesReturnId
+                && x.Status == InventoryTransactionStatus.Confirmed
+                && x.Product != null
+                && x.Product.Physical == true
+                && (x.Product.SerialTrackingMode == null
+                    || x.Product.SerialTrackingMode == SerialTrackingMode.None))
+            .Select(x => new
+            {
+                x.ProductId,
+                x.WarehouseId,
+                ProductName = x.Product!.Name,
+                Quantity = x.Stock ?? 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in lines.GroupBy(x => new { x.ProductId, x.WarehouseId, x.ProductName }))
+        {
+            var currentStock = await _inventoryTransactionRepository.GetQuery()
+                .AsNoTracking()
+                .ApplyIsDeletedFilter(false)
+                .Where(x => x.Status == InventoryTransactionStatus.Confirmed
+                    && x.ProductId == group.Key.ProductId
+                    && x.WarehouseId == group.Key.WarehouseId)
+                .SumAsync(x => x.Stock ?? 0m, cancellationToken);
+            var returnedStock = group.Sum(x => x.Quantity);
+            if (currentStock - returnedStock < -0.000001m)
+            {
+                throw new InvalidOperationException(
+                    $"Không thể hoàn tác phiếu trả hàng bán: {group.Key.ProductName ?? "hàng hóa"} " +
+                    $"không còn đủ tại kho. Tồn hiện tại: {currentStock}; cần hoàn tác: {returnedStock}. " +
+                    "Hãy hoàn tác giao dịch xuất phát sinh sau trước.");
             }
         }
     }

@@ -57,7 +57,8 @@ async function login(page) {
         await page.waitForFunction(() => {
             const main = document.querySelector('#MainGrid')?.ej2_instances?.[0];
             const items = document.querySelector('#SecondaryGrid')?.ej2_instances?.[0];
-            return main && items && Array.isArray(main.dataSource);
+            return main && items
+                && (Array.isArray(main.dataSource) || Array.isArray(main.dataSource?.result));
         });
 
         const fixture = await page.evaluate(async () => {
@@ -111,12 +112,13 @@ async function login(page) {
         await page.waitForSelector('#app:not([v-cloak])', { timeout: 20000 });
         await page.waitForFunction(id => {
             const grid = document.querySelector('#MainGrid')?.ej2_instances?.[0];
-            return grid?.dataSource?.some?.(item => item.id === id);
+            const rows = grid?.dataSource?.result ?? grid?.dataSource ?? [];
+            return rows.some?.(item => item.id === id);
         }, salesOrderId);
 
         await page.evaluate(async id => {
             const grid = document.querySelector('#MainGrid').ej2_instances[0];
-            const record = grid.dataSource.find(item => item.id === id);
+            const record = (grid.dataSource?.result ?? grid.dataSource).find(item => item.id === id);
             const original = grid.getSelectedRecords;
             grid.getSelectedRecords = () => [record];
             try {
