@@ -1,8 +1,7 @@
 const App = {
     setup() {
         const state = Vue.reactive({
-            mainData: [],
-            mainTotalCount: 0
+            mainData: []
         });
 
         const mainGridRef = Vue.ref(null);
@@ -24,9 +23,9 @@ const App = {
         });
 
         const services = {
-            getMainData: async (gridState = {}) => {
+            getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryTransactionList' + ServerGridManager.buildQuery(gridState), {});
+                    const response = await AxiosManager.get('/InventoryTransaction/GetInventoryTransactionList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -35,17 +34,14 @@ const App = {
         };
 
         const methods = {
-            populateMainData: async (gridState = {}) => {
-                const response = await services.getMainData(gridState);
-                const dataSource = ServerGridManager.unwrap(response, item => ({
+            populateMainData: async () => {
+                const response = await services.getMainData();
+                state.mainData = (response?.data?.content?.data ?? []).map(item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc),
                     movementDate: DateFormatManager.parseBusinessDate(item.movementDate),
                     movementDateText: DateFormatManager.formatToLocale(item.movementDate)
                 }));
-                state.mainData = dataSource.result;
-                state.mainTotalCount = dataSource.count;
-                return dataSource;
             },
             onMainModalHidden: () => {
             }
@@ -57,7 +53,7 @@ const App = {
                 await SecurityManager.validateToken();
 
                 await methods.populateMainData();
-                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
+                await mainGrid.create(state.mainData);
                 window.addEventListener('resize', resizeGrid);
 
             } catch (e) {
@@ -85,10 +81,7 @@ const App = {
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
-                    dataStateChange: async args => {
-                        mainGrid.obj.dataSource = await methods.populateMainData(args);
-                    },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Single' },
                     autoFit: true,
                     showColumnMenu: true,
@@ -158,7 +151,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
+                mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
 

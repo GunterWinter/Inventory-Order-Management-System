@@ -2,7 +2,6 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
-            mainTotalCount: 0,
             deleteMode: false,
             mainTitle: null,
             id: '',
@@ -174,8 +173,8 @@ const App = {
         };
 
         const services = {
-            getMainData: async (gridState = {}) => {
-                return await AxiosManager.get('/CashTransaction/GetCashTransactionList' + ServerGridManager.buildQuery(gridState), {});
+            getMainData: async () => {
+                return await AxiosManager.get('/CashTransaction/GetCashTransactionList', {});
             },
             getCashAccountList: async () => {
                 return await AxiosManager.get('/CashAccount/GetCashAccountList', {});
@@ -224,9 +223,9 @@ const App = {
             formatMoney: value => NumberFormatManager.formatMoneyToLocale(value ?? 0),
             formatNumber: value => NumberFormatManager.formatToLocale(value ?? 0),
             formatDate: value => DateFormatManager.formatToLocale(value),
-            populateMainData: async (gridState = {}) => {
-                const response = await services.getMainData(gridState);
-                const dataSource = ServerGridManager.unwrap(response, item => {
+            populateMainData: async () => {
+                const response = await services.getMainData();
+                state.mainData = (response?.data?.content?.data ?? []).map(item => {
                     let partnerName = '';
                     if (item.customerName && item.vendorName) partnerName = item.customerName;
                     else if (item.customerName) partnerName = item.customerName;
@@ -243,9 +242,6 @@ const App = {
                         ,allocations: item.allocations ?? []
                     };
                 });
-                state.mainData = dataSource.result;
-                state.mainTotalCount = dataSource.count;
-                return dataSource;
             },
             populateCashAccountList: async () => {
                 const response = await services.getCashAccountList();
@@ -823,7 +819,7 @@ const App = {
                 await methods.populateCashCategoryList();
                 await methods.populatePartnerList();
                 await methods.populateMainData();
-                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
+                await mainGrid.create(state.mainData);
 
                 transactionDatePicker.create();
                 transactionTypeDropDown.create();
@@ -845,7 +841,7 @@ const App = {
                     resetFormState();
                     requestAnimationFrame(() => {
                         if (!mainGrid.obj?.isDestroyed) {
-                            mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } }, true);
+                            mainGrid.obj.setProperties({ dataSource: state.mainData }, true);
                             mainGrid.obj.refresh();
                         }
                     });
@@ -867,10 +863,7 @@ const App = {
                     allowTextWrap: true, allowResizing: true, allowPaging: true, allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
-                    dataStateChange: async args => {
-                        mainGrid.obj.dataSource = await methods.populateMainData(args);
-                    },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true, showColumnMenu: true, gridLines: 'Horizontal',
                     columns: [
@@ -880,12 +873,12 @@ const App = {
                         { field: 'transactionDate', headerText: 'Date', width: 130, format: 'yyyy-MM-dd' },
                         { field: 'transactionTypeName', headerText: 'Type', width: 100, minWidth: 100 },
                         { field: 'cashAccountName', headerText: 'Cash Account', width: 180, minWidth: 180 },
-                        { field: 'cashCategoryName', headerText: 'Cash Category', width: 150, minWidth: 150 },
-                        { field: 'partnerName', headerText: 'Partner', width: 180, minWidth: 180 },
+                        { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
                         { field: 'amount', headerText: 'Original Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'paidAmount', headerText: 'Paid Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'remaining', headerText: 'Remaining', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
+                        { field: 'partnerName', headerText: 'Partner', width: 180, minWidth: 180 },
+                        { field: 'cashCategoryName', headerText: 'Cash Category', width: 150, minWidth: 150 },
                         { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 },
                         { field: 'statusName', headerText: 'Status', width: 120, minWidth: 120 },
                         { field: 'createdAtUtc', headerText: 'Created At', width: 150, format: 'yyyy-MM-dd HH:mm' }
@@ -1040,7 +1033,7 @@ const App = {
                 });
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
-            refresh: () => { mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } }); }
+            refresh: () => { mainGrid.obj.setProperties({ dataSource: state.mainData }); }
         };
 
         const mainModal = {

@@ -2,7 +2,6 @@ const App = {
     setup() {
         const state = Vue.reactive({
             mainData: [],
-            mainTotalCount: 0,
             deleteMode: false,
             customerListLookupData: [],
             taxListLookupData: [],
@@ -286,9 +285,9 @@ const App = {
         };
 
         const services = {
-            getMainData: async (gridState = {}) => {
+            getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/SalesOrder/GetSalesOrderList' + ServerGridManager.buildQuery(gridState), {});
+                    const response = await AxiosManager.get('/SalesOrder/GetSalesOrderList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -509,13 +508,13 @@ const App = {
                 const response = await services.getSalesTypeListLookupData();
                 state.salesTypeListLookupData = response?.data?.content?.data;
             },
-            populateMainData: async (gridState = {}) => {
-                const response = await services.getMainData(gridState);
+            populateMainData: async () => {
+                const response = await services.getMainData();
                 const rawData = response?.data?.content?.data ?? [];
                 const paymentResponse = rawData.length ? await services.getPaymentStatusLookup(rawData.map(item => item.id)) : null;
                 state.paymentStatusLookupData = paymentResponse?.data?.content?.data ?? [];
                 const paymentMap = new Map(state.paymentStatusLookupData.map(p => [p.sourceModuleId, p]));
-                const dataSource = ServerGridManager.unwrap(response, item => {
+                state.mainData = rawData.map(item => {
                     const payment = paymentMap.get(item.id);
                     const isConfirmed = item.orderStatus === 2;
                     let paymentStatusText = '';
@@ -555,9 +554,6 @@ const App = {
                         cashTransactionIsSplit: payment?.isSplit ?? false
                     };
                 });
-                state.mainData = dataSource.result;
-                state.mainTotalCount = dataSource.count;
-                return dataSource;
             },
             populateSecondaryData: async (salesOrderId) => {
                 try {
@@ -999,10 +995,7 @@ const App = {
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
-                    dataStateChange: async args => {
-                        mainGrid.obj.dataSource = await methods.populateMainData(args);
-                    },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -1188,7 +1181,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
+                mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
 
@@ -2428,7 +2421,7 @@ const App = {
                 await methods.populateCashAccountList();
                 await methods.populateCashCategoryList();
                 await methods.populateMainData();
-                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
+                await mainGrid.create(state.mainData);
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', methods.onMainModalHidden);
