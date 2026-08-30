@@ -29,10 +29,10 @@ const App = {
         };
 
         const services = {
-            cards: () => AxiosManager.get('/Dashboard/GetCardsDashboard', {}),
-            sales: () => AxiosManager.get('/Dashboard/GetSalesDashboard', {}),
-            purchase: () => AxiosManager.get('/Dashboard/GetPurchaseDashboard', {}),
-            inventory: () => AxiosManager.get('/Dashboard/GetInventoryDashboard', {})
+            cards: () => AxiosManager.get('/Dashboard/GetCardsDashboard', { skipGlobalError: true }),
+            sales: () => AxiosManager.get('/Dashboard/GetSalesDashboard', { skipGlobalError: true }),
+            purchase: () => AxiosManager.get('/Dashboard/GetPurchaseDashboard', { skipGlobalError: true }),
+            inventory: () => AxiosManager.get('/Dashboard/GetInventoryDashboard', { skipGlobalError: true })
         };
 
         const methods = {

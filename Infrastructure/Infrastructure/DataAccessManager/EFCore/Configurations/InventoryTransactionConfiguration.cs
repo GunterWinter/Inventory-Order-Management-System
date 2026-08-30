@@ -29,6 +29,9 @@ public class InventoryTransactionConfiguration : BaseEntityConfiguration<Invento
         builder.Property(x => x.QtySCCount).IsRequired(false);
         builder.Property(x => x.QtySCDelta).IsRequired(false);
         builder.Property(x => x.UnitCost).IsRequired(false);
+        builder.Property(x => x.PendingManufacturerSerialNumbersJson)
+            .HasColumnType("nvarchar(max)")
+            .IsRequired(false);
 
         builder.HasIndex(e => e.Number);
         builder.HasIndex(e => e.ModuleName);

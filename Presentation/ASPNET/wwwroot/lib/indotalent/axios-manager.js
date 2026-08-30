@@ -10,6 +10,112 @@
     let isRefreshing = false;
     let retryQueue = [];
     const NUMERIC_REQUEST_KEY_PATTERN = /(price|amount|cost|profit|cogs|subtotal|total|quantity|qty|movement|percentage|rate)$/i;
+    let lastGlobalErrorKey = '';
+    let lastGlobalErrorAt = 0;
+
+    const cleanErrorText = (value) => {
+        if (value == null) return '';
+        const text = String(value).replace(/^Exception:\s*/i, '').trim();
+        return text
+            && !/^Request failed with status code\s+\d+$/i.test(text)
+            && !/^(Network Error|Failed to fetch)$/i.test(text)
+            ? text
+            : '';
+    };
+
+    const flattenErrorMessages = (value) => {
+        if (Array.isArray(value)) {
+            return value.flatMap(item => flattenErrorMessages(item)).filter(Boolean);
+        }
+        if (value && typeof value === 'object') {
+            if (value.message || value.Message || value.error) {
+                return flattenErrorMessages(value.message ?? value.Message ?? value.error);
+            }
+            return Object.values(value).flatMap(item => flattenErrorMessages(item)).filter(Boolean);
+        }
+        const text = cleanErrorText(value);
+        return text ? [text] : [];
+    };
+
+    const getErrorMessage = (error, fallback = 'Không thể hoàn thành thao tác.') => {
+        const data = error?.response?.data;
+        const candidates = [
+            data?.message,
+            data?.Message,
+            data?.content?.message,
+            data?.content?.Message,
+            data?.detail,
+            data?.title,
+            data?.error?.message,
+            typeof data === 'string' ? data : null,
+            error?.userMessage,
+            error?.message
+        ];
+        for (const candidate of candidates) {
+            const message = cleanErrorText(candidate);
+            if (message) return message;
+        }
+
+        const validationMessages = flattenErrorMessages(data?.errors ?? data?.Errors);
+        if (validationMessages.length) return [...new Set(validationMessages)].join('\n');
+
+        const status = error?.response?.status;
+        if (status === 401 || status === 498) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        if (status === 403) return 'Bạn không có quyền thực hiện thao tác này.';
+        if (status === 404) return 'Không tìm thấy dữ liệu cần xử lý.';
+        if (status === 409) return 'Dữ liệu đã thay đổi hoặc đang được sử dụng bởi nghiệp vụ khác.';
+        if (!error?.response) return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng rồi thử lại.';
+        return fallback;
+    };
+
+    const showGlobalErrorIfUnhandled = (error, config, message) => {
+        if (config?.skipGlobalError || isAuthEndpoint(config?.url)) return;
+        setTimeout(() => {
+            if (error?.uiErrorHandled || typeof Swal === 'undefined' || typeof Swal.fire !== 'function') return;
+            if (typeof document !== 'undefined' && document.querySelector('.swal2-container.swal2-shown')) return;
+            const key = `${String(config?.method || '').toUpperCase()} ${config?.url || ''} ${message}`;
+            if (key === lastGlobalErrorKey && Date.now() - lastGlobalErrorAt < 1000) return;
+            lastGlobalErrorKey = key;
+            lastGlobalErrorAt = Date.now();
+            error.uiErrorHandled = true;
+            Swal.fire({
+                icon: 'error',
+                title: 'Không thể thực hiện thao tác',
+                text: message,
+                confirmButtonText: 'Đồng ý',
+                heightAuto: false
+            });
+        }, 0);
+    };
+
+    const enrichError = (error, config) => {
+        const message = getErrorMessage(error);
+        error.userMessage = message;
+        error.message = message;
+        if (!error.response) {
+            error.response = { status: 0, data: { message }, config };
+        } else if (error.response.data == null) {
+            error.response.data = { message };
+        } else if (typeof error.response.data === 'string') {
+            error.response.data = { message: cleanErrorText(error.response.data) || message };
+        } else if (typeof error.response.data === 'object') {
+            const existing = getErrorMessage(error, '');
+            if (!error.response.data.message && existing) error.response.data.message = existing;
+        }
+        showGlobalErrorIfUnhandled(error, config, message);
+        return error;
+    };
+
+    // Legacy grid handlers often await an API call without a local catch.
+    // Surface those rejections globally so users see the normalized message.
+    if (window.addEventListener && !window.__axiosManagerUnhandledRejectionHook) {
+        window.__axiosManagerUnhandledRejectionHook = true;
+        window.addEventListener('unhandledrejection', event => {
+            const error = event?.reason;
+            if (!error) return;
+            showGlobalErrorIfUnhandled(error, error.config || {}, getErrorMessage(error));
+        });
+    }
 
     const formatDateOnly = (value) => {
         if (window.DateFormatManager?.formatForApiDate) {
@@ -131,7 +237,7 @@
         }
     );
 
-    const request = async (method, url, data = {}, customHeaders = {}, responseType = 'json') => {
+    const request = async (method, url, data = {}, customHeaders = {}, responseType = 'json', requestOptions = {}) => {
         try {
             const response = await axiosInstance({
                 method,
@@ -144,15 +250,30 @@
             });
             return response;
         } catch (error) {
-            throw error;
+            throw enrichError(error, { method, url, ...requestOptions });
         }
     };
 
     return {
         request,
-        get: (url, config = {}) => request('get', url, {}, config.headers, config.responseType),
-        post: (url, data, config = {}) => request('post', url, data, config.headers, config.responseType),
-        put: (url, data, config = {}) => request('put', url, data, config.headers, config.responseType),
-        delete: (url, config = {}) => request('delete', url, {}, config.headers, config.responseType),
+        get: (url, config = {}) => request('get', url, {}, config.headers, config.responseType, config),
+        post: (url, data, config = {}) => request('post', url, data, config.headers, config.responseType, config),
+        put: (url, data, config = {}) => request('put', url, data, config.headers, config.responseType, config),
+        delete: (url, config = {}) => request('delete', url, {}, config.headers, config.responseType, config),
+        getErrorMessage,
+        showError: (error, fallback) => {
+            const message = getErrorMessage(error, fallback);
+            if (typeof Swal !== 'undefined' && typeof Swal.fire === 'function') {
+                error.uiErrorHandled = true;
+                return Swal.fire({
+                    icon: 'error',
+                    title: 'Không thể thực hiện thao tác',
+                    text: message,
+                    confirmButtonText: 'Đồng ý',
+                    heightAuto: false
+                });
+            }
+            return Promise.resolve();
+        },
     };
 })();

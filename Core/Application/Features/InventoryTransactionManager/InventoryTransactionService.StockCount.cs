@@ -2,6 +2,7 @@ using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Application.Features.ProductSerialManager;
 
 namespace Application.Features.InventoryTransactionManager;
 
@@ -13,7 +14,10 @@ public partial class InventoryTransactionService
         decimal? qtySCCount,
         string? createdById,
         CancellationToken cancellationToken = default,
-        IReadOnlyCollection<string>? productSerialIds = null
+        IReadOnlyCollection<string>? productSerialIds = null,
+        decimal? unitCost = null,
+        IReadOnlyCollection<string>? newManufacturerSerialNumbers = null,
+        IReadOnlyCollection<StockCountNewSerialInput>? newSerials = null
         )
     {
         var parent = await _stockCountRepository
@@ -51,12 +55,18 @@ public partial class InventoryTransactionService
         child.WarehouseId = parent.WarehouseId;
         child.ProductId = productId;
         child.QtySCCount = qtySCCount;
+        child.UnitCost = unitCost;
+        child.PendingManufacturerSerialNumbersJson = newSerials != null
+            ? System.Text.Json.JsonSerializer.Serialize(newSerials)
+            : newManufacturerSerialNumbers == null ? null : System.Text.Json.JsonSerializer.Serialize(newManufacturerSerialNumbers);
 
         CalculateInvenTrans(child);
 
         await _inventoryTransactionRepository.CreateAsync(child, cancellationToken);
         await _unitOfWork.SaveAsync(cancellationToken);
-        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, createdById, cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, createdById, cancellationToken,
+            newManufacturerSerialNumbers,
+            newSerials);
 
         return child;
     }
@@ -67,7 +77,10 @@ public partial class InventoryTransactionService
         decimal? qtySCCount,
         string? updatedById,
         CancellationToken cancellationToken = default,
-        IReadOnlyCollection<string>? productSerialIds = null
+        IReadOnlyCollection<string>? productSerialIds = null,
+        decimal? unitCost = null,
+        IReadOnlyCollection<string>? newManufacturerSerialNumbers = null,
+        IReadOnlyCollection<StockCountNewSerialInput>? newSerials = null
         )
     {
         var child = await _inventoryTransactionRepository.GetAsync(id ?? string.Empty, cancellationToken);
@@ -94,14 +107,28 @@ public partial class InventoryTransactionService
                 child.Id, updatedById, cancellationToken);
             child.QtySCSys = null;
         }
+        else if (productSerialIds != null)
+        {
+            // The grid sends an empty selection when a user accepts a FIFO decrease.
+            // Clear the previous draft movements before applying the new selection so
+            // a draft line cannot retain serials that are no longer counted.
+            await _productSerialService.ReleaseInventoryTransactionSerialsAsync(
+                child.Id, updatedById, cancellationToken);
+        }
         child.ProductId = productId;
         child.QtySCCount = qtySCCount;
+        child.UnitCost = unitCost;
+        child.PendingManufacturerSerialNumbersJson = newSerials != null
+            ? System.Text.Json.JsonSerializer.Serialize(newSerials)
+            : newManufacturerSerialNumbers == null ? null : System.Text.Json.JsonSerializer.Serialize(newManufacturerSerialNumbers);
 
         CalculateInvenTrans(child);
 
         _inventoryTransactionRepository.Update(child);
         await _unitOfWork.SaveAsync(cancellationToken);
-        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, updatedById, cancellationToken);
+        await _productSerialService.ApplyInventoryTransactionSerialsAsync(child, productSerialIds, updatedById, cancellationToken,
+            newManufacturerSerialNumbers,
+            newSerials);
 
         return child;
     }

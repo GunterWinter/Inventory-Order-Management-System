@@ -49,13 +49,15 @@
     }
 
     function showFailure(error) {
-        const message = error?.message || 'Unable to export Excel. Please try again.';
+        const message = window.AxiosManager?.getErrorMessage?.(error, 'Không thể xuất Excel.')
+            || error?.message
+            || 'Không thể xuất Excel.';
         if (window.Swal) {
             void window.Swal.fire({
                 icon: 'error',
-                title: 'Excel export failed',
+                title: 'Xuất Excel thất bại',
                 text: message,
-                confirmButtonText: 'OK'
+                confirmButtonText: 'Đồng ý'
             });
         } else {
             window.alert(message);

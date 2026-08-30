@@ -139,6 +139,41 @@ const App = {
             return getOpeningStockValue() ?? 0;
         };
 
+        const getProductEditSnapshot = source => {
+            const numberValue = value => {
+                if (value === '' || value === null || value === undefined) return null;
+                const parsed = Number(value);
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+            const physical = source.physical === true;
+            const serialTrackingMode = physical ? Number(source.serialTrackingMode ?? 0) : 0;
+            return JSON.stringify({
+                name: String(source.name ?? '').trim(),
+                referenceCode: String(source.referenceCode ?? '').trim(),
+                unitPrice: numberValue(source.unitPrice),
+                costPrice: numberValue(source.costPrice),
+                imageUrl: String(source.imageUrl ?? ''),
+                physical,
+                serialTrackingMode,
+                internalSerialFixedCode: serialTrackingMode === 1 ? normalizeInternalSerialFixedCode(source.internalSerialFixedCode) : null,
+                defaultWarehouseId: source.defaultWarehouseId ?? null,
+                defaultWarrantyMonths: numberValue(source.defaultWarrantyMonths),
+                description: String(source.description ?? ''),
+                productGroupId: source.productGroupId ?? null,
+                unitMeasureName: String(source.unitMeasureName ?? '').trim()
+            });
+        };
+
+        const hasProductEditChanges = () => {
+            const original = state.mainData.find(item => item.id === state.id);
+            if (!original) return true;
+            return getProductEditSnapshot(state) !== getProductEditSnapshot(original);
+        };
+
+        const getSerialOpeningStockWarning = () => Number(state.originalSerialTrackingMode ?? state.serialTrackingMode ?? 0) === 1
+            ? 'Hàng tự sinh serial không chỉnh tồn đầu kỳ tại đây. Hãy vào Phiếu kiểm kê để điều chỉnh; serial mới sẽ được sinh khi xác nhận.'
+            : 'Hàng serial nhà sản xuất không chỉnh tồn đầu kỳ tại đây. Hãy vào Phiếu kiểm kê và nhập mã serial mới, hoặc nhập ban đầu qua Đơn mua hàng.';
+
         const readNumericEditorValue = (editor, fallback) => {
             if (!editor) return fallback;
             if (typeof editor.value === 'number' && Number.isFinite(editor.value)) {
@@ -286,9 +321,9 @@ const App = {
         };
 
         const services = {
-            getMainData: async (gridState = {}) => {
+            getMainData: async () => {
                 try {
-                    const response = await AxiosManager.get('/Product/GetProductList' + ServerGridManager.buildQuery(gridState), {});
+                    const response = await AxiosManager.get('/Product/GetProductList', {});
                     return response;
                 } catch (error) {
                     throw error;
@@ -373,15 +408,13 @@ const App = {
                 const response = await services.getWarehouseListLookupData();
                 state.warehouseListLookupData = response?.data?.content?.data?.filter(item => item.systemWarehouse === false) ?? [];
             },
-            populateMainData: async (gridState = {}) => {
-                const response = await services.getMainData(gridState);
-                const dataSource = ServerGridManager.unwrap(response, item => ({
+            populateMainData: async () => {
+                const response = await services.getMainData();
+                state.mainData = response?.data?.content?.data.map(item => ({
                     ...item,
                     createdAtUtc: DateFormatManager.parseServerDate(item.createdAtUtc)
-                }));
-                state.mainData = dataSource.result;
-                state.mainTotalCount = dataSource.count;
-                return dataSource;
+                })) ?? [];
+                state.mainTotalCount = state.mainData.length;
             },
         };
 
@@ -785,6 +818,20 @@ const App = {
                         return;
                     }
 
+                    if (state.id !== ''
+                        && !state.deleteMode
+                        && Number(state.originalSerialTrackingMode ?? 0) > 0
+                        && !hasProductEditChanges()) {
+                        await Swal.fire({
+                            icon: 'error',
+                            title: 'Không thể lưu tồn đầu kỳ',
+                            text: getSerialOpeningStockWarning(),
+                            confirmButtonText: 'Đồng ý',
+                            heightAuto: false
+                        });
+                        return;
+                    }
+
                     const response = state.id === ''
                         ? await services.createMainData(state.name, state.referenceCode, getUnitPriceValue(), getCostPriceValue(), state.imageUrl, state.physical, getEffectiveSerialTrackingMode(), getEffectiveInternalSerialFixedCode(), state.defaultWarehouseId, getDefaultWarrantyMonthsValue(), state.description, state.productGroupId, state.unitMeasureName, getOpeningStockPayloadValue(), StorageManager.getUserId())
                         : state.deleteMode
@@ -892,7 +939,8 @@ const App = {
 
                 mainModal.create();
                 mainModalRef.value?.addEventListener('hidden.bs.modal', resetFormState);
-                await mainGrid.create({ result: state.mainData, count: state.mainTotalCount });
+                await mainGrid.create(state.mainData);
+                window.GridExportManager?.configure?.(mainGrid.obj);
 
             } catch (e) {
                 console.error('page init error:', e);
@@ -921,10 +969,7 @@ const App = {
                     allowExcelExport: true,
                     filterSettings: { type: 'CheckBox' },
                     sortSettings: { columns: [{ field: 'createdAtUtc', direction: 'Descending' }] },
-                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200"] },
-                    dataStateChange: async args => {
-                        mainGrid.obj.dataSource = await methods.populateMainData(args);
-                    },
+                    pageSettings: { currentPage: 1, pageSize: 50, pageSizes: ["10", "20", "50", "100", "200", "All"] },
                     selectionSettings: { persistSelection: true, type: 'Multiple', checkboxOnly: true },
                     autoFit: true,
                     showColumnMenu: true,
@@ -1065,8 +1110,15 @@ const App = {
                                 heightAuto: false
                             });
                             if (!result.isConfirmed) return;
-                            for (const record of selected) {
-                                await services.deleteMainData(record.id, StorageManager.getUserId());
+                            try {
+                                for (const record of selected) {
+                                    await services.deleteMainData(record.id, StorageManager.getUserId());
+                                }
+                            } catch (error) {
+                                await AxiosManager.showError(error, 'Không thể xóa hàng hóa đã chọn.');
+                                await methods.populateMainData();
+                                mainGrid.refresh();
+                                return;
                             }
                             await methods.populateMainData();
                             mainGrid.refresh();
@@ -1113,7 +1165,7 @@ const App = {
                 mainGrid.obj.appendTo(mainGridRef.value);
             },
             refresh: () => {
-                mainGrid.obj.setProperties({ dataSource: { result: state.mainData, count: state.mainTotalCount } });
+                mainGrid.obj.setProperties({ dataSource: state.mainData });
             }
         };
 

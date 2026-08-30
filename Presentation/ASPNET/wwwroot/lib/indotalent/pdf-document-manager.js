@@ -2,14 +2,16 @@
     'use strict';
 
     function showError(error) {
-        const message = error?.message || 'Unable to generate PDF. Please try again.';
+        const message = window.AxiosManager?.getErrorMessage?.(error, 'Không thể tạo PDF.')
+            || error?.message
+            || 'Không thể tạo PDF.';
         console.error('Unable to generate PDF.', error);
         if (window.Swal) {
             void window.Swal.fire({
                 icon: 'error',
-                title: 'PDF generation failed',
+                title: 'Tạo PDF thất bại',
                 text: message,
-                confirmButtonText: 'OK'
+                confirmButtonText: 'Đồng ý'
             });
         } else {
             window.alert(message);

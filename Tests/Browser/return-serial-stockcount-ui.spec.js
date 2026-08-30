@@ -662,8 +662,6 @@ test('Stock Count đổi hàng serial sang hàng thường sẽ release serial c
 
     const productCell = await gridCellByHeader(grid, /Hàng hóa|Product/i);
     await productCell.dblclick();
-    const updateLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountUpdateInvenTrans')
-        && response.request().method() === 'POST');
     await selectEditedDropdown(page, fixture.plainProduct.name);
     const clearedRow = await page.evaluate(() => {
         const row = document.querySelector('#SecondaryGrid').ej2_instances[0].getRowsObject()[0]?.data;
@@ -676,6 +674,8 @@ test('Stock Count đổi hàng serial sang hàng thường sẽ release serial c
         };
     });
     expect(clearedRow).toEqual({ rowIds: [], rowText: '', changedIds: [], changedText: '' });
+    const updateLine = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountUpdateInvenTrans')
+        && response.request().method() === 'POST');
     await page.locator('#SecondaryGrid_update').click();
     const updateLineResponse = await updateLine;
     expect(updateLineResponse.status()).toBe(200);
@@ -712,4 +712,68 @@ test('Stock Count đổi hàng serial sang hàng thường sẽ release serial c
         serialStatus: 'InStock',
         serialWarehouseId: fixture.warehouse.id
     });
+});
+
+test('Stock Count serial tự sinh tăng số lượng, lưu dòng rồi xác nhận', async ({ monitoredPage: page }) => {
+    test.slow();
+    await login(page, 'vi');
+    const key = `UI-STOCK-SERIAL-INCREASE-${Date.now()}`;
+    const fixture = await page.evaluate(async key => {
+        const one = response => response?.data?.content?.data;
+        const list = response => response?.data?.content?.data ?? [];
+        const userId = StorageManager.getUserId();
+        const [groups, warehouses] = await Promise.all([
+            AxiosManager.get('/ProductGroup/GetProductGroupList', {}),
+            AxiosManager.get('/Warehouse/GetWarehouseList', {})
+        ]);
+        const warehouse = list(warehouses).find(item => item.systemWarehouse === false);
+        const product = one(await AxiosManager.post('/Product/CreateProduct', {
+            name: key, referenceCode: `${key}-REF`, unitPrice: 100000, costPrice: 80000,
+            physical: true, serialTrackingMode: 1, internalSerialFixedCode: 'INC',
+            defaultWarehouseId: warehouse.id, defaultWarrantyMonths: 0, unitMeasureName: 'Cái',
+            productGroupId: list(groups)[0].id, openingStockQuantity: 1, createdById: userId
+        }));
+        return { product, warehouse };
+    }, key);
+
+    await page.goto('/StockCounts/StockCountList', { waitUntil: 'domcontentloaded' });
+    await waitForVuePage(page);
+    await page.locator('#AddCustom').click();
+    await page.waitForSelector('#MainModal.show');
+    const countDate = page.locator('#MainModal label[for="CountDate"]').locator('xpath=..').locator('input.e-datepicker');
+    await countDate.fill('26/08/2026'); await countDate.press('Tab');
+    await selectHeaderDropdown(page, 'WarehouseId', fixture.warehouse.name);
+    const headerResponse = page.waitForResponse(response => response.url().includes('/StockCount/CreateStockCount') && response.request().method() === 'POST');
+    await page.locator('#MainSaveButton').click();
+    expect((await headerResponse).status()).toBe(200);
+    await expect(page.locator('#ComplexDiv')).toBeVisible();
+
+    const grid = page.locator('#SecondaryGrid');
+    await grid.locator('#SecondaryGrid_add').click();
+    await selectEditedDropdown(page, key);
+    const headers = grid.locator('.e-headercell:visible');
+    let quantityIndex = -1;
+    for (let index = 0; index < await headers.count(); index += 1) {
+        if ((await headers.nth(index).innerText()).includes('Số lượng thực đếm')) quantityIndex = index;
+    }
+    const quantityCell = grid.locator('.e-row').first().locator('td.e-rowcell:visible').nth(quantityIndex);
+    await quantityCell.dblclick();
+    const quantityInput = grid.locator('td.e-editedbatchcell input.e-numerictextbox');
+    await quantityInput.fill('2'); await quantityInput.press('Tab');
+    await grid.locator('#SecondaryGrid_update').click();
+    await page.waitForSelector('.swal2-popup');
+    await expect(page.locator('.swal2-popup')).toContainText('Điều chỉnh tăng tồn serial');
+    const lineResponse = page.waitForResponse(response => response.url().includes('/InventoryTransaction/StockCountCreateInvenTrans') && response.request().method() === 'POST');
+    await page.locator('.swal2-confirm').click();
+    expect((await lineResponse).status()).toBe(200);
+    await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
+
+    await selectHeaderDropdown(page, 'Status', /Đã xác nhận/i);
+    const confirmResponse = page.waitForResponse(response => response.url().includes('/StockCount/UpdateStockCount') && response.request().method() === 'POST');
+    await page.locator('#MainSaveButton').click();
+    const confirmation = page.locator('.swal2-confirm');
+    if (await confirmation.waitFor({ state: 'visible', timeout: 2_000 }).then(() => true, () => false)) await confirmation.click();
+    const response = await confirmResponse;
+    expect(response.status(), await response.text()).toBe(200);
+    await expect(page.locator('.swal2-popup')).toBeHidden({ timeout: 10_000 });
 });

@@ -47,6 +47,7 @@
         const numberRef = Vue.ref(null);
 
         const normalizeStatus = (value) => value === null || value === undefined ? '' : String(value);
+        const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 
         const getAllowedStatusData = () => {
             const currentStatus = normalizeStatus(state.originalStatus ?? state.status);
@@ -322,25 +323,31 @@
             getSecondaryData: async (moduleId) => {
                 try {
                     const response = await AxiosManager.get('/InventoryTransaction/StockCountGetInvenTransList?moduleId=' + moduleId, {});
-                    return response;
-                } catch (error) {
-                    throw error;
-                }
-            },
-            createSecondaryData: async (moduleId, productId, qtySCCount, createdById, productSerialIds) => {
-                try {
-                    const response = await AxiosManager.post('/InventoryTransaction/StockCountCreateInvenTrans', {
-                        moduleId, productId, qtySCCount, createdById, productSerialIds
+                    const rows = response?.data?.content?.data ?? [];
+                    rows.forEach(item => {
+                        item.newSerials = item.pendingManufacturerSerialNumbersJson
+                            ? (() => { try { const value = JSON.parse(item.pendingManufacturerSerialNumbersJson); return Array.isArray(value) ? value.map(serial => typeof serial === 'string' ? { manufacturerSerialNumber: serial } : serial) : []; } catch { return []; } })()
+                            : [];
                     });
                     return response;
                 } catch (error) {
                     throw error;
                 }
             },
-            updateSecondaryData: async (id, productId, qtySCCount, updatedById, productSerialIds) => {
+            createSecondaryData: async (moduleId, productId, qtySCCount, createdById, productSerialIds, unitCost, newSerials) => {
+                try {
+                    const response = await AxiosManager.post('/InventoryTransaction/StockCountCreateInvenTrans', {
+                        moduleId, productId, qtySCCount, createdById, productSerialIds, unitCost, newSerials
+                    });
+                    return response;
+                } catch (error) {
+                    throw error;
+                }
+            },
+            updateSecondaryData: async (id, productId, qtySCCount, updatedById, productSerialIds, unitCost, newSerials) => {
                 try {
                     const response = await AxiosManager.post('/InventoryTransaction/StockCountUpdateInvenTrans', {
-                        id, productId, qtySCCount, updatedById, productSerialIds
+                        id, productId, qtySCCount, updatedById, productSerialIds, unitCost, newSerials
                     });
                     return response;
                 } catch (error) {
@@ -500,7 +507,7 @@
 
                     return { isValid, response };
                 } catch (error) {
-                    return { isValid, response: null };
+                    return { isValid, response: null, error };
                 }
             },
             onMainModalHidden: () => {
@@ -521,9 +528,19 @@
                     state.isSubmitting = true;
                     await new Promise(resolve => setTimeout(resolve, 300));
 
-                    const { isValid, response } = await methods.submitMainData();
+                    const { isValid, response, error } = await methods.submitMainData();
 
                     if (!isValid) {
+                        return;
+                    }
+
+                    if (!response) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Lưu thất bại',
+                            text: error?.response?.data?.message ?? 'Vui lòng kiểm tra lại dữ liệu.',
+                            confirmButtonText: 'Đồng ý'
+                        });
                         return;
                     }
 
@@ -782,6 +799,171 @@
         let movementObj = null;
         let qtySCCountObj = null;
 
+        const getAvailableSerials = async (productId) => {
+            const response = await AxiosManager.get(`/ProductSerial/GetProductSerialPickerList?productId=${encodeURIComponent(productId)}&warehouseId=${encodeURIComponent(state.warehouseId)}&moduleName=StockCount`, {});
+            return response?.data?.content?.data ?? [];
+        };
+
+        const serialAdjustmentSnapshots = new Map();
+        const serialAdjustmentKey = row => row?.id || row?.uid || null;
+        const cloneSerialRow = row => {
+            try { return JSON.parse(JSON.stringify(row)); } catch { return null; }
+        };
+        const restoreSerialAdjustmentAfterCancel = row => {
+            const key = serialAdjustmentKey(row);
+            const snapshot = key ? serialAdjustmentSnapshots.get(key) : null;
+            if (!snapshot || !secondaryGrid.obj) {
+                serialAdjustmentSnapshots.delete(key);
+                return;
+            }
+
+            Object.assign(row, snapshot);
+            const batchChanges = secondaryGrid.obj.editModule?.batchChanges;
+            if (Array.isArray(batchChanges?.changedRecords)) {
+                for (let index = batchChanges.changedRecords.length - 1; index >= 0; index -= 1) {
+                    const item = batchChanges.changedRecords[index];
+                    if (item === row || (row.id && String(item?.id) === String(row.id))) {
+                        batchChanges.changedRecords.splice(index, 1);
+                    }
+                }
+            }
+            const rowObjects = secondaryGrid.obj.getRowsObject?.() ?? [];
+            const rowObject = rowObjects
+                .find(item => item?.data === row || (row.id && String(item?.data?.id) === String(row.id)));
+            if (rowObject?.data && rowObject.data !== row) Object.assign(rowObject.data, snapshot);
+            const rowIndex = rowObject ? rowObjects.indexOf(rowObject) : -1;
+            if (rowIndex >= 0 && typeof secondaryGrid.obj.refreshRow === 'function') {
+                secondaryGrid.obj.refreshRow(rowIndex);
+            }
+            serialAdjustmentSnapshots.delete(key);
+        };
+
+        const confirmSerialAdjustment = async (row) => {
+            const product = state.productListLookupData.find(item => item.id === row.productId);
+            if (!product || Number(product.serialTrackingMode ?? 0) === 0) return true;
+
+            const quantity = Math.max(0, Math.trunc(Number(row.qtySCCount ?? 0)));
+            const available = await getAvailableSerials(row.productId);
+            const currentCount = available.length;
+            const selectedCount = row.productSerialIds?.length ?? 0;
+            // Selecting the exact serials in the existing picker is the explicit
+            // alternative to FIFO; keep that choice without showing a decrease warning.
+            if (selectedCount > 0 && selectedCount === quantity) {
+                row.newSerials = [];
+                return true;
+            }
+            if (selectedCount > quantity || quantity < currentCount) {
+                const result = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Điều chỉnh giảm tồn serial',
+                    html: `<div class="text-start">
+                        <p class="mb-3">Số lượng kiểm kê đang nhỏ hơn số serial hiện có.</p>
+                        <div class="border rounded p-3 bg-light">
+                            <div class="d-flex justify-content-between gap-3"><span>Hàng hóa</span><strong>${escapeHtml(product.name)}</strong></div>
+                            <div class="d-flex justify-content-between gap-3"><span>Serial hiện có</span><strong>${currentCount}</strong></div>
+                            <div class="d-flex justify-content-between gap-3"><span>Số lượng kiểm kê</span><strong>${quantity}</strong></div>
+                        </div>
+                        <p class="mt-3 mb-0">Nếu tiếp tục, hệ thống sẽ tự chọn serial nhập kho sớm nhất theo FIFO để đưa phần chênh lệch ra khỏi tồn.</p>
+                    </div>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Tiếp tục',
+                    cancelButtonText: 'Hủy',
+                    heightAuto: false
+                });
+                if (!result.isConfirmed) return false;
+                row.productSerialIds = [];
+                row.productSerialNumbers = '';
+                row.newSerials = [];
+                return true;
+            }
+            if (quantity <= currentCount) return true;
+
+            const difference = quantity - currentCount;
+            const isManufacturer = Number(product.serialTrackingMode ?? 0) === 2;
+            const defaultCost = Number(row.unitCost ?? product.costPrice ?? 0);
+            const pending = Array.isArray(row.newSerials) ? row.newSerials : [];
+            const used = new Set(available.map(item => String(item.internalSerialNumber ?? '').toUpperCase()));
+            const createInternalNumber = () => {
+                const fixed = String(product.internalSerialFixedCode ?? 'SN').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'SN';
+                let value = '';
+                do {
+                    const bytes = new Uint8Array(12 - fixed.length);
+                    if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+                    else bytes.forEach((_, index) => bytes[index] = Math.floor(Math.random() * 256));
+                    value = Array.from(bytes, byte => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[byte % 36]).join('') + fixed;
+                } while (used.has(value));
+                used.add(value);
+                return value;
+            };
+            const rows = Array.from({ length: difference }, (_, index) => ({
+                internalSerialNumber: String(pending[index]?.internalSerialNumber ?? '').trim() || createInternalNumber(),
+                manufacturerSerialNumber: String(pending[index]?.manufacturerSerialNumber ?? '').trim(),
+                unitCost: Number(pending[index]?.unitCost ?? defaultCost)
+            }));
+            const result = await Swal.fire({
+                icon: 'warning',
+                title: 'Điều chỉnh tăng tồn serial',
+                width: 900,
+                html: `<div class="text-start">
+                    <p class="mb-3">Hàng hóa <strong>${escapeHtml(product.name)}</strong> hiện có <strong>${currentCount}</strong> serial, nhưng số lượng kiểm kê là <strong>${quantity}</strong>.</p>
+                    <div class="small text-muted mb-2">Serial đang tồn chỉ để xem lại. Các dòng serial mới có thể chỉnh giá vốn${isManufacturer ? ' và nhập mã serial nhà sản xuất' : ''}.</div>
+                    <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0"><thead><tr>
+                        <th>Trạng thái</th><th>Serial nội bộ</th>${isManufacturer ? '<th>Serial NSX</th>' : ''}<th style="width:180px">Giá vốn</th>
+                    </tr></thead><tbody id="stock-count-serial-adjustment-rows"></tbody></table></div>
+                </div>`,
+                showCancelButton: true,
+                confirmButtonText: 'Lưu serial mới',
+                cancelButtonText: 'Hủy',
+                focusConfirm: false,
+                heightAuto: false,
+                didOpen: () => {
+                    const body = document.getElementById('stock-count-serial-adjustment-rows');
+                    const addRow = (label, serial, manufacturer, cost, editable) => {
+                        const tr = document.createElement('tr');
+                        if (!editable) tr.className = 'table-light text-muted';
+                        const status = document.createElement('td');
+                        status.innerHTML = `<span class="badge ${editable ? 'bg-primary' : 'bg-secondary'}">${label}</span>`;
+                        const internal = document.createElement('td'); internal.textContent = serial || '—';
+                        tr.append(status, internal);
+                        if (isManufacturer) { const nsx = document.createElement('td'); nsx.textContent = manufacturer || '—'; tr.append(nsx); }
+                        const costCell = document.createElement('td');
+                        if (editable) {
+                            const costInput = document.createElement('input');
+                            costInput.className = 'form-control form-control-sm';
+                            costCell.append(costInput);
+                            const costEditor = new ej.inputs.NumericTextBox({ value: Number(cost ?? 0), min: 0, decimals: 2, format: 'n2', numericKind: 'money', validateDecimalOnType: false });
+                            costEditor.appendTo(costInput);
+                            NumberFormatManager.configureNumericTextBox(costEditor, { kind: 'money', min: 0 });
+                            NumberFormatManager.refreshNumericTextBox(costEditor);
+                            tr._costEditor = costEditor;
+                            if (isManufacturer) { const nsxInput = document.createElement('input'); nsxInput.type = 'text'; nsxInput.className = 'form-control form-control-sm mt-1'; nsxInput.placeholder = 'Mã serial NSX'; nsxInput.value = manufacturer || ''; tr.children[2].replaceChildren(nsxInput); tr._manufacturerInput = nsxInput; }
+                        } else costCell.textContent = NumberFormatManager.formatMoneyToLocale(cost ?? 0);
+                        tr.append(costCell); body?.append(tr); return tr;
+                    };
+                    available.forEach(item => addRow('Tồn hiện tại', item.internalSerialNumber, item.manufacturerSerialNumber, item.unitCost, false));
+                    rows.forEach(item => { const tr = addRow('Serial mới', item.internalSerialNumber, item.manufacturerSerialNumber, item.unitCost, true); item._row = tr; });
+                },
+                preConfirm: () => {
+                    const newSerials = rows.map(item => {
+                        const unitCost = NumberFormatManager.readNumericTextBoxValue(item._row?._costEditor);
+                        const manufacturerSerialNumber = item._row?._manufacturerInput?.value?.trim() || null;
+                        if (!Number.isFinite(unitCost) || unitCost < 0) { Swal.showValidationMessage('Giá vốn serial mới phải là số không âm.'); return null; }
+                        if (isManufacturer && !manufacturerSerialNumber) { Swal.showValidationMessage('Vui lòng nhập đủ mã serial nhà sản xuất.'); return null; }
+                        return { internalSerialNumber: item.internalSerialNumber, manufacturerSerialNumber, unitCost };
+                    });
+                    if (newSerials.some(item => item == null)) return false;
+                    const values = newSerials.map(item => isManufacturer ? item.manufacturerSerialNumber : item.internalSerialNumber);
+                    if (new Set(values.map(item => item.toUpperCase())).size !== values.length) { Swal.showValidationMessage('Mã serial mới không được trùng nhau.'); return false; }
+                    return newSerials;
+                }
+            });
+            if (!result.isConfirmed) return false;
+            row.productSerialIds = available.map(item => item.id).filter(Boolean);
+            row.productSerialNumbers = available.map(item => item.internalSerialNumber).filter(Boolean).join(', ');
+            row.newSerials = result.value ?? rows.map(item => ({ internalSerialNumber: item.internalSerialNumber, manufacturerSerialNumber: item.manufacturerSerialNumber || null, unitCost: item.unitCost }));
+            return true;
+        };
+
         const secondaryGrid = {
             obj: null,
             create: async (dataSource) => {
@@ -857,7 +1039,9 @@
                                                 productSerialNumbers: '',
                                                 qtySCSys: stock,
                                                 qtySCCount: 0,
-                                                qtySCDelta: -Number(stock)
+                                                qtySCDelta: -Number(stock),
+                                                unitCost: p?.costPrice ?? 0,
+                                                newSerials: []
                                             };
                                             GridInteractionManager.syncBatchRowValues(secondaryGrid.obj, {
                                                 rowData: args.rowData,
@@ -876,7 +1060,7 @@
                                                 if (qtySCCountObj.element?.dataset) qtySCCountObj.element.dataset.numericKind = qtySCCountObj.numericKind;
                                                 qtySCCountObj.decimals = serialTracked ? 0 : 6;
                                                 qtySCCountObj.format = serialTracked ? 'n0' : 'n6';
-                                                qtySCCountObj.readonly = serialTracked;
+                                                qtySCCountObj.readonly = serialTracked && (args.rowData.productSerialIds?.length ?? 0) > 0;
                                                 qtySCCountObj.dataBind();
                                             }
                                         },
@@ -896,7 +1080,8 @@
                             moduleName: 'StockCount',
                             quantityField: 'qtySCCount',
                             quantityObjGetter: () => qtySCCountObj,
-                            requireWarehouse: true
+                            requireWarehouse: true,
+                            allowQuantityOverride: true
                         }),
                         {
                             field: 'qtySCCount',
@@ -928,7 +1113,7 @@
                                         numericKind: serialTracked ? 'integer' : 'decimal',
                                         format: serialTracked ? 'n0' : 'n6',
                                         decimals: serialTracked ? 0 : 6,
-                                        readonly: serialTracked,
+                                        readonly: false,
                                         validateDecimalOnType: true,
                                     });
                                     qtySCCountObj.appendTo(qtySCCountElem);
@@ -974,6 +1159,10 @@
                             args.cancel = true;
                             return;
                         }
+                        if (String(args.requestType ?? '').toLowerCase() === 'beginedit' && args.rowData) {
+                            const key = serialAdjustmentKey(args.rowData);
+                            if (key) serialAdjustmentSnapshots.set(key, cloneSerialRow(args.rowData));
+                        }
                         if (String(args.requestType ?? '').toLowerCase() === 'save') {
                             const duplicate = (secondaryGrid.obj.getCurrentViewRecords?.() ?? [])
                                 .some(row => row !== args.data && row.productId && row.productId === args.data?.productId
@@ -994,7 +1183,11 @@
                     actionComplete: async (args) => {
                         if (args.requestType === 'save' && args.action === 'add') {
                             try {
-                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                if (!(await confirmSerialAdjustment(args.data))) {
+                                    restoreSerialAdjustmentAfterCancel(args.data);
+                                    return;
+                                }
+                                const response = await services.createSecondaryData(state.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? [], args.data.unitCost, args.data.newSerials ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {
@@ -1023,7 +1216,11 @@
                         }
                         if (args.requestType === 'save' && args.action === 'edit') {
                             try {
-                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? []);
+                                if (!(await confirmSerialAdjustment(args.data))) {
+                                    restoreSerialAdjustmentAfterCancel(args.data);
+                                    return;
+                                }
+                                const response = await services.updateSecondaryData(args.data.id, args.data.productId, args.data.qtySCCount, StorageManager.getUserId(), args.data.productSerialIds ?? [], args.data.unitCost, args.data.newSerials ?? []);
                                 await methods.populateSecondaryData(state.id);
                                 secondaryGrid.refresh();
                                 if (response.data.code === 200) {

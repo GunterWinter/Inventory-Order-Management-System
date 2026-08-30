@@ -1089,7 +1089,7 @@ const App = {
                                     detailGrid.dataSource = allocData;
                                 }
                             } catch (err) {
-                                console.error('Error loading detail row:', err);
+                                await AxiosManager.showError(err, 'Không thể tải chi tiết phân bổ của đơn mua hàng.');
                             }
                         }
                     },
@@ -1309,13 +1309,9 @@ const App = {
                                     heightAuto: false
                                 });
                             } catch (error) {
-                                await Swal.fire({
-                                    icon: 'error',
-                                    title: 'Không thể xóa đơn mua hàng',
-                                    text: error.response?.data?.message ?? 'Vui lòng thử lại.',
-                                    confirmButtonText: 'Đồng ý',
-                                    heightAuto: false
-                                });
+                                await AxiosManager.showError(error, 'Không thể xóa đơn mua hàng đã chọn.');
+                                await methods.populateMainData();
+                                mainGrid.refresh();
                             }
                         }
 

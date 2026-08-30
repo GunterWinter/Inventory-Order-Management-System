@@ -127,6 +127,11 @@ public partial class InventoryTransactionService
             {
                 item.WarehouseId = warehouseId;
             }
+            if (moduleName == nameof(StockCount) && status == InventoryTransactionStatus.Confirmed)
+            {
+                item.QtySCSys = GetStock(item.WarehouseId, item.ProductId, item.Id);
+                CalculateInvenTrans(item);
+            }
         }
 
         await _unitOfWork.SaveAsync(cancellationToken);

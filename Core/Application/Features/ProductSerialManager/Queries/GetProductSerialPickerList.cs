@@ -11,6 +11,7 @@ public record ProductSerialPickerDto
 {
     public string? Id { get; init; }
     public string? InternalSerialNumber { get; init; }
+    public string? ManufacturerSerialNumber { get; init; }
     public string? ProductId { get; init; }
     public string? ProductName { get; init; }
     public string? WarehouseId { get; init; }
@@ -69,8 +70,8 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
         {
             query = query.Where(x => currentSerialIds.Contains(x.Id)
                 || x.CurrentWarehouseId == request.WarehouseId
-                || x.Status == ProductSerialStatus.Sold
-                || x.Status == ProductSerialStatus.InTransfer);
+                || (request.ModuleName != nameof(StockCount)
+                    && (x.Status == ProductSerialStatus.Sold || x.Status == ProductSerialStatus.InTransfer)));
         }
 
         if (request.ModuleName == nameof(TransferIn) && !string.IsNullOrWhiteSpace(request.ModuleId))
@@ -126,6 +127,7 @@ public class GetProductSerialPickerListHandler : IRequestHandler<GetProductSeria
             {
                 Id = x.Id,
                 InternalSerialNumber = x.InternalSerialNumber,
+                ManufacturerSerialNumber = x.ManufacturerSerialNumber,
                 ProductId = x.ProductId,
                 ProductName = x.Product != null ? x.Product.Name : string.Empty,
                 WarehouseId = x.CurrentWarehouseId,

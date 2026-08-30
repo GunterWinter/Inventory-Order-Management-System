@@ -257,7 +257,7 @@ window.ProductSerialPicker = (() => {
                     });
                     if (quantityObj && quantityObj.isDestroyed !== true) {
                         quantityObj.value = args.rowData[quantityField] ?? 0;
-                        quantityObj.readonly = selectedSerials.length > 0;
+                        quantityObj.readonly = selectedSerials.length > 0 && options.allowQuantityOverride !== true;
                         quantityObj.dataBind();
                     }
                     refreshLabel();
@@ -307,7 +307,7 @@ window.ProductSerialPicker = (() => {
             return fail('Vui lòng chọn serial thiết bị trước khi lưu.');
         }
 
-        if (selectedCount > 0) {
+        if (selectedCount > 0 && options.allowQuantityOverride !== true) {
             data[quantityField] = selectedCount;
         }
         return true;

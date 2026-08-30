@@ -7,6 +7,11 @@
 
 <link href="~/lib/syncfusion/css/bootstrap5.css" rel="stylesheet"  asp-append-version="true"/>
 <script src="~/lib/syncfusion/js/ej2.min.js" asp-append-version="true"></script>
+<script>
+    if (window.ej?.grids?.Grid?.Inject && window.ej.grids.ExcelExport) {
+        window.ej.grids.Grid.Inject(window.ej.grids.ExcelExport);
+    }
+</script>
 
 <link href="~/lib/font-awesome/css/all.min.css" rel="stylesheet" asp-append-version="true">
 <link href="~/lib/bootstrap/dist/css/bootstrap-icons.css" rel="stylesheet" asp-append-version="true">

@@ -197,7 +197,7 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
                     productGroupId, unitMeasureName: 'SERVICE', createdById },
                 { name: '', unitPrice: 100, physical: false, serialTrackingMode: 0,
                     productGroupId, unitMeasureName: 'SERVICE', createdById }
-            ] });
+            ] }, { skipGlobalError: true });
             status = 200;
         } catch (error) {
             status = error?.response?.status ?? 0;
@@ -650,8 +650,14 @@ const waitForUi = ms => new Promise(resolve => setTimeout(resolve, ms));
         return window.GridExportManager.getExportColumns(grid).map(column => column.headerText);
     });
     const exportDownload = page.waitForEvent('download');
+    const exportError = page.waitForSelector('.swal2-icon-error', { timeout: 30000 })
+        .then(async () => `Excel export error: ${await page.locator('.swal2-html-container').innerText()}`)
+        .catch(() => null);
     await page.locator('#MainGrid_excelexport').click();
-    const exported = await exportDownload;
+    const exported = await Promise.race([exportDownload, exportError.then(message => {
+        if (message) throw new Error(message);
+        return new Promise(() => {});
+    })]);
     const exportPath = path.join(tempDir, 'products-export.xlsx');
     await exported.saveAs(exportPath);
     const exportWorkbook = readWorkbook(exportPath);

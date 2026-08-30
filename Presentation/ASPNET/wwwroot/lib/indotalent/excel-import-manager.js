@@ -1102,7 +1102,7 @@
 
         const moduleName = window.location.pathname.split('/').filter(Boolean)[0] ?? '';
         const requestProperty = config.itemColumns || config.nestedColumns ? 'documents' : 'rows';
-        const response = await AxiosManager.post(`/${moduleName}/ImportExcel`, { [requestProperty]: payloads });
+        const response = await AxiosManager.post(`/${moduleName}/ImportExcel`, { [requestProperty]: payloads }, { skipGlobalError: true });
         if (response?.data?.code !== 200) throw new Error(getErrorMessage({ response }));
         const successCount = response?.data?.content?.importedCount ?? payloads.length;
 

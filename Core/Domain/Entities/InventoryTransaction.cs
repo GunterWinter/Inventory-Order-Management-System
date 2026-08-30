@@ -31,6 +31,7 @@ public class InventoryTransaction : BaseEntity
     public decimal? QtySCCount { get; set; }
     public decimal? QtySCDelta { get; set; }
     public decimal? UnitCost { get; set; }
+    public string? PendingManufacturerSerialNumbersJson { get; set; }
     [NotMapped]
     public List<string>? ProductSerialIds { get; set; }
     [NotMapped]

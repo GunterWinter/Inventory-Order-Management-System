@@ -2,6 +2,7 @@ using Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Application.Common.Repositories;
+using Application.Features.ProductSerialManager;
 
 namespace Application.Features.InventoryTransactionManager.Commands;
 
@@ -17,6 +18,9 @@ public class StockCountUpdateInvenTransRequest : IRequest<StockCountUpdateInvenT
     public decimal? QtySCCount { get; init; }
     public string? UpdatedById { get; init; }
     public List<string>? ProductSerialIds { get; init; }
+    public decimal? UnitCost { get; init; }
+    public List<string>? NewManufacturerSerialNumbers { get; init; }
+    public List<StockCountNewSerialInput>? NewSerials { get; init; }
 
 }
 
@@ -27,6 +31,7 @@ public class StockCountUpdateInvenTransValidator : AbstractValidator<StockCountU
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.QtySCCount).NotNull().GreaterThanOrEqualTo(0);
+        RuleFor(x => x.UnitCost).GreaterThanOrEqualTo(0).When(x => x.UnitCost.HasValue);
         RuleFor(x => x.UpdatedById).NotEmpty();
     }
 }
@@ -54,7 +59,10 @@ public class StockCountUpdateInvenTransHandler : IRequestHandler<StockCountUpdat
             request.QtySCCount,
             request.UpdatedById,
             ct,
-            request.ProductSerialIds), cancellationToken);
+            request.ProductSerialIds,
+            request.UnitCost,
+            request.NewManufacturerSerialNumbers,
+            request.NewSerials), cancellationToken);
 
         return new StockCountUpdateInvenTransResult
         {

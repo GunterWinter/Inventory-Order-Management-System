@@ -46,3 +46,11 @@ test('opening stock warehouse column falls back to the default warehouse for leg
         hasOpeningStockHistory: false
     }), '');
 });
+
+test('product grid keeps the native checkbox filter and local datasource behavior', () => {
+    const source = fs.readFileSync(path.resolve(__dirname,
+        '../../Presentation/ASPNET/FrontEnd/Pages/Products/ProductList.cshtml.js'), 'utf8');
+
+    assert.match(source, /filterSettings:\s*\{ type: 'CheckBox' \}/);
+    assert.doesNotMatch(source, /dataStateChange:\s*async args/);
+});

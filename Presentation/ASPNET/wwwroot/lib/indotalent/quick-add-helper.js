@@ -487,7 +487,7 @@ const QuickAddHelper = (() => {
             Swal.fire({
                 icon: 'error',
                 title: 'Error',
-                text: 'The record could not be added. Please try again.'
+                text: AxiosManager.getErrorMessage(error, 'Không thể thêm bản ghi.')
             });
             return null;
         }
@@ -646,7 +646,7 @@ const QuickAddHelper = (() => {
             return created;
         } catch (error) {
             console.error('Quick add vendor error:', error);
-            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Vendor could not be added. Please try again.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: AxiosManager.getErrorMessage(error, 'Không thể thêm nhà cung cấp.') });
             return null;
         }
     };
@@ -795,7 +795,7 @@ const QuickAddHelper = (() => {
             return created;
         } catch (error) {
             console.error('Quick add customer error:', error);
-            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Customer could not be added. Please try again.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: AxiosManager.getErrorMessage(error, 'Không thể thêm khách hàng.') });
             return null;
         }
     };
@@ -980,6 +980,15 @@ const QuickAddHelper = (() => {
             didOpen: () => {
                 _disableModalFocusTrap();
                 document.getElementById('qa-p-name')?.focus();
+                const popup = document.querySelector('.swal2-popup');
+                popup?.addEventListener('keydown', event => {
+                    if (event.key !== 'Enter') return;
+                    const target = event.target;
+                    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                }, true);
                 _attachInlineQuickAdd('qa-p-group-add', 'qa-p-group', '/ProductGroup/CreateProductGroup');
                 _attachInlineQuickAdd('qa-p-warehouse-add', 'qa-p-warehouse', '/Warehouse/CreateWarehouse');
 
@@ -1055,7 +1064,7 @@ const QuickAddHelper = (() => {
             return created;
         } catch (error) {
             console.error('Quick add product error:', error);
-            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.message ?? 'The Product could not be added. Please try again.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: AxiosManager.getErrorMessage(error, 'Không thể thêm hàng hóa.') });
             return null;
         }
     };

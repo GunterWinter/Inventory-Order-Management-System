@@ -347,19 +347,55 @@ public class ProductSerialService
         InventoryTransaction transaction,
         IReadOnlyCollection<string>? productSerialIds,
         string? userId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? newManufacturerSerialNumbers = null,
+        IReadOnlyCollection<StockCountNewSerialInput>? newSerialInputs = null)
     {
         if (!await IsProductSerialTrackedAsync(transaction.ProductId, cancellationToken))
         {
             return;
         }
 
+        var pendingSerialInputs = newSerialInputs?.ToList()
+            ?? DeserializePendingSerialInputs(transaction.PendingManufacturerSerialNumbersJson);
+        if (newManufacturerSerialNumbers == null && pendingSerialInputs.Count > 0)
+        {
+            newManufacturerSerialNumbers = pendingSerialInputs
+                .Select(x => x.ManufacturerSerialNumber)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim())
+                .ToList();
+        }
+
         var serialIds = productSerialIds?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
             ?? await ResolveSerialIdsForTransactionAsync(transaction, cancellationToken);
 
         var quantity = ResolveTransactionQuantity(transaction);
+        if (transaction.ModuleName == nameof(StockCount)
+            && transaction.Status == InventoryTransactionStatus.Confirmed
+            && serialIds.Count == 0
+            && quantity > 0)
+        {
+            var available = await _productSerialRepository.GetQuery()
+                .AsNoTracking()
+                .Where(x => !x.IsDeleted
+                    && x.ProductId == transaction.ProductId
+                    && x.CurrentWarehouseId == transaction.WarehouseId
+                    && (x.Status == ProductSerialStatus.InStock || x.Status == ProductSerialStatus.ReturnedByCustomer))
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .ThenByDescending(x => x.Id)
+                .Select(x => x.Id)
+                .Take(quantity)
+                .ToListAsync(cancellationToken);
+            serialIds.AddRange(available);
+        }
         if (serialIds.Count == 0)
         {
+            if (transaction.ModuleName == nameof(StockCount)
+                && transaction.Status == InventoryTransactionStatus.Draft)
+            {
+                return;
+            }
             if (transaction.ModuleName == nameof(StockCount) && quantity == 0)
             {
                 await ApplyStockCountMissingSerialsAsync(transaction, serialIds, userId, cancellationToken);
@@ -372,6 +408,125 @@ public class ProductSerialService
 
         var serials = await GetSerialsByIdsAsync(serialIds, cancellationToken);
         ValidateSerialCount(serialIds, serials);
+
+        if (transaction.ModuleName == nameof(StockCount)
+            && transaction.Status == InventoryTransactionStatus.Confirmed
+            && serials.Count < quantity)
+        {
+            var product = await _queryContext.Set<Product>()
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == transaction.ProductId, cancellationToken);
+            var missing = quantity - serials.Count;
+            var unitCost = transaction.UnitCost ?? product.CostPrice;
+            if ((!unitCost.HasValue || unitCost.Value < 0m)
+                && pendingSerialInputs.All(x => !x.UnitCost.HasValue))
+            {
+                throw new InvalidOperationException("Cần nhập giá vốn không âm trước khi tăng tồn serial.");
+            }
+
+            var manufacturerNumbers = (newManufacturerSerialNumbers ?? Array.Empty<string>())
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+            var requestedNewSerials = pendingSerialInputs
+                .Where(x => !string.IsNullOrWhiteSpace(x.InternalSerialNumber)
+                    || !string.IsNullOrWhiteSpace(x.ManufacturerSerialNumber))
+                .ToList();
+            if (requestedNewSerials.Count > 0 && requestedNewSerials.Count != missing)
+            {
+                throw new InvalidOperationException($"Cần nhập đúng {missing} serial mới cho phần chênh lệch.");
+            }
+            if (product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial)
+            {
+                if (requestedNewSerials.Count > 0)
+                {
+                    manufacturerNumbers = requestedNewSerials
+                        .Select(x => x.ManufacturerSerialNumber?.Trim())
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Select(x => x!)
+                        .ToList();
+                }
+                if (manufacturerNumbers.Count != missing)
+                {
+                    throw new InvalidOperationException($"Cần nhập đúng {missing} mã serial nhà sản xuất mới.");
+                }
+
+                if (manufacturerNumbers.Count != manufacturerNumbers.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+                {
+                    throw new InvalidOperationException("Mã serial nhà sản xuất không được trùng nhau.");
+                }
+
+                var duplicate = await _productSerialRepository.GetQuery()
+                    .AsNoTracking()
+                    .AnyAsync(x => !x.IsDeleted
+                        && x.ManufacturerSerialNumber != null
+                        && manufacturerNumbers.Contains(x.ManufacturerSerialNumber), cancellationToken);
+                if (duplicate)
+                {
+                    throw new InvalidOperationException("Mã serial nhà sản xuất đã tồn tại trong hệ thống.");
+                }
+            }
+
+            var fixedCode = product.InternalSerialFixedCode ?? "SN";
+            var generatedInternalNumbers = await GenerateInternalSerialNumbersAsync(fixedCode,
+                requestedNewSerials.Count > 0
+                    ? requestedNewSerials.Count(x => string.IsNullOrWhiteSpace(x.InternalSerialNumber))
+                    : missing,
+                cancellationToken);
+            var generatedIndex = 0;
+            var internalNumbers = new List<string>(missing);
+            for (var i = 0; i < missing; i++)
+            {
+                var requested = requestedNewSerials.Count > i ? requestedNewSerials[i].InternalSerialNumber?.Trim() : null;
+                internalNumbers.Add(string.IsNullOrWhiteSpace(requested)
+                    ? generatedInternalNumbers[generatedIndex++]
+                    : requested);
+            }
+            if (internalNumbers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != internalNumbers.Count)
+            {
+                throw new InvalidOperationException("Mã serial nội bộ không được trùng nhau.");
+            }
+            var duplicateInternal = await _productSerialRepository.GetQuery()
+                .AsNoTracking()
+                .AnyAsync(x => !x.IsDeleted && x.InternalSerialNumber != null && internalNumbers.Contains(x.InternalSerialNumber), cancellationToken);
+            if (duplicateInternal)
+            {
+                throw new InvalidOperationException("Mã serial nội bộ đã tồn tại trong hệ thống.");
+            }
+            for (var i = 0; i < missing; i++)
+            {
+                var requestedCost = requestedNewSerials.Count > i ? requestedNewSerials[i].UnitCost : null;
+                unitCost = requestedCost ?? transaction.UnitCost ?? product.CostPrice;
+                if (!unitCost.HasValue || unitCost.Value < 0m)
+                {
+                    throw new InvalidOperationException("Cần nhập giá vốn không âm trước khi tăng tồn serial.");
+                }
+                var serial = new ProductSerial
+                {
+                    CreatedById = userId,
+                    ProductId = product.Id,
+                    InternalSerialNumber = internalNumbers[i],
+                    ManufacturerSerialNumber = product.SerialTrackingMode == SerialTrackingMode.ManufacturerSerial
+                        ? manufacturerNumbers[i]
+                        : null,
+                    // A newly generated adjustment serial is activated below; keeping it
+                    // voided first makes cancellation restore it to a non-stock state.
+                    Status = ProductSerialStatus.Voided,
+                    CurrentWarehouseId = null,
+                    UnitCost = unitCost.Value
+                };
+                await _productSerialRepository.CreateAsync(serial, cancellationToken);
+                serials.Add(serial);
+                serialIds.Add(serial.Id);
+            }
+        }
+
+        if (transaction.ModuleName == nameof(StockCount)
+            && transaction.Status == InventoryTransactionStatus.Draft
+            && serials.Count < quantity)
+        {
+            return;
+        }
 
         if (quantity != serials.Count)
         {
@@ -560,6 +715,34 @@ public class ProductSerialService
             .ToListAsync(cancellationToken);
     }
 
+    private static List<StockCountNewSerialInput> DeserializePendingSerialInputs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<StockCountNewSerialInput>();
+        try
+        {
+            var inputs = JsonSerializer.Deserialize<List<StockCountNewSerialInput>>(json);
+            if (inputs != null && inputs.Any(x => !string.IsNullOrWhiteSpace(x.InternalSerialNumber)
+                || !string.IsNullOrWhiteSpace(x.ManufacturerSerialNumber))) return inputs;
+
+            return (JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>())
+                .Select(x => new StockCountNewSerialInput { ManufacturerSerialNumber = x })
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            try
+            {
+                return (JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>())
+                    .Select(x => new StockCountNewSerialInput { ManufacturerSerialNumber = x })
+                    .ToList();
+            }
+            catch (JsonException)
+            {
+                return new List<StockCountNewSerialInput>();
+            }
+        }
+    }
+
     private async Task<List<ProductSerial>> GetSerialsByIdsAsync(IReadOnlyCollection<string> serialIds, CancellationToken cancellationToken)
     {
         return await _productSerialRepository
@@ -647,6 +830,11 @@ public class ProductSerialService
 
         foreach (var serial in serials)
         {
+            var isNewStockCountSerial = transaction.ModuleName == nameof(StockCount)
+                && transaction.Status == InventoryTransactionStatus.Confirmed
+                && serial.Status == ProductSerialStatus.Voided
+                && string.IsNullOrWhiteSpace(serial.PurchaseOrderItemId)
+                && string.IsNullOrWhiteSpace(serial.SalesOrderItemId);
             ValidateSerialForTransaction(transaction, serial);
             serial.Status = targetStatus;
             serial.UpdatedById = userId;
@@ -670,7 +858,12 @@ public class ProductSerialService
                 serial.CustomerWarrantyEndDate = warrantyEndDate;
             }
 
-            _productSerialRepository.Update(serial);
+            // A stock-count adjustment serial was just added in this unit of work.
+            // Keep its Added state so EF inserts it instead of updating a missing row.
+            if (!isNewStockCountSerial)
+            {
+                _productSerialRepository.Update(serial);
+            }
         }
     }
 
@@ -758,12 +951,21 @@ public class ProductSerialService
             return;
         }
 
-        if (serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.Reserved && serial.Status != ProductSerialStatus.ReturnedByCustomer && serial.Status != targetStatus)
+        var isNewStockCountSerial = transaction.ModuleName == nameof(StockCount)
+            && transaction.Status == InventoryTransactionStatus.Confirmed
+            && serial.Status == ProductSerialStatus.Voided
+            && string.IsNullOrWhiteSpace(serial.PurchaseOrderItemId)
+            && string.IsNullOrWhiteSpace(serial.SalesOrderItemId);
+        if (!isNewStockCountSerial
+            && serial.Status != ProductSerialStatus.InStock && serial.Status != ProductSerialStatus.Reserved && serial.Status != ProductSerialStatus.ReturnedByCustomer && serial.Status != targetStatus)
         {
             throw new Exception("Serial đã chọn hiện không còn sẵn trong kho.");
         }
 
-        if (!string.IsNullOrWhiteSpace(transaction.WarehouseId) && serial.CurrentWarehouseId != transaction.WarehouseId && serial.Status != targetStatus)
+        if (!isNewStockCountSerial
+            && !string.IsNullOrWhiteSpace(transaction.WarehouseId)
+            && serial.CurrentWarehouseId != transaction.WarehouseId
+            && serial.Status != targetStatus)
         {
             throw new Exception("Serial đã chọn không nằm trong kho hiện tại.");
         }

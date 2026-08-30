@@ -171,6 +171,15 @@
                                                 <label for="OpeningStockQuantity">Opening Stock</label>
                                                 <input id="OpeningStockQuantity" ref="openingStockQuantityRef">
                                                 <label class="text-danger d-block">{{ state.errors.openingStockQuantity }}</label>
+                                                <div class="alert alert-info py-2 mb-2" v-if="state.physical && state.id !== '' && state.originalSerialTrackingMode === 0">
+                                                    Điều chỉnh tồn đầu kỳ sẽ tạo một phiếu kiểm kê điều chỉnh và giữ nguyên lịch sử tồn đầu kỳ ban đầu.
+                                                </div>
+                                                <div class="alert alert-warning py-2 mb-2" v-else-if="state.physical && state.id !== '' && state.originalSerialTrackingMode === 1">
+                                                    Hàng tự sinh serial không chỉnh tồn đầu kỳ tại đây. Hãy vào Phiếu kiểm kê để điều chỉnh; serial mới sẽ được sinh khi xác nhận.
+                                                </div>
+                                                <div class="alert alert-warning py-2 mb-2" v-else-if="state.physical && state.id !== '' && state.originalSerialTrackingMode === 2">
+                                                    Hàng serial nhà sản xuất không chỉnh tồn đầu kỳ tại đây. Hãy vào Phiếu kiểm kê và nhập mã serial mới, hoặc nhập ban đầu qua Đơn mua hàng.
+                                                </div>
                                                 <small class="text-muted d-block" v-if="state.physical && state.id === '' && state.serialTrackingMode !== 2">
                                                     Opening stock uses the default warehouse when first entered.
                                                 </small>
