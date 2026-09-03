@@ -20,10 +20,16 @@ async function enterDate(page, displayDate) {
 
 async function enterPaidAmount(page, amount) {
     const paidAmountInput = page.locator('#PaidAmountInput');
+    const editable = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 6 }).format(amount);
     await paidAmountInput.click();
     await paidAmountInput.press('Control+A');
-    await paidAmountInput.pressSequentially(new Intl.NumberFormat('vi-VN').format(amount));
+    await paidAmountInput.pressSequentially(editable);
+    await expect(paidAmountInput).toHaveValue(editable);
     await paidAmountInput.press('Tab');
+    await expect(paidAmountInput).toHaveValue(new Intl.NumberFormat('vi-VN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(amount));
 }
 
 async function selectCashAccount(page, accountName) {
@@ -91,7 +97,7 @@ test('Cash Transaction cho sửa ngày giao dịch ở trạng thái chưa, mộ
             status: /Thanh toán một phần|Partially Paid/i,
             displayDate: '21/08/2026',
             apiDate: '2026-08-21',
-            paidAmount: Math.floor(fixture.transaction.amount / 2)
+            paidAmount: Number((Math.floor(fixture.transaction.amount / 2) + 0.123456).toFixed(6))
         },
         {
             status: /Đã thanh toán|Paid/i,

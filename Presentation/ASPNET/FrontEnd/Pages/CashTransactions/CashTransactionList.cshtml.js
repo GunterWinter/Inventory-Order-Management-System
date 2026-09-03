@@ -68,11 +68,15 @@ const App = {
         const toAccountRef = Vue.ref(null);
         const transferAmountRef = Vue.ref(null);
         let allocationRowSequence = 0;
-        const createAllocationRow = allocation => ({
-            ...allocation,
-            amount: allocation?.amount == null ? '' : NumberFormatManager.formatToLocale(allocation.amount),
-            __uiKey: allocation?.__uiKey ?? `allocation-${++allocationRowSequence}`
-        });
+        const createAllocationRow = allocation => {
+            const amountValue = Number(allocation?.amountValue ?? allocation?.amount ?? 0);
+            return {
+                ...allocation,
+                amount: allocation?.amount == null ? '' : NumberFormatManager.formatMoneyToLocale(amountValue),
+                amountValue,
+                __uiKey: allocation?.__uiKey ?? `allocation-${++allocationRowSequence}`
+            };
+        };
 
         const transactionTypeOptions = [
             { value: 0, text: 'Debit' },
@@ -328,7 +332,7 @@ const App = {
             canEditRestrictedFields: () => !state.viewMode && !state.deleteMode,
             canEditPaidAmount: () => !state.viewMode && !state.deleteMode,
             canEditCashAccount: () => !state.viewMode && !state.deleteMode
-            ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (NumberFormatManager.parseLocaleNumber(row.amount) || 0), 0)
+            ,allocationTotal: () => state.allocationRows.reduce((sum, row) => sum + (Number(row.amountValue) || 0), 0)
             ,validateAllocations: () => {
                 if (state.allocationRows.length === 0 || !methods.canEditPrimaryFields()) return true;
                 return Math.abs(methods.allocationTotal() - (Number(state.amount) || 0)) <= 0.000001;
@@ -339,7 +343,12 @@ const App = {
             }
             ,onAllocationAmountInput: (row, event) => {
                 row.amount = event?.target?.value ?? '';
+                row.amountValue = NumberFormatManager.readInputValue(event?.target) ?? 0;
                 Vue.nextTick(() => methods.syncAmountFromAllocations());
+            }
+            ,onAllocationAmountBlur: (row, event) => {
+                row.amountValue = NumberFormatManager.readInputValue(event?.target) ?? 0;
+                row.amount = NumberFormatManager.formatMoneyToLocale(row.amountValue);
             }
             ,partnerOptions: () => state.partnerList
             ,refreshAllocationDropdowns: () => Vue.nextTick(() => {
@@ -480,7 +489,9 @@ const App = {
             create: () => {
                 amountInput.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Enter Amount',
-                    format: 'N0',
+                    numericKind: 'money',
+                    format: 'N2',
+                    decimals: 6,
                     min: 0,
                     change: (args) => { state.amount = args.value; }
                 });
@@ -547,7 +558,9 @@ const App = {
             create: () => {
                 transferAmountInput.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Enter Amount',
-                    format: 'N0',
+                    numericKind: 'money',
+                    format: 'N2',
+                    decimals: 6,
                     min: 0,
                     change: (args) => { state.transfer.amount = args.value; }
                 });
@@ -567,7 +580,9 @@ const App = {
             create: () => {
                 paidAmountInput.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Paid Amount',
-                    format: 'N0',
+                    numericKind: 'money',
+                    format: 'N2',
+                    decimals: 6,
                     min: 0,
                     change: (args) => { state.paidAmount = args.value; }
                 });
@@ -684,7 +699,7 @@ const App = {
                         sourceModule: state.sourceModule,
                         sourceModuleId: state.sourceModuleId,
                         sourceModuleNumber: state.sourceModuleNumber,
-                        allocations: state.allocationRows.map(row => ({ customerId: row.customerId || null, amount: NumberFormatManager.parseLocaleNumber(row.amount) || 0, description: row.description || null })).filter(row => row.amount > 0),
+                        allocations: state.allocationRows.map(row => ({ customerId: row.customerId || null, amount: Number(row.amountValue) || 0, description: row.description || null })).filter(row => row.amount > 0),
                     };
 
                     let response;
@@ -876,7 +891,7 @@ const App = {
                         { field: 'description', headerText: 'Description', width: 250, minWidth: 250 },
                         { field: 'amount', headerText: 'Original Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
                         { field: 'paidAmount', headerText: 'Paid Amount', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
-                        { field: 'remaining', headerText: 'Remaining', width: 150, minWidth: 150, textAlign: 'Right', format: 'N0' },
+                        { field: 'remaining', headerText: 'Remaining', width: 150, minWidth: 150, textAlign: 'Right', numericKind: 'money' },
                         { field: 'partnerName', headerText: 'Partner', width: 180, minWidth: 180 },
                         { field: 'cashCategoryName', headerText: 'Cash Category', width: 150, minWidth: 150 },
                         { field: 'sourceModuleNumber', headerText: 'Source', width: 130, minWidth: 130 },

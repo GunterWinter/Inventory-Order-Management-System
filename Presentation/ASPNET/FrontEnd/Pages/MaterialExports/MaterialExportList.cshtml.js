@@ -1019,7 +1019,7 @@ const App = {
                             width: 160,
                             allowEditing: false,
                             textAlign: 'Right',
-                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatToLocale(data.unitCost, 0, 6)
+                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatMoneyToLocale(data.unitCost)
                         },
                         {
                             field: 'totalCost',
@@ -1027,7 +1027,7 @@ const App = {
                             width: 160,
                             allowEditing: false,
                             textAlign: 'Right',
-                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatToLocale(data.totalCost, 0, 6)
+                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatMoneyToLocale(data.totalCost)
                         },
                         {
                             field: 'costStatus',

@@ -62,7 +62,7 @@ window.ProductSerialPicker = (() => {
     };
 
     const formatDate = (value) => value ? DateFormatManager.formatToLocale(new Date(value)) : '';
-    const formatCost = (value) => NumberFormatManager.formatToLocale(value ?? 0, 0, 6);
+    const formatCost = (value) => NumberFormatManager.formatMoneyToLocale(value ?? 0);
 
     const updateSummary = (items, selectedIds) => {
         const selected = items.filter(item => selectedIds.has(item.id));

@@ -537,6 +537,7 @@ const App = {
             obj: null,
             create: () => {
                 defaultWarrantyMonthsNumber.obj = new ej.inputs.NumericTextBox({
+                    numericKind: 'integer',
                     format: 'n0',
                     placeholder: 'Enter Warranty Months',
                     min: 0,
@@ -561,10 +562,11 @@ const App = {
             create: () => {
                 openingStockNumber.obj = new ej.inputs.NumericTextBox({
                     value: getOpeningStockValue() ?? 0,
-                    format: 'n6',
+                    numericKind: getEffectiveSerialTrackingMode() === 1 ? 'integer' : 'decimal',
+                    format: getEffectiveSerialTrackingMode() === 1 ? 'n0' : 'n6',
                     min: 0,
-                    decimals: 6,
-                    validateDecimalOnType: false,
+                    decimals: getEffectiveSerialTrackingMode() === 1 ? 0 : 6,
+                    validateDecimalOnType: getEffectiveSerialTrackingMode() === 1,
                     enabled: isOpeningStockEditable(),
                     change: (e) => {
                         state.openingStockQuantity = e.value ?? 0;
@@ -580,11 +582,12 @@ const App = {
                 }
 
                 const requiresWholeNumber = getEffectiveSerialTrackingMode() === 1;
+                NumberFormatManager.configureNumericTextBox(openingStockNumber.obj, {
+                    kind: requiresWholeNumber ? 'integer' : 'decimal',
+                    min: 0
+                });
                 openingStockNumber.obj.setProperties({
                     value: getOpeningStockValue() ?? 0,
-                    format: requiresWholeNumber ? 'n0' : 'n6',
-                    decimals: requiresWholeNumber ? 0 : 6,
-                    validateDecimalOnType: requiresWholeNumber,
                     enabled: isOpeningStockEditable()
                 }, true);
                 openingStockNumber.obj.dataBind();
@@ -595,7 +598,8 @@ const App = {
             obj: null,
             create: () => {
                 costPriceNumber.obj = new ej.inputs.NumericTextBox({
-                    format: 'n6',
+                    numericKind: 'money',
+                    format: 'n2',
                     placeholder: 'Enter Cost Price',
                     min: 0,
                     step: 0.01,
@@ -619,7 +623,8 @@ const App = {
             obj: null,
             create: () => {
                 unitPriceNumber.obj = new ej.inputs.NumericTextBox({
-                    format: 'n6',
+                    numericKind: 'money',
+                    format: 'n2',
                     placeholder: 'Enter Unit Price',
                     min: 0,
                     step: 0.01,

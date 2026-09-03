@@ -150,7 +150,9 @@ const App = {
             create: () => {
                 initialBalanceInput.obj = new ej.inputs.NumericTextBox({
                     placeholder: 'Enter Initial Balance',
-                    format: 'N0',
+                    numericKind: 'money',
+                    format: 'N2',
+                    decimals: 6,
                     min: 0,
                     value: 0,
                     change: (args) => {

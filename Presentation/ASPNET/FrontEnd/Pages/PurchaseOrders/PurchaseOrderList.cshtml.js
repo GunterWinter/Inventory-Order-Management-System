@@ -850,7 +850,7 @@ const App = {
                     if (customerAllocations.length > 0) {
                         previewData = customerAllocations.map((alloc, idx) => {
                             const poItem = state.secondaryData.find(x => x.id === alloc.purchaseOrderItemId);
-                            const calcPrice = poItem ? ((poItem.afterTaxAmount || 0) / (poItem.quantity > 0 ? poItem.quantity : 1)) : alloc.unitPrice;
+                            const sourceUnitPrice = poItem?.unitPrice ?? alloc.unitPrice ?? 0;
                             return {
                                 id: alloc.id,
                                 poItemId: alloc.purchaseOrderItemId,
@@ -859,8 +859,8 @@ const App = {
                                 remainingQuantity: 0,
                                 customerId: alloc.customerId,
                                 allocateQuantity: alloc.quantity,
-                                allocateUnitPrice: calcPrice,
-                                allocateTotal: alloc.quantity * calcPrice
+                                allocateUnitPrice: sourceUnitPrice,
+                                allocateTotal: alloc.quantity * sourceUnitPrice
                             };
                         });
                     }
@@ -870,7 +870,6 @@ const App = {
                     for (const item of poItems) {
                         const hasRow = previewData.some(x => x.poItemId === item.id);
                         if (!hasRow) {
-                            const calcPrice = (item.afterTaxAmount || 0) / (item.quantity > 0 ? item.quantity : 1);
                             previewData.push({
                                 id: `alloc_def_${item.id}_${Date.now()}`,
                                 poItemId: item.id,
@@ -879,7 +878,7 @@ const App = {
                                 remainingQuantity: 0,
                                 customerId: null,
                                 allocateQuantity: 0,
-                                allocateUnitPrice: calcPrice,
+                                allocateUnitPrice: item.unitPrice ?? 0,
                                 allocateTotal: 0
                             });
                         }
@@ -1392,7 +1391,7 @@ const App = {
         const editManufacturerSerials = async (rowData, refreshQuantity, editorElement = null) => {
             if (!isManufacturerSerialProduct(rowData.productId)) return;
             const serials = [...(rowData.manufacturerSerialNumbers ?? [])];
-            const unitCostText = NumberFormatManager.formatToLocale(rowData.unitPrice ?? 0, 0, 6);
+            const unitCostText = NumberFormatManager.formatMoneyToLocale(rowData.unitPrice ?? 0);
             const result = await Swal.fire({
                 title: 'Mã serial nhà sản xuất',
                 html: `<div class="alert alert-light border text-start py-2">Giá vốn mỗi serial: <strong>${unitCostText}</strong> (đơn giá dòng mua hàng)</div><div id="manufacturer-serial-list" class="text-start"></div><button type="button" id="manufacturer-serial-add" class="btn btn-outline-primary btn-sm mt-2">Thêm serial</button>`,
@@ -1586,6 +1585,7 @@ const App = {
                                 write: (args) => {
                                     supplierWarrantyObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.supplierWarrantyMonths ?? 6,
+                                        numericKind: 'integer',
                                         format: 'n0',
                                         decimals: 0,
                                         min: 0,
@@ -2352,7 +2352,6 @@ const App = {
                 }
 
                 let allocQtyObj = null;
-                let allocPriceObj = null;
                 let customerDropObj = null;
                 let customerEditorRow = null;
 
@@ -2449,7 +2448,7 @@ const App = {
                             width: 140,
                             valueAccessor: (field, data) => state.warehouseListLookupData.find(item => item.id === data[field])?.name ?? ''
                         },
-                        { field: 'remainingQuantity', headerText: 'Remaining', width: 80, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        { field: 'remainingQuantity', headerText: 'Remaining', width: 80, type: 'number', numericKind: 'decimal', textAlign: 'Right', allowEditing: false },
                         {
                             field: 'customerId',
                             headerText: 'Customer',
@@ -2511,7 +2510,7 @@ const App = {
                             headerText: 'Allocation Quantity',
                             width: 100,
                             type: 'number',
-                            format: 'N0',
+                            numericKind: 'decimal',
                             textAlign: 'Right',
                             edit: {
                                 create: () => {
@@ -2519,7 +2518,7 @@ const App = {
                                     return elem;
                                 },
                                 read: () => {
-                                    return allocQtyObj ? allocQtyObj.value : 0;
+                                    return NumberFormatManager.readNumericTextBoxValue(allocQtyObj) ?? 0;
                                 },
                                 destroy: () => {
                                     if (allocQtyObj) allocQtyObj.destroy();
@@ -2530,9 +2529,10 @@ const App = {
                                         value: args.rowData.allocateQuantity,
                                         min: 0,
                                         max: maxAllowable,
-                                        format: 'n0',
-                                        decimals: 0,
-                                        validateDecimalOnType: true,
+                                        numericKind: isSerialTrackedProduct(args.rowData.productId) ? 'integer' : 'decimal',
+                                        format: isSerialTrackedProduct(args.rowData.productId) ? 'n0' : 'n6',
+                                        decimals: isSerialTrackedProduct(args.rowData.productId) ? 0 : 6,
+                                        validateDecimalOnType: isSerialTrackedProduct(args.rowData.productId),
                                         change: (e) => {
                                             if (args.rowData) {
                                                 const oldQty = args.rowData.allocateQuantity || 0;
@@ -2556,8 +2556,6 @@ const App = {
                                                     // Update UI for remainingQuantity and allocateTotal cells
                                                     const allTrs = costAllocationPreviewGrid.obj.getContentTable().querySelectorAll('.e-row');
                                                     const remainingCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('remainingQuantity');
-                                                    const totalCellIdx = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
-
                                                     allTrs.forEach(tr => {
                                                         const rowData = costAllocationPreviewGrid.obj.getRowInfo(tr).rowData;
                                                         if (rowData && rowData.poItemId === args.rowData.poItemId) {
@@ -2572,7 +2570,7 @@ const App = {
                                                 if (tr && costAllocationPreviewGrid.obj) {
                                                     const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
                                                     if (cellIndex !== -1 && tr.cells[cellIndex]) {
-                                                        tr.cells[cellIndex].innerText = NumberFormatManager.formatToLocale(newTotal);
+                                                        tr.cells[cellIndex].innerText = NumberFormatManager.formatMoneyToLocale(newTotal);
                                                     }
                                                 }
                                             }
@@ -2587,53 +2585,11 @@ const App = {
                             headerText: 'Unit Price',
                             width: 130,
                             type: 'number',
-                            format: 'N0',
+                            numericKind: 'money',
                             textAlign: 'Right',
-                            edit: {
-                                create: () => {
-                                    const elem = document.createElement('input');
-                                    return elem;
-                                },
-                                read: () => {
-                                    return allocPriceObj ? allocPriceObj.value : 0;
-                                },
-                                destroy: () => {
-                                    if (allocPriceObj) allocPriceObj.destroy();
-                                },
-                                write: (args) => {
-                                    allocPriceObj = new ej.inputs.NumericTextBox({
-                                        value: args.rowData.allocateUnitPrice,
-                                        min: 0,
-                                        format: 'N0',
-                                        change: (e) => {
-                                            if (args.rowData) {
-                                                args.rowData.allocateUnitPrice = e.value;
-                                                const newTotal = (args.rowData.allocateQuantity || 0) * (e.value || 0);
-                                                args.rowData.allocateTotal = newTotal;
-
-                                                if (costAllocationPreviewGrid.obj) {
-                                                    const actualRow = costAllocationPreviewGrid.obj.dataSource.find(x => x.id === args.rowData.id);
-                                                    if (actualRow) {
-                                                        actualRow.allocateUnitPrice = e.value;
-                                                        actualRow.allocateTotal = newTotal;
-                                                    }
-                                                }
-
-                                                const tr = args.element.closest('tr');
-                                                if (tr && costAllocationPreviewGrid.obj) {
-                                                    const cellIndex = costAllocationPreviewGrid.obj.getColumnIndexByField('allocateTotal');
-                                                    if (cellIndex !== -1 && tr.cells[cellIndex]) {
-                                                        tr.cells[cellIndex].innerText = NumberFormatManager.formatToLocale(newTotal);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    });
-                                    allocPriceObj.appendTo(args.element);
-                                }
-                            }
+                            allowEditing: false
                         },
-                        { field: 'allocateTotal', headerText: 'Total', width: 130, type: 'number', format: 'N0', textAlign: 'Right', allowEditing: false },
+                        { field: 'allocateTotal', headerText: 'Total', width: 130, type: 'number', numericKind: 'money', textAlign: 'Right', allowEditing: false },
                     ],
                     cellSave: (args) => {
                         // Recalculate total after cell save
@@ -2686,7 +2642,7 @@ const App = {
                 existingCashAccountId = history.cashAccountId ?? existingCashAccountId;
             }
             const remainingAmountValue = Math.max(0, totalAmountValue - paidAmountValue);
-            const displayAmount = NumberFormatManager.formatToLocale(0, 0, 0);
+            const displayAmount = NumberFormatManager.formatMoneyToLocale(0);
             const now = new Date();
             const defaultPaymentDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
                 .toISOString().slice(0, 10);
@@ -2734,7 +2690,7 @@ const App = {
                         </div>
                         <div class="purchase-payment-form">
                             <div class="form-group mb-3"><label for="swal-payment-date" class="d-block font-weight-bold mb-2">${text('Ngày thanh toán', 'Payment Date')}</label><input id="swal-payment-date" type="date" class="form-control" value="${defaultPaymentDate}"></div>
-                            <div class="form-group mb-3"><label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Số tiền trả lần này', 'Payment This Time')}</label><input id="swal-amount" class="form-control" data-number-format="true" inputmode="numeric" value="${displayAmount}"></div>
+                            <div class="form-group mb-3"><label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Số tiền trả lần này', 'Payment This Time')}</label><input id="swal-amount" class="form-control" data-number-format="true" data-numeric-kind="money" inputmode="decimal" value="${displayAmount}"></div>
                             ${descHtml}
                         </div>
                         ${paymentHistoryHtml}
@@ -2769,7 +2725,7 @@ const App = {
                 },
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
-                    const parsedAmount = NumberFormatManager.parseLocaleNumber(document.getElementById('swal-amount').value) ?? 0;
+                    const parsedAmount = NumberFormatManager.readInputValue(document.getElementById('swal-amount')) ?? 0;
                     if (!accountId) {
                         Swal.showValidationMessage(text('Chọn tài khoản thanh toán.', 'Select a payment account.'));
                         return false;

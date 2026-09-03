@@ -1495,6 +1495,7 @@ const App = {
                                 write: (args) => {
                                     warrantyObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.warrantyMonths ?? null,
+                                        numericKind: 'integer',
                                         format: 'n0',
                                         min: 0,
                                         decimals: 0,
@@ -1633,8 +1634,9 @@ const App = {
                                 },
                                 write: (args) => {
                                     totalObj = new ej.inputs.NumericTextBox({
-                                        format: 'n0',
-                                        decimals: 0,
+                                        numericKind: 'money',
+                                        format: 'n2',
+                                        decimals: 6,
                                         value: args.rowData.total ?? 0,
                                         readonly: true
                                     });
@@ -1716,8 +1718,9 @@ const App = {
                                 write: (args) => {
                                     taxAmountObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.taxAmount ?? 0,
-                                        format: 'N0',
-                                        decimals: 0,
+                                        numericKind: 'money',
+                                        format: 'N2',
+                                        decimals: 6,
                                         readonly: true
                                     });
                                     taxAmountObj.appendTo(args.element);
@@ -1749,8 +1752,9 @@ const App = {
                                 write: (args) => {
                                     afterTaxAmountObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.afterTaxAmount ?? 0,
-                                        format: 'N0',
-                                        decimals: 0,
+                                        numericKind: 'money',
+                                        format: 'N2',
+                                        decimals: 6,
                                         readonly: true
                                     });
                                     afterTaxAmountObj.appendTo(args.element);
@@ -1838,8 +1842,9 @@ const App = {
                                 write: (args) => {
                                     cogsObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.cogsAmount ?? 0,
-                                        format: 'N0',
-                                        decimals: 0,
+                                        numericKind: 'money',
+                                        format: 'N2',
+                                        decimals: 6,
                                         readonly: true
                                     });
                                     cogsObj.appendTo(args.element);
@@ -1871,8 +1876,9 @@ const App = {
                                 write: (args) => {
                                     profitObj = new ej.inputs.NumericTextBox({
                                         value: args.rowData.profitAmount ?? 0,
-                                        format: 'N0',
-                                        decimals: 0,
+                                        numericKind: 'money',
+                                        format: 'N2',
+                                        decimals: 6,
                                         readonly: true
                                     });
                                     profitObj.appendTo(args.element);
@@ -2327,7 +2333,7 @@ const App = {
                             </div>
                             <div class="form-group mb-3">
                                 <label for="swal-amount" class="d-block font-weight-bold mb-2">${text('Thanh toán lần này', 'Payment This Time')}</label>
-                                <input id="swal-amount" class="form-control" inputmode="numeric" data-number-format="true" value="${NumberFormatManager.formatMoneyToLocale(remainingAmountValue)}">
+                                <input id="swal-amount" class="form-control" inputmode="decimal" data-number-format="true" data-numeric-kind="money" value="${NumberFormatManager.formatMoneyToLocale(remainingAmountValue)}">
                             </div>
                             <div class="form-group mb-0">
                                 <label for="swal-desc" class="d-block font-weight-bold mb-2">${text('Diễn giải', 'Description')}</label>
@@ -2361,8 +2367,7 @@ const App = {
                 preConfirm: () => {
                     const accountId = document.getElementById('swal-account').value;
                     const categoryId = defaultCashCategoryId;
-                    const rawAmountValue = document.getElementById('swal-amount').value ?? '0';
-                    const parsedAmount = NumberFormatManager.parseLocaleNumber(rawAmountValue) ?? 0;
+                    const parsedAmount = NumberFormatManager.readInputValue(document.getElementById('swal-amount')) ?? 0;
                     if (!accountId) {
                         Swal.showValidationMessage(text('Vui lòng chọn tài khoản quỹ.', 'Select a cash account.'));
                         return false;

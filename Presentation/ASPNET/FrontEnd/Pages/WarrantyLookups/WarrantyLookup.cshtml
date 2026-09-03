@@ -65,8 +65,8 @@
                                     <div class="col-md-4"><label class="form-label text-muted small">Product</label><div>{{ state.docData.allocationProductName || '—' }}</div></div>
                                     <div class="col-md-4"><label class="form-label text-muted small">Warehouse</label><div>{{ state.docData.allocationWarehouseName || '—' }}</div></div>
                                     <div class="col-md-4"><label class="form-label text-muted small">Quantity</label><div>{{ methods.formatNumber(state.docData.allocationQuantity) }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Unit Price</label><div>{{ methods.formatNumber(state.docData.allocationUnitPrice) }}</div></div>
-                                    <div class="col-md-4"><label class="form-label text-muted small">Total</label><div class="fw-bold">{{ methods.formatNumber(state.docData.allocationTotal) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Unit Price</label><div>{{ methods.formatMoney(state.docData.allocationUnitPrice) }}</div></div>
+                                    <div class="col-md-4"><label class="form-label text-muted small">Total</label><div class="fw-bold">{{ methods.formatMoney(state.docData.allocationTotal) }}</div></div>
                                 </div>
                             </div>
                             <div class="card-footer bg-white text-end" v-if="state.docData.purchaseOrderId">
@@ -129,8 +129,8 @@
                                                 </td>
                                                 <td class="align-middle">{{ item.warehouse?.name }}</td>
                                                 <td class="text-end align-middle">{{ methods.formatNumber(item.quantity) }}</td>
-                                                <td class="text-end align-middle">{{ methods.formatNumber(item.unitPrice) }}</td>
-                                                <td class="text-end fw-bold pe-3 align-middle">{{ methods.formatNumber(item.quantity * item.unitPrice) }}</td>
+                                                <td class="text-end align-middle">{{ methods.formatMoney(item.unitPrice) }}</td>
+                                                <td class="text-end fw-bold pe-3 align-middle">{{ methods.formatMoney(item.quantity * item.unitPrice) }}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -141,15 +141,15 @@
                                     <div class="col-md-4 pe-3">
                                         <div class="d-flex justify-content-between mb-2">
                                             <span class="text-muted">Subtotal:</span>
-                                            <span>{{ methods.formatNumber(state.docData.beforeTaxAmount) }}</span>
+                                            <span>{{ methods.formatMoney(state.docData.beforeTaxAmount) }}</span>
                                         </div>
                                         <div class="d-flex justify-content-between mb-2">
                                             <span class="text-muted">Tax:</span>
-                                            <span>{{ methods.formatNumber(state.docData.taxAmount) }}</span>
+                                            <span>{{ methods.formatMoney(state.docData.taxAmount) }}</span>
                                         </div>
                                         <div class="d-flex justify-content-between mt-3 pt-2 border-top">
                                             <span class="fw-bold">Total:</span>
-                                            <span class="fw-bold text-success fs-5">{{ methods.formatNumber(state.docData.afterTaxAmount) }}</span>
+                                            <span class="fw-bold text-success fs-5">{{ methods.formatMoney(state.docData.afterTaxAmount) }}</span>
                                         </div>
                                     </div>
                                 </div>

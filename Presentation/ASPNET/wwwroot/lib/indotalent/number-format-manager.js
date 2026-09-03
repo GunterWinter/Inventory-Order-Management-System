@@ -6,7 +6,7 @@
     const MAX_FRACTION_DIGITS = 6;
     const MONEY_FRACTION_DIGITS = 2;
     const MONEY_FORMAT = 'N2';
-    const MONEY_FIELD_PATTERN = /(price|amount|balance|debit|credit|receipt|expense|revenue|debt|paid|payment|cost|profit|cogs|subtotal|total|sales)/i;
+    const MONEY_FIELD_PATTERN = /(price|amount|balance|debit|credit|receipt|expense|revenue|debt|paid|payment|cost|profit|cogs|subtotal|total|sales|cashflow|obligation)/i;
     const QUANTITY_FIELD_PATTERN = /(quantity|qty|stock|movement)/i;
     const DECIMAL_FIELD_PATTERN = /(quantity|qty|stock|movement|price|amount|cost|profit|cogs|subtotal|total|rate|percentage)/i;
     const INTEGER_FIELD_PATTERN = /(month|warranty|year|page|sequence|serial)/i;
@@ -57,8 +57,9 @@
 
     function roundMoney(value) {
         const safeValue = toFiniteNumber(value);
-        const factor = 10 ** MONEY_FRACTION_DIGITS;
-        return Math.sign(safeValue) * Math.round((Math.abs(safeValue) + Number.EPSILON) * factor) / factor;
+        const factor = 10 ** MAX_FRACTION_DIGITS;
+        const absoluteValue = Math.abs(safeValue);
+        return Math.sign(safeValue) * Math.round((absoluteValue + Number.EPSILON * absoluteValue) * factor) / factor;
     }
 
     function formatInteger(value) {
@@ -91,6 +92,8 @@
     }
 
     function isMoneyNumericTextBox(numericTextBox) {
+        if (numericTextBox?.numericKind === NUMERIC_KIND.money
+            || numericTextBox?.element?.dataset?.numericKind === NUMERIC_KIND.money) return true;
         return isMoneyText([
             numericTextBox?.placeholder,
             numericTextBox?.element?.id,
@@ -121,7 +124,7 @@
 
         const moneyInput = numericKind === NUMERIC_KIND.money || isMoneyText(identity);
         numericTextBox.format = moneyInput ? 'n2' : 'n6';
-        numericTextBox.decimals = moneyInput ? MONEY_FRACTION_DIGITS : MAX_FRACTION_DIGITS;
+        numericTextBox.decimals = MAX_FRACTION_DIGITS;
         numericTextBox.validateDecimalOnType = false;
     }
 
@@ -172,6 +175,18 @@
         }
     }
 
+    function normalizeGridAggregateColumn(column, gridColumns) {
+        const sourceColumn = gridColumns.find(item => item.field === column?.field);
+        const numericKind = column?.numericKind ?? sourceColumn?.numericKind;
+        const columnText = getColumnText({ ...sourceColumn, ...column });
+        const integerColumn = numericKind === NUMERIC_KIND.integer || INTEGER_FIELD_PATTERN.test(columnText);
+        if (numericKind === NUMERIC_KIND.money || isMoneyText(columnText)) {
+            column.format = MONEY_FORMAT;
+        } else if (!integerColumn && (numericKind === NUMERIC_KIND.decimal || DECIMAL_FIELD_PATTERN.test(columnText))) {
+            column.format = `N${MAX_FRACTION_DIGITS}`;
+        }
+    }
+
     function splitEditableNumber(value) {
         const rawValue = `${value ?? ''}`.trim();
         const sign = rawValue.startsWith('-') ? '-' : '';
@@ -189,7 +204,7 @@
                 .slice(0, MAX_FRACTION_DIGITS);
         }
 
-        integerPart = integerPart.replace(/\D/g, '');
+        integerPart = integerPart.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
 
         return {
             sign,
@@ -236,13 +251,17 @@
         return Number.isFinite(parsedValue) ? parsedValue : null;
     }
 
-    function syncNumericDisplay(numericTextBox) {
+    function syncNumericDisplay(numericTextBox, preserveStoredValue = false) {
         const element = numericTextBox?.element;
         if (!element) {
             return;
         }
 
-        const value = numericTextBox.value ?? parseLocaleNumber(element.value);
+        const storedValue = Number(element.dataset.localeNumericValue);
+        const value = preserveStoredValue && element.dataset.localeNumericValue !== '' && Number.isFinite(storedValue)
+            ? storedValue
+            : numericTextBox.value ?? parseLocaleNumber(element.value);
+        element.dataset.localeNumericValue = value == null ? '' : `${value}`;
         element.value = value == null
             ? ''
             : (element.dataset.moneyFormat === 'true' ? formatMoney(value) : formatNumber(value));
@@ -366,7 +385,7 @@
             element.dataset.localeNumericValue = parsedValue == null ? '' : `${parsedValue}`;
             element.value = parsedValue == null ? '' : `${parsedValue}`;
             componentValuePrepared = true;
-            setTimeout(() => syncNumericDisplay(numericTextBox), 0);
+            setTimeout(() => syncNumericDisplay(numericTextBox, true), 0);
         };
 
         element.addEventListener('compositionstart', () => {
@@ -489,7 +508,10 @@
             const moneyInput = isMoneyNumericTextBox(this);
             normalizeDecimalNumericTextBox(this);
             const result = originalAppendTo.call(this, selector);
-            if (moneyInput && this.element) this.element.dataset.moneyFormat = 'true';
+            if (this.element) {
+                if (this.numericKind) this.element.dataset.numericKind = this.numericKind;
+                if (moneyInput) this.element.dataset.moneyFormat = 'true';
+            }
             attachLiveFormatting(this);
             return result;
         };
@@ -499,7 +521,8 @@
             numericTextBox.prototype.focusHandler = function (e) {
                 originalFocusIn.call(this, e);
                 if (this.element && this.element.dataset.liveFormatted === 'true') {
-                    syncNumericDisplay(this);
+                    const value = readNumericTextBoxValue(this);
+                    this.element.value = value == null ? '' : formatNumber(value);
                 }
             };
         }
@@ -525,14 +548,27 @@
         numericTextBox.prototype.__vietnamCurrencyPatched = true;
     }
 
-    function formatPlainNumericInput(element) {
+    function readPlainNumericInputValue(element) {
+        const storedValue = element?.dataset?.localeNumericValue;
+        if (storedValue !== undefined && storedValue !== '') {
+            const value = Number(storedValue);
+            if (Number.isFinite(value)) return value;
+        }
+        return parseLocaleNumber(element?.value);
+    }
+
+    function formatPlainNumericInput(element, displayMoney = false) {
         if (!element || element.disabled || element.readOnly) {
             return;
         }
 
         const editableValue = element.value;
         const digitOffset = countDigitsBeforeCaret(editableValue, element.selectionStart ?? editableValue.length);
-        element.value = formatEditableValue(editableValue);
+        const parsedValue = parseLocaleNumber(editableValue);
+        element.dataset.localeNumericValue = parsedValue == null ? '' : `${parsedValue}`;
+        element.value = displayMoney && element.dataset.numericKind === NUMERIC_KIND.money && parsedValue != null
+            ? formatMoney(parsedValue)
+            : formatEditableValue(editableValue);
         restoreCaret(element, digitOffset);
     }
 
@@ -560,6 +596,15 @@
         if (element instanceof HTMLInputElement && element.dataset.numberFormat === 'true') {
             formatPlainNumericInput(element);
         }
+    }, true);
+
+    document.addEventListener('focusin', event => {
+        const element = event.target;
+        if (!(element instanceof HTMLInputElement)
+            || element.dataset.numberFormat !== 'true'
+            || element.dataset.numericKind !== NUMERIC_KIND.money) return;
+        const value = readPlainNumericInputValue(element);
+        if (value != null) element.value = formatNumber(value);
     }, true);
 
     document.addEventListener('keydown', event => {
@@ -599,7 +644,7 @@
         }
 
         if (element instanceof HTMLInputElement && element.dataset.numberFormat === 'true') {
-            formatPlainNumericInput(element);
+            formatPlainNumericInput(element, true);
         }
     }, true);
 
@@ -634,6 +679,9 @@
         grid.prototype.appendTo = function (selector) {
             if (Array.isArray(this.columns)) {
                 this.columns.forEach(normalizeMoneyGridColumn);
+                const gridColumns = this.columns.flatMap(column => Array.isArray(column.columns) ? column.columns : column);
+                this.aggregates?.forEach(aggregate => aggregate.columns?.forEach(column =>
+                    normalizeGridAggregateColumn(column, gridColumns)));
             }
 
             return originalAppendTo.call(this, selector);
@@ -663,6 +711,7 @@
         normalizeNumberString,
         parseLocaleNumber,
         readNumericTextBoxValue,
+        readInputValue: readPlainNumericInputValue,
         configureNumericTextBox,
         createGridValueAccessor,
         bindNumericInput,

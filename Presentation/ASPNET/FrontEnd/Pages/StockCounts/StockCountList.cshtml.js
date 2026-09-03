@@ -931,7 +931,7 @@
                             const costInput = document.createElement('input');
                             costInput.className = 'form-control form-control-sm';
                             costCell.append(costInput);
-                            const costEditor = new ej.inputs.NumericTextBox({ value: Number(cost ?? 0), min: 0, decimals: 2, format: 'n2', numericKind: 'money', validateDecimalOnType: false });
+                            const costEditor = new ej.inputs.NumericTextBox({ value: Number(cost ?? 0), min: 0, decimals: 6, format: 'n2', numericKind: 'money', validateDecimalOnType: false });
                             costEditor.appendTo(costInput);
                             NumberFormatManager.configureNumericTextBox(costEditor, { kind: 'money', min: 0 });
                             NumberFormatManager.refreshNumericTextBox(costEditor);

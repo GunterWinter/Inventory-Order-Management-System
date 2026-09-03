@@ -701,6 +701,14 @@
         'Quick Add Vendor Category': 'Thêm Nhanh Loại Nhà Cung Cấp',
         'Allocation saved': 'Đã Lưu Phân Bổ',
         'Allocation is locked': 'Phân Bổ Đã Bị Khóa',
+        'A partially or fully paid purchase order cannot be reallocated.': 'Không thể phân bổ lại đơn mua hàng đã thanh toán một phần hoặc toàn bộ.',
+        'Only confirmed purchase orders can be allocated.': 'Chỉ có thể phân bổ đơn mua hàng đã xác nhận.',
+        'The purchase order must have a vendor before allocation.': 'Đơn mua hàng phải có nhà cung cấp trước khi phân bổ.',
+        'More than one cash transaction exists for this purchase order.': 'Đơn mua hàng này có nhiều hơn một giao dịch thu chi.',
+        'Every allocated quantity must have a customer.': 'Mọi số lượng phân bổ phải có khách hàng.',
+        'An allocation contains an item that does not belong to the purchase order.': 'Phân bổ có mặt hàng không thuộc đơn mua hàng.',
+        'One or more allocation customers were not found.': 'Không tìm thấy một hoặc nhiều khách hàng được phân bổ.',
+        'Serial-tracked products require a whole-number quantity.': 'Hàng hóa theo dõi serial yêu cầu số lượng nguyên.',
         'Warehouse cannot be changed': 'Không Thể Đổi Kho',
         'Quantity exceeds stock': 'Số Lượng Vượt Tồn Kho',
         'Quick Add is unavailable': 'Không Thể Dùng Thêm Nhanh',
@@ -719,7 +727,9 @@
         'An error occurred': 'Đã Xảy Ra Lỗi',
         'The cost allocation could not be saved.': 'Không Thể Lưu Phân Bổ.',
         'One unpaid vendor obligation was created or updated.': 'Đã Tạo Hoặc Cập Nhật Một Chứng Từ Công Nợ Nhà Cung Cấp Chưa Thanh Toán.',
-        'Open Cash Transactions?': 'Mở Giao Dịch Tiền?',
+        'Open Cash Transactions?': 'Mở Giao Dịch Thu Chi?',
+        'Open Cash Transactions': 'Mở Giao Dịch Thu Chi',
+        'Processing...': 'Đang xử lý...',
         'Quick Add Vendor': 'Thêm Nhanh Nhà Cung Cấp',
         'Quick Add Product': 'Thêm Nhanh Sản Phẩm',
         'Quick Add Product Group': 'Thêm Nhanh Nhóm Hàng Hóa',
@@ -1348,6 +1358,21 @@
         const selectedBatchStockMatch = value.match(/^Not enough stock for the selected warehouse and batch\. Available:\s*(.+)\.$/i);
         if (selectedBatchStockMatch) {
             return `Không đủ tồn cho kho và lô đã chọn. Tồn khả dụng: ${selectedBatchStockMatch[1]}.`;
+        }
+
+        const purchaseOrderNotFoundMatch = value.match(/^Purchase order was not found:\s*(.+)$/i);
+        if (purchaseOrderNotFoundMatch) {
+            return `Không tìm thấy đơn mua hàng: ${purchaseOrderNotFoundMatch[1]}`;
+        }
+
+        const allocatedQuantityMatch = value.match(/^Allocated quantity exceeds purchased quantity for (.+)\.$/i);
+        if (allocatedQuantityMatch) {
+            return `Số lượng phân bổ vượt quá số lượng đã mua của ${allocatedQuantityMatch[1]}.`;
+        }
+
+        const allocationSerialStockMatch = value.match(/^Not enough in-stock serials for (.+)\.$/i);
+        if (allocationSerialStockMatch) {
+            return `Không đủ serial đang tồn kho cho ${allocationSerialStockMatch[1]}.`;
         }
 
         const remainingStockMatch = value.match(/^Quantity must not exceed remaining stock \((.+)\)\.$/i);

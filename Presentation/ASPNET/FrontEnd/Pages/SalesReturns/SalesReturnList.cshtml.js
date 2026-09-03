@@ -876,7 +876,7 @@
                             width: 160,
                             allowEditing: false,
                             textAlign: 'Right',
-                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatToLocale(data.unitCost, 0, 6)
+                            valueAccessor: (_field, data) => data.unitCost == null ? '' : NumberFormatManager.formatMoneyToLocale(data.unitCost)
                         },
                         {
                             field: 'totalCost',
@@ -884,7 +884,7 @@
                             width: 160,
                             allowEditing: false,
                             textAlign: 'Right',
-                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatToLocale(data.totalCost, 0, 6)
+                            valueAccessor: (_field, data) => data.totalCost == null ? '' : NumberFormatManager.formatMoneyToLocale(data.totalCost)
                         },
                     ],
                     toolbar: !state.isViewMode && String(state.status ?? '0') === '0' ? [

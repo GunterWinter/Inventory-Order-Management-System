@@ -299,9 +299,12 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
 
         await page.locator('#qa-p-name').fill(key);
         await page.locator('#qa-p-unit').fill('PCS');
-        await page.locator('#qa-p-costprice').fill('321987,63');
+        await page.locator('#qa-p-costprice').fill('321987,625678');
+        await expect(page.locator('#qa-p-costprice')).toHaveValue('321.987,625678');
+        await page.locator('#qa-p-unitprice').fill('321987,625678');
+        await expect(page.locator('#qa-p-unitprice')).toHaveValue('321.987,625678');
+        await page.locator('#qa-p-name').focus();
         await expect(page.locator('#qa-p-costprice')).toHaveValue('321.987,63');
-        await page.locator('#qa-p-unitprice').fill('321987,63');
         await expect(page.locator('#qa-p-unitprice')).toHaveValue('321.987,63');
         await page.locator('#qa-p-serial-auto').check();
         await expect(page.locator('#qa-p-fixedcode-section')).toBeVisible();
@@ -363,8 +366,8 @@ test('Purchase Order quick-add hàng hóa đồng bộ serial và tồn đầu k
         expect(response.status()).toBe(200);
         expect(request.postDataJSON()).toMatchObject({
             name: key,
-            costPrice: 321987.63,
-            unitPrice: 321987.63,
+            costPrice: 321987.625678,
+            unitPrice: 321987.625678,
             physical: true,
             serialTrackingMode: 0,
             internalSerialFixedCode: null,

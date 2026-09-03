@@ -192,7 +192,7 @@
                                                     </div>
                                                     <div class="col-md-3 px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Số tiền</label>
-                                                        <input type="text" inputmode="decimal" data-number-format="true" class="form-control" v-bind:value="row.amount" v-on:input="methods.onAllocationAmountInput(row, $event)" placeholder="Nhập số tiền" v-bind:disabled="!methods.canEditPrimaryFields()" />
+                                                        <input type="text" inputmode="decimal" data-number-format="true" data-numeric-kind="money" class="form-control" v-bind:value="row.amount" v-on:input="methods.onAllocationAmountInput(row, $event)" v-on:blur="methods.onAllocationAmountBlur(row, $event)" placeholder="Nhập số tiền" v-bind:disabled="!methods.canEditPrimaryFields()" />
                                                     </div>
                                                     <div class="col px-1 mb-2 mb-md-0">
                                                         <label class="small font-weight-semibold text-muted mb-1">Diễn giải</label>

@@ -143,6 +143,10 @@ const App = {
                 if (!value && value !== 0) return '';
                 return NumberFormatManager.formatToLocale(value);
             },
+            formatMoney: (value) => {
+                if (!value && value !== 0) return '';
+                return NumberFormatManager.formatMoneyToLocale(value);
+            },
             formatStatus: (statusValue) => {
                 if (statusValue === null || statusValue === undefined || statusValue === '') return '';
                 // basic mapping

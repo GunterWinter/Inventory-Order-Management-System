@@ -5,7 +5,8 @@ window.InventoryCostLayerViewer = (() => {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
-    const number = value => NumberFormatManager.formatToLocale(value ?? 0, 0, 6);
+    const quantity = value => NumberFormatManager.formatToLocale(value ?? 0);
+    const money = value => NumberFormatManager.formatMoneyToLocale(value ?? 0);
     const date = value => value
         ? DateFormatManager.formatToLocale(DateFormatManager.parseBusinessDate(value))
         : '';
@@ -17,9 +18,9 @@ window.InventoryCostLayerViewer = (() => {
                 <td>${escapeHtml(item.sourceNumber)}</td>
                 <td>${escapeHtml(date(item.sourceDate))}</td>
                 <td>${escapeHtml(item.productSerialNumber)}</td>
-                <td class="text-end">${number(item.quantity)}</td>
-                <td class="text-end">${number(item.unitPrice)}</td>
-                <td class="text-end">${number(item.total)}</td>
+                <td class="text-end">${quantity(item.quantity)}</td>
+                <td class="text-end">${money(item.unitPrice)}</td>
+                <td class="text-end">${money(item.total)}</td>
             </tr>`).join('');
 
         await Swal.fire({
@@ -40,9 +41,9 @@ window.InventoryCostLayerViewer = (() => {
             <tr>
                 <td>${escapeHtml(item.sourceNumber)}</td>
                 <td>${escapeHtml(date(item.sourceDate))}</td>
-                <td class="text-end">${number(item.availableReturnQuantity)}</td>
-                <td class="text-end">${number(item.unitCost)}</td>
-                <td><input class="form-control form-control-sm inventory-cost-layer-quantity" inputmode="decimal" data-id="${escapeHtml(item.sourceCostAllocationId)}" data-max="${escapeHtml(item.availableReturnQuantity)}" data-cost="${escapeHtml(item.unitCost)}" value="${number(item.currentReturnQuantity)}"></td>
+                <td class="text-end">${quantity(item.availableReturnQuantity)}</td>
+                <td class="text-end">${money(item.unitCost)}</td>
+                <td><input class="form-control form-control-sm inventory-cost-layer-quantity" inputmode="decimal" data-id="${escapeHtml(item.sourceCostAllocationId)}" data-max="${escapeHtml(item.availableReturnQuantity)}" data-cost="${escapeHtml(item.unitCost)}" value="${quantity(item.currentReturnQuantity)}"></td>
             </tr>`).join('');
         const result = await Swal.fire({
             title: 'Chọn lớp giá vốn trả hàng',

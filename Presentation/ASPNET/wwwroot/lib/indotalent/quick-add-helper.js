@@ -850,8 +850,8 @@ const QuickAddHelper = (() => {
                         <div class="qa-field"><label class="qa-label">Unit Measure</label><input id="qa-p-unit" class="qa-input" placeholder="Piece, Box, Kg..."></div>
                     </div>
                     <div class="qa-row">
-                        <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" value="0,00"></div>
-                        <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" value="0,00"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Cost Price</label><input id="qa-p-costprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" data-numeric-kind="money" value="0,00"></div>
+                        <div class="qa-field qa-col-4"><label class="qa-label">Unit Price</label><input id="qa-p-unitprice" class="qa-input" type="text" inputmode="decimal" data-number-format="true" data-numeric-kind="money" value="0,00"></div>
                         <div class="qa-field qa-col-4">
                             <label class="qa-label">Warehouse</label>
                             <div class="quick-add-wrapper">
@@ -923,10 +923,12 @@ const QuickAddHelper = (() => {
                 const openingStockQuantity = openingStockApplies
                     ? (openingStockRaw === '' ? 0 : NumberFormatManager.parseLocaleNumber(openingStockRaw))
                     : null;
-                const costPriceRaw = document.getElementById('qa-p-costprice').value.trim();
-                const costPrice = costPriceRaw === '' ? null : NumberFormatManager.parseLocaleNumber(costPriceRaw);
-                const unitPriceRaw = document.getElementById('qa-p-unitprice').value.trim();
-                const unitPrice = unitPriceRaw === '' ? 0 : NumberFormatManager.parseLocaleNumber(unitPriceRaw);
+                const costPriceInput = document.getElementById('qa-p-costprice');
+                const costPriceRaw = costPriceInput.value.trim();
+                const costPrice = costPriceRaw === '' ? null : NumberFormatManager.readInputValue(costPriceInput);
+                const unitPriceInput = document.getElementById('qa-p-unitprice');
+                const unitPriceRaw = unitPriceInput.value.trim();
+                const unitPrice = unitPriceRaw === '' ? 0 : NumberFormatManager.readInputValue(unitPriceInput);
 
                 if (physical && serialTrackingMode === 1 && (fixedCode.length < 2 || fixedCode.length > 4)) {
                     Swal.showValidationMessage('Fixed Code must be 2-4 letters or digits.');
@@ -1044,7 +1046,7 @@ const QuickAddHelper = (() => {
                     if (parsed != null) openingStockInput.value = NumberFormatManager.formatToLocale(parsed);
                 });
                 moneyInputs.forEach(input => input?.addEventListener('blur', () => {
-                    const parsed = NumberFormatManager.parseLocaleNumber(input.value);
+                    const parsed = NumberFormatManager.readInputValue(input);
                     if (parsed != null) input.value = NumberFormatManager.formatMoneyToLocale(parsed);
                 }));
                 refreshProductTrackingFields();

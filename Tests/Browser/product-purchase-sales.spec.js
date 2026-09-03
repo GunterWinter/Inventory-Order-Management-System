@@ -156,22 +156,29 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const key = `E2E-PRICE-${Date.now()}`;
     const productName = `Dây điện ${key}`;
     const productSearchText = `DAY DIEN ${key.toUpperCase()}`;
-    const expectedSalesPrice = 345000.75;
-    const expectedCostPrice = 1232.23;
+    const expectedSalesPrice = 345000.751234;
+    const expectedCostPrice = 1232.234567;
     const expectedOpeningStock = 2.5;
     const expectedSalesQuantity = 1.25;
-    const editedSalesPrice = 456789.13;
-    const editedPurchasePrice = 321987.63;
+    const editedSalesPrice = 456789.131234;
+    const editedPurchasePrice = 321987.625678;
     const editedPurchaseQuantity = 2.5;
-    const allocatedPurchasePrice = 2232.23;
+    const allocatedPurchasePrice = 2232.234567;
     const fifoPurchaseQuantity = 3;
-    const allocatedPurchaseQuantity = 1;
+    const allocatedPurchaseQuantity = 1.25;
     const fifoExportQuantity = 3;
-    const fifoTotalCost = expectedOpeningStock * expectedCostPrice
-        + (fifoExportQuantity - expectedOpeningStock) * allocatedPurchasePrice;
+    const fifoTotalCost = (
+        Math.round(expectedCostPrice * 1e6 * expectedOpeningStock)
+        + Math.round(allocatedPurchasePrice * 1e6 * (fifoExportQuantity - expectedOpeningStock))
+    ) / 1e6;
     const fifoAverageCost = Number((fifoTotalCost / fifoExportQuantity).toFixed(6));
     const today = new Date();
-    const expectedOpeningDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    const businessYear = today.getFullYear();
+    const businessMonth = String(today.getMonth() + 1).padStart(2, '0');
+    const purchaseBusinessDay = String(Math.max(1, today.getDate() - 1)).padStart(2, '0');
+    const exportBusinessDay = String(today.getDate()).padStart(2, '0');
+    const expectedOpeningDate = `${businessYear}-${businessMonth}-01`;
+    const purchaseBusinessDate = `${businessYear}-${businessMonth}-${purchaseBusinessDay}`;
 
     await login(page);
     await page.goto('/Products/ProductList', { waitUntil: 'domcontentloaded' });
@@ -213,11 +220,15 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await page.locator('input[placeholder="Enter Reference Code (SKU/Custom)"]').fill(`${key}-REF`);
     const costPriceInput = page.locator('input[placeholder="Enter Cost Price"]');
     const salesPriceInput = page.locator('input[placeholder="Enter Unit Price"]');
-    await costPriceInput.pressSequentially('1232,23');
-    await salesPriceInput.pressSequentially('345000,75');
+    await costPriceInput.pressSequentially('1232,234567');
+    await salesPriceInput.pressSequentially('345000,751234');
+    await expect(costPriceInput).toHaveValue('1.232,23');
+    await expect(salesPriceInput).toHaveValue('345.000,751234');
+    await costPriceInput.click();
+    await expect(costPriceInput).toHaveValue('1.232,234567');
+    await page.locator('input[placeholder="Enter Unit Measure"]').fill('PCS');
     await expect(costPriceInput).toHaveValue('1.232,23');
     await expect(salesPriceInput).toHaveValue('345.000,75');
-    await page.locator('input[placeholder="Enter Unit Measure"]').fill('PCS');
 
     await page.locator('input[placeholder="Select a Product Group"]').locator('xpath=..').click();
     await selectOpenDropdownOption(page, lookup.group.name);
@@ -389,14 +400,15 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     });
     expect(salesRow.row.productId).toBe(productId);
     expect(salesRow.row.unitPrice).toBe(expectedSalesPrice);
-    expect(salesRow.parsedPrice).toBe(expectedSalesPrice);
+    expect(salesRow.priceText).toContain('345.000,75');
+    expect(salesRow.parsedPrice).toBe(345000.75);
 
     await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
     const orderSalesPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await orderSalesPriceInput.click();
     await orderSalesPriceInput.press('Control+A');
-    await orderSalesPriceInput.pressSequentially('456789,13');
-    await expect(orderSalesPriceInput).toHaveValue('456.789,13');
+    await orderSalesPriceInput.pressSequentially('456789,131234');
+    await expect(orderSalesPriceInput).toHaveValue('456.789,131234');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -405,7 +417,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
             row: Number(grid.getRowsObject()[0]?.data?.unitPrice),
             rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
         };
-    })).toEqual({ row: editedSalesPrice, rendered: editedSalesPrice });
+    })).toEqual({ row: editedSalesPrice, rendered: 456789.13 });
 
     await (await gridCellByHeader(page, /Quantity|Số lượng/i)).dblclick();
     const salesQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
@@ -474,14 +486,14 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     });
     expect(purchaseRow.row.productId).toBe(productId);
     expect(purchaseRow.row.unitPrice).toBe(expectedCostPrice);
-    expect(purchaseRow.parsedPrice).toBe(expectedCostPrice);
+    expect(purchaseRow.parsedPrice).toBe(1232.23);
 
     await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
     const purchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await purchasePriceInput.click();
     await purchasePriceInput.press('Control+A');
-    await purchasePriceInput.pressSequentially('321987,63');
-    await expect(purchasePriceInput).toHaveValue('321.987,63');
+    await purchasePriceInput.pressSequentially('321987,625678');
+    await expect(purchasePriceInput).toHaveValue('321.987,625678');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -490,15 +502,15 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
             row: Number(grid.getRowsObject()[0]?.data?.unitPrice),
             rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
         };
-    })).toEqual({ row: editedPurchasePrice, rendered: editedPurchasePrice });
+    })).toEqual({ row: editedPurchasePrice, rendered: 321987.63 });
 
     // Restore the product's exact cost after exercising the money editor.
     await (await gridCellByHeader(page, /Unit Price|Đơn giá/i)).dblclick();
     const exactPurchasePriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await exactPurchasePriceInput.click();
     await exactPurchasePriceInput.press('Control+A');
-    await exactPurchasePriceInput.pressSequentially('1232,23');
-    await expect(exactPurchasePriceInput).toHaveValue('1.232,23');
+    await exactPurchasePriceInput.pressSequentially('1232,234567');
+    await expect(exactPurchasePriceInput).toHaveValue('1.232,234567');
     await page.locator('#MainModal .modal-title').click();
     await expect.poll(() => page.evaluate(() => {
         const grid = document.querySelector('#SecondaryGrid').ej2_instances[0];
@@ -507,7 +519,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
             row: Number(grid.getRowsObject()[0]?.data?.unitPrice),
             rendered: NumberFormatManager.parseLocaleNumber(cell?.innerText ?? '')
         };
-    })).toEqual({ row: expectedCostPrice, rendered: expectedCostPrice });
+    })).toEqual({ row: expectedCostPrice, rendered: 1232.23 });
 
     await (await gridCellByHeader(page, /Quantity|Số lượng/i)).dblclick();
     const purchaseQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
@@ -543,7 +555,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     const allocatedPriceInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
     await allocatedPriceInput.click();
     await allocatedPriceInput.press('Control+A');
-    await allocatedPriceInput.pressSequentially('2232,23');
+    await allocatedPriceInput.pressSequentially('2232,234567');
     await page.locator('#MainModal .modal-title').click();
     await (await gridCellByHeader(page, /Quantity|Số lượng/i)).dblclick();
     const allocatedQuantityInput = page.locator('#SecondaryGrid td.e-editedbatchcell input.e-numerictextbox');
@@ -564,7 +576,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
     await test.step('Material Export uses FIFO instead of averaging an older opening layer with a newer PO lot', async () => {
         const purchaseDateInput = page.locator('#MainModal .e-datepicker').first();
         const purchaseLocale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
-        await purchaseDateInput.fill(purchaseLocale === 'vi' ? '10/08/2026' : '08/10/2026');
+        await purchaseDateInput.fill(purchaseLocale === 'vi'
+            ? `${purchaseBusinessDay}/${businessMonth}/${businessYear}`
+            : `${businessMonth}/${purchaseBusinessDay}/${businessYear}`);
         await purchaseDateInput.press('Tab');
         await selectStatusByLabel(page, 'OrderStatus', /Confirmed|Đã xác nhận/i);
         const confirmPoPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/UpdatePurchaseOrder')
@@ -572,7 +586,7 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await page.locator('#MainSaveButton').click();
         await page.locator('.swal2-confirm').click();
         const confirmPoResponse = await confirmPoPromise;
-        expect(String(confirmPoResponse.request().postDataJSON().orderDate).slice(0, 10)).toBe('2026-08-10');
+        expect(String(confirmPoResponse.request().postDataJSON().orderDate).slice(0, 10)).toBe(purchaseBusinessDate);
         await expect(page.locator('.swal2-container')).toBeHidden({ timeout: 10000 });
 
         await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
@@ -589,8 +603,11 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         const allocationQuantityInput = page.locator('#CostAllocationPreviewGrid td.e-editedbatchcell input.e-numerictextbox');
         await allocationQuantityInput.click();
         await allocationQuantityInput.press('Control+A');
-        await allocationQuantityInput.pressSequentially(String(allocatedPurchaseQuantity));
+        await allocationQuantityInput.pressSequentially('1,25');
         await page.locator('#CostAllocationModal .modal-title').click();
+        await expect(await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i)).toContainText('1,25');
+        await expect(await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Unit Price|Đơn giá/i)).toContainText('2.232,23');
+        await expect(await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /^Total$|^Thành tiền$/i)).toContainText('2.790,29');
 
         const allocationPromise = page.waitForResponse(response => response.url().includes('/PurchaseOrder/AllocatePurchaseOrderCosts')
             && response.request().method() === 'POST');
@@ -615,7 +632,9 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await page.waitForSelector('#MainModal.show');
         const exportDateInput = page.locator('#MainModal .e-datepicker').first();
         const exportLocale = await page.evaluate(() => window.UiLocalization?.getLocale?.() ?? 'vi');
-        await exportDateInput.fill(exportLocale === 'vi' ? '20/08/2026' : '08/20/2026');
+        await exportDateInput.fill(exportLocale === 'vi'
+            ? `${exportBusinessDay}/${businessMonth}/${businessYear}`
+            : `${businessMonth}/${exportBusinessDay}/${businessYear}`);
         await exportDateInput.press('Tab');
         const stockLookupPromise = page.waitForResponse(response => response.url().includes('/MaterialExport/GetWarehouseProductStock')
             && response.status() === 200);
@@ -667,11 +686,11 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
 
         await expect(await gridCellByHeader(page, /Product|Hàng hóa/i)).toContainText(productName);
         await expect(await gridCellByHeader(page, /Reference Code|Mã Tham Khảo/i)).toContainText(`${key}-REF`);
-        await expect(await gridCellByHeader(page, /Inventory|Tồn kho|Kho/i)).toHaveText(/^1[,.]5(?:0+)?$/);
+        await expect(await gridCellByHeader(page, /Inventory|Tồn kho|Kho/i)).toHaveText(/^1[,.]25(?:0+)?$/);
         await expect.poll(async () => (await gridCellByHeader(page, /Average Cost|Giá Vốn Bình Quân/i))
-            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(fifoAverageCost);
+            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(Number(fifoAverageCost.toFixed(2)));
         await expect.poll(async () => (await gridCellByHeader(page, /Total Cost|Tổng Giá Vốn/i))
-            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(fifoTotalCost);
+            .evaluate(element => NumberFormatManager.parseLocaleNumber(element.innerText))).toBe(Number(fifoTotalCost.toFixed(2)));
         await expect(await gridCellByHeader(page, /Cost Status|Trạng Thái Giá Vốn/i)).toContainText(/Đã chốt/i);
         await page.locator('#SecondaryGrid .cost-layer-details').click();
         await expect(page.locator('.swal2-popup tbody tr')).toHaveCount(2);
@@ -738,6 +757,8 @@ test('Product tồn đầu kỳ giữ giá và PO/SO hiển thị đúng giá ng
         await expect(page.locator('#CostAllocateCustom')).toBeEnabled();
         await page.locator('#CostAllocateCustom').click();
         await page.waitForSelector('#CostAllocationModal.show');
+        await expect(await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i)).toContainText('1,25');
+        await expect(await gridCellByHeaderIn(page, '#CostAllocationPreviewGrid', /Unit Price|Đơn giá/i)).toContainText('2.232,23');
         const cleanupAllocationCell = await gridCellByHeaderIn(
             page, '#CostAllocationPreviewGrid', /Allocation Quantity|Số lượng phân bổ/i);
         await cleanupAllocationCell.dblclick();
